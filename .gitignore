@@ -1,0 +1,8 @@
+# Playwright / 浏览器自测产物
+.playwright-mcp/
+
+# 原型自测过程中的截图
+*.png
+
+# 系统/编辑器
+.DS_Store

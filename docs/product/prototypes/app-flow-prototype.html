@@ -1,0 +1,3256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent 管理平台 - 流程原型</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+            font-size: 14px;
+        }
+
+        /* Layout */
+        .app-shell {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: #fff;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 20px;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+            gap: 20px;
+            min-height: 56px;
+        }
+
+        .topbar-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .logo {
+            font-weight: bold;
+            font-size: 16px;
+            min-width: 60px;
+        }
+
+        .project-switcher {
+            position: relative;
+        }
+
+        .project-btn {
+            padding: 8px 12px;
+            background: #f0f0f0;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .project-btn:hover {
+            background: #e8e8e8;
+        }
+
+        .project-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #fff;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            margin-top: 4px;
+            min-width: 200px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 100;
+            display: none;
+        }
+
+        .project-dropdown.show {
+            display: block;
+        }
+
+        .project-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .project-item:hover {
+            background: #f8f8f8;
+        }
+
+        .project-item.selected {
+            background: #e3f2fd;
+            font-weight: 500;
+        }
+
+        .project-divider {
+            border-bottom: 1px solid #d0d0d0;
+            margin: 4px 0;
+        }
+
+        .project-action {
+            padding: 10px 12px;
+            cursor: pointer;
+            color: #0066cc;
+        }
+
+        .project-action:hover {
+            background: #f8f8f8;
+        }
+
+        .banner {
+            padding: 8px 20px;
+            background: #fff3cd;
+            border-bottom: 1px solid #ffc107;
+            display: none;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .banner.show {
+            display: flex;
+        }
+
+        .banner-btn {
+            padding: 4px 12px;
+            background: #ffc107;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 250px;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+
+        .sidebar-header {
+            padding: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .new-task-btn {
+            padding: 6px 12px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 100%;
+        }
+
+        .new-task-btn:hover {
+            background: #0052a3;
+        }
+
+        .task-item {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .task-item:hover {
+            background: #f0f0f0;
+        }
+
+        .task-item.selected {
+            background: #e3f2fd;
+        }
+
+        .task-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-preparing { background: #ffc107; animation: pulse 1s infinite; }
+        .status-running { background: #4caf50; }
+        .status-stopped { background: #999; }
+        .status-failed { background: #f44336; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Modals and overlays */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .modal-header {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-input, .form-textarea, .form-select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #d0d0d0;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: #666;
+        }
+
+        .tab.active {
+            border-bottom-color: #0066cc;
+            color: #0066cc;
+            font-weight: 500;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.show {
+            display: block;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .btn:hover {
+            background: #0052a3;
+        }
+
+        .btn-secondary {
+            background: #999;
+        }
+
+        .btn-secondary:hover {
+            background: #777;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        /* Welcome state */
+        .welcome-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            gap: 20px;
+            text-align: center;
+        }
+
+        .welcome-title {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .welcome-subtitle {
+            font-size: 16px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .welcome-buttons {
+            display: flex;
+            gap: 16px;
+        }
+
+        .welcome-btn {
+            padding: 12px 24px;
+            border: 2px solid #0066cc;
+            background: white;
+            color: #0066cc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .welcome-btn:hover {
+            background: #f0f7ff;
+        }
+
+        .welcome-btn.primary {
+            background: #0066cc;
+            color: white;
+        }
+
+        .welcome-btn.primary:hover {
+            background: #0052a3;
+        }
+
+        /* Terminal area */
+        .terminal-area {
+            flex: 1;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-y: auto;
+            line-height: 1.5;
+        }
+
+        .terminal-line {
+            margin: 2px 0;
+        }
+
+        /* Progress card */
+        .progress-card {
+            background: #f0f0f0;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            padding: 16px;
+            margin: 16px;
+        }
+
+        .progress-step {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .progress-step:last-child {
+            margin-bottom: 0;
+        }
+
+        .progress-icon {
+            width: 20px;
+            text-align: center;
+            font-weight: bold;
+        }
+
+        /* Runtime cards */
+        .runtime-cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .runtime-card {
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .runtime-card:hover {
+            border-color: #0066cc;
+            box-shadow: 0 2px 8px rgba(0,102,204,0.1);
+        }
+
+        .runtime-card.selected {
+            border-color: #0066cc;
+            background: #e3f2fd;
+        }
+
+        .runtime-name {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .runtime-status {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .auth-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 2px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .auth-badge.done {
+            background: #c8e6c9;
+            color: #2e7d32;
+        }
+
+        .auth-badge.pending {
+            background: #fff9c4;
+            color: #f57f17;
+        }
+
+        /* Device code section */
+        .device-code-section {
+            text-align: center;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+
+        .device-code {
+            font-size: 28px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 4px;
+            margin: 12px 0;
+        }
+
+        .countdown {
+            font-size: 12px;
+            color: #f44336;
+        }
+
+        /* API Key section */
+        .api-key-section {
+            background: #f9f9f9;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #323232;
+            color: white;
+            padding: 12px 16px;
+            border-radius: 4px;
+            display: none;
+            z-index: 300;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .toast.show {
+            display: block;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Debug panel */
+        .debug-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            background: white;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 250;
+        }
+
+        .debug-header {
+            padding: 8px 12px;
+            background: #f0f0f0;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #d0d0d0;
+        }
+
+        .debug-content {
+            display: none;
+            padding: 8px;
+            min-width: 200px;
+        }
+
+        .debug-content.show {
+            display: block;
+        }
+
+        .debug-btn {
+            display: block;
+            width: 100%;
+            padding: 4px 8px;
+            margin-bottom: 4px;
+            background: #f0f0f0;
+            border: 1px solid #d0d0d0;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 11px;
+            text-align: left;
+        }
+
+        .debug-btn:hover {
+            background: #e0e0e0;
+        }
+
+        /* Doc anchor */
+        .doc-anchor {
+            font-size: 11px;
+            background: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 2px;
+            color: #888;
+            margin-left: 8px;
+            display: inline-block;
+        }
+
+        /* Confirmm dialog */
+        .confirm-dialog {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            padding: 24px;
+            max-width: 400px;
+        }
+
+        .confirm-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 12px;
+        }
+
+        .confirm-message {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .confirm-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .alert {
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            border-left: 4px solid #f44336;
+            background: #ffebee;
+            color: #c62828;
+            font-size: 13px;
+        }
+
+        .alert.error {
+            border-left-color: #f44336;
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .alert.success {
+            border-left-color: #4caf50;
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .alert.warning {
+            border-left-color: #ffc107;
+            background: #fffbee;
+            color: #f57f17;
+        }
+
+        .info-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+    <!-- Topbar -->
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="logo">☁️ Agent</div>
+            <div class="project-switcher" id="projectSwitcher">
+                <button class="project-btn" id="projectBtn">
+                    <span id="projectName">选择项目</span>
+                    <span>▾</span>
+                </button>
+                <div class="project-dropdown" id="projectDropdown">
+                    <div id="projectList"></div>
+                    <div class="project-divider"></div>
+                    <div class="project-action" onclick="app.showCreateProjectModal()">+ 创建项目</div>
+                    <div class="project-action" id="manageProjectMenu" style="display:none;" onclick="app.showProjectMenu()">🛠️ 管理当前项目</div>
+                </div>
+            </div>
+        </div>
+        <div style="position:relative;">
+            <div style="cursor:pointer; display:flex; align-items:center; gap:4px;" onclick="app.toggleSettingsMenu()">
+                cmdk · ⚙️ <span id="settingsMenuToggle">▸</span>
+            </div>
+            <div id="settingsMenu" style="position:absolute; top:100%; right:0; background:#fff; border:1px solid #d0d0d0; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1); z-index:200; display:none; min-width:180px; margin-top:4px;">
+                <div style="padding:8px 0;">
+                    <div style="padding:8px 16px; cursor:pointer; font-size:13px;" onclick="app.showSettingsPage('credentials')">🔐 凭证管理</div>
+                    <div style="padding:8px 16px; cursor:pointer; font-size:13px;" onclick="app.showSettingsPage('images')">📦 镜像管理</div>
+                    <div style="padding:8px 16px; cursor:pointer; font-size:13px;" onclick="app.showSettingsPage('system')">📊 系统状态</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Banner -->
+    <div class="banner" id="banner">
+        <span id="bannerText"></span>
+        <button class="banner-btn" id="bannerBtn"></button>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <span>📋 任务列表</span> <span class="doc-anchor">P20 §2</span>
+            </div>
+            <button class="new-task-btn" id="newTaskBtn" style="display:none;" onclick="app.startNewTask()">+ 新任务</button>
+            <div id="taskList"></div>
+        </div>
+
+        <!-- Main area -->
+        <div class="main" id="mainArea">
+            <div id="mainContent"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modal" onclick="event.stopPropagation()"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Debug panel -->
+<div class="debug-panel">
+    <div class="debug-header" onclick="document.querySelector('.debug-content').classList.toggle('show')">
+        🐛 调试面板
+    </div>
+    <div class="debug-content">
+        <button class="debug-btn" onclick="app.resetToColdStart()">↺ 重置到冷启动</button>
+        <button class="debug-btn" onclick="app.resetToUninitialized()">🔧 重置为未初始化</button>
+        <button class="debug-btn" onclick="app.jumpToStateWithTasks()">→ 有 2 个 Task 的状态</button>
+        <button class="debug-btn" onclick="app.resetToNoCredState()">🔐 重置为无凭证状态</button>
+        <button class="debug-btn" onclick="app.triggerCredExpiredBanner()">⚠️ 触发凭证过期横幅</button>
+        <button class="debug-btn" onclick="app.showSettingsPage('images')">📦 镜像管理</button>
+        <button class="debug-btn" onclick="app.showSettingsPage('system')">📊 系统状态</button>
+        <button class="debug-btn" onclick="console.log(app.state)">📋 打印当前 state</button>
+    </div>
+</div>
+
+<script>
+// ============ Global State Management ============
+const app = {
+    state: {
+        // Projects
+        projects: [
+            // Will be populated by flow
+        ],
+        currentProjectId: null,
+
+        // Tasks
+        tasks: {}, // { projectId: [{ id, name, status, runtime, ... }] }
+
+        // Auth - Multiple credentials per runtime
+        credentials: {
+            // codex: {
+            //   account: { status: 'valid'|'expired', email: '...', expiresAt: '2026-09-15' },
+            //   'api-key': { status: 'valid', secret: 'sk-...ab12' }
+            // }
+            // activeMode: { codex: 'account'|'api-key' }
+        },
+
+        // Modal state
+        currentModal: null, // 'createProject' | 'createTask' | 'stepX' | 'credentials' | 'projectMenu' | 'deleteProject' | 'registerImage' | null
+        wizardData: {
+            selectedRuntime: null,
+            selectedAuthMode: null, // 'account' | 'api-key' （Step 2 选择的模式）
+            authStatus: null, // 'pending' | 'success'
+            deviceCode: 'ABCD1234',
+            deviceCodeCountdown: 15 * 60,
+            hasCredentialBeforWizard: false, // 向导启动时是否已有凭证
+        },
+
+        // Other
+        showBanner: false,
+        bannerType: null, // 'expired' | 'warning' | null
+    },
+
+    // Initialize
+    init() {
+        this.resetToColdStart();
+        this.render();
+        window.addEventListener('click', (e) => {
+            if (!e.target.closest('.project-switcher')) {
+                document.getElementById('projectDropdown').classList.remove('show');
+            }
+        });
+    },
+
+    // Reset to cold start (no projects, show init wizard)
+    resetToColdStart() {
+        this.state = {
+            projects: [],
+            currentProjectId: null,
+            tasks: {},
+            credentials: {},
+            initialized: false, // 冷启动标记：未完成初始化向导
+            currentModal: null, // 页面主状态不用 modal 驱动
+            settingsMenuOpen: false,
+            wizardData: {
+                selectedRuntime: null,
+                authMethod: null,
+                authStatus: null,
+                deviceCode: 'ABCD1234',
+                deviceCodeCountdown: 15 * 60,
+                selectedProjectId: null, // 确认步选择的项目
+            },
+            showBanner: false,
+            bannerType: null,
+            // 镜像管理状态
+            images: [
+                { id: 'img-1', name: 'AIO（预置）', uri: 'ghcr.io/agent-infra/sandbox:latest', status: 'valid', isActive: true, supportedRuntimes: ['codex', 'claude-code'], vars: [] },
+                { id: 'img-2', name: 'ml-agent:v1.0（自定义）', uri: 'docker.io/myrepo/ml-agent:v1.0', status: 'warning', isActive: true, supportedRuntimes: ['codex'], warning: '缺少 tmux → 终端断线恢复将降级为缓冲重放', vars: [] },
+            ],
+            editingImageVars: {},
+            showImageEditForm: false,
+            newImageForm: { uri: '', validationResult: null }, // 新镜像注册表单状态
+            taskListFolds: {}, // { projectId: true|false } 任务列表项目组折叠状态
+            // 系统状态
+            systemStatus: {
+                cpu: { used: 4.2, total: 8, unit: '核' },
+                ram: { used: 5.8, total: 16, unit: 'GB' },
+                activeTasks: 5,
+                providers: [
+                    { name: 'aio', status: 'ok', desc: '容器运行时正常' },
+                    { name: 'boxlite', status: 'disabled', desc: '未启用（v2.0 开放）' },
+                ],
+                connection: { rest: 'ok', ws: 'ok', wsLatency: 15 },
+            },
+            diagnostics: [],
+            diagnosticsRunning: false,
+            // 页面级状态（P21 总览，设置页改为独立页）
+            currentPage: 'workbench', // 'workbench' | 'settings'
+            currentSettingsTab: 'credentials', // 'credentials' | 'images' | 'system'
+        };
+    },
+
+    // Jump to state with 2 projects and tasks
+    jumpToStateWithTasks() {
+        this.state.projects = [
+            { id: 'proj-1', name: 'MyProject', source: 'empty', taskCount: 2 },
+            { id: 'proj-2', name: 'DataPipeline', source: 'git', url: 'https://github.com/user/data-pipeline', taskCount: 1 },
+        ];
+        this.state.currentProjectId = 'proj-1';
+        this.state.tasks = {
+            'proj-1': [
+                { id: 'task-1', name: 'Task-001', status: 'running', runtime: 'codex', createdAt: '08:12' },
+                { id: 'task-2', name: 'Task-002', status: 'stopped', runtime: 'codex', createdAt: '08:00' },
+            ],
+            'proj-2': [
+                { id: 'task-3', name: 'DataSync', status: 'running', runtime: 'codex', createdAt: '09:30' },
+            ],
+        };
+        this.state.credentials = {
+            'codex': { method: 'account', email: 'user@example.com', status: 'valid' },
+        };
+        this.state.currentModal = null;
+        this.render();
+    },
+
+    triggerCredExpiredBanner() {
+        this.state.showBanner = true;
+        this.state.bannerType = 'expired';
+        this.render();
+    },
+
+    // Render entire app
+    render() {
+        // Render sidebar
+        this.renderSidebar();
+        // Render main area
+        this.renderMain();
+        // Render modal if needed
+        this.renderModal();
+    },
+
+    renderSidebar() {
+        const projectList = document.getElementById('projectList');
+        const newTaskBtn = document.getElementById('newTaskBtn');
+        const manageMenu = document.getElementById('manageProjectMenu');
+
+        if (this.state.projects.length === 0) {
+            projectList.innerHTML = '<div style="padding:10px; color:#999; font-size:12px;">无项目</div>';
+            newTaskBtn.style.display = 'none';
+            manageMenu.style.display = 'none';
+        } else {
+            projectList.innerHTML = this.state.projects.map(proj => `
+                <div class="project-item ${proj.id === this.state.currentProjectId ? 'selected' : ''}"
+                     onclick="app.selectProject('${proj.id}')">
+                    📁 ${proj.name} <span style="color:#999;">(${proj.taskCount || 0} tasks)</span>
+                </div>
+            `).join('');
+            newTaskBtn.style.display = 'block';
+            manageMenu.style.display = 'block';
+        }
+
+        // Project switcher button
+        const projectBtn = document.getElementById('projectBtn');
+        const currentProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+        if (currentProj) {
+            projectBtn.innerHTML = `📁 ${currentProj.name}`;
+            projectBtn.style.cursor = 'pointer';
+            projectBtn.title = '点击在左侧树中定位该项目';
+            projectBtn.onclick = () => {
+                // 点击时展开该项目组并定位
+                if (this.state.currentProjectId) {
+                    this.state.taskListFolds[this.state.currentProjectId] = false; // 展开
+                    this.render();
+                }
+            };
+        } else {
+            projectBtn.innerHTML = `📁 选择项目`;
+            projectBtn.style.cursor = 'default';
+            projectBtn.onclick = null;
+        }
+
+        // Task list (grouped by projects with expandable headers)
+        const taskList = document.getElementById('taskList');
+
+        // Calculate total task count across all projects
+        let totalTasks = 0;
+        for (const projId of Object.keys(this.state.tasks)) {
+            totalTasks += (this.state.tasks[projId] || []).length;
+        }
+
+        if (this.state.projects.length === 0) {
+            taskList.innerHTML = '';
+        } else {
+            let html = '';
+            for (const proj of this.state.projects) {
+                const projTasks = this.state.tasks[proj.id] || [];
+                const taskCount = projTasks.length;
+                const isFolded = this.state.taskListFolds[proj.id];
+                const isCurrentProj = proj.id === this.state.currentProjectId;
+
+                // Project group header（空项目组同样渲染——保证新建空项目在列表可见）
+                html += `
+                    <div class="task-group-header" style="cursor:pointer; padding:8px 12px; background:${isCurrentProj ? '#f0f8ff' : '#f9f9f9'}; border-left:3px solid ${isCurrentProj ? '#0066cc' : 'transparent'}; display:flex; align-items:center; gap:8px; font-weight:500; font-size:12px; user-select:none; position:relative;" onmouseover="this.querySelector('[data-menu]')?.style.display='block'" onmouseout="this.querySelector('[data-menu]')?.style.display='none'">
+                        <span onclick="app.toggleTaskGroup('${proj.id}')" style="flex-shrink:0; cursor:pointer;">${isFolded ? '▸' : '▾'}</span>
+                        <span style="flex:1; cursor:pointer; overflow:hidden; text-overflow:ellipsis;" onclick="app.toggleTaskGroup('${proj.id}')">${this.htmlEscape(proj.name)}</span>
+                        <span style="background:#e3f2fd; color:#0066cc; padding:2px 6px; border-radius:2px; font-size:11px; flex-shrink:0;">${taskCount}</span>
+                        <button data-menu style="display:none; background:none; border:none; cursor:pointer; padding:4px; color:#666; font-size:14px;" onclick="app.state.currentModal = 'projectMenu'; app.state.selectedProjectForMenu = '${proj.id}'; app.render()">⋯</button>
+                    </div>
+                `;
+                if (taskCount === 0 && !isFolded) {
+                    html += `
+                        <div style="margin-left:4px; padding:8px 12px; font-size:12px; color:#0066cc; cursor:pointer;" onclick="app.switchProject('${proj.id}'); app.startNewTask()">
+                            在 ${this.htmlEscape(proj.name)} 中发起第一个任务 →
+                        </div>
+                    `;
+                }
+                if (taskCount > 0) {
+                    // Task list items (shown if not folded)
+                    if (!isFolded) {
+                        html += projTasks.map(task => `
+                            <div class="task-item" onclick="app.selectTask('${task.id}'); app.switchProject('${proj.id}')" style="margin-left:4px;">
+                                <div class="task-status status-${task.status}"></div>
+                                <div style="flex:1;">
+                                    <div style="font-size:13px; font-weight:500;">${task.name}</div>
+                                    <div style="font-size:11px; color:#999;">${task.createdAt}</div>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            }
+
+            // 树底部：新建项目入口
+            html += `
+                <div style="border-top:1px solid #e0e0e0; margin-top:8px; padding:8px 12px;">
+                    <div style="cursor:pointer; user-select:none; padding:8px; background:#f0f8ff; border-radius:4px; text-align:center; font-size:12px; color:#0066cc; font-weight:500;" onclick="app.state.currentModal = 'createProject'; app.render()">
+                        + 新建项目
+                    </div>
+                </div>
+            `;
+
+            taskList.innerHTML = html;
+        }
+    },
+
+    renderMain() {
+        const mainContent = document.getElementById('mainContent');
+
+        // 【页面级分支】设置页面（独立页面：隐藏工作台任务侧栏）
+        const sidebar = document.querySelector('.sidebar');
+        if (this.state.currentPage === 'settings') {
+            if (sidebar) sidebar.style.display = 'none';
+            this.renderSettingsPage();
+            return;
+        }
+        if (sidebar) sidebar.style.display = '';
+
+        // Banner（工作台才显示）
+        this.renderBanner();
+
+        // Derive view state from data
+        const hasProjects = this.state.projects.length > 0;
+        const currentProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+        const currentProjName = currentProj?.name || '未选项目'; // 兜底
+        const tasks = this.state.tasks[this.state.currentProjectId] || [];
+
+        // 【初始化向导】冷启动且未初始化
+        if (!this.state.initialized && !hasProjects) {
+            mainContent.innerHTML = `
+                <div class="welcome-section">
+                    <div class="welcome-title">⚙️ 初始化部署</div>
+                    <div class="welcome-subtitle" style="font-size:14px; margin-bottom:30px;">
+                        <div style="margin-bottom:12px;">检查出网连通性...</div>
+                        <div style="text-align:center; margin:20px 0;">
+                            <div style="font-size:12px; color:#666; margin-bottom:8px;">✅ OpenAI API · 可达</div>
+                            <div style="font-size:12px; color:#666; margin-bottom:8px;">✅ Anthropic API · 可达</div>
+                            <div style="font-size:12px; color:#666;">✅ 容器镜像仓库 · 可达</div>
+                        </div>
+                    </div>
+                    <button class="welcome-btn primary" onclick="app.proceedInitWizard()">
+                        ✓ 继续初始化（代理配置/资源确认可选）
+                    </button>
+                    <span class="doc-anchor">P21-8 §2</span>
+                </div>
+            `;
+            // 延迟绑定事件，确保DOM已插入
+            setTimeout(() => {
+                const btn = document.querySelector('button[onclick*="proceedInitWizard"]');
+                if (btn) {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        app.proceedInitWizard();
+                    });
+                }
+            }, 0);
+            return;
+        }
+
+        // 【欢迎态】无项目
+        if (!hasProjects) {
+            mainContent.innerHTML = `
+                <div class="welcome-section">
+                    <div class="welcome-title">欢迎使用 Agent 管理平台</div>
+                    <div class="welcome-subtitle">第一步：为你的代码建一个项目</div>
+                    <div class="welcome-buttons">
+                        <button class="welcome-btn primary" onclick="app.showCreateProjectModal()">
+                            📦 用我的代码库
+                        </button>
+                        <button class="welcome-btn" onclick="app.createProjectDirect('empty')">
+                            📄 开一个空项目
+                        </button>
+                    </div>
+                    <span class="doc-anchor">P21-6 §5</span>
+                </div>
+            `;
+            return;
+        }
+
+        // 【引导态】有项目但无Task
+        if (tasks.length === 0) {
+            mainContent.innerHTML = `
+                <div class="welcome-section">
+                    <div class="welcome-subtitle">在 <strong>${this.htmlEscape(currentProjName)}</strong> 中发起第一个任务</div>
+                    <button class="welcome-btn primary" onclick="app.startNewTask()">
+                        + 发起第一个任务
+                    </button>
+                    <span class="doc-anchor">P20 §2.1</span>
+                </div>
+            `;
+            return;
+        }
+
+        // 【终端态】有Task，显示终端
+        const selectedTask = tasks.length > 0 ? tasks[tasks.length - 1] : null;
+        const taskRuntime = selectedTask?.runtime === 'codex' ? 'Codex' : 'Claude Code';
+        const imageName = selectedTask?.image || 'AIO（预置）';
+        mainContent.innerHTML = `
+            <div class="terminal-area">
+                <div class="terminal-line">$ agent-cli start...</div>
+                <div class="terminal-line">初始化环境...</div>
+                <div class="terminal-line" style="color:#ffc107;">配置: ${this.htmlEscape(taskRuntime)} runtime, ${this.htmlEscape(imageName)}, aio provider</div>
+                <div class="terminal-line">✓ 环境就绪</div>
+                ${selectedTask?.initialPrompt ? `
+                <div class="terminal-line" style="color:#00ff00;">agent@sandbox:~$ agent "${this.htmlEscape(selectedTask.initialPrompt)}"</div>
+                <div class="terminal-line" style="color:#9cdcfe;">▸ 已接收任务指令，开始执行…</div>
+                <div class="terminal-line" style="color:#9cdcfe;">▸ 正在分析工作区…</div>
+                <div class="terminal-line" style="color:#00ff00;">agent&gt; _</div>
+                ` : `
+                <div class="terminal-line" style="color:#00ff00;">agent@sandbox:~$ _</div>
+                `}
+                <span class="doc-anchor">P20 §3.3</span>
+            </div>
+        `;
+    },
+
+    renderSettingsPage() {
+        const mainContent = document.getElementById('mainContent');
+        const tab = this.state.currentSettingsTab || 'credentials';
+
+        // 获取当前菜单项的内容
+        let contentHtml = '';
+        if (tab === 'credentials') {
+            contentHtml = this.renderCredentialsContent();
+        } else if (tab === 'images') {
+            contentHtml = this.renderImagesContent();
+        } else if (tab === 'system') {
+            contentHtml = this.renderSystemContent();
+        }
+
+        mainContent.innerHTML = `
+            <div style="display:flex; height:100%; background:#fff;">
+                <!-- 左侧菜单栏 -->
+                <div id="settingsSideMenu" style="width:200px; border-right:1px solid #e0e0e0; background:#f9f9f9; overflow-y:auto;">
+                    <div style="padding:16px;">
+                        <button class="btn btn-secondary" style="width:100%; margin-bottom:16px; text-align:left;" onclick="app.backToWorkbench()">
+                            ← 返回工作台
+                        </button>
+                    </div>
+                    <div style="border-top:1px solid #e0e0e0;">
+                        <div style="padding:8px 0;">
+                            <div class="settings-menu-item ${tab === 'credentials' ? 'active' : ''}" onclick="app.switchSettingsTab('credentials')">
+                                🔐 凭证管理
+                            </div>
+                            <div class="settings-menu-item ${tab === 'images' ? 'active' : ''}" onclick="app.switchSettingsTab('images')">
+                                📦 镜像管理
+                            </div>
+                            <div class="settings-menu-item ${tab === 'system' ? 'active' : ''}" onclick="app.switchSettingsTab('system')">
+                                📊 系统状态
+                            </div>
+                        </div>
+                    </div>
+                    <span class="doc-anchor">P21 设置页 · 左侧菜单布局</span>
+                </div>
+
+                <!-- 右侧内容区 -->
+                <div style="flex:1; overflow-y:auto; padding:20px;">
+                    ${contentHtml}
+                </div>
+            </div>
+            <style>
+                .settings-menu-item {
+                    padding:12px 16px;
+                    cursor:pointer;
+                    border-left:4px solid transparent;
+                    font-size:13px;
+                    transition:background 0.2s;
+                }
+                .settings-menu-item:hover {
+                    background:#f0f0f0;
+                }
+                .settings-menu-item.active {
+                    border-left-color:#0066cc;
+                    background:#f0f8ff;
+                    font-weight:500;
+                }
+            </style>
+        `;
+    },
+
+    renderCredentialsContent() {
+        // 复用 renderCredentialsModal 的内容逻辑
+        const gitCreds = this.state.credentials.git || {};
+        return `
+            <div style="font-size:12px; color:#666; margin-bottom:16px; font-weight:bold;">🎫 Runtime 凭证（本机全局共享）</div>
+            ${this.renderCredentialGroup('codex', 'Codex', 'OpenAI · ChatGPT 订阅')}
+            ${this.renderCredentialGroup('claude', 'Claude Code', 'Anthropic · Claude 订阅')}
+
+            <div style="border-top:1px solid #e0e0e0; margin-top:20px; padding-top:20px;">
+                <div style="font-size:12px; color:#666; margin-bottom:16px; font-weight:bold;">📦 Git 凭证（私有仓库访问）</div>
+                ${this.renderGitCredentialGroup()}
+            </div>
+
+            <div style="font-size:12px; color:#666; background:#f9f9f9; padding:12px; border-radius:4px; margin-top:16px; line-height:1.6;">
+                ℹ️ 凭证已加密保存在本机，不上传；帐号授权在您自己的浏览器中完成，平台不接触您的密码。
+            </div>
+            <span class="doc-anchor">P21-3</span>
+        `;
+    },
+
+    renderImagesContent() {
+        // 复用镜像管理的内容
+        const imageList = this.state.images.map(img => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:12px; margin-bottom:12px; background:#fff;">
+                <div style="font-weight:500; margin-bottom:4px;">${this.htmlEscape(img.name)}</div>
+                <div style="font-size:12px; color:#666; margin-bottom:8px;">
+                    ${this.htmlEscape(img.uri)}<br>
+                    ${img.status === 'valid' ? '✅ 可用 · 适用: ' + img.supportedRuntimes.join(', ') :
+                      img.status === 'warning' ? '⚠️ 可用但有警告: ' + img.warning :
+                      '❌ 无效'}
+                    ${img.status === 'warning' ? `<br><span style="font-size:11px; color:#f57f17;">最后验证: 3 小时前</span>` : ''}
+                </div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                    <span style="color:${img.isActive ? '#4caf50' : '#999'};">
+                        ${img.isActive ? '🟢 已启用' : '⚫ 已禁用'}
+                    </span>
+                    <button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.editImageVars('${img.id}')">编辑</button>
+                    ${!img.name.includes('预置') ? `<button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.deleteImage('${img.id}')">[删除]</button>` : ''}
+                    <button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.toggleImageActive('${img.id}')">${img.isActive ? '[禁用]' : '[启用]'}</button>
+                </div>
+            </div>
+        `).join('');
+
+        return `
+            <div style="margin-bottom:16px;">
+                <div style="font-size:13px; font-weight:500; margin-bottom:12px;">已注册的 OCI 镜像</div>
+                <div id="imagesList" style="max-height:400px; overflow-y:auto;">
+                    ${imageList}
+                </div>
+                <button class="btn" style="width:100%; margin-top:12px;" onclick="app.openRegisterImageModal()">+ 注册新镜像</button>
+            </div>
+            <span class="doc-anchor">P21-4 | 页面级设置布局：菜单（左）+内容（右）</span>
+        `;
+    },
+
+    renderSystemContent() {
+        // 复用系统状态的内容
+        const sys = this.state.systemStatus;
+        const cpuPercent = Math.round((sys.cpu.used / sys.cpu.total) * 100);
+        const ramPercent = Math.round((sys.ram.used / sys.ram.total) * 100);
+        const cpuBar = '▓'.repeat(Math.ceil(cpuPercent / 10)) + '░'.repeat(10 - Math.ceil(cpuPercent / 10));
+        const ramBar = '▓'.repeat(Math.ceil(ramPercent / 10)) + '░'.repeat(10 - Math.ceil(ramPercent / 10));
+
+        let diagnosticsHtml = '';
+        if (this.state.diagnostics.length > 0) {
+            diagnosticsHtml = this.state.diagnostics.map(d => `
+                <div style="margin-bottom:8px; font-size:11px;">
+                    ${d.status === 'ok' ? '✅' : d.status === 'warn' ? '⚠️' : '❌'} ${this.htmlEscape(d.item)}: ${this.htmlEscape(d.desc || '')}
+                    ${d.fix ? `<br><span style="color:#0066cc; cursor:pointer;">[${d.fix}]</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        return `
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">📊 系统资源使用情况</div>
+                <div style="font-size:12px;">
+                    CPU: ${cpuBar} ${sys.cpu.used}/${sys.cpu.total} ${sys.cpu.unit} (${cpuPercent}%)<br>
+                    RAM: ${ramBar} ${sys.ram.used}/${sys.ram.total} ${sys.ram.unit} (${ramPercent}%)
+                </div>
+                <div style="margin-top:8px; font-size:12px; ${cpuPercent > 80 ? 'color:#d32f2f;' : 'color:#388e3c;'}">
+                    ${cpuPercent > 95 ? '🔴 资源耗尽' : cpuPercent > 80 ? '⚠️ 资源紧张，建议停止部分 Task' : '✅ 资源充足'} · 当前活跃 Task: ${sys.activeTasks}
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🏃 Provider 状态</div>
+                <div style="font-size:12px;">
+                    ${sys.providers.map(p => `
+                        <div style="margin-bottom:4px;">
+                            ${p.status === 'ok' ? '✅' : '⏸️'} ${p.name}（${p.desc}）
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🌐 连接状态</div>
+                <div style="font-size:12px;">
+                    REST ✅ · WS ${sys.connection.ws === 'ok' ? '✅' : '❌'}(${sys.connection.wsLatency}ms) · 终端 2 连接<br>
+                    <span style="color:#999; font-size:11px;">上次事件推送: 1 秒前</span>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🔧 诊断</div>
+                <div id="diagnosticsPanel" style="font-size:11px; background:#f5f5f5; padding:8px; border-radius:4px;">
+                    ${this.state.diagnosticsRunning ? `
+                        <div style="color:#666;">正在诊断中...</div>
+                    ` : diagnosticsHtml || `
+                        <div style="color:#999;">点击下方按钮开始诊断</div>
+                    `}
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn" onclick="app.runDiagnostics()">${this.state.diagnosticsRunning ? '诊断中...' : '重新诊断'}</button>
+            </div>
+            <span class="doc-anchor">P21-5</span>
+        `;
+    },
+
+    backToWorkbench() {
+        this.state.currentPage = 'workbench';
+        this.state.currentSettingsTab = 'credentials';
+        this.render();
+    },
+
+    switchSettingsTab(tab) {
+        this.state.currentSettingsTab = tab;
+        this.render();
+    },
+
+    showSettingsPage(tab) {
+        this.state.currentPage = 'settings';
+        this.state.currentSettingsTab = tab || 'credentials';
+        this.render();
+    },
+
+    htmlEscape(text) {
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return (text || '').replace(/[&<>"']/g, m => map[m]);
+    },
+
+    renderBanner() {
+        const banner = document.getElementById('banner');
+        const bannerText = document.getElementById('bannerText');
+        const bannerBtn = document.getElementById('bannerBtn');
+
+        if (this.state.showBanner && this.state.bannerType === 'expired') {
+            banner.classList.add('show');
+            bannerText.textContent = '⚠️ Codex 凭证将在 3 天内过期';
+            bannerBtn.textContent = '重新授权';
+            bannerBtn.onclick = () => app.showCredentialsPage();
+        } else {
+            banner.classList.remove('show');
+        }
+    },
+
+    renderModal() {
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modal');
+
+        if (!this.state.currentModal) {
+            overlay.classList.remove('show');
+            return;
+        }
+
+        overlay.classList.add('show');
+
+        // currentModal 只处理弹层类型（不包括 'welcome'）
+        if (this.state.currentModal === 'editImageVars') {
+            this.renderEditImageVarsModal();
+        } else if (this.state.currentModal === 'registerImage') {
+            this.renderRegisterImageModal();
+        } else if (this.state.currentModal === 'createProject') {
+            this.renderCreateProjectModal();
+        } else if (this.state.currentModal === 'step1') {
+            this.renderStep1Modal();
+        } else if (this.state.currentModal === 'step3') {
+            this.renderStep3Modal();
+        } else if (this.state.currentModal === 'authIntercept') {
+            this.renderAuthInterceptPanel();
+        } else if (this.state.currentModal === 'progress') {
+            this.renderProgressModal();
+        } else if (this.state.currentModal === 'credentials') {
+            // 旧弹层形态已废弃（v1.0.1 设置页化）：重定向到设置页
+            this.state.currentModal = null;
+            this.showSettingsPage('credentials');
+            return;
+        } else if (this.state.currentModal === 'projectMenu') {
+            this.renderProjectMenuModal();
+        } else if (this.state.currentModal === 'gitCredentials') {
+            this.renderGitCredentialsModal();
+        } else if (this.state.currentModal === 'imageParams') {
+            this.renderImageParamsModal();
+        } else if (this.state.currentModal === 'images') {
+            this.state.currentModal = null;
+            this.showSettingsPage('images');
+            return;
+        } else if (this.state.currentModal === 'system') {
+            this.state.currentModal = null;
+            this.showSettingsPage('system');
+            return;
+        }
+    },
+
+    renderAuthInterceptPanel() {
+        const modal = document.getElementById('modal');
+        const runtime = this.state.wizardData.selectedRuntime;
+        const runtimeName = runtime === 'codex' ? 'Codex' : 'Claude Code';
+        const isCodex = runtime === 'codex';
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                首次使用 ${runtimeName}：完成一次全局登录
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px; padding:12px; background:#e3f2fd; border-radius:4px; font-size:13px; line-height:1.6;">
+                <strong>只需配置一次</strong>，此后所有任务（包括其他项目）自动使用该凭证。
+            </div>
+            <div class="tabs">
+                <div class="tab active" onclick="app.switchAuthTab('account', this)">帐号授权 (推荐)</div>
+                <div class="tab" onclick="app.switchAuthTab('apikey', this)">API Key</div>
+            </div>
+            <div style="font-size:11px; color:#666; margin-bottom:12px;">
+                帐号授权使用订阅额度；API Key 按量计费、配置最快
+            </div>
+
+            <div id="accountAuthPanel" class="tab-content show">
+                ${isCodex ? `
+                    <div class="device-code-section">
+                        <div style="font-size:12px; color:#666; margin-bottom:12px;">请在浏览器中打开以下链接完成授权（设备码由平台 auth helper 实时提供——技术 05 §2 决策 A）</div>
+                        <div style="color:#0066cc; text-decoration:underline; cursor:pointer; margin-bottom:12px; font-size:13px;">https://auth.openai.com/device</div>
+                        <div class="device-code">ABCD-1234</div>
+                        <div class="countdown" id="countdown">⏱️ 15:00 后过期 · 等待授权中…（自动轮询）</div>
+                        <div class="info-text">💡 平台不接触您的密码 - 授权在您自己的浏览器中完成；本面板内即时完成，无需等待任务启动</div>
+                    </div>
+                ` : `
+                    <div class="form-group">
+                        <div style="font-size:12px; color:#666; margin-bottom:12px;">点击下方链接在浏览器中完成授权，然后粘贴返回的授权码</div>
+                        <div style="color:#0066cc; text-decoration:underline; cursor:pointer; margin-bottom:16px; font-size:13px;">https://claude.ai/auth/setup</div>
+                        <label class="form-label">授权码</label>
+                        <input type="password" class="form-input" id="setupTokenInput" placeholder="请从浏览器授权完成后粘贴 code...">
+                        <div class="info-text">💡 平台不接触您的密码 - 授权在您自己的浏览器中完成</div>
+                    </div>
+                `}
+            </div>
+
+            <div id="apiKeyAuthPanel" class="tab-content">
+                <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-input" id="apiKeyInput" placeholder="${isCodex ? 'sk-...' : 'sk-ant-...'}">
+                    <div class="info-text">按量计费；配置最快</div>
+                </div>
+            </div>
+
+            <div class="btn-group" style="margin-top:16px;">
+                <button class="btn" onclick="app.completeAuthIntercept()">完成配置并继续</button>
+                <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+            </div>
+            <span class="doc-anchor">P21-2 B（鉴权拦截面板）</span>
+        `;
+    },
+
+    completeAuthIntercept() {
+        const runtime = this.state.wizardData.selectedRuntime;
+        const mode = this.state.wizardData.selectedAuthMode || 'account';
+
+        if (mode === 'apikey') {
+            const key = document.getElementById('apiKeyInput')?.value;
+            if (!key) {
+                this.showToast('❌ 请输入 API Key');
+                return;
+            }
+            this.state.credentials[runtime] = this.state.credentials[runtime] || {};
+            this.state.credentials[runtime]['api-key'] = {
+                status: 'valid',
+                secret: key.substring(0, 7) + '...ab12',
+            };
+            if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+            this.state.credentials.activeMode[runtime] = 'api-key';
+        } else {
+            // 帐号授权：面板内即时完成（决策 1，auth helper 跑登录流——技术 05 §2 决策 A）
+            if (runtime !== 'codex') {
+                const code = document.getElementById('setupTokenInput')?.value;
+                if (!code) { this.showToast('❌ 请先粘贴授权码'); return; }
+            }
+            this.state.credentials[runtime] = this.state.credentials[runtime] || {};
+            this.state.credentials[runtime].account = {
+                status: 'valid',
+                email: 'user@example.com',
+                expiresAt: '2027-08-09',
+            };
+            if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+            this.state.credentials.activeMode[runtime] = 'account';
+        }
+
+        this.showToast('✅ 登录成功，凭证已保存——自动进入确认步');
+        this.state.currentModal = 'step3';
+        this.render();
+    },
+
+    proceedInitWizard() {
+        // 初始化向导完成，标记 initialized
+        this.state.initialized = true;
+        this.render();
+    },
+
+    renderCreateProjectModal() {
+        const modal = document.getElementById('modal');
+        const failureMsg = this.state.projectCreationError;
+        const pending = this.state.pendingProjectCreate; // Git 凭证回程时预填
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                创建项目
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            ${failureMsg ? `<div class="alert error">${this.htmlEscape(failureMsg)}</div>` : ''}
+            <form onsubmit="return false;">
+                <div class="form-group">
+                    <label class="form-label">项目名称</label>
+                    <input type="text" class="form-input" id="newProjectName" placeholder="我的项目（1-40 字符）" value="${pending ? this.htmlEscape(pending.name || '') : ''}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">来源</label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="sourceGit" name="source" value="git" checked>
+                            <label for="sourceGit">从 Git 仓库克隆</label>
+                        </div>
+                        <div class="form-input" id="gitUrlArea" style="margin-left:24px; margin-top:8px; display:block;">
+                            <input type="text" placeholder="https://github.com/org/repo.git 或 git@github.com:org/repo.git" class="form-input" id="gitUrl" value="${pending && pending.url ? this.htmlEscape(pending.url) : ''}">
+                            <div class="info-text">ℹ️ 私有仓需先配置 Git 凭证</div>
+                        </div>
+                        <div class="radio-option" style="margin-top:12px;">
+                            <input type="radio" id="sourceEmpty" name="source" value="empty">
+                            <label for="sourceEmpty">空项目（从零开始）</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="app.createProject()">创建</button>
+                    <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+                </div>
+            </form>
+            <span class="doc-anchor">P21-6 §3.2, P22 §2</span>
+        `;
+    },
+
+    renderStep1Modal() {
+        const modal = document.getElementById('modal');
+        const currentProj = this.state.projects.find(p => p.id === this.state.currentProjectId);
+
+        // Helper to get credential badge for runtime
+        const getCredBadge = (runtime) => {
+            const creds = this.state.credentials[runtime] || {};
+            const hasValidCred = creds.account?.status === 'valid' || creds['api-key']?.status === 'valid';
+
+            if (hasValidCred) {
+                const email = creds.account?.email || creds['api-key']?.secret || 'already configured';
+                return `<span class="auth-badge done">✅ 已登录 ${email}</span>`;
+            } else {
+                return `<span class="auth-badge pending">○ 首次使用需完成一次全局登录（约 1 分钟）</span>`;
+            }
+        };
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                发起任务 (1/2) 选择 Agent
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:12px; padding:8px; background:#e3f2fd; border-radius:4px; font-size:13px;">
+                📌 在 <strong>${currentProj?.name}</strong> 中发起 <span class="doc-anchor">P20 §3.2</span>
+            </div>
+            <div class="runtime-cards">
+                <div class="runtime-card ${this.state.wizardData.selectedRuntime === 'codex' ? 'selected' : ''}"
+                     onclick="app.selectRuntime('codex')">
+                    <div class="runtime-name">Codex</div>
+                    <div class="runtime-status">OpenAI · ChatGPT 订阅</div>
+                    <div style="margin-top:8px;">
+                        ${getCredBadge('codex')}
+                    </div>
+                    <div style="font-size:12px; color:#0066cc; margin-top:8px;">上次使用 ✓</div>
+                </div>
+                <div class="runtime-card ${this.state.wizardData.selectedRuntime === 'claude' ? 'selected' : ''}"
+                     onclick="app.selectRuntime('claude')">
+                    <div class="runtime-name">Claude Code</div>
+                    <div class="runtime-status">Anthropic · Claude 订阅</div>
+                    <div style="margin-top:8px;">
+                        ${getCredBadge('claude')}
+                    </div>
+                </div>
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="app.nextWizardStep()" ${this.state.wizardData.selectedRuntime ? '' : 'disabled'}>下一步</button>
+                <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+            </div>
+        `;
+    },
+
+    renderStep3Modal() {
+        const modal = document.getElementById('modal');
+        const runtime = this.state.wizardData.selectedRuntime;
+        const credential = this.state.credentials[runtime];
+        const imageParams = this.state.imageParams || {};
+
+        // 初始化项目选择：默认为当前项目
+        if (!this.state.wizardData.selectedProjectId && this.state.currentProjectId) {
+            this.state.wizardData.selectedProjectId = this.state.currentProjectId;
+        }
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                发起任务 (2/2) 确认
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div class="form-group">
+                <label style="font-weight:bold;">Runtime</label>
+                <div style="padding:8px; background:#f5f5f5; border-radius:4px;">
+                    ${runtime === 'codex' ? 'Codex' : 'Claude Code'}
+                    <span style="float:right; color:#0066cc;">✅ ${credential?.email || '已配置'}</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="font-weight:bold;">任务模式</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" name="mode" value="interactive" checked>
+                        <label>◉ 交互式终端（实时看 agent 输出）</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="mode" value="headless">
+                        <label>○ 无头任务（填 prompt，后台运行）- v1.1</label>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="font-weight:bold;">任务指令（可选）</label>
+                <textarea class="form-textarea" id="taskPrompt" placeholder="示例：分析这个仓库的架构并输出摘要…&#10;（可选；填了则 agent 启动时即执行）" style="min-height:80px;">${this.htmlEscape(this.state.wizardData.initialPrompt || '')}</textarea>
+            </div>
+            <div class="form-group">
+                <label style="font-weight:bold;">项目</label>
+                <select class="form-select" id="projectSelect" onchange="app.selectProjectInWizard(this.value)">
+                    ${this.state.projects.map(proj => `
+                        <option value="${proj.id}" ${proj.id === this.state.wizardData.selectedProjectId ? 'selected' : ''}>
+                            ${proj.name}
+                        </option>
+                    `).join('')}
+                    <option value="__new__" style="font-weight:bold; background:#f0f8ff;">+ 新建项目…</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label style="font-weight:bold;">镜像</label>
+                <select class="form-select" id="imageSelect" onchange="app.selectImage(this.value)">
+                    ${this.getAvailableImages(runtime).map(img => `
+                        <option value="${img.id}" ${img.name.includes('AIO') ? 'selected' : ''}}>
+                            ${img.name.includes('AIO') ? img.name + '（默认）' : (img.status === 'warning' ? '⚠️ ' : '') + img.name}
+                        </option>
+                    `).join('')}
+                </select>
+            </div>
+
+            <!-- Advanced Options (Collapsed by default) -->
+            <div style="border-top:1px solid #e0e0e0; margin-top:16px; padding-top:16px;">
+                <div style="cursor:pointer; user-select:none; margin-bottom:12px;" onclick="app.toggleAdvancedOptions()">
+                    <span id="advancedToggle">▸</span> 高级选项
+                </div>
+                <div id="advancedPanel" style="display:none; margin-left:12px;">
+                    <div class="form-group">
+                        <label style="font-weight:bold; font-size:12px;">环境变量（本次覆盖）</label>
+                        <div style="font-size:11px; color:#666; margin-bottom:8px;">
+                            📌 来自镜像全局配置：LOG_LEVEL=info, API_TIMEOUT=30
+                        </div>
+                        <table style="width:100%; font-size:11px; margin-bottom:8px;">
+                            <tr style="background:#f5f5f5;">
+                                <th style="padding:4px; text-align:left; border-bottom:1px solid #d0d0d0;">KEY</th>
+                                <th style="padding:4px; text-align:left; border-bottom:1px solid #d0d0d0;">VALUE</th>
+                                <th style="padding:4px; text-align:center; border-bottom:1px solid #d0d0d0;">操作</th>
+                            </tr>
+                            <tr style="border-bottom:1px solid #f0f0f0;">
+                                <td style="padding:4px;">LOG_LEVEL</td>
+                                <td style="padding:4px; color:#666;">[来自镜像]</td>
+                                <td style="padding:4px; text-align:center;">—</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid #f0f0f0;">
+                                <td style="padding:4px;">API_TIMEOUT</td>
+                                <td style="padding:4px; color:#666;">[来自镜像]</td>
+                                <td style="padding:4px; text-align:center;">—</td>
+                            </tr>
+                        </table>
+                        <button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.state.currentModal = 'imageParams'; app.render()">📝 编辑镜像参数</button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="font-size:12px; color:#666; margin-top:16px; margin-bottom:16px;">
+                ⏱️ 预计耗时：同镜像 ~20秒 / 首次拉镜像 1–2分钟
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="app.launchTask()">发起</button>
+                <button class="btn btn-secondary" onclick="app.previousWizardStep()">上一步</button>
+            </div>
+            <span class="doc-anchor">P21-2 §3, P21-4 §10</span>
+        `;
+    },
+
+    getAvailableImages(runtime) {
+        // 返回已启用且验证通过的镜像列表，按 runtime 过滤
+        return this.state.images.filter(img =>
+            img.isActive &&
+            (img.status === 'valid' || img.status === 'warning') &&
+            img.supportedRuntimes.includes(runtime)
+        );
+    },
+
+    selectImage(imageId) {
+        const img = this.state.images.find(i => i.id === imageId);
+        if (img) {
+            this.state.wizardData.selectedImage = imageId;
+            this.state.wizardData.selectedImageName = img.name;
+        }
+    },
+
+    toggleAdvancedOptions() {
+        const panel = document.getElementById('advancedPanel');
+        const toggle = document.getElementById('advancedToggle');
+        if (panel.style.display === 'none') {
+            panel.style.display = 'block';
+            toggle.textContent = '▾';
+        } else {
+            panel.style.display = 'none';
+            toggle.textContent = '▸';
+        }
+    },
+
+    renderProgressModal() {
+        const modal = document.getElementById('modal');
+        const runtime = this.state.wizardData.selectedRuntime;
+        const runtimeName = runtime === 'codex' ? 'Codex' : 'Claude Code';
+        const progressState = this.state.wizardData.progressState || { currentStageIndex: 0, elapsedTime: 0 };
+
+        // 决策 1：无「等待登录」阶段——鉴权已在拦截面板内完成，凭证在「启动实例」阶段由 Vault 注入（用户无感）
+        const stages = [
+            { name: '初始化', duration: 1200 },
+            { name: '拉取镜像 150/800MB（预计还需 40s）', duration: 2000 },
+            { name: '准备工作区（克隆项目独立副本）', duration: 1500 },
+            { name: '启动实例（凭证注入·无感）', duration: 1300 },
+            { name: '连接终端', duration: 1000 },
+        ];
+
+        const currentStageIndex = progressState.currentStageIndex;
+        const totalElapsed = stages.slice(0, currentStageIndex + 1).reduce((sum, s) => sum + s.duration, 0);
+
+        modal.innerHTML = `
+            <div class="modal-header">🔄 正在发起 ${runtimeName} 任务   ⏱️ 已耗时 ${Math.round(totalElapsed / 1000)}s</div>
+            <div class="progress-card">
+                ${stages.map((s, i) => `
+                    <div class="progress-step">
+                        <div class="progress-icon">
+                            ${i < currentStageIndex ? '✅' : (i === currentStageIndex ? '🔄' : '⏳')}
+                        </div>
+                        <div style="flex:1;">${s.name}</div>
+                    </div>
+
+                `).join('')}
+            </div>
+            <div style="margin-top:16px; display:flex; gap:8px;">
+                <button class="btn btn-secondary" onclick="app.closeModal()">后台运行</button>
+                <button class="btn btn-secondary" onclick="app.cancelTask()">取消</button>
+            </div>
+            <span class="doc-anchor">P21-2 形态 D · 无等待登录（决策 1）</span>
+        `;
+
+        // Automatically progress through stages
+        if (currentStageIndex < stages.length - 1) {
+            setTimeout(() => {
+                if (!this.state.wizardData.progressState) {
+                    this.state.wizardData.progressState = { currentStageIndex: 0, elapsedTime: 0 };
+                }
+                this.state.wizardData.progressState.currentStageIndex++;
+                this.render();
+            }, stages[currentStageIndex].duration);
+        } else if (currentStageIndex === stages.length - 1) {
+            // All stages complete
+            setTimeout(() => {
+                this.finishTaskCreation();
+            }, stages[currentStageIndex].duration);
+        }
+    },
+
+    cancelTask() {
+        // Show custom confirmation
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modal');
+
+        overlay.classList.add('show');
+        modal.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-title">取消任务创建</div>
+                <div class="confirm-message">
+                    确定要取消任务创建吗？已占用的资源将自动回收。
+                </div>
+                <div class="confirm-actions">
+                    <button class="btn btn-secondary" onclick="app.state.currentModal = 'progress'; app.render()">继续</button>
+                    <button class="btn" style="background:#f44336;" onclick="app.state.currentModal = null; app.render()">确认取消</button>
+                </div>
+            </div>
+        `;
+    },
+
+    finishTaskCreation() {
+        const taskId = 'task-' + Date.now();
+        const runtime = this.state.wizardData.selectedRuntime;
+        const imageName = this.state.wizardData.selectedImageName || 'AIO（预置）';
+
+        // 使用确认步选择的项目，或回退到当前项目
+        const targetProjectId = this.state.wizardData.selectedProjectId || this.state.currentProjectId;
+
+        const newTask = {
+            id: taskId,
+            name: `Task-${String((this.state.tasks[targetProjectId]?.length || 0) + 1).padStart(3, '0')}`,
+            status: 'running',
+            runtime: runtime,
+            image: imageName, // 记录所选镜像
+            initialPrompt: this.state.wizardData.initialPrompt || null,
+            createdAt: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        };
+
+        if (!this.state.tasks[targetProjectId]) {
+            this.state.tasks[targetProjectId] = [];
+        }
+        this.state.tasks[targetProjectId].push(newTask);
+
+        // 更新目标项目为当前项目，并展开任务树
+        this.state.currentProjectId = targetProjectId;
+        if (this.state.taskListFolds[targetProjectId]) {
+            this.state.taskListFolds[targetProjectId] = false; // 展开
+        }
+
+        const proj = this.state.projects.find(p => p.id === targetProjectId);
+        if (proj) proj.taskCount = this.state.tasks[targetProjectId].length;
+
+        this.state.currentModal = null;
+        this.state.wizardData = {
+            selectedRuntime: null,
+            selectedAuthMode: null,
+            authStatus: null,
+            deviceCode: 'ABCD1234',
+            deviceCodeCountdown: 15 * 60,
+            hasCredentialBeforWizard: false,
+            waitingForLoginInProgress: false,
+            selectedProjectId: null,
+        };
+
+        this.showToast('✓ Task 创建成功，已连接终端');
+        this.render();
+    },
+
+    renderCredentialsModal() {
+        const modal = document.getElementById('modal');
+        const gitCreds = this.state.credentials.git || {};
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                🔐 凭证管理
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+
+            <!-- Runtime Credentials -->
+            <div style="font-size:12px; color:#666; margin-bottom:16px; font-weight:bold;">🎫 Runtime 凭证（本机全局共享）</div>
+            ${this.renderCredentialGroup('codex', 'Codex', 'OpenAI · ChatGPT 订阅')}
+            ${this.renderCredentialGroup('claude', 'Claude Code', 'Anthropic · Claude 订阅')}
+
+            <!-- Git Credentials (New) -->
+            <div style="border-top:1px solid #e0e0e0; margin-top:20px; padding-top:20px;">
+                <div style="font-size:12px; color:#666; margin-bottom:16px; font-weight:bold;">📦 Git 凭证（私有仓库访问）</div>
+                ${this.renderGitCredentialGroup()}
+            </div>
+
+            <div style="font-size:12px; color:#666; background:#f9f9f9; padding:12px; border-radius:4px; margin-top:16px; line-height:1.6;">
+                ℹ️ 凭证已加密保存在本机，不上传；帐号授权在您自己的浏览器中完成，平台不接触您的密码。
+            </div>
+            <span class="doc-anchor">P21-3 §10</span>
+        `;
+    },
+
+    renderGitCredentialGroup() {
+        const gitCreds = this.state.credentials.git || {};
+        const hasSSHKey = gitCreds.ssh?.fingerprint;
+        const hasHTTPSToken = gitCreds.https?.type;
+
+        if (!hasSSHKey && !hasHTTPSToken) {
+            return `
+                <div style="border:1px solid #d0d0d0; border-radius:4px; padding:16px;">
+                    <div style="font-size:13px; color:#999; margin-bottom:12px;">○ 未配置 Git 凭证</div>
+                    <button class="btn" style="padding:6px 12px; font-size:12px; margin-right:8px;" onclick="app.showGitCredentialPanel('ssh')">配置 SSH 密钥</button>
+                    <button class="btn" style="padding:6px 12px; font-size:12px;" onclick="app.showGitCredentialPanel('https')">配置 HTTPS Token</button>
+                </div>
+            `;
+        }
+
+        let gitHtml = '<div style="border:1px solid #d0d0d0; border-radius:4px; padding:16px;">';
+
+        if (hasSSHKey) {
+            gitHtml += `
+                <div style="margin-bottom:12px; padding:12px; background:#f9f9f9; border-radius:4px;">
+                    <div style="font-weight:500; margin-bottom:6px;">🔑 SSH 私钥</div>
+                    <div style="font-size:12px; color:#666;">指纹: ${gitCreds.ssh.fingerprint}</div>
+                    <div style="font-size:12px; color:#666; margin-top:4px;">最后使用: ${gitCreds.ssh.lastUsed || '未使用'}</div>
+                    <button class="btn" style="padding:4px 12px; font-size:11px; margin-top:8px; margin-right:8px;" onclick="app.testGitConnection('ssh')">测试连接</button>
+                    <button class="btn btn-secondary" style="padding:4px 12px; font-size:11px; margin-top:8px;" onclick="app.revokeGitCredential('ssh')">吊销</button>
+                </div>
+            `;
+        }
+
+        if (hasHTTPSToken) {
+            gitHtml += `
+                <div style="padding:12px; background:#f9f9f9; border-radius:4px;">
+                    <div style="font-weight:500; margin-bottom:6px;">🔐 HTTPS Token</div>
+                    <div style="font-size:12px; color:#666;">平台: ${gitCreds.https.type} · 尾数: ${gitCreds.https.tail}</div>
+                    <div style="font-size:12px; color:#666; margin-top:4px;">最后使用: ${gitCreds.https.lastUsed || '未使用'}</div>
+                    <button class="btn" style="padding:4px 12px; font-size:11px; margin-top:8px; margin-right:8px;" onclick="app.testGitConnection('https')">测试连接</button>
+                    <button class="btn btn-secondary" style="padding:4px 12px; font-size:11px; margin-top:8px;" onclick="app.revokeGitCredential('https')">吊销</button>
+                </div>
+            `;
+        }
+
+        gitHtml += `
+            <div style="font-size:11px; color:#666; margin-top:12px; line-height:1.6; padding:8px; background:#fffbee; border-radius:2px;">
+                ℹ️ Git 凭证用于克隆私有仓库，与 Runtime 凭证无关。
+            </div>
+        </div>`;
+
+        return gitHtml;
+    },
+
+    renderGitCredentialsModal() {
+        // 单独的 Git 凭证配置模态
+        const modal = document.getElementById('modal');
+        const defaultTab = this.state.gitCredentialType || 'ssh';
+        const isSSHTab = defaultTab === 'ssh';
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                配置 Git 凭证
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div class="tabs">
+                <div class="tab ${isSSHTab ? 'active' : ''}" onclick="app.switchTab('ssh', this)">SSH 密钥</div>
+                <div class="tab ${!isSSHTab ? 'active' : ''}" onclick="app.switchTab('https', this)">HTTPS Token</div>
+            </div>
+            <div id="sshPanel" class="tab-content ${isSSHTab ? 'show' : ''}">
+                <div class="form-group">
+                    <label class="form-label">SSH 私钥</label>
+                    <textarea class="form-textarea" id="sshKeyInput" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+                    <div class="info-text">将您的 SSH 私钥内容粘贴到此处</div>
+                </div>
+                <button class="btn" onclick="app.saveGitCredential('ssh')">保存并测试连接</button>
+            </div>
+            <div id="httpsPanel" class="tab-content ${!isSSHTab ? 'show' : ''}">
+                <div class="form-group">
+                    <label class="form-label">平台</label>
+                    <select class="form-select" id="httpsPlatform">
+                        <option value="github">GitHub</option>
+                        <option value="gitlab">GitLab</option>
+                        <option value="other">其他</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Token</label>
+                    <input type="password" class="form-input" id="httpsTokenInput" placeholder="ghp_..." />
+                    <div class="info-text">需要 'repo' scope 权限</div>
+                </div>
+                <button class="btn" onclick="app.saveGitCredential('https')">保存并测试连接</button>
+            </div>
+            <span class="doc-anchor">P21-3 §10</span>
+        `;
+    },
+
+    renderCredentialGroup(runtimeId, name, desc) {
+        const credentials = this.state.credentials[runtimeId] || {};
+        const activeMode = this.state.credentials.activeMode?.[runtimeId] || 'account';
+        const accountCred = credentials.account;
+        const apikeyCred = credentials['api-key'];
+
+        if (!accountCred && !apikeyCred) {
+            return `
+                <div style="border:1px solid #d0d0d0; border-radius:4px; padding:16px; margin-bottom:16px;">
+                    <div style="font-weight:bold; margin-bottom:8px;">${name}</div>
+                    <div style="font-size:12px; color:#999; margin-bottom:12px;">○ 未配置凭证</div>
+                    <button class="btn" style="padding:6px 12px; font-size:12px;" onclick="app.startNewTask()">立即授权</button>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="border:1px solid #d0d0d0; border-radius:4px; padding:16px; margin-bottom:16px;">
+                <div style="font-weight:bold; margin-bottom:12px;">${name} · 当前模式（二选一，切换全局生效）</div>
+
+                <!-- Account Auth Card -->
+                <div style="margin-bottom:12px; padding:12px; background:#f9f9f9; border-radius:4px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <input type="radio" name="mode-${runtimeId}" value="account"
+                            ${activeMode === 'account' ? 'checked' : ''}
+                            onchange="app.changeAuthMode('${runtimeId}', 'account')">
+                        <span style="font-weight:500;">🎫 帐号授权 · ${desc}</span>
+                        ${accountCred ? '<span style="background:#e8f5e9; color:#2e7d32; padding:2px 6px; border-radius:2px; font-size:11px; font-weight:500;">[生效中]</span>' : ''}
+                    </div>
+                    ${accountCred ? `
+                        <div style="margin-left:24px; font-size:12px; color:#666; line-height:1.6;">
+                            帐号: ${accountCred.email}<br>
+                            有效期: ${accountCred.expiresAt}<br>
+                            <button class="btn" style="padding:4px 12px; font-size:11px; margin-top:8px; margin-right:8px;" onclick="app.reauthCredential('${runtimeId}', 'account')">重新授权</button>
+                            <button class="btn btn-secondary" style="padding:4px 12px; font-size:11px; margin-top:8px;" onclick="app.revokeCredential('${runtimeId}', 'account')">吊销</button>
+                        </div>
+                    ` : `
+                        <div style="margin-left:24px; font-size:12px; color:#999;">未配置</div>
+                    `}
+                </div>
+
+                <!-- API Key Card -->
+                <div style="padding:12px; background:#f9f9f9; border-radius:4px;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                        <input type="radio" name="mode-${runtimeId}" value="api-key"
+                            ${activeMode === 'api-key' ? 'checked' : ''}
+                            onchange="app.changeAuthMode('${runtimeId}', 'api-key')">
+                        <span style="font-weight:500;">🔑 API Key</span>
+                        ${apikeyCred && activeMode === 'api-key' ? '<span style="background:#e8f5e9; color:#2e7d32; padding:2px 6px; border-radius:2px; font-size:11px; font-weight:500;">[生效中]</span>' : ''}
+                    </div>
+                    ${apikeyCred ? `
+                        <div style="margin-left:24px; font-size:12px; color:#666; line-height:1.6;">
+                            ${apikeyCred.secret}<br>
+                            <button class="btn" style="padding:4px 12px; font-size:11px; margin-top:8px; margin-right:8px;" onclick="app.showAddApiKeyPanel('${runtimeId}')">更换</button>
+                            <button class="btn btn-secondary" style="padding:4px 12px; font-size:11px; margin-top:8px;" onclick="app.revokeCredential('${runtimeId}', 'api-key')">吊销</button>
+                        </div>
+                    ` : `
+                        <div style="margin-left:24px; font-size:12px; color:#999;">未配置</div>
+                    `}
+                </div>
+
+                <div style="font-size:11px; color:#666; margin-top:12px; line-height:1.6; padding:8px; background:#fffbee; border-radius:2px;">
+                    ℹ️ 切换模式后新任务立即按新模式注入；已运行任务不受影响（下次启动生效）
+                </div>
+            </div>
+        `;
+    },
+
+    renderImageParamsModal() {
+        const modal = document.getElementById('modal');
+        const imageParams = this.state.imageParams || { env: {}, cmd: '' };
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                ⚙️ 镜像运行参数（AIO）
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">环境变量</div>
+                <table style="width:100%; font-size:12px; margin-bottom:12px;">
+                    <tr style="background:#f5f5f5;">
+                        <th style="padding:6px; text-align:left; border-bottom:1px solid #d0d0d0;">KEY</th>
+                        <th style="padding:6px; text-align:left; border-bottom:1px solid #d0d0d0;">VALUE</th>
+                        <th style="padding:6px; text-align:center; border-bottom:1px solid #d0d0d0;">SECRET</th>
+                        <th style="padding:6px; text-align:center; border-bottom:1px solid #d0d0d0;">操作</th>
+                    </tr>
+                    ${Object.entries(imageParams.env || {}).map(([k, v]) => `
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <td style="padding:6px;">${this.htmlEscape(k)}</td>
+                            <td style="padding:6px;">${v.secret ? '***' : this.htmlEscape(v.value || '')}</td>
+                            <td style="padding:6px; text-align:center;">${v.secret ? '✓' : ''}</td>
+                            <td style="padding:6px; text-align:center;">
+                                <button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="app.removeImageEnv('${this.htmlEscape(k)}')">删除</button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </table>
+                <div style="display:flex; gap:6px; margin-top:8px;">
+                    <input type="text" id="newEnvKey" placeholder="变量名（如 LOG_LEVEL）" style="flex:1; padding:4px; border:1px solid #ddd; border-radius:2px; font-size:12px;">
+                    <input type="text" id="newEnvVal" placeholder="值" style="flex:1; padding:4px; border:1px solid #ddd; border-radius:2px; font-size:12px;">
+                    <button class="btn" style="font-size:12px; padding:6px 12px;" onclick="app.addImageEnv()">+ 添加</button>
+                </div>
+            </div>
+
+            <div style="background:#fffbee; border-left:4px solid #ffc107; padding:8px; border-radius:2px; margin-bottom:16px; font-size:11px;">
+                ⚠️ 保留变量名（黑名单）：ANTHROPIC_API_KEY / OPENAI_API_KEY / CLAUDE_CODE_OAUTH_TOKEN / CODEX_* / GIT_*——该类变量为系统保留，请使用凭证管理配置
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">启动命令</div>
+                <div style="padding:8px; background:#f5f5f5; border-radius:4px; font-family:monospace; font-size:12px;">
+                    ${this.htmlEscape(imageParams.cmd || 'python -u agent.py')}
+                </div>
+                <div class="info-text">v1.1 可编辑；目前为只读</div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="app.state.currentModal = 'step3'; app.render()">完成，返回确认步</button>
+            </div>
+            <span class="doc-anchor">P21-4 §10</span>
+        `;
+    },
+
+    renderImagesModal() {
+        const modal = document.getElementById('modal');
+        const imageList = this.state.images.map(img => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:12px; margin-bottom:12px; background:#fff;">
+                <div style="font-weight:500; margin-bottom:4px;">${this.htmlEscape(img.name)}</div>
+                <div style="font-size:12px; color:#666; margin-bottom:8px;">
+                    ${this.htmlEscape(img.uri)}<br>
+                    ${img.status === 'valid' ? '✅ 可用 · 适用: ' + img.supportedRuntimes.join(', ') :
+                      img.status === 'warning' ? '⚠️ 可用但有警告: ' + img.warning :
+                      '❌ 无效'}
+                    ${img.status === 'warning' ? `<br><span style="font-size:11px; color:#f57f17;">最后验证: 3 小时前</span>` : ''}
+                </div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
+                    <span style="color:${img.isActive ? '#4caf50' : '#999'};">
+                        ${img.isActive ? '🟢 已启用' : '⚫ 已禁用'}
+                    </span>
+                    <button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.editImageVars('${img.id}')">编辑</button>
+                    ${!img.name.includes('预置') ? `<button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.deleteImage('${img.id}')">[删除]</button>` : ''}
+                    <button class="btn" style="font-size:11px; padding:4px 8px;" onclick="app.toggleImageActive('${img.id}')">${img.isActive ? '[禁用]' : '[启用]'}</button>
+                </div>
+            </div>
+        `).join('');
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                📦 镜像管理
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-size:13px; font-weight:500; margin-bottom:12px;">已注册的 OCI 镜像</div>
+                <div id="imagesList" style="max-height:400px; overflow-y:auto;">
+                    ${imageList}
+                </div>
+                <button class="btn" style="width:100%; margin-top:12px;" onclick="app.toggleImageForm()">+ 注册新镜像</button>
+            </div>
+
+            <div id="imageFormPanel" style="display:none; border:1px solid #ddd; padding:12px; border-radius:6px; background:#f9f9f9; margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:12px;">注册新镜像</div>
+                <input type="text" id="imageUri" placeholder="镜像 URI (如 docker.io/user/image:tag)" style="width:100%; padding:8px; margin-bottom:8px; border:1px solid #ddd; border-radius:4px;">
+                <button class="btn" onclick="app.validateImage()" style="margin-right:8px;">验证</button>
+                <button class="btn btn-secondary" onclick="app.toggleImageForm()">取消</button>
+                <div id="validationResult" style="margin-top:12px;"></div>
+            </div>
+
+            <span class="doc-anchor">P21-4</span>
+        `;
+    },
+
+    editImageVars(imageId) {
+        const img = this.state.images.find(i => i.id === imageId);
+        if (!img) return;
+        // 工作副本：add/remove 重渲染前先捕获 DOM 中的编辑值
+        if (!this.state.editingImageVars || this.state.editingImageVars.imageId !== imageId) {
+            this.state.editingImageVars = { imageId, vars: (img.vars || []).map(v => ({ ...v })) };
+        }
+        this.state.currentModal = 'editImageVars';
+        this.render();
+    },
+
+    openRegisterImageModal() {
+        this.state.newImageForm = { uri: '', validationResult: null };
+        this.state.currentModal = 'registerImage';
+        this.render();
+    },
+
+    renderRegisterImageModal() {
+        const modal = document.getElementById('modal');
+        const form = this.state.newImageForm;
+        let validationHtml = '';
+        if (form.validationResult) {
+            const r = form.validationResult;
+            if (r.status === 'success') {
+                validationHtml = `<div style="padding:8px; background:#c8e6c9; border-left:4px solid #4caf50; border-radius:2px; font-size:12px; margin-top:12px;">✅ 验证通过：镜像可用</div>`;
+            } else if (r.status === 'warning') {
+                validationHtml = `<div style="padding:8px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:2px; font-size:12px; margin-top:12px;">⚠️ 验证通过但有警告：缺少 tmux → 终端断线恢复将降级</div>`;
+            } else {
+                validationHtml = `<div style="padding:8px; background:#ffcdd2; border-left:4px solid #f44336; border-radius:2px; font-size:12px; margin-top:12px;">❌ 验证失败：镜像不符合平台约定</div>`;
+            }
+        }
+        modal.innerHTML = `
+            <div class="modal-header">
+                📦 注册新镜像
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-size:12px; margin-bottom:8px; font-weight:500;">镜像 URI</div>
+                <input type="text" id="regImageUri" placeholder="docker.io/user/image:tag" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; box-sizing:border-box;" value="${this.htmlEscape(form.uri)}">
+                ${validationHtml}
+            </div>
+            <div style="background:#f9f9f9; border-left:4px solid #0066cc; padding:8px; border-radius:2px; margin-bottom:16px; font-size:11px;">
+                ℹ️ 镜像需满足平台约定（参见文档）；验证会检查镜像可达性及依赖项
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="app.validateRegisterImage()">验证</button>
+                ${form.validationResult && form.validationResult.status === 'success' ? `<button class="btn" onclick="app.confirmRegisterImage()">保存</button>` : ''}
+                <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+            </div>
+            <span class="doc-anchor">P21-4 §6 + 注册新镜像</span>
+        `;
+        // 在 DOM 更新后，设置焦点
+        setTimeout(() => {
+            const uri = document.getElementById('regImageUri');
+            if (uri) uri.focus();
+        }, 0);
+    },
+
+    validateRegisterImage() {
+        const uri = (document.getElementById('regImageUri')?.value || '').trim();
+        if (!uri) {
+            this.showToast('⚠️ 请输入镜像 URI');
+            return;
+        }
+        this.state.newImageForm.uri = uri;
+        const status = uri.includes('invalid') ? 'error' :
+                      uri.includes('warning') ? 'warning' : 'success';
+        this.state.newImageForm.validationResult = { status };
+        this.renderRegisterImageModal();
+    },
+
+    confirmRegisterImage() {
+        const uri = this.state.newImageForm.uri.trim();
+        if (!uri) {
+            this.showToast('⚠️ 请输入镜像 URI');
+            return;
+        }
+        if (!this.state.images) this.state.images = [];
+        this.state.images.push({
+            id: 'img-' + Date.now(),
+            name: uri.split('/').pop(),
+            uri: uri,
+            status: 'valid',
+            isActive: true,
+            supportedRuntimes: ['codex'],
+            vars: [],
+        });
+        this.showToast('✓ 镜像已注册');
+        this.state.currentModal = null;
+        this.state.newImageForm = { uri: '', validationResult: null };
+        this.showSettingsPage('images');
+    },
+
+    renderEditImageVarsModal() {
+        const st = this.state.editingImageVars;
+        const img = st && this.state.images.find(i => i.id === st.imageId);
+        if (!img) { this.closeModal(); return; }
+        const vars = st.vars;
+        const modal = document.getElementById('modal');
+        modal.innerHTML = `
+            <div class="modal-header">
+                🔧 编辑环境变量：${this.htmlEscape(img.name)}
+                <button class="modal-close" onclick="app.state.editingImageVars = null; app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <table style="width:100%; font-size:12px; margin-bottom:12px;">
+                    <tr style="background:#f5f5f5;">
+                        <th style="padding:6px; text-align:left; border-bottom:1px solid #d0d0d0;">KEY</th>
+                        <th style="padding:6px; text-align:left; border-bottom:1px solid #d0d0d0;">VALUE</th>
+                        <th style="padding:6px; text-align:center; border-bottom:1px solid #d0d0d0;">Secret</th>
+                        <th style="padding:6px; text-align:center; border-bottom:1px solid #d0d0d0;">操作</th>
+                    </tr>
+                    ${vars.map((v, idx) => `
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <td style="padding:6px;"><input type="text" id="ivk_${idx}" value="${this.htmlEscape(v.key || '')}" placeholder="LOG_LEVEL" style="width:100%; padding:4px; border:1px solid #ddd; border-radius:2px;"></td>
+                            <td style="padding:6px;"><input type="${v.secret ? 'password' : 'text'}" id="ivv_${idx}" value="${v.secret ? '' : this.htmlEscape(v.value || '')}" placeholder="${v.secret && v.value ? '（保持不变，输入即覆盖）' : ''}" data-keep="${v.secret && v.value ? '1' : ''}" style="width:100%; padding:4px; border:1px solid #ddd; border-radius:2px;"></td>
+                            <td style="padding:6px; text-align:center;"><input type="checkbox" id="ivs_${idx}" ${v.secret ? 'checked' : ''}></td>
+                            <td style="padding:6px; text-align:center;"><button class="btn btn-secondary" style="padding:2px 6px; font-size:10px;" onclick="app.removeVar(${idx})">删除</button></td>
+                        </tr>
+                    `).join('')}
+                </table>
+                <button class="btn" onclick="app.addImageVar()" style="font-size:11px; padding:4px 8px;">+ 添加变量</button>
+            </div>
+            <div style="background:#fff3cd; border-left:4px solid #ffc107; padding:8px; border-radius:2px; margin-bottom:16px; font-size:11px;">
+                ⚠️ 保留变量名（黑名单）：ANTHROPIC_API_KEY / OPENAI_API_KEY / CLAUDE_CODE_OAUTH_TOKEN / CODEX_* / GIT_*——该类变量为系统保留，请使用凭证管理配置
+            </div>
+            <div class="btn-group">
+                <button class="btn" onclick="app.saveImageVars()">保存</button>
+                <button class="btn btn-secondary" onclick="app.state.editingImageVars = null; app.closeModal()">取消</button>
+            </div>
+            <span class="doc-anchor">P21-4 §10</span>
+        `;
+    },
+
+    captureImageVarEdits() {
+        const st = this.state.editingImageVars;
+        if (!st) return;
+        st.vars = st.vars.map((v, idx) => {
+            const el = document.getElementById('ivv_' + idx);
+            const typed = el?.value ?? '';
+            // secret 原值不回显：输入为空且标记 keep 时保持原值
+            const value = (el?.dataset?.keep === '1' && typed === '') ? (v.value ?? '') : (el ? typed : (v.value ?? ''));
+            return {
+                key: (document.getElementById('ivk_' + idx)?.value ?? v.key ?? '').trim(),
+                value,
+                secret: document.getElementById('ivs_' + idx)?.checked ?? !!v.secret,
+            };
+        });
+    },
+
+    toggleImageForm() {
+        const panel = document.getElementById('imageFormPanel');
+        if (panel) {
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+    },
+
+    validateImage() {
+        const uri = document.getElementById('imageUri').value.trim();
+        if (!uri) {
+            this.showToast('⚠️ 请输入镜像 URI');
+            return;
+        }
+
+        const result = document.getElementById('validationResult');
+        const status = uri.includes('invalid') ? 'error' :
+                      uri.includes('warning') ? 'warning' : 'success';
+
+        if (status === 'success') {
+            result.innerHTML = `
+                <div style="padding:8px; background:#c8e6c9; border-left:4px solid #4caf50; border-radius:2px; font-size:12px;">
+                    ✅ 验证通过：镜像可用
+                    <button class="btn" style="margin-left:8px; padding:4px 8px; font-size:10px;" onclick="app.saveImage('${uri}')">保存</button>
+                </div>
+            `;
+        } else if (status === 'warning') {
+            result.innerHTML = `
+                <div style="padding:8px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:2px; font-size:12px;">
+                    ⚠️ 验证通过但有警告：缺少 tmux → 终端断线恢复将降级
+                    <button class="btn" style="margin-left:8px; padding:4px 8px; font-size:10px;" onclick="app.saveImage('${uri}')">保存</button>
+                </div>
+            `;
+        } else {
+            result.innerHTML = `
+                <div style="padding:8px; background:#ffcdd2; border-left:4px solid #f44336; border-radius:2px; font-size:12px;">
+                    ❌ 验证失败：镜像不符合平台约定。<a href="#" onclick="event.preventDefault();">[查看要求]</a>
+                </div>
+            `;
+        }
+    },
+
+    saveImage(uri) {
+        if (!this.state.images) this.state.images = [];
+        this.state.images.push({
+            id: 'img-' + Date.now(),
+            name: uri.split('/').pop(),
+            uri: uri,
+            status: 'valid',
+            isActive: true,
+            supportedRuntimes: ['codex'],
+            vars: [],
+        });
+        this.showToast('✓ 镜像已注册');
+        this.showImagesPage();
+    },
+
+    toggleImageActive(imageId) {
+        const img = this.state.images.find(i => i.id === imageId);
+        if (img) {
+            img.isActive = !img.isActive;
+            this.render();
+        }
+    },
+
+    deleteImage(imageId) {
+        const img = this.state.images.find(i => i.id === imageId);
+        if (!img) return;
+        const idx = this.state.images.indexOf(img);
+        if (idx > -1) {
+            this.state.images.splice(idx, 1);
+            this.showToast('✓ 镜像已删除');
+            this.render();
+        }
+    },
+
+    addImageVar() {
+        this.captureImageVarEdits();
+        this.state.editingImageVars.vars.push({ key: '', value: '', secret: false });
+        this.editImageVars(this.state.editingImageVars.imageId);
+    },
+
+    removeVar(idx) {
+        this.captureImageVarEdits();
+        this.state.editingImageVars.vars.splice(idx, 1);
+        this.editImageVars(this.state.editingImageVars.imageId);
+    },
+
+    saveImageVars() {
+        this.captureImageVarEdits();
+        const st = this.state.editingImageVars;
+        if (!st) return;
+        const blacklist = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','CLAUDE_CODE_OAUTH_TOKEN','CODEX_AUTH_TOKEN','GIT_SSH_KEY','GIT_HTTPS_TOKEN'];
+        const rows = st.vars.filter(v => v.key);
+        for (const v of rows) {
+            const K = v.key.toUpperCase();
+            if (blacklist.includes(K) || K.startsWith('GIT_') || K.startsWith('CODEX_')) {
+                this.showToast('❌ 该变量名为系统保留，请使用凭证管理配置');
+                return;
+            }
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.key)) {
+                this.showToast(`❌ 变量名不合法：${v.key}`);
+                return;
+            }
+        }
+        const img = this.state.images.find(i => i.id === st.imageId);
+        if (img) img.vars = rows;
+        this.state.editingImageVars = null;
+        this.state.currentModal = null;
+        this.showToast('✓ 环境变量已保存');
+        this.showImagesPage();
+    },
+
+    renderSystemModal() {
+        const modal = document.getElementById('modal');
+        const sys = this.state.systemStatus;
+        const cpuPercent = Math.round((sys.cpu.used / sys.cpu.total) * 100);
+        const ramPercent = Math.round((sys.ram.used / sys.ram.total) * 100);
+        const cpuBar = '▓'.repeat(Math.ceil(cpuPercent / 10)) + '░'.repeat(10 - Math.ceil(cpuPercent / 10));
+        const ramBar = '▓'.repeat(Math.ceil(ramPercent / 10)) + '░'.repeat(10 - Math.ceil(ramPercent / 10));
+
+        let diagnosticsHtml = '';
+        if (this.state.diagnostics.length > 0) {
+            diagnosticsHtml = this.state.diagnostics.map(d => `
+                <div style="margin-bottom:8px; font-size:11px;">
+                    ${d.status === 'ok' ? '✅' : d.status === 'warn' ? '⚠️' : '❌'} ${this.htmlEscape(d.item)}: ${this.htmlEscape(d.desc || '')}
+                    ${d.fix ? `<br><span style="color:#0066cc; cursor:pointer;">[${d.fix}]</span>` : ''}
+                </div>
+            `).join('');
+        }
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                📊 系统状态
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">📊 系统资源使用情况</div>
+                <div style="font-size:12px;">
+                    CPU: ${cpuBar} ${sys.cpu.used}/${sys.cpu.total} ${sys.cpu.unit} (${cpuPercent}%)<br>
+                    RAM: ${ramBar} ${sys.ram.used}/${sys.ram.total} ${sys.ram.unit} (${ramPercent}%)
+                </div>
+                <div style="margin-top:8px; font-size:12px; ${cpuPercent > 80 ? 'color:#d32f2f;' : 'color:#388e3c;'}">
+                    ${cpuPercent > 95 ? '🔴 资源耗尽' : cpuPercent > 80 ? '⚠️ 资源紧张，建议停止部分 Task' : '✅ 资源充足'} · 当前活跃 Task: ${sys.activeTasks}
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🏃 Provider 状态</div>
+                <div style="font-size:12px;">
+                    ${sys.providers.map(p => `
+                        <div style="margin-bottom:4px;">
+                            ${p.status === 'ok' ? '✅' : '⏸️'} ${p.name}（${p.desc}）
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🌐 连接状态</div>
+                <div style="font-size:12px;">
+                    REST ✅ · WS ${sys.connection.ws === 'ok' ? '✅' : '❌'}(${sys.connection.wsLatency}ms) · 终端 2 连接<br>
+                    <span style="color:#999; font-size:11px;">上次事件推送: 1 秒前</span>
+                </div>
+            </div>
+
+            <div style="margin-bottom:16px;">
+                <div style="font-weight:500; margin-bottom:8px;">🔧 诊断</div>
+                <div id="diagnosticsPanel" style="font-size:11px; background:#f5f5f5; padding:8px; border-radius:4px;">
+                    ${this.state.diagnosticsRunning ? `
+                        <div style="color:#666;">正在诊断中...</div>
+                    ` : diagnosticsHtml || `
+                        <div style="color:#999;">点击下方按钮开始诊断</div>
+                    `}
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="btn" onclick="app.runDiagnostics()">${this.state.diagnosticsRunning ? '诊断中...' : '重新诊断'}</button>
+                <button class="btn btn-secondary" onclick="app.closeModal()">关闭</button>
+            </div>
+            <span class="doc-anchor">P21-5</span>
+        `;
+    },
+
+    runDiagnostics() {
+        this.state.diagnosticsRunning = true;
+        this.state.diagnostics = [];
+        this.render();
+
+        const items = [
+            { item: '容器运行时可达（aio）', status: 'ok' },
+            { item: '/dev/kvm 可用（boxlite 就绪）', status: 'ok' },
+            { item: '磁盘余量 200GB', status: 'ok' },
+            { item: '端口未占用', status: 'ok' },
+            { item: '镜像仓库连接', status: 'warn', desc: '超时', fix: '配置 HTTP_PROXY [复制]' },
+        ];
+
+        let idx = 0;
+        const interval = setInterval(() => {
+            if (idx < items.length) {
+                this.state.diagnostics.push(items[idx]);
+                this.state.diagnosticsRunning = idx < items.length - 1;
+                this.render();
+                idx++;
+            } else {
+                clearInterval(interval);
+                this.state.diagnosticsRunning = false;
+                this.render();
+            }
+        }, 500);
+    },
+
+    renderProjectMenuModal() {
+        const modal = document.getElementById('modal');
+        const menuProjId = this.state.selectedProjectForMenu || this.state.currentProjectId;
+        const currentProj = this.state.projects.find(p => p.id === menuProjId);
+
+        if (this.state.currentModal === 'deleteProjectConfirm') {
+            // Delete confirmation dialog
+            modal.innerHTML = `
+                <div class="confirm-dialog">
+                    <div class="confirm-title">⚠️ 删除项目</div>
+                    <div class="confirm-message">
+                        确定删除项目 <strong>${this.htmlEscape(currentProj?.name || '未知项目')}</strong> 吗？<br><br>
+                        将级联删除：<br>
+                        • ${this.state.tasks[this.state.currentProjectId]?.length || 0} 个 Task（工作卷）<br>
+                        • 保留的成果卷（如需可手动导出）<br><br>
+                        <strong>此操作不可逆。</strong>
+                    </div>
+                    <div class="confirm-actions">
+                        <button class="btn btn-secondary" onclick="app.state.currentModal = 'projectMenu'; app.render()">取消</button>
+                        <button class="btn" style="background:#f44336;" onclick="app.confirmDeleteProject()">删除</button>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        modal.innerHTML = `
+            <div class="modal-header">
+                🛠️ 管理项目：${this.htmlEscape(currentProj?.name || '未知项目')}
+                <button class="modal-close" onclick="app.closeModal()">×</button>
+            </div>
+            <div style="margin-bottom:16px;">
+                <div style="font-size:12px; color:#666;">
+                    <div>来源: ${currentProj?.source === 'empty' ? '空项目' : `Git - ${currentProj?.url}`}</div>
+                    <div>创建时间: 2026-08-09 10:23</div>
+                    <div>Task 数: ${currentProj?.taskCount || 0}</div>
+                </div>
+            </div>
+            <div style="margin-bottom:16px;">
+                <button class="btn btn-secondary" style="width:100%; margin-bottom:8px; opacity:0.5; cursor:not-allowed;" disabled>✏️ 重命名（v1.1）</button>
+                <button class="btn btn-secondary" style="width:100%; margin-bottom:8px; opacity:0.5; cursor:not-allowed;" disabled>📦 归档（v1.1）</button>
+                <button class="btn btn-secondary" style="width:100%; margin-bottom:8px; background:#f44336; color:white;" onclick="app.state.currentModal = 'deleteProjectConfirm'; app.render()">🗑️ 删除项目</button>
+                <button class="btn btn-secondary" style="width:100%;">⚙️ 自动化规则 <span class="doc-anchor">v1.1</span></button>
+            </div>
+            <span class="doc-anchor">P21-6 §6</span>
+        `;
+    },
+
+    confirmDeleteProject() {
+        const projId = this.state.currentProjectId;
+        const index = this.state.projects.findIndex(p => p.id === projId);
+        if (index > -1) {
+            this.state.projects.splice(index, 1);
+            delete this.state.tasks[projId];
+        }
+
+        if (this.state.projects.length > 0) {
+            this.state.currentProjectId = this.state.projects[0].id;
+        } else {
+            this.state.currentProjectId = null;
+            this.state.currentModal = 'welcome';
+        }
+
+        this.showToast(`✓ 项目已删除`);
+        this.render();
+    },
+
+    // Actions
+    showCreateProjectModal() {
+        this.state.currentModal = 'createProject';
+        this.render();
+    },
+
+    createProjectDirect(source) {
+        const name = source === 'empty' ? '空项目' : '新项目';
+        const projId = 'proj-' + Date.now();
+        this.state.projects.push({
+            id: projId,
+            name: name,
+            source: source,
+            url: null,
+            taskCount: 0,
+        });
+        this.state.currentProjectId = projId;
+        this.state.tasks[projId] = [];
+        this.state.currentModal = null;
+        this.render();
+    },
+
+    selectProject(projId) {
+        this.state.currentProjectId = projId;
+        document.getElementById('projectDropdown').classList.remove('show');
+        this.render();
+    },
+
+    showProjectMenu() {
+        this.state.currentModal = 'projectMenu';
+        this.render();
+    },
+
+    selectTask(taskId) {
+        // Just visual selection; in real app would show task terminal
+    },
+
+    startNewTask() {
+        if (this.state.projects.length === 0) {
+            this.state.currentModal = 'createProject';
+        } else {
+            this.state.wizardData.selectedRuntime = null;
+            this.state.wizardData.authMethod = null;
+            this.state.wizardData.authStatus = null;
+            this.state.currentModal = 'step1';
+        }
+        this.render();
+    },
+
+    toggleTaskGroup(projectId) {
+        if (!this.state.taskListFolds) {
+            this.state.taskListFolds = {};
+        }
+        this.state.taskListFolds[projectId] = !this.state.taskListFolds[projectId];
+        this.render();
+    },
+
+    switchProject(projectId) {
+        this.state.currentProjectId = projectId;
+        this.render();
+    },
+
+    selectRuntime(runtime) {
+        this.state.wizardData.selectedRuntime = runtime;
+        const credentials = this.state.credentials[runtime] || {};
+        const hasValidCred = credentials.account?.status === 'valid' || credentials['api-key']?.status === 'valid';
+
+        if (hasValidCred) {
+            this.state.wizardData.selectedAuthMode = this.state.credentials.activeMode?.[runtime] || 'account';
+        } else {
+            this.state.wizardData.selectedAuthMode = 'account'; // Default to account for new users
+        }
+        this.render();
+    },
+
+    selectProjectInWizard(projectId) {
+        if (projectId === '__new__') {
+            // 打开项目创建弹层，保留已填表单值（任务指令先捕获进 wizardData）
+            this.state.wizardData.initialPrompt = document.getElementById('taskPrompt')?.value || this.state.wizardData.initialPrompt || '';
+            this.state.wizardReturn = true; // 创建成功后回确认步（与 Git 重试的 pending 语义分离）
+            this.state.pendingProjectCreate = {
+                name: '',
+                source: 'empty'
+            };
+            this.state.currentModal = 'createProject';
+            this.render();
+        } else {
+            // 设置选中项目
+            this.state.wizardData.selectedProjectId = projectId;
+            this.render();
+        }
+    },
+
+    nextWizardStep() {
+        if (this.state.currentModal === 'step1') {
+            // Check if runtime has valid credentials
+            const runtime = this.state.wizardData.selectedRuntime;
+            const credentials = this.state.credentials[runtime] || {};
+            const hasValidCred = credentials.account?.status === 'valid' || credentials['api-key']?.status === 'valid';
+
+            if (hasValidCred) {
+                // Has valid credentials - skip auth, go directly to step 2 (confirmation)
+                this.state.currentModal = 'step3';
+            } else {
+                // No credentials - show auth intercept panel (no step number)
+                this.state.currentModal = 'authIntercept';
+            }
+        } else if (this.state.currentModal === 'authIntercept') {
+            // After auth completes, go to confirmation step
+            this.state.currentModal = 'step3';
+        }
+        this.render();
+    },
+
+    completeStep2() {
+        const runtime = this.state.wizardData.selectedRuntime;
+        const mode = this.state.wizardData.selectedAuthMode;
+
+        if (mode === 'apikey') {
+            // API key mode - submit immediately
+            const key = document.getElementById('apiKeyInput')?.value;
+            if (!key) {
+                this.showToast('❌ 请输入 API Key');
+                return;
+            }
+            this.state.credentials[runtime] = this.state.credentials[runtime] || {};
+            this.state.credentials[runtime]['api-key'] = {
+                status: 'valid',
+                secret: key.substring(0, 7) + '...ab12',
+            };
+            if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+            this.state.credentials.activeMode[runtime] = 'api-key';
+            this.showToast('✅ API Key 已保存');
+        } else {
+            // Account mode - just mark the selection, actual login happens in progress card
+            if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+            this.state.credentials.activeMode[runtime] = 'account';
+        }
+
+        this.state.currentModal = 'step3';
+        this.render();
+    },
+
+    previousWizardStep() {
+        if (this.state.currentModal === 'step3') {
+            // From confirmation, go back to Step 1
+            this.state.currentModal = 'step1';
+        } else if (this.state.currentModal === 'authIntercept') {
+            // From auth intercept, go back to Step 1
+            this.state.currentModal = 'step1';
+        }
+        this.render();
+    },
+
+    switchAuthTab(method, element) {
+        this.state.wizardData.selectedAuthMode = method; // Update the selected mode
+
+        // Update tab UI
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        if (element) element.classList.add('active');
+
+        // Show/hide content
+        const accountPanel = document.getElementById('accountAuthPanel');
+        const apiKeyPanel = document.getElementById('apiKeyAuthPanel');
+        if (accountPanel) accountPanel.classList.toggle('show', method === 'account');
+        if (apiKeyPanel) apiKeyPanel.classList.toggle('show', method === 'apikey');
+    },
+
+    startDeviceCodeCountdown() {
+        let countdown = 15 * 60;
+        const countdownEl = document.getElementById('countdown');
+        const interval = setInterval(() => {
+            countdown--;
+            if (countdown < 0) {
+                clearInterval(interval);
+                if (countdownEl) countdownEl.textContent = '⏱️ 已过期';
+                this.showToast('❌ 设备码已过期');
+            } else {
+                const mins = Math.floor(countdown / 60);
+                const secs = countdown % 60;
+                if (countdownEl) {
+                    countdownEl.textContent = `⏱️ ${mins}:${String(secs).padStart(2, '0')} 后过期`;
+                }
+            }
+        }, 1000);
+    },
+
+    simulateAuthSuccess() {
+        this.state.wizardData.authStatus = 'success';
+        const runtime = this.state.wizardData.selectedRuntime;
+        this.state.credentials[runtime] = {
+            method: 'account',
+            email: 'user@example.com',
+            status: 'valid',
+        };
+
+        this.showToast('✅ 授权成功');
+
+        // Auto-advance to step 3 after 2s
+        setTimeout(() => {
+            this.state.currentModal = 'step3';
+            this.render();
+        }, 2000);
+    },
+
+    submitApiKey() {
+        const key = document.getElementById('apiKeyInput')?.value;
+        if (!key) {
+            this.showToast('❌ 请输入 API Key');
+            return;
+        }
+
+        const runtime = this.state.wizardData.selectedRuntime;
+        this.state.credentials[runtime] = {
+            method: 'api-key',
+            secret: key.substring(0, 7) + '...',
+            status: 'valid',
+        };
+
+        this.showToast('✅ API Key 已保存');
+
+        setTimeout(() => {
+            this.state.currentModal = 'step3';
+            this.render();
+        }, 1000);
+    },
+
+    launchTask() {
+        // 读取所选项目（确认步项目行）
+        const projectSelect = document.getElementById('projectSelect');
+        const selectedProjectId = projectSelect?.value || this.state.currentProjectId;
+        this.state.wizardData.selectedProjectId = selectedProjectId;
+
+        // 读取可选的任务指令（仅随创建请求传输，不落任何持久化——P21-2 §9）
+        this.state.wizardData.initialPrompt = (document.getElementById('taskPrompt')?.value || '').trim() || null;
+
+        // 记录所选镜像（从下拉框读取）
+        const imageSelect = document.getElementById('imageSelect');
+        if (imageSelect) {
+            const selectedImageId = imageSelect.value;
+            const selectedImage = this.state.images.find(i => i.id === selectedImageId);
+            if (selectedImage) {
+                this.state.wizardData.selectedImage = selectedImageId;
+                this.state.wizardData.selectedImageName = selectedImage.name;
+            }
+        } else {
+            // 降级：使用默认 AIO
+            const aioImage = this.state.images.find(i => i.name.includes('AIO'));
+            if (aioImage) {
+                this.state.wizardData.selectedImage = aioImage.id;
+                this.state.wizardData.selectedImageName = aioImage.name;
+            }
+        }
+
+        // 重置进度状态；阶段推进完全由进度卡的计时器驱动，
+        // 最后一个阶段（连接终端）结束时由 renderProgressModal 调用 finishTaskCreation（P21-2 D）
+// 决策 1：无 withLogin——鉴权已在拦截面板完成，进度卡阶段固定
+        this.state.wizardData.progressState = { currentStageIndex: 0, elapsedTime: 0 }
+        this.state.currentModal = 'progress';
+        this.render();
+    },
+
+    toggleSettingsMenu() {
+        this.state.settingsMenuOpen = !this.state.settingsMenuOpen;
+        const menu = document.getElementById('settingsMenu');
+        const toggle = document.getElementById('settingsMenuToggle');
+        if (this.state.settingsMenuOpen) {
+            menu.style.display = 'block';
+            toggle.textContent = '▾';
+        } else {
+            menu.style.display = 'none';
+            toggle.textContent = '▸';
+        }
+    },
+
+    showCredentialsPage() {
+        // 向后兼容：重定向到新的设置页
+        this.showSettingsPage('credentials');
+    },
+
+    showImagesPage() {
+        // 向后兼容：重定向到新的设置页
+        this.showSettingsPage('images');
+    },
+
+    showSystemPage() {
+        // 向后兼容：重定向到新的设置页
+        this.showSettingsPage('system');
+    },
+
+    changeAuthMode(runtime, newMode) {
+        const credentials = this.state.credentials[runtime] || {};
+        const currentMode = this.state.credentials.activeMode?.[runtime] || 'account';
+
+        // Check if target mode has credentials
+        const hasTargetCred = (newMode === 'account' && credentials.account?.status === 'valid') ||
+                              (newMode === 'api-key' && credentials['api-key']?.status === 'valid');
+
+        if (hasTargetCred) {
+            // Show confirmation
+            this.showModeConfirmation(runtime, newMode);
+        } else {
+            // Mode not configured - would show panel to add it
+            this.showToast('⚠️ 该模式未配置，请先添加凭证');
+        }
+    },
+
+    showModeConfirmation(runtime, newMode) {
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modal');
+
+        overlay.classList.add('show');
+        modal.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-title">切换凭证模式</div>
+                <div class="confirm-message">
+                    切换后新任务将使用 ${newMode === 'api-key' ? 'API Key（按量计费）' : '帐号授权（订阅额度）'}，已运行任务不受影响。
+                </div>
+                <div class="confirm-actions">
+                    <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+                    <button class="btn" onclick="app.confirmModeChange('${runtime}', '${newMode}')">确认切换</button>
+                </div>
+            </div>
+        `;
+    },
+
+    confirmModeChange(runtime, newMode) {
+        if (!this.state.credentials.activeMode) {
+            this.state.credentials.activeMode = {};
+        }
+        this.state.credentials.activeMode[runtime] = newMode;
+
+        this.showToast(`✓ 已切换到 ${newMode === 'api-key' ? 'API Key' : '帐号授权'} 模式`);
+        this.state.currentModal = 'credentials';
+        this.render();
+    },
+
+    reauthCredential(runtime, method) {
+        // Start new task wizard for reauth
+        this.state.wizardData.selectedRuntime = runtime;
+        this.state.wizardData.selectedAuthMode = method;
+        this.state.currentModal = 'step2';
+        this.render();
+    },
+
+    showAddApiKeyPanel(runtime) {
+        // Show inline panel to add API key
+        this.showToast('💡 在凭证管理中输入新的 API Key');
+    },
+
+    revokeCredential(runtime, method) {
+        const credentials = this.state.credentials[runtime] || {};
+        const activeMode = this.state.credentials.activeMode?.[runtime];
+        const isActive = (method === 'account' && activeMode === 'account') ||
+                        (method === 'api-key' && activeMode === 'api-key');
+
+        const overlay = document.getElementById('modalOverlay');
+        const modal = document.getElementById('modal');
+
+        overlay.classList.add('show');
+
+        let warningText = '';
+        if (isActive) {
+            warningText = '<div style="background:#ffebee; border-left:4px solid #f44336; color:#c62828; padding:8px; margin-bottom:12px; border-radius:2px; font-size:12px;"><strong>⚠️ 警告：</strong> 该模式当前生效中，吊销后将不可用。</div>';
+        }
+
+        modal.innerHTML = `
+            <div class="confirm-dialog">
+                <div class="confirm-title">吊销凭证</div>
+                <div class="confirm-message">
+                    ${warningText}
+                    确定要吊销 <strong>${method === 'account' ? '帐号授权' : 'API Key'}</strong> 凭证吗？
+                </div>
+                <div class="confirm-actions">
+                    <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+                    <button class="btn" style="background:#f44336;" onclick="app.confirmRevokeCredential('${runtime}', '${method}')">确认吊销</button>
+                </div>
+            </div>
+        `;
+    },
+
+    confirmRevokeCredential(runtime, method) {
+        const credentials = this.state.credentials[runtime] || {};
+        const activeMode = this.state.credentials.activeMode?.[runtime];
+        const isActive = (method === 'account' && activeMode === 'account') ||
+                        (method === 'api-key' && activeMode === 'api-key');
+
+        if (credentials[method]) {
+            delete credentials[method];
+        }
+
+        if (isActive) {
+            // Find if there's another valid credential
+            const hasOtherCred = (method === 'account' && credentials['api-key']?.status === 'valid') ||
+                                (method === 'api-key' && credentials.account?.status === 'valid');
+
+            if (hasOtherCred) {
+                // Show dialog asking to switch
+                const overlay = document.getElementById('modalOverlay');
+                const modal = document.getElementById('modal');
+
+                overlay.classList.add('show');
+                modal.innerHTML = `
+                    <div class="confirm-dialog">
+                        <div class="confirm-title">切换凭证模式</div>
+                        <div class="confirm-message">
+                            另一模式已配置凭证，要切换过去吗？
+                        </div>
+                        <div class="confirm-actions">
+                            <button class="btn btn-secondary" onclick="app.finalizRevokeWithoutSwitch('${runtime}')">不切换</button>
+                            <button class="btn" onclick="app.finalizRevokeWithSwitch('${runtime}', '${method === 'account' ? 'api-key' : 'account'}')">切换过去</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // No other credential available
+                if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+                this.state.credentials.activeMode[runtime] = null;
+                this.showToast(`✓ 凭证已吊销`);
+                this.state.currentModal = 'credentials';
+                this.render();
+            }
+        } else {
+            this.showToast(`✓ 凭证已吊销`);
+            this.state.currentModal = 'credentials';
+            this.render();
+        }
+    },
+
+    finalizRevokeWithSwitch(runtime, newMode) {
+        if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+        this.state.credentials.activeMode[runtime] = newMode;
+        this.showToast(`✓ 凭证已吊销，已切换到 ${newMode === 'api-key' ? 'API Key' : '帐号授权'} 模式`);
+        this.state.currentModal = 'credentials';
+        this.render();
+    },
+
+    finalizRevokeWithoutSwitch(runtime) {
+        if (!this.state.credentials.activeMode) this.state.credentials.activeMode = {};
+        this.state.credentials.activeMode[runtime] = null;
+        this.showToast(`✓ 凭证已吊销，当前模式已禁用`);
+        this.state.currentModal = 'credentials';
+        this.render();
+    },
+
+    closeModal() {
+        this.state.currentModal = null;
+        this.render();
+    },
+
+    showToast(message) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    },
+
+    // Debug functions
+    resetToUninitialized() {
+        this.state = {
+            projects: [],
+            currentProjectId: null,
+            tasks: {},
+            credentials: {},
+            initialized: false, // 未初始化标记
+            currentModal: null,
+            wizardData: {
+                selectedRuntime: null,
+                authMethod: null,
+                authStatus: null,
+                deviceCode: 'ABCD1234',
+                deviceCodeCountdown: 15 * 60,
+            },
+            showBanner: false,
+            bannerType: null,
+        };
+        this.showToast('🔧 已重置为未初始化状态 → 显示初始化向导');
+        this.render();
+    },
+
+    jumpToStateWithTasks() {
+        this.state.projects = [
+            { id: 'proj-1', name: 'MyProject', source: 'empty', taskCount: 2 },
+            { id: 'proj-2', name: 'DataPipeline', source: 'git', url: 'https://github.com/user/data-pipeline', taskCount: 1 },
+        ];
+        this.state.currentProjectId = 'proj-1';
+        this.state.tasks = {
+            'proj-1': [
+                { id: 'task-1', name: 'Task-001', status: 'running', runtime: 'codex', createdAt: '08:12' },
+                { id: 'task-2', name: 'Task-002', status: 'stopped', runtime: 'codex', createdAt: '08:00' },
+            ],
+            'proj-2': [
+                { id: 'task-3', name: 'DataSync', status: 'running', runtime: 'codex', createdAt: '09:30' },
+            ],
+        };
+        this.state.credentials = {
+            'codex': {
+                'account': { status: 'valid', email: 'user@example.com', expiresAt: '2026-09-15' },
+                'api-key': { status: 'valid', secret: 'sk-...ab12' }
+            },
+            'activeMode': { 'codex': 'account' }
+        };
+        this.state.initialized = true;
+        this.state.currentModal = null;
+        this.render();
+    },
+
+    resetToNoCredState() {
+        // Reset all credentials
+        this.state.credentials = {
+            'codex': {},
+            'activeMode': {}
+        };
+        this.state.projects = [
+            { id: 'proj-1', name: 'MyProject', source: 'empty', taskCount: 0 },
+        ];
+        this.state.currentProjectId = 'proj-1';
+        this.state.tasks = { 'proj-1': [] };
+        this.state.initialized = true;
+        this.state.currentModal = null;
+        this.showToast('↺ 已重置为无凭证状态');
+        this.render();
+    },
+
+    triggerCredExpiredBanner() {
+        this.state.showBanner = true;
+        this.state.bannerType = 'expired';
+        this.render();
+    },
+
+    // Toggle project dropdown
+    toggleProjectDropdown() {
+        const dropdown = document.getElementById('projectDropdown');
+        dropdown.classList.toggle('show');
+    },
+
+    // ============ Git Credentials (New) ============
+    showGitCredentialPanel(type) {
+        this.state.gitCredentialType = type; // Store which type to configure
+        this.state.currentModal = 'gitCredentials';
+        this.render();
+    },
+
+    saveGitCredential(type) {
+        if (!this.state.credentials.git) this.state.credentials.git = {};
+
+        if (type === 'ssh') {
+            this.state.credentials.git.ssh = {
+                fingerprint: 'SHA256:abc123def456... (模拟)',
+                lastUsed: '未使用'
+            };
+            this.showToast('✅ SSH 密钥已保存');
+        } else {
+            const platform = document.getElementById('httpsPlatform')?.value || 'github';
+            this.state.credentials.git.https = {
+                type: platform.toUpperCase(),
+                tail: '...ab12 (模拟)',
+                lastUsed: '未使用'
+            };
+            this.showToast('✅ HTTPS Token 已保存');
+        }
+        // 回程（P22 §2）：若因 clone 权限失败跳转而来，返回项目创建弹层重试
+        if (this.state.pendingProjectCreate) {
+            this.state.currentPage = 'workbench';
+            this.state.currentModal = 'createProject';
+            this.showToast('✅ Git 凭证已保存——请点击 [创建] 重试克隆');
+        } else {
+            this.state.currentModal = null;
+            this.showSettingsPage('credentials');
+        }
+        this.render();
+    },
+
+    testGitConnection(type) {
+        this.showToast(`✅ Git ${type} 连接测试成功`);
+    },
+
+    revokeGitCredential(type) {
+        if (!this.state.credentials.git) return;
+        delete this.state.credentials.git[type];
+        this.showToast(`✓ Git ${type.toUpperCase()} 凭证已吊销`);
+        this.render();
+    },
+
+    switchTab(tabName, element) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        element.classList.add('active');
+        document.querySelectorAll('.tab-content').forEach(p => p.classList.remove('show'));
+        document.getElementById(tabName + 'Panel').classList.add('show');
+    },
+
+    // ============ Image Parameters (New) ============
+    addImageEnv() {
+        if (!this.state.imageParams) this.state.imageParams = { env: {}, cmd: '' };
+        const key = (document.getElementById('newEnvKey')?.value || '').trim();
+        const value = document.getElementById('newEnvVal')?.value || '';
+        if (!key) { this.showToast('⚠️ 请输入变量名'); return; }
+        const blacklist = ['ANTHROPIC_API_KEY','OPENAI_API_KEY','CLAUDE_CODE_OAUTH_TOKEN','CODEX_AUTH_TOKEN','GIT_SSH_KEY','GIT_HTTPS_TOKEN'];
+        const K = key.toUpperCase();
+        if (blacklist.includes(K) || K.startsWith('GIT_') || K.startsWith('CODEX_')) {
+            this.showToast('❌ 该变量名为系统保留，请使用凭证管理配置');
+            return;
+        }
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) { this.showToast('❌ 变量名不合法'); return; }
+        if (!this.state.imageParams.env) this.state.imageParams.env = {};
+        this.state.imageParams.env[key] = { value, secret: false };
+        this.showToast(`✓ 环境变量 ${key} 已添加`);
+        this.render();
+    },
+
+    removeImageEnv(key) {
+        if (this.state.imageParams?.env) {
+            delete this.state.imageParams.env[key];
+            this.showToast(`✓ 环境变量已删除`);
+            this.render();
+        }
+    },
+
+    // ============ Project Creation with Git Failure Handling ============
+    createProject() {
+        const name = document.getElementById('newProjectName')?.value || '新项目';
+        const source = document.querySelector('input[name="source"]:checked').value;
+        const url = source === 'git' ? (document.getElementById('gitUrl').value || '') : null;
+
+        const hasGitCred = !!(this.state.credentials.git && (this.state.credentials.git.ssh || this.state.credentials.git.https));
+        if (source === 'git' && url && !hasGitCred) {
+            // 模拟：未配置 Git 凭证时私有仓克隆失败（配置后重试即成功）
+            if (url.includes('private') || Math.random() > 0.5) {
+                if (!url.includes('public')) {
+                    // Show failure and guide to Git credential config
+                    this.state.projectCreationError = `❌ 克隆失败：无权访问该仓库（401/403）。是否为私有仓库？`;
+                    this.state.pendingProjectCreate = { name, source, url };
+                    this.render();
+
+                    // Show action
+                    setTimeout(() => {
+                        const overlay = document.getElementById('modalOverlay');
+                        const modal = document.getElementById('modal');
+                        overlay.classList.add('show');
+                        modal.innerHTML = `
+                            <div class="confirm-dialog">
+                                <div class="confirm-title">配置 Git 凭证</div>
+                                <div class="confirm-message">
+                                    克隆失败可能是因为权限不足。请先配置 Git 凭证，然后重试克隆。
+                                </div>
+                                <div class="confirm-actions">
+                                    <button class="btn btn-secondary" onclick="app.closeModal()">取消</button>
+                                    <button class="btn" onclick="app.navigateToGitCredConfig()">配置 Git 凭证</button>
+                                </div>
+                            </div>
+                        `;
+                    }, 500);
+                    return;
+                }
+            }
+        }
+
+        const projId = 'proj-' + Date.now();
+        this.state.projects.push({
+            id: projId,
+            name: name,
+            source: source,
+            url: url,
+            taskCount: 0,
+        });
+        this.state.currentProjectId = projId;
+        this.state.tasks[projId] = [];
+        this.state.projectCreationError = null;
+        this.state.pendingProjectCreate = null;
+        // 向导内「+ 新建项目…」的回程：回确认步并选中新项目（表单值经 wizardData 保留）
+        if (this.state.wizardReturn) {
+            this.state.wizardReturn = false;
+            this.state.wizardData.selectedProjectId = projId;
+            this.state.currentModal = 'step3';
+        } else {
+            this.state.currentModal = null;
+        }
+
+        this.showToast(`✓ 项目 "${name}" 创建成功`);
+        this.render();
+    },
+
+    navigateToGitCredConfig() {
+        this.state.currentModal = null;
+        this.showSettingsPage('credentials');
+        this.showToast('ℹ️ 配置 Git 凭证后将返回项目创建');
+    },
+
+    // ============ Utility Methods ============
+};
+
+// Attach toggle to button
+document.addEventListener('DOMContentLoaded', () => {
+    app.init();
+    document.getElementById('projectBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        app.toggleProjectDropdown();
+    });
+});
+</script>
+</body>
+</html>
