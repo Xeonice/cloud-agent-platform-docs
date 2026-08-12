@@ -111,12 +111,12 @@ CSS 随 `terminal` chunk 一起动态注入，**不放全局 layout**——否�
 
 ```
 浏览器 → 服务端
-  { type: 'input',  payload: string }          # 用户键入
+  { type: 'input',  data: string }             # 用户键入（plain string）
   { type: 'resize', cols: number, rows: number }
   { type: 'ping' }
 
 服务端 → 浏览器
-  { type: 'data',   payload: base64 }          # 终端输出
+  { type: 'data',   data: string }             # 终端输出（plain string，xterm 直接 write）
   { type: 'exit',   code: number }
   { type: 'pong' }
 ```
@@ -419,7 +419,7 @@ views/project-task-tree/TaskListItem.view#onClick()
             ├─ hooks/useTerminalInstance#setupRenderer(terminal)
             │  ├─ 可用 → loadAddon(new WebglAddon()) + onContextLoss → §11.8
             │  └─ 不可用 → await import('@xterm/addon-canvas') → loadAddon
-            ├─ terminal.onData(d => ptySocket.send({type:'input', payload:d}))   // §11.2
+            ├─ terminal.onData(d => ptySocket.send({type:'input', data:d}))   // §11.2
             ├─ hooks/useSandboxTerminalSocket#connect(sessionId, sandboxId)      // ↓ 展开
             │  ├─ services/ws/ptySocket#create({ WebSocketCtor, url, onFrame, onState })
             │  │  └─ new WebSocketCtor(`/terminal?sandboxId=..&socketSessionKey=..`)
@@ -450,7 +450,7 @@ views/project-task-tree/TaskListItem.view#onClick()
 └─ ▲ terminal.onData(data: string)                     // 绑定于 §11.1 第 8 步
    └─ hooks/useTerminalInstance#handleData(sessionId, data)
       └─ stores/createTerminalRegistrySlice#entries.get(sessionId).socket
-         └─ services/ws/ptySocket#send({ type:'input', payload: data })
+         └─ services/ws/ptySocket#send({ type:'input', data })
             ├─ connState==='open' → ws.send(JSON.stringify(frame))
             └─ 否则 → **丢弃并返回 false**（不排队）
 ```
@@ -471,7 +471,7 @@ views/project-task-tree/TaskListItem.view#onClick()
    │  └─ 失败 → dev: assertContract 横幅 / prod: 上报后 return（不阻断渲染）
    └─ ▲ onFrame(frame) → hooks/useSandboxTerminalSocket#handleFrame()
       ├─ frame.type==='data'
-      │  └─ lib/writeBatcher#push(sessionId, decodeBase64(frame.payload))
+      │  └─ lib/writeBatcher#push(sessionId, frame.data)   // plain string，无需解码
       │     └─（rAF 到期）lib/writeBatcher#flush(sessionId)
       │        └─ registry.entries.get(sessionId).terminal.write(merged)   // §6.1
       ├─ frame.type==='exit'
@@ -485,7 +485,7 @@ views/project-task-tree/TaskListItem.view#onClick()
 | 文件 | 层 | 职责 |
 |---|---|---|
 | `services/ws/ptySocket.ts` | service | 帧解码 + zod 校验 |
-| `types/ws-protocol.ts` | type | 帧 union 与 schema（10 §3 权威） |
+| `types/ws-protocol.ts` | type | 帧 union 与 schema（10 §7.4 权威） |
 | `lib/writeBatcher.ts` | lib | rAF 合并写入 |
 | `hooks/useSandboxTerminalSocket.ts` | hook | 帧分派 + exit 处理 |
 

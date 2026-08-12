@@ -197,7 +197,7 @@
 | 能力 | REST | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|
 | `listAutomations` | `GET /api/projects/:id/automations` | | `AutomationDto[]` | `list-automations` query | — | — | — |
-| `createAutomation` | `POST /api/projects/:id/automations` | `{ name, runtimeId, prompt, schedule, timeoutMinutes, webhookUrl?, triggerOn?, artifactRetentionDays? }` | `AutomationDto` | `create-automation` command | I-AUT-5（timeout ∈ 30/60/120/240、prompt ≤8000）、I-AUT-6、**I-AUT-7（每项目 ≤20）** | `INVALID_ARGUMENT`(400)、`409`（超上限） | — |
+| `createAutomation` | `POST /api/projects/:id/automations` | `{ name, runtimeId, prompt, schedule, **timezone**, timeoutMinutes, webhookUrl?, triggerOn?, artifactRetentionDays? }`——**`timezone` 由前端传当前浏览器时区，创建后快照不变** | `AutomationDto` | `create-automation` command | I-AUT-5、I-AUT-6、**I-AUT-7（每项目 ≤20）**、**I-AUT-9（IANA 非空、不可隐式改写）** | `INVALID_ARGUMENT`(400)、`409`（超上限） | — |
 | `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
 | `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
 | `listRuns` | `GET /api/automations/:id/runs`（分页） | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
@@ -205,8 +205,9 @@
 | `readRunLogs` | `GET /api/automations/runs/:runId/logs?offset=&limit=` | 分页字节区间，默认回末尾 64KB | 原始 stdout/stderr | `read-run-logs` query | I-AUR-4（≤30MB） | `NOT_FOUND` | — |
 | `webhookTest` | `POST /api/automations/webhook-test` | `{ url }` | `{ ok, errorCode?, message }` | — | I-AUT-6（http/https + SSRF 谓词） | `INVALID_ARGUMENT`(400) | — |
 
-**前端要知道的三件事**：
+**前端要知道的四件事**：
 
+0. **`timezone` 创建时传、之后别动**：它是快照（P21-7 §3.2）——编辑规则时若你把当前浏览器时区又传一遍，用户换台机器就会把凌晨任务挪走。**只在用户显式改时区时才传这个字段**。
 1. **触发产生的是标准 Task**：它会出现在工作台列表里（`labels.automationId` 打 `[自动]` 标签），并**照常发 `sandbox.created` / `sandbox.status_changed`**。自动化本身**没有** WS 事件（23 D-10），运行历史靠 REST 拉。
 2. **`resource-exhausted` 是过程态不是失败**：配合 `retryCount`/`retryAt` 渲染成「⚠️ 资源重试中（n/5）」；5 次后才转 `failed`。
 3. **降频 ≠ 禁用**：连续失败 ≥3 → `degraded=true`（每日一次，规则仍启用）；降频后再 7 次 → `enabled=false`。两态在列表上要能区分（🟡 vs 🔴）。

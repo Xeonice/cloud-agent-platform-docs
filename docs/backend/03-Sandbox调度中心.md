@@ -245,6 +245,7 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 
 - **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
 - **取消的清理**：用户在进度卡取消或进程重启后发现残留 → 扫 `workspaces/` 下标记文件为 `preparing` 的目录，一律 `rm -rf`（启动对账，13 §4）。半成品目录没有任何保留价值。
+- **`ready` 孤儿目录清理**（交叉评审 P2-8）：销毁 keepVolume 流程中"`provider.destroy` 后、打 `kept` 标记/登记 `RetainedVolume` 前"崩溃，会留下标记仍为 `ready` 且 DB 无 `retained_volumes` 记录的孤儿目录。启动对账补一条判据：**sandbox 已 destroyed/failed 但目录标记仍 `ready` 且无 retained 记录 → `rm -rf`**（有 retained 记录的 `kept` 目录才保留）。
 - 复制期间不占用 CPU/内存配额（配额已在 §3 互斥区登记，此处只是 IO），但**计入并发准备数上限**（`sandbox.maxConcurrentWorkspacePrepare`，默认 2）防止多个 Task 同时复制大仓库把磁盘 IO 打满。**在 CoW 文件系统上这个上限可以调高**（reflink 复制几乎不产生 IO）。
 
 ### 7.7 保留工作区（keepVolume）
@@ -265,8 +266,11 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 
 - `AutomationScheduler` 定时任务，**每分钟**扫描 `WHERE enabled = true AND next_trigger_at <= now()`（走 `(enabled, next_trigger_at)` 索引，13 §2）。
 - **单实例串行**：整个扫描批次在一个 `async-mutex` 内跑完，防止上一轮未结束时下一轮重入（单机单进程前提；多节点时改为 DB 行级锁 + `claimed_by`，见 11 §4 预留）。
-- 触发即 `next_trigger_at` **先推进后执行**（按 `schedule_kind` + `schedule_config` 算下一次），保证任何执行异常都不会导致同一时刻被反复触发。
-- **时区**：`schedule_config.tz` 存 IANA 时区名（前端默认取浏览器时区，P21-7 §3.2），下一次触发时间用该时区计算再转 UTC 存库——夏令时切换按"本地墙钟时间"语义（每天 08:00 就是当地 08:00）。
+- **outcome-pending 孤儿 run 补扫（交叉评审 P2-7）**：run 已 `finalize`（终态写入）但 `Automation.recordOutcome()`（增 `consecutive_failures` / 触发降频）尚未生效时崩溃——仅按 `next_trigger_at` 扫规则无法发现它，会**漏记一次失败计数**。故每轮额外扫 `automation_runs WHERE status IN (failed,timeout,success) AND outcome_applied = false`，对每条补调 `recordOutcome` 并置 `outcome_applied=true`（幂等，13 automation_runs 加 `outcome_applied` 列）。
+- 触发即 `next_trigger_at` **先推进后执行**（按 `schedule_kind` + `schedule_config` + `timezone` 算下一次），保证任何执行异常都不会导致同一时刻被反复触发。
+- **时区（快照语义，产品 P21-7 §3.2）**：计算下一次触发时间**只用规则自己的 `automations.timezone` 列**（13 §2.7.1），**绝不读服务器系统时区、也不读请求方时区**。该列在规则创建时快照（前端默认填当时的浏览器时区），此后**规则存续期内不变**——用户换个时区的机器再打开平台，既有规则的触发时刻不会漂移（"每天凌晨 3 点"不会变成中午 3 点）；只有**新建**规则才继承当时的用户时区。
+  - 算法：在 `timezone` 下按**本地墙钟**语义求下一个满足 `schedule_config` 的时刻，再转 UTC 存 `next_trigger_at`。夏令时切换日照此自然处理——"每天 08:00"永远是当地 08:00，UTC 偏移随 DST 变化（25 T-AUT-4）。
+  - 编辑规则时**不隐式改写 `timezone`**：用户要换时区必须显式改这个字段（否则"改了个 prompt 顺手把触发时刻挪了 8 小时"是最难排查的一类 bug）。
 
 ### 8.2 触发决策表（实现即 P21-7 §5 决策表，逐条对齐）
 

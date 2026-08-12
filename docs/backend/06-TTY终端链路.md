@@ -91,7 +91,7 @@ interface WaitingInputDetector {
 ### 8.2 sandbox 级聚合与上报
 
 - sandbox 的子态 = **其全部 attached tty 会话都 waiting**（任一会话在刷输出即说明 agent 在干活，03 §4.1）；会话关闭时从集合移除并重算。
-- 翻转时推 WS `sandbox.waiting_input { sandboxId, waiting, sessionId? }`（协议见 10 §3）。
+- 翻转时推 WS `sandbox.waiting_input { sandboxId, waiting, sessionId? }`（协议见 10 §7.4）。
 - 状态只存网关内存，**不落库、不进状态机、不进 `sandbox_state_transitions`**（03 §4.1）。
 - **`GET /api/sandboxes*` 的派生字段 `waitingInput` 怎么取（审计 P1-12 修正）**：terminal 的 **application 层**暴露只读查询端口 `WaitingInputQueryPort { isWaiting(id) / filterWaiting(ids) }`，sandbox 的查询处理器经 DI 注入它。**sandbox 不得直接读网关/检测器的内存态**——那是跨上下文摸对方内部实现，违反 01 §5；检测器本身仍留在 `terminal/infrastructure`（§8.1）。批量接口 `filterWaiting` 是必需的：列表一次几十个 sandbox，逐个调用会退化成 N 次跨层查询。网关重启后一律回落为 `false`，下一次静默满 10s 自然重新判定——这个"漂移"的最坏后果只是图标短暂缺失，符合 03 §4.1 的容忍度红线。
 
