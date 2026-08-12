@@ -1,0 +1,6 @@
+[submodule "web"]
+	path = web
+	url = git@github.com:Xeonice/agent-platform-web.git
+[submodule "api"]
+	path = api
+	url = git@github.com:Xeonice/agent-platform-api.git
