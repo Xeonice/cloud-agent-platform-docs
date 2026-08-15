@@ -82,9 +82,11 @@ interface SandboxProvider {
 |---|---|---|
 | create / start / stop / destroy | OCI 容器 create/start/stop/rm（经 socket proxy，文档 11 §1） | BoxLite 库调用创建/启动/停止/销毁 Box |
 | inspect | 容器 inspect + 健康探针 | Box 状态查询 |
-| spawn(tty=false) | 容器内一次性命令执行 | Box 内一次性命令执行 |
-| spawn(tty=true) | 容器内分配 TTY 的交互式会话 | Box 内分配 TTY 的交互式会话 |
+| spawn(tty=false) | 经 in-sandbox agent `POST /v1/shell/exec`（收集输出到 EOF） | 同左（Box 内 `:8080`，端口转发） |
+| spawn(tty=true) | 经 in-sandbox agent `ws /v1/shell/ws`，翻译成 `ProcessStream` | 同左（Box 内 `:8080`，端口转发） |
 | watchEvents | ✅ 原生事件流 | ✅ 库回调包装成同一 `AsyncIterable` |
+
+> **数据面 = 沙箱内 agent（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/shell/exec` 命令）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**仅内网可达、就绪探测、不外泄**。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
 
 ### 2.3 为什么把 `exec` / `attachPty` / `healthCheck` 从必须方法里删掉
 
