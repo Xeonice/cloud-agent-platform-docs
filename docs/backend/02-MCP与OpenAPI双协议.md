@@ -103,7 +103,7 @@ export class SandboxMcpTools {
 | 端点 | 说明 |
 |---|---|
 | `GET /api/projects` | 列表 + **各项目 Task 数聚合**（P21-6 §7）+ `cloneStatus` |
-| `POST /api/projects` | 创建；`{ name, sourceType:'git-clone'\|'empty', repoUrl?, repoBranch? }`；git-clone **立即返回 202**（`cloneStatus:'cloning'`），后台异步克隆，进度经 WS `project.clone_progress` 推送（03 §7.2） |
+| `POST /api/projects` | 创建；`{ name, sourceType:'git'\|'empty', repoUrl?, repoBranch? }`；git **立即返回 202**（`cloneStatus:'cloning'`），后台异步克隆，进度经 WS `project.clone_progress` 推送（03 §7.2） |
 | `GET /api/projects/:id` | 详情（含 clone 失败的 `errorCode`/`errorMessage`） |
 | **`POST /api/projects/:id/retry-clone`** | **重试克隆**：把 `cloneStatus` 从 `failed` 显式重置为 `cloning` 并重新入队（03 §7.2 / 23 I-PRJ-6 不允许隐式回退）。产品闭环：权限类失败 → [配置 Git 凭证] → 配完 [重试克隆]（P22 §2）。**此前 03/24/26 有 `RetryCloneCommand` 却没有端点——本次补齐**。非 `failed` 态调用 → 409。用 POST 动作子路径而非 PATCH：它触发外部副作用（重跑 clone），判据同下 |
 | **`POST /api/projects/:id/convert-to-empty`** | **改为空项目**：对 `cloneStatus='failed'` 的项目放弃克隆、转为空项目继续用（产品 P21-6 §5/§9）。做四件事：① `sourceType` 改 `empty`、`repoUrl` 丢弃置 null；② **删除半成品基线目录**（`rm -rf ${DATA_ROOT}/baselines/<projectId>`，复用 03 §7.2 的清理路径）；③ `cloneStatus` 转 **`ready`**；④ **项目 id / 名称 / 已关联 Task 全部保留不变**——这正是选它而不是「删除+新建」的理由。仅 `failed` 态可调，非该态 → **409**（判据同 retry-clone）|
