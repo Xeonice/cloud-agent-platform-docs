@@ -16,7 +16,7 @@
 
 - `@nestjs/websockets` + `@nestjs/platform-socket.io`，namespace `/terminal`。
 - 选 socket.io 理由：房间、重连、多路复用原语开箱即用，工程成本低；对延迟极敏感时备选纯 `ws`（协议开销更小），网关抽象保证可替换。
-- 鉴权预留：`@UseGuards(WsAuthGuard)`，当前 no-op 实现（见文档 11）。
+- **鉴权（S1 审查 P1-1 修复项，不得留 no-op）**：终端 WS 握手**必须**校验访问口令/会话。`PasscodeGuard`（`APP_GUARD`）对非 http 上下文自豁免，故网关须在 `handleConnection` 里显式校验 `handshake.auth`/cookie（复用 `PasscodeService.verifySessionToken`）。理由：给 root shell 的这条链路是访问口令唯一能被绕开的入口。安全姿态权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)。
 
 ## 3. PTY 获取：`provider.spawn({ tty: true })`
 
@@ -30,8 +30,10 @@
 
 | 实现 | spawn(tty=true) 的内部形态 | 实现内部注意 |
 |---|---|---|
-| `aio` | 容器内分配 TTY 的交互式会话 | 容器 runtime 的 tty 模式是单一输出流、**无需 demux 8 字节头**（demux 只在非 tty 时需要）——经典实现坑，收敛在 aio 内部 |
-| `boxlite` | Box（micro-VM）内交互式会话 | 库层直接交出流，无 daemon 中转 |
+| `aio` | 经 in-sandbox agent `ws /v1/shell/ws` → 中立 `ProcessStream`（AIO 协议翻译在 provider 内，**非宿主 docker exec**） | tty 单一输出流、无需 demux；AIO ws 帧 ↔ ProcessStream 映射见 ADR |
+| `boxlite` | 同上（同一 AIO 镜像跑进 BoxLite Box，经端口转发到 Box 内 `:8080`） | BoxLite 库进程内嵌，无 daemon |
+
+> **网关设计不因此改变**：网关始终只跟中立 `ProcessStream` 打交道——`spawn` 内部走 in-sandbox agent（`/v1/shell/ws`）还是 fallback `docker exec`，对网关透明。数据面选型（沙箱内 agent，docker exec 仅 fallback）与 AIO↔ProcessStream 翻译的权威定义见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)。
 
 node-pty 仅在未来"本地进程 provider"场景才需要（node-gyp 原生编译坑随之而来）；当前两个内建实现都不依赖它。
 

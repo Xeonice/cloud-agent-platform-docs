@@ -421,14 +421,16 @@ views/project-task-tree/TaskListItem.view#onClick()
             │  └─ 不可用 → await import('@xterm/addon-canvas') → loadAddon
             ├─ terminal.onData(d => ptySocket.send({type:'input', data:d}))   // §11.2
             ├─ hooks/useSandboxTerminalSocket#connect(sessionId, sandboxId)      // ↓ 展开
-            │  ├─ services/ws/ptySocket#create({ WebSocketCtor, url, onFrame, onState })
-            │  │  └─ new WebSocketCtor(`/terminal?sandboxId=..&socketSessionKey=..`)
-            │  │      // 首次连接无 key；服务端随首帧下发后由 hook 存入 registry（§3）
+            │  ├─ services/ws/ptySocket#create({ ioFactory, namespace:'/terminal', query, onFrame, onState })
+            │  │  └─ io(`${origin}/terminal`, { transports:['websocket'], query:{ sandboxId, cols, rows, xSchemaHash, socketSessionKey? } })
+            │  │      // socket.io（传输层决策见 backend/06）；首次无 key，服务端随首个 session 帧下发后由 hook 存入 registry（§3）
             │  ├─ ▲ onState('open') → registry#patchConnState(sessionId,'open')
             │  └─ ▲ onFrame(frame)  → §11.3
             ├─ fitAddon.fit() → hooks/useTerminalInstance#reportResize()          // §11.4
             └─ stores/createTerminalRegistrySlice#register(entry) + #enforceLru() // §11.7
 ```
+
+> **传输层决策（修订）**：`/terminal` 通道统一采用 **socket.io（socket.io-client ⇄ NestJS socket.io 网关）**，与 [backend/06](../backend/06-TTY终端链路.md) 一致。本文早期示意曾用原生 `new WebSocket` 与其矛盾（S1 实施时暴露并已按此修订）：`ptySocket` 基于 socket.io-client，双向 `frame` 事件承载 `TerminalServerFrame`/`TerminalClientFrame`（shared/10 §7.4），schema-hash 经握手 query 键 `xSchemaHash` 校验（14 §2.5，S1 两端钉共享字面值 `sb-terminal-v1`，真正的 codegen 哈希留待 14 §2.4 工具链）。原生 `ws` 仅作延迟敏感时备选（网关抽象保证可替换）。
 
 **步骤讲解**：① 选中动作只改 UI 状态，终端的建立由渲染副作用触发——container 不直接命令式地"创建终端"，保持"状态驱动"；② `sessionId` 是**前端本地生成的标签身份**，与后端下发的 `socketSessionKey`（重连凭据）是两回事，混用会导致重连时把标签 id 当凭据发出去；③ addon 加载严格在 `open()` 之后（§7.2）；④ LRU 检查放在 `register` 之后，保证新实例不会把自己淘汰掉（§5.3）。
 
@@ -548,7 +550,7 @@ views/terminal/TerminalTabBar.view#onSelect(sessionId)
          │   └─ 是 → ptySocket#close() 并停止循环（转由 [重启] 驱动新会话）
          └─ 否 → services/ws/ptySocket#scheduleReconnect(attempt)
             ├─ delay = min(30s, 500ms×2^attempt) × jitter
-            └─ 重连：new WebSocketCtor(`...&socketSessionKey=${entry.socketSessionKey}`)
+            └─ 重连：io(`${origin}/terminal`, { query:{ ...原参数, socketSessionKey: entry.socketSessionKey } })  // socket.io 重连回带 key
                ├─ 成功 → ▲ onState('open')
                │   ├─ registry#patchConnState('open') → 黄条消失
                │   ├─ 补发 pendingSize 的 resize 帧（§11.4）
