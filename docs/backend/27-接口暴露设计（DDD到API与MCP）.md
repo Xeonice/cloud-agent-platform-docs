@@ -93,7 +93,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `listProjects` | `GET /api/projects` | `list_projects` | | `ProjectDto[]`，含各项目 Task 数聚合 + `cloneStatus` | `list-projects` query | — | — | — |
 | `getProject` | `GET /api/projects/:id` | — | | `ProjectDto`（失败时含 `errorCode`/`errorMessage`） | `get-project` query | — | `NOT_FOUND` | — |
-| `createProject` | `POST /api/projects` → **202** | `create_project` | `{ name, sourceType:'git-clone'\|'empty', repoUrl?, repoBranch? }` | `{ projectId, cloneStatus:'cloning'\|'ready' }` | `create-project` command | I-PRJ-1/2/4（名称 1–40、全局唯一、总数 ≤50） | `INVALID_ARGUMENT`(400)、`ALREADY_EXISTS`(409) | `project.clone_progress` ×N |
+| `createProject` | `POST /api/projects` → **202** | `create_project` | `{ name, sourceType:'git'\|'empty', repoUrl?, repoBranch? }` | `{ projectId, cloneStatus:'cloning'\|'ready' }` | `create-project` command | I-PRJ-1/2/4（名称 1–40、全局唯一、总数 ≤50） | `INVALID_ARGUMENT`(400)、`ALREADY_EXISTS`(409) | `project.clone_progress` ×N |
 | `retryClone` | `POST /api/projects/:id/retry-clone` | — | 仅 `failed` 态可调；显式重置 `cloneStatus='cloning'` 重新入队 | `ProjectDto` | `retry-clone` command | I-PRJ-6（不允许隐式回退） | `INVALID_STATE`(409) | `project.clone_progress` ×N |
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
 | `deleteProject` / `cancelClone` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 取消克隆** | 204 | `delete-project` / `cancel-clone` | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
