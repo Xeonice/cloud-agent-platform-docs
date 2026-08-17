@@ -220,9 +220,13 @@ interface CloneRequest {
 
 - **git-https-token 凭证携带 `allowed_hosts`（host 白名单，≥1 个；一条 token 可绑多个 host，13 §2.5.1 / 23 I-CRD-8）**。此前的 helper 对**任何** URL 无条件回吐 token → 用户配了 GitHub PAT 后，建一个 `https://evil.example.com/x.git`（公网、能过 SSRF 黑名单）的项目，clone 时 helper 就把 PAT 发给 evil；`/git/test { repoUrl }` 更是直接汲取面。
 - **helper 按 host 绑定**（上表 C2）：URL-scoped 到白名单里每个 host，git 只在请求该 host 时才调对应 helper。
-- **clone 与 `/git/test` 前置校验**（C3）：目标 URL 的 host ∈ 该凭证 `allowed_hosts`，否则**拒绝携带凭证**（clone 失败 / test 返回 `errorCode`），不给"对任意 host 吐 token"的机会。
-- **resolve + pin IP（C4）**：clone/`ls-remote` 时**解析一次目标 host、校验非内网、用 pinned IP 连接**（防 DNS rebinding 携 token 打内网）；**"校验时解析"与"连接时解析"必须是同一次**。带凭证场景下 DNS rebinding 从"可达性问题"**升级为 token 外泄**——SSRF 谓词沿用 §8.5 webhook 那套（环回/链路本地/元数据地址拒绝），但此处**私网段也拒绝携带凭证**（clone 公网私有仓不需要连内网）。
-- **SSH 侧（C5）**：SSH 凭证也记录 host（用于 known_hosts 指纹与展示）；但 SSH 私钥不会被对端服务器窃取（只交换签名挑战），故 SSH 侧 host 校验**主要靠 `RepoUrl` 的 SSRF**（resolve+pin 同样适用）。
+- **clone 与 `/git/test` 前置校验（C3，凭证去向的唯一授权边界）**：目标 URL 的 host ∈ 该凭证 `allowed_hosts`，否则**拒绝携带凭证**（clone 失败 / test 返回 `errorCode`），不给"对任意 host 吐 token"的机会。**`allowed_hosts` 是"token/私钥可以发给谁"的唯一控制**——用户把内网 host 填进白名单就是显式授权发内网，把公网 host 填进去就发公网。
+- **口径是 authority（host + 非默认端口），不是裸 host（git ≥ 2.50 端口敏感）**：git 的凭证匹配按 authority——`credential.https://h.helper` **不**匹配 `https://h:8443/`。因此全链（`RepoUrl.host()` → 门面 → helper 键 `credential.https://<authority>.helper` → `allowed_hosts` 精确相等校验）统一用 **authority**：默认端口（https=443 / ssh=22）省略、非默认端口保留。企业自建 GitLab/Gitea 常跑 `:8443`/`:3000`，用户在 `allowed_hosts` 里填 `git.company.com:8443`；`github.com`（默认端口）即裸 host。只此一套规范化，不搞"端口无关"的第二套（避歧义）。
+- **rebinding/MITM 闭合（C4，修正版）**：**本产品是单机私有化部署，企业自建 git 常在内网（`10.x`/`172.16.x`/`192.168.x`），clone 内网私有仓是核心用例——因此"携凭证禁私网"是错的、已废弃**（会砸掉核心用例）。DNS rebinding / MITM 的**硬闭合**改为：
+  - **HTTPS**：**TLS 证书校验**（保持默认 `sslVerify=on`，`GUARDED_ENV` 额外剥离 ambient `GIT_SSL_NO_VERIFY` 防静默关闭）。rebind 到内网 IP 的伪主机拿不出该域名的合法证书 → 发凭证前 TLS 握手即断。内网自建若用自签证书，那是**用户自己的网络信任域**（与网络隔离同一前提），需用户为其配 CA；平台不因此关校验。host-scoped credential.helper 只对原 host 发、git 默认不跨 host 重发凭证（即使重定向），是第二重。
+  - **SSH**：**pinned known_hosts（公网 SaaS，见 H）**——rebind/MITM 到伪主机时 host key 不匹配、握手即断（私钥签名前）；自建未知 host 的首连由**网络隔离**承担（accept-new，H）。
+  - **纵深（非硬闭合）**：`RepoUrl` VO 的字面 SSRF 黑名单仍拦 **loopback（`127/8`、`::1`）+ 链路本地/云 metadata（`169.254/16`、`fe80::/10`）+ 未指定地址（`0/8`）**——这些**永不是**合法 git host，免费纵深；**但私网段（`10/8`、`172.16/12`、`192.168/16`、`fc00::/7`）放行**。
+- **SSH 侧（C5）**：SSH 凭证也记录 host（用于 known_hosts 指纹与展示）；SSH 私钥不会被对端服务器窃取（只交换签名挑战），rebinding/MITM 由 **pinned known_hosts（H）**闭合。
 
 补充纪律：
 
@@ -234,7 +238,7 @@ interface CloneRequest {
 
 - 临时私钥文件：`fs.mkdtemp()` 随机目录（平台用户属主 `0700`）+ keyfile `wx`+`0600` **独占创建、绝不跟随符号链接**；**每次 clone 独立目录**，用完整目录 `rm -rf`（防可预测文件名的 symlink 攻击）。目录**建议置于 tmpfs**；文档明示"明文私钥短暂落盘"为**接受风险**。
 - **崩溃兜底**：`try/finally` 与 `process.on('exit')` 在 SIGKILL/OOM/断电下都不执行 → 改成**启动清扫**私有 keyfile 目录（与 §7.6 工作区 `.platform-workspace-state` 对账同思路），不依赖进程退出钩子作为唯一防线。
-- **`GIT_SSH_COMMAND` 注入必须在 guard 之后**：git-cloner 的 `GUARDED_ENV` 会剥离 `GIT_SSH_COMMAND`/`GIT_SSH`（防环境透传）→ 平台自造的 `GIT_SSH_COMMAND` 必须在 **guard 之后合并**（是平台自造值、非透传），确保 `-o IdentitiesOnly=yes -o UserKnownHostsFile=<平台私有> -o StrictHostKeyChecking=accept-new` 真正生效。**加断言**：带 SSH 凭证时子进程 env 里 `GIT_SSH_COMMAND` 存在且指向本次 keyfile。
+- **`GIT_SSH_COMMAND` 注入必须在 guard 之后**：git-cloner 的 `GUARDED_ENV` 会剥离 `GIT_SSH_COMMAND`/`GIT_SSH`（防环境透传）→ 平台自造的 `GIT_SSH_COMMAND` 必须在 **guard 之后合并**（是平台自造值、非透传）。自造值为 `ssh -F /dev/null -i <keyfile> -o IdentitiesOnly=yes -o UserKnownHostsFile=<pinned 或平台私有> -o StrictHostKeyChecking=<yes 或 accept-new>`（按 host 是否 pinned SaaS 二选一，见 H）。**`-F /dev/null` 是硬性要求**：忽略 ambient `~/.ssh/config`，防其改写 host（如 `github.com`→`ssh.github.com:443` 会绕过 pin）、注入 `ProxyCommand` 或追加 ambient IdentityFile——一切由平台显式给定。**加断言**：带 SSH 凭证时子进程 env 里 `GIT_SSH_COMMAND` 存在且指向本次 keyfile。
 
 **日志脱敏（G 裁决）**：
 
@@ -242,10 +246,11 @@ interface CloneRequest {
 - `sanitizeCloneMessage` 现只匹配 `ghp_`/`github_pat_`/URL userinfo/query → **补 `Authorization:` 行整体打码**；过滤 URL 中的 userinfo 与任何 `password=` 片段（与 05 §4 同一纪律）。
 - **加断言**：拼出的 git 参数数组**不含 token 明文**，`GIT_TOKEN` **只出现在 env**。
 
-**known_hosts（H 裁决）**：
+**known_hosts（H 裁决——SSH rebinding/MITM 的硬闭合）**：
 
-- **公网 SaaS（`github.com` / `gitlab.com` / `gitee.com`）预置 pinned `known_hosts`**（指纹随平台发布固化），首连即校验，杜绝首连 MITM。
-- **仅"公司自建 Git（用户填的未知 host）"回落 `StrictHostKeyChecking=accept-new`**（首连 TOFU）——使用**平台私有** `UserKnownHostsFile`（不碰系统 `~/.ssh/known_hosts`），首次连接自动记录主机指纹，**之后主机密钥变更则 clone 失败**（accept-new 只信任新主机、不接受变更，这是与 `no` 的关键差别）。记录的指纹写入 credentials 记录的元数据供凭证详情核对（P21-3 §10.1）。安全边界明示：自建场景的首连 MITM 风险由网络隔离承担，无头容器内交互确认不可行（P21-3 §10.2 已定）。
+- **公网 SaaS（`github.com` / `gitlab.com` / `gitee.com`）内置 pinned host 公钥**（ed25519 + rsa 两类，固化进代码 `credential/infrastructure/git/known-hosts.ts`；github/gitlab 已核对与各厂商官方公布的 SHA256 指纹一致，gitee 经 ssh-keyscan 采集）。这些 host 用 **`StrictHostKeyChecking=yes`** 指向**每次写入的** pinned `known_hosts` 文件（`0600`，每次覆写保证不可被前次写入污染）——rebind/MITM 到伪主机时 host key 不匹配 → **"Host key verification failed"，握手即断、私钥签名之前**。key 轮换需改代码 + 指纹（这正是 pin 生效：静默换 key 必须失败而非自动信任）。
+- **仅"公司自建 Git（用户填的未知 host）"回落 `StrictHostKeyChecking=accept-new`**（首连 TOFU）——使用**平台私有** `UserKnownHostsFile`（不碰系统 `~/.ssh/known_hosts`），首连自动记录主机指纹，**之后主机密钥变更则 clone 失败**（accept-new 只信任新主机、不接受变更，这是与 `no` 的关键差别）。安全边界明示：自建场景首连 MITM 风险由网络隔离承担，无头容器内交互确认不可行（P21-3 §10.2 已定）。
+- 两条都配 `-F /dev/null` 使 ssh 忽略 ambient `~/.ssh/config`（否则 host 改写会绕过 pin，见上）。
 
 ### 7.4 测试连接端点
 
@@ -265,7 +270,7 @@ GitTestRequest =
 - `inline` → 用请求里的 `secret` 走 §7.3 同一 `git-auth.materializer` 做**瞬时 materialize**（产 `GitAuthContext`，**绝不入 `credentials` 表**），`host ∈ allowedHosts` 按**请求里的 `allowedHosts`** 校验；passphrase 私钥在此同样拒绝（F）。
 - `stored` → 经 `CREDENTIAL_FACADE.prepareGitAuth`（A2）从 Vault 解密，`host` 按该凭证的 `allowedHosts` 校验。
 
-**前置校验同 clone（C 裁决）**：目标 URL 的 host **必须 ∈ 该凭证 `allowed_hosts`**，否则**拒绝携带凭证**并直接返回 `errorCode`（不给"对任意 host 吐 token"的机会——`/git/test` 是最直接的汲取面）；同样走 **resolve + pin IP + 非内网校验**（"校验时解析"与"连接时解析"是同一次，C4）。
+**前置校验同 clone（C 裁决）**：目标 URL 的 host **必须 ∈ 该凭证 `allowed_hosts`**，否则**拒绝携带凭证**并直接返回 `errorCode`（不给"对任意 host 吐 token"的机会——`/git/test` 是最直接的汲取面）；rebinding/MITM 闭合同 clone（HTTPS 靠 TLS、SSH 靠 pinned known_hosts，**不禁私网**——内网自建仓的 test 是核心用例，C4 修正版）。`/git/test` 支持 `source: 'inline' | 'stored'` 判别联合（存前测/测已存卡片），inline 密钥瞬时 materialize、绝不入库。
 
 ### 7.5 clone 错误码（对应 P22 §1 新增项）
 
