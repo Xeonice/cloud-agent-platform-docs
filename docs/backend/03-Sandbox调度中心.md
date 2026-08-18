@@ -199,7 +199,7 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 
 ### 7.3 Git 凭证的使用链路（凭证 kind='git'，见 05 §3.2 / 23 §8）
 
-**编排边界（A 裁决）**：clone 编排在 **project 上下文**，Git 凭证的解密与 materialize 在 **credential 上下文**。project 侧**不碰明文**——`RepoUrl.credentialKind()` + `RepoUrl.host()` 算出 `kind` 与 `host`（23 §6.3），经门面 `CREDENTIAL_FACADE.prepareGitAuth(kind, host)`（`@Inject(CREDENTIAL_FACADE)`，23 §8 / 27 §5）拿一个**不透明句柄** `GitAuthContext = { env, gitSshCommand?, dispose() }`。`GitCloner` 的 `CloneRequest` 因此扩展两字段承载已 materialize 的产物：
+**编排边界（A 裁决）**：clone 编排在 **project 上下文**，Git 凭证的解密与 materialize 在 **credential 上下文**。project 侧**不碰明文**——`RepoUrl.credentialKind()` + `RepoUrl.host()` + `RepoUrl.scheme()` 算出 `kind`、`host` 与 `scheme`（23 §6.3），经门面 `CREDENTIAL_FACADE.prepareGitAuth(kind, host, scheme)`（`@Inject(CREDENTIAL_FACADE)`，23 §8 / 27 §5）拿一个**不透明句柄** `GitAuthContext = { env, gitSshCommand?, dispose() }`。`GitCloner` 的 `CloneRequest` 因此扩展两字段承载已 materialize 的产物：
 
 ```ts
 interface CloneRequest {
