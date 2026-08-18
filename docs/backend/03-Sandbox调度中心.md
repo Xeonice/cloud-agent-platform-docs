@@ -213,7 +213,7 @@ interface CloneRequest {
 
 | clone URL | 使用凭证 | 落地方式（**全部发生在 `credential/infrastructure` 内**，project 只拿句柄） |
 |---|---|---|
-| `git@host:...` / `ssh://...` | `obtained_via='git-ssh-key'` | 解密私钥 → `fs.mkdtemp()` 随机目录（平台用户属主 `0700`）内 keyfile 以 `wx`+`0600` **独占创建、不跟随符号链接**；`gitSshCommand = "ssh -i <keyfile> -o IdentitiesOnly=yes -o UserKnownHostsFile=<平台私有> -o StrictHostKeyChecking=accept-new"`。每次 clone **独立目录**，`dispose()` 整目录 `rm -rf`（防可预测文件名的 symlink 攻击） |
+| `git@host:...` / `ssh://...` | `obtained_via='git-ssh-key'` | 解密私钥 → `fs.mkdtemp()` 随机目录（平台用户属主 `0700`）内 keyfile 以 `wx`+`0600` **独占创建、不跟随符号链接**；`gitSshCommand = "ssh -F /dev/null -i <keyfile> -o IdentitiesOnly=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=<平台私有> -o StrictHostKeyChecking=accept-new"`（两处 `/dev/null` 见 §7.3 known_hosts 段）。每次 clone **独立目录**，`dispose()` 整目录 `rm -rf`（防可预测文件名的 symlink 攻击） |
 | `https://...` | `obtained_via='git-https-token'` | **credential helper 走内存 + 按 host 绑定**：对 `allowedHosts` 里**每个** host 各下发一条 **URL-scoped** 配置 `-c credential.https://<host>.helper='!f(){ echo username=x-access-token; echo password=$GIT_TOKEN; }; f'`（git 仅在请求该 host 时才调它）；token 仍只经 env `$GIT_TOKEN`、**绝不进 URL/argv**、不写任何文件（防落进 `git config`、reflog、进程 argv 与日志） |
 
 **host 绑定与白名单（C 裁决——修一条能外泄 PAT 的 P0）**：
@@ -239,7 +239,7 @@ interface CloneRequest {
 
 - 临时私钥文件：`fs.mkdtemp()` 随机目录（平台用户属主 `0700`）+ keyfile `wx`+`0600` **独占创建、绝不跟随符号链接**；**每次 clone 独立目录**，用完整目录 `rm -rf`（防可预测文件名的 symlink 攻击）。目录**建议置于 tmpfs**；文档明示"明文私钥短暂落盘"为**接受风险**。
 - **崩溃兜底**：`try/finally` 与 `process.on('exit')` 在 SIGKILL/OOM/断电下都不执行 → 改成**启动清扫**私有 keyfile 目录（与 §7.6 工作区 `.platform-workspace-state` 对账同思路），不依赖进程退出钩子作为唯一防线。
-- **`GIT_SSH_COMMAND` 注入必须在 guard 之后**：git-cloner 的 `GUARDED_ENV` 会剥离 `GIT_SSH_COMMAND`/`GIT_SSH`（防环境透传）→ 平台自造的 `GIT_SSH_COMMAND` 必须在 **guard 之后合并**（是平台自造值、非透传）。自造值为 `ssh -F /dev/null -i <keyfile> -o IdentitiesOnly=yes -o UserKnownHostsFile=<pinned 或平台私有> -o StrictHostKeyChecking=<yes 或 accept-new>`（按 host 是否 pinned SaaS 二选一，见 H）。**`-F /dev/null` 是硬性要求**：忽略 ambient `~/.ssh/config`，防其改写 host（如 `github.com`→`ssh.github.com:443` 会绕过 pin）、注入 `ProxyCommand` 或追加 ambient IdentityFile——一切由平台显式给定。**加断言**：带 SSH 凭证时子进程 env 里 `GIT_SSH_COMMAND` 存在且指向本次 keyfile。
+- **`GIT_SSH_COMMAND` 注入必须在 guard 之后**：git-cloner 的 `GUARDED_ENV` 会剥离 `GIT_SSH_COMMAND`/`GIT_SSH`（防环境透传）→ 平台自造的 `GIT_SSH_COMMAND` 必须在 **guard 之后合并**（是平台自造值、非透传）。自造值为 `ssh -F /dev/null -i <keyfile> -o IdentitiesOnly=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=<pinned 或平台私有> -o StrictHostKeyChecking=<yes 或 accept-new>`（按 host 是否 pinned SaaS 二选一，见 H）。**两处 `/dev/null` 都是硬性要求(host-key 验证必须只认平台自己的 known_hosts 文件)**：① `-F /dev/null` 忽略 ambient `~/.ssh/config`，防其改写 host（如 `github.com`→`ssh.github.com:443` 会绕过 pin）、注入 `ProxyCommand` 或追加 ambient IdentityFile；② **`GlobalKnownHostsFile=/dev/null` 忽略宿主 `/etc/ssh/ssh_known_hosts`**——否则宿主全局 known_hosts 里若有 github 真 key,会在我们 pin 了别的 key 时**照样接受、静默绕过 pin**(CI runner 预置全局 known_hosts 的场景已实测复现)。**加断言**：带 SSH 凭证时子进程 env 里 `GIT_SSH_COMMAND` 存在且含 `-F /dev/null -o GlobalKnownHostsFile=/dev/null` 并指向本次 keyfile。
 
 **日志脱敏（G 裁决）**：
 
@@ -251,7 +251,7 @@ interface CloneRequest {
 
 - **公网 SaaS（`github.com` / `gitlab.com` / `gitee.com`）内置 pinned host 公钥**（ed25519 + rsa 两类，固化进代码 `credential/infrastructure/git/known-hosts.ts`；github/gitlab 已核对与各厂商官方公布的 SHA256 指纹一致，gitee 经 ssh-keyscan 采集）。这些 host 用 **`StrictHostKeyChecking=yes`** 指向**每次写入的** pinned `known_hosts` 文件（`0600`，每次覆写保证不可被前次写入污染）——rebind/MITM 到伪主机时 host key 不匹配 → **"Host key verification failed"，握手即断、私钥签名之前**。key 轮换需改代码 + 指纹（这正是 pin 生效：静默换 key 必须失败而非自动信任）。
 - **仅"公司自建 Git（用户填的未知 host）"回落 `StrictHostKeyChecking=accept-new`**（首连 TOFU）——使用**平台私有** `UserKnownHostsFile`（不碰系统 `~/.ssh/known_hosts`），首连自动记录主机指纹，**之后主机密钥变更则 clone 失败**（accept-new 只信任新主机、不接受变更，这是与 `no` 的关键差别）。安全边界明示：自建场景首连 MITM 风险由网络隔离承担，无头容器内交互确认不可行（P21-3 §10.2 已定）。
-- 两条都配 `-F /dev/null` 使 ssh 忽略 ambient `~/.ssh/config`（否则 host 改写会绕过 pin，见上）。
+- 两条都配 `-F /dev/null` + `-o GlobalKnownHostsFile=/dev/null` 使 ssh 只认平台自己的 `UserKnownHostsFile`：前者忽略 ambient `~/.ssh/config`（host 改写会绕过 pin），后者忽略宿主 `/etc/ssh/ssh_known_hosts`（全局 known_hosts 里的真 key 会静默绕过 pin，见上）。
 
 ### 7.4 测试连接端点
 
