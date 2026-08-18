@@ -139,10 +139,16 @@
 
 | 能力 | REST | MCP | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|---|
-| `listGitCredentials` | `GET /api/credentials?kind=git` | — | **`kind` 必填，MVP 只接受 `git`** | `[{ id, kind, type:'ssh-key'\|'https-token', maskedIdentifier, platform?, knownHosts?, lastUsedAt, createdAt }]` | `list-git-credentials` query | I-CRD-2（SSH 只回指纹、token 只回尾号） | `INVALID_ARGUMENT`(400，kind 缺失或非 git) | — |
-| `storeGitCredential` | `POST /api/credentials/git` | — | `{ type, secret, platform? }`；同协议已有 = **更换**语义 | `{ id, maskedIdentifier }` | `store-git-credential` command | I-CRD-1/5/**6（passphrase 私钥拒绝）** | `INVALID_ARGUMENT`(400) | — |
-| `testGitCredential` | `POST /api/credentials/git/test` | — | `{ repoUrl? }`；`git ls-remote`，**15s 超时** | `{ ok, errorCode?, message }`——**绝不回 ref 名** | `test-git-credential` command | — | `TIMEOUT`(504)、`CLONE_FAILED_PERMISSION`、`CLONE_FAILED_NETWORK` | — |
-| （吊销） | `DELETE /api/credentials/git/:id` | — | | 204 | `revoke-credential` command | I-CRD-3 | `NOT_FOUND` | — |
+| `listGitCredentials` | `GET /api/credentials?kind=git` | — | **`kind` 必填，MVP 只接受 `git`** | `[{ id, kind, type:'ssh-key'\|'https-token', maskedIdentifier, platform?, allowedHosts, knownHosts?, lastUsedAt, createdAt }]` | `list-git-credentials` query | I-CRD-2（SSH 只回指纹、token 只回尾号） | `INVALID_ARGUMENT`(400，kind 缺失或非 git) | — |
+| `storeGitCredential` | `POST /api/credentials/git` | — | `{ type, secret, platform?, allowedHosts }`；`https-token` 必带 **host 白名单 ≥1**（C）；同协议已有 = **更换**语义（revoke-old + insert-new 同一 `UnitOfWork.run`，I4） | `{ id, maskedIdentifier }` | `store-git-credential` command | I-CRD-1/5/**6（passphrase 私钥拒绝）**/**8（host 白名单）** | `INVALID_ARGUMENT`(400) | — |
+| `testGitCredential` | `POST /api/credentials/git/test` | — | `{ repoUrl? }`；**经 `prepareGitAuth` 组装**，`git ls-remote`，**15s 超时**；**目标 host 必须 ∈ allowedHosts 才携带凭证**（C3），走 resolve+pin（C4） | `{ ok, errorCode?, message }`——**绝不回 ref 名** | `test-git-credential` command | **I-CRD-8** | `TIMEOUT`(504)、`CLONE_FAILED_PERMISSION`、`CLONE_FAILED_NETWORK` | — |
+| （吊销） | `DELETE /api/credentials/git/:id` | — | | 204 | `revoke-credential` command | I-CRD-3；**联动命中零 binding 属正常，不告警（I3）** | `NOT_FOUND` | — |
+
+**跨上下文门面装配（A2 裁决）**：Git 凭证的**使用**（clone / `ls-remote`）不走上表的 command/query，而是经**第三个跨上下文门面** `CREDENTIAL_FACADE`（`packages/contracts/src/credential-facade.port.ts`，与 `SANDBOX_FACADE` / `PROJECT_FACADE` 同构）暴露：
+
+- 契约：`CredentialFacade.prepareGitAuth(kind: 'git-ssh-key'\|'git-https-token', host): Promise<GitAuthContext>`（`GitAuthContext = { env, gitSshCommand?, dispose() }`，23 §8）。
+- 实现：`credential/application/credential-facade.adapter.ts`，内部 `forKind` 选凭证 → 校验 `host ∈ allowedHosts`（I-CRD-8）→ `credential/infrastructure` 解密 materialize 成句柄。
+- 消费方：project 的 **clone workflow** `@Inject(CREDENTIAL_FACADE)`；`POST /api/credentials/git/test` **复用同一 `prepareGitAuth` 路径**。**明文（`SecretMaterial`）永不越 credential/infrastructure 边界，consumer 只拿不透明句柄**（A1 / 03 §7.3）。
 
 **前端要知道的两件事**：
 

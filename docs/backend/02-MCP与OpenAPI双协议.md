@@ -124,9 +124,9 @@ export class SandboxMcpTools {
 
 | 端点 | 说明 |
 |---|---|
-| **`GET /api/credentials?kind=git`** | 掩码列表：`[{ id, kind:'git', type: 'ssh-key'\|'https-token', maskedIdentifier, platform?, knownHosts?, lastUsedAt, createdAt }]`。`maskedIdentifier` 对 SSH 是**指纹**（`SHA256:…`）、对 token 是尾号；**私钥与 token 永不回显**（05 §3.2 / I-CRD-2）。前端 P21-3 §10.1 的 Git 凭证卡片直接消费本端点 |
-| **`POST /api/credentials/git`** | `{ type: 'ssh-key' \| 'https-token', secret, platform?: 'github'\|'gitlab'\|'other' }` → 映射到 `credentials.kind='git'` + `obtained_via='git-ssh-key'\|'git-https-token'`（13 §2）。**同协议已有生效凭证时按"更换"语义处理**（旧的按吊销语义，同 I-CRD-5）；SSH 私钥带 passphrase **保存被拒**（I-CRD-6 / 03 §7.3） |
-| **`POST /api/credentials/git/test`** | `{ repoUrl? }` → `git ls-remote`，**15s 超时**；只回 `{ ok, errorCode?, message }`，**不回任何 ref 名**（防泄露私有仓分支，03 §7.4） |
+| **`GET /api/credentials?kind=git`** | 掩码列表：`[{ id, kind:'git', type: 'ssh-key'\|'https-token', maskedIdentifier, platform?, allowedHosts, knownHosts?, lastUsedAt, createdAt }]`。`maskedIdentifier` 对 SSH 是**指纹**（`SHA256:…`）、对 token 是尾号；`allowedHosts` 是 **host 白名单数组（非敏感、明示，I2）**；**私钥与 token 永不回显**（05 §3.2 / I-CRD-2）。前端 P21-3 §10.1 的 Git 凭证卡片直接消费本端点 |
+| **`POST /api/credentials/git`** | `{ type: 'ssh-key' \| 'https-token', secret, platform?: 'github'\|'gitlab'\|'gitee'\|'other', allowedHosts: string[] }` → 映射到 `credentials.kind='git'` + `obtained_via='git-ssh-key'\|'git-https-token'`（13 §2）。**`https-token` 必带 `allowedHosts`（≥1 host，白名单，C 裁决 / I-CRD-8）**——helper 按 host 绑定、clone/test 前置校验目标 host ∈ 白名单，防对任意 host 回吐 PAT。**同协议已有生效凭证时按"更换"语义处理**（旧的按吊销语义、与新增须同一 `UnitOfWork`，同 I-CRD-5 / I4）；SSH 私钥带 passphrase **保存被拒**（I-CRD-6 / 03 §7.3） |
+| **`POST /api/credentials/git/test`** | 判别联合 body：`{source:'inline', type, secret, platform?, allowedHosts, repoUrl?}`（存前测，密钥未入库）或 `{source:'stored', credentialId, repoUrl?}`（卡片测）→ `git ls-remote`，**15s 超时**；只回 `{ ok, errorCode?, message }`，**不回任何 ref 名**（防泄露私有仓分支，03 §7.4） |
 | **`DELETE /api/credentials/git/:id`** | 吊销（擦除密文、保留审计元数据）。**不做联动清除**——Git 凭证从不注入 sandbox（05 §3.2） |
 
 > **`kind` 是必填参数，且 MVP 只接受 `git`**（其他值 400）。这条约束是刻意的：runtime 凭证的读取已经归属 `GET /api/runtimes`（聚合状态）与 `GET /api/runtimes/:rt/credentials/status`，若 `GET /api/credentials` 允许省略 `kind` 或接受 `kind=runtime`，同一条 runtime 凭证就有了两条可达路径。**读走带 `kind` 的集合、写走 `/api/credentials/git` 子路径**是有意的分工：读端要为将来的第二种 kind 留位，写端的 body 结构因 kind 而异、天然应当分路径。
@@ -182,7 +182,7 @@ export class SandboxMcpTools {
 | **`list_projects`** | GET /projects | 上层 agent 先看有哪些工作区（P20 §9.4） |
 | **`create_project`** | POST /projects | 异步 clone：tool **立即返回** `{ projectId, cloneStatus:'cloning' }`，调用方轮询 `list_projects` 或 `get_project` 直到 `ready`——MCP 无推送通道，不能让 tool 调用挂 30 分钟 |
 
-镜像管理、凭证配置、自动化规则、系统初始化**不进 MCP 面**：它们是管理员的一次性配置动作，交给 LLM 调用方既无价值也扩大攻击面（凭证类接口尤甚）。
+镜像管理、凭证配置、自动化规则、系统初始化**不进 MCP 面**：它们是管理员的一次性配置动作，交给 LLM 调用方既无价值也扩大攻击面（凭证类接口尤甚）。**Git 凭证端点族（`GET /api/credentials?kind=git`、`POST /api/credentials/git`、`POST /api/credentials/git/test`、`DELETE /api/credentials/git/:id`）明确仅 REST、不进 MCP**（I5；27 §11.3 差异清单同源）。
 
 ### 5.3 诊断接口的传输方式定案：**SSE**
 

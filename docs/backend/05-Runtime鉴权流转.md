@@ -109,7 +109,7 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 | 过期 | 有 `expiresAt`，7 天预警 | 通常无（PAT 有效期用户自管）；仅在 clone 失败为权限类时提示 |
 | 端点 | 读 `GET /api/runtimes`（聚合）· `/api/runtimes/:rt/credentials/*` | 读 `GET /api/credentials?kind=git`（`kind` 必填，MVP 只接受 `git`）· 写 `POST /api/credentials/git` · `POST /api/credentials/git/test` · `DELETE /api/credentials/git/:id`（端点族定案见 02 §5.1）——**runtime 凭证不经泛集合读取**，避免两条可达路径 |
 
-**使用链路的具体落地形态（临时密钥文件 0600 + `GIT_SSH_COMMAND` vs HTTPS credential helper、`known_hosts` 首连自动信任、passphrase 私钥不支持的校验）写在 03 §7.3**——那里是 clone 编排的所在地，此处不重复。本文档只负责一条纪律：**Git 凭证的解密（materialize）同样只在内存流转，落到磁盘的只有生命周期不超过一次 clone 的 `0600` 临时密钥文件，`try/finally` 必删。**
+**使用链路的具体落地形态（临时密钥文件 0600 + `GIT_SSH_COMMAND` vs HTTPS credential helper、host 白名单、resolve+pin、`known_hosts` 首连自动信任、passphrase 私钥不支持的校验）写在 03 §7.3**——那里是 clone 编排的所在地，此处不重复。本文档只负责一条纪律：**Git 凭证的解密（materialize）同样只在内存流转，且全部发生在 `credential/infrastructure` 内**——对外只经门面 `CREDENTIAL_FACADE.prepareGitAuth(kind, host)` 返回不透明句柄 `GitAuthContext`（23 §8 / 27 §5），**clone 编排（project 侧）只消费句柄、永不持有明文**；落到磁盘的只有生命周期不超过一次 clone 的 `0600` 临时密钥文件，句柄 `dispose()` 在 `try/finally` 必删。
 
 ## 4. CredentialVault（credential 限界上下文）
 
@@ -163,10 +163,11 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 
 | 环节 | 定案 |
 |---|---|
-| **来源优先级** | ① 环境变量 `PLATFORM_MASTER_KEY`（base64，32 字节）——生产/编排环境优先；② 未设置则**首次启动自动生成** 32 字节随机key 写入 `${DATA_ROOT}/.master.key`（权限 `0600`，目录 `0700`），并在启动日志与系统状态页打一条**醒目提示**："已自动生成主密钥，请纳入你的备份策略" |
+| **来源优先级** | ① 环境变量 `PLATFORM_MASTER_KEY`（base64，32 字节）——生产/编排环境优先；② 未设置则**首次启动自动生成** 32 字节随机 key。**随机源必须 `crypto.randomBytes(32)`（禁 `Math.random`）**；写盘用 `fs.open(path, 'wx', 0o600)` **独占创建**（`EEXIST` 则读现有）——防并发首启竞态与"先 `writeFile` 后 `chmod` 的 `0644` 可读窗口"；父目录先 `mkdir(0o700)`，写后 `fsync`，**key 落盘先于任何加密使用**。写 `${DATA_ROOT}/.master.key` 后在启动日志与系统状态页打一条**醒目提示**："已自动生成主密钥，请纳入你的备份策略" |
 | **加载时机** | 启动装配阶段读入内存（`P/config`），**只在内存里存在**；日志与诊断接口永不回显 |
-| **缺失即失败** | 库里有凭证但 key 不可用时**启动不静默通过**：凭证一律以 `revoked`（不可用）语义呈现，前端走"重新授权"引导——比"解密报错 500"和"静默当作没配置"都好 |
-| **轮换** | 生成新 key → 后台任务逐条 `decrypt(old) → encrypt(new)` 并更新 `credentials.encryption_key_id`（13 §2.5.1 已有该列）；轮换期间新旧 key 同时在内存，全部记录迁完才丢弃旧 key。轮换是**在线**的，不需要停机 |
+| **`encryption_key_id` 定义** | 定为 **key 的稳定指纹**（如 `sha256(key)` 截断）**而非逻辑标签**——否则 env 换了 key 但标签相同时，GCM `authTag` 会**静默校验失败**却查不出根因 |
+| **缺失即失败** | 库里有凭证但 key **不可用**时**启动不静默通过**：凭证一律以 `revoked`（不可用）语义呈现，前端走"重新授权"引导——比"解密报错 500"和"静默当作没配置"都好。**"key 存在但不对"**（`authTag` 校验失败）**同样**按"凭证以 `revoked` 呈现、引导重授权"处理，**不 500** |
+| **轮换** | **新 key 必须先 durable 落盘 + 确认**，再逐条 `decrypt(old) → encrypt(new)` 并更新 `credentials.encryption_key_id`（每行自带 `encryption_key_id` 供**中断恢复**：崩溃后按各行的 key_id 分辨已迁/未迁）；轮换期间新旧 key 同时在内存，全部记录迁完才丢弃旧 key。轮换是**在线**的，不需要停机 |
 | **备份** | 备份导出（v1.5）**默认不含 master key，也不含凭证密文**（P22 §4.18）；文档明示"备份不含密钥，换机恢复后需重新授权"，不给用户"备份了就万事大吉"的错觉 |
 | **多用户/KMS 演进** | `encryption_key_id` 已为多 key 共存留位；接 KMS 时只换 `CryptoPort` 实现，密文格式不变 |
 

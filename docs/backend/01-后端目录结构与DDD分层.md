@@ -43,6 +43,7 @@ agent-platform-api/
 │   │   ├── runtime-adapter.contract.ts
 │   │   ├── image-spec.contract.ts
 │   │   ├── errors.ts                        # 统一错误模型（04 §4）
+│   │   ├── credential-facade.port.ts        # CREDENTIAL_FACADE token + GitAuthContext（跨上下文门面，与 SANDBOX/PROJECT_FACADE 同构，A2）
 │   │   ├── registry.tokens.ts
 │   │   └── testkit/                         # golden 契约测试套件（04 §10）
 │   ├── shared-kernel/src/
@@ -95,7 +96,7 @@ agent-platform-api/
 │       │   │   └── repositories/{project,retained-volume}.repository.ts
 │       │   └── infrastructure/
 │       │       ├── persistence/sqlite/{project,retained-volume}.repository.impl.ts
-│       │       ├── git/{git-cloner,git-progress.parser,git-error.classifier,git-credential.materializer}.ts   # simple-git，03 §7.2/§7.3/§7.5
+│       │       ├── git/{git-cloner,git-progress.parser,git-error.classifier}.ts   # simple-git，03 §7.2/§7.3/§7.5；clone 只消费 CREDENTIAL_FACADE 返回的 GitAuthContext 句柄，**不做 git 凭证 materialize、不持有明文**（A1/A2）
 │       │       └── workspace/{baseline-dir.manager,workspace.reaper}.ts # 基线目录 / 保留目录回收（03 §7.7，审计 P0-1）
 │       ├── runtime/                         # codex / claude-code 适配 + 鉴权编排
 │       │   ├── interface/{http/runtime.controller.ts, runtime.module.ts}
@@ -119,7 +120,8 @@ agent-platform-api/
 │       │   ├── interface/{http/credential.controller.ts, credential.module.ts}
 │       │   ├── application/
 │       │   │   ├── credential-application.service.ts
-│       │   │   ├── credential-vault.service.ts           # materialize 门面（05 §4）
+│       │   │   ├── credential-vault.service.ts           # runtime 凭证 materialize 注入 sandbox 门面（05 §4）——不变
+│       │   │   ├── credential-facade.adapter.ts          # 跨上下文门面 CREDENTIAL_FACADE.prepareGitAuth(kind, host)→GitAuthContext（A2，23 §8.5 / 27 §5）
 │       │   │   ├── commands/{store-credential,revoke-credential,store-git-credential,test-git-credential}/
 │       │   │   ├── queries/{list-git-credentials,get-credential-status}/
 │       │   │   └── ports/crypto.port.ts
@@ -134,7 +136,7 @@ agent-platform-api/
 │       │       ├── crypto/{aes-gcm.crypto,master-key.provider}.ts
 │       │       ├── expiry/credential-expiry.scanner.ts   # 7 天预警扫描（05 §5）
 │       │       ├── refresh/credential-refresh.scanner.ts  # access token 刷新回写（05 §5.1，审计 P1-7）
-│       │       └── git/git-ls-remote.tester.ts           # 测试连接 15s（03 §7.4）
+│       │       └── git/{git-auth.materializer,git-ls-remote.tester}.ts   # git-auth materializer：解密+写 0600 临时私钥+组 env/GIT_SSH_COMMAND，产出 GitAuthContext（A1，03 §7.3）；tester 测试连接 15s（03 §7.4）
 │       ├── image/                           # manifest 校验 + 运行参数
 │       │   ├── interface/{http/image.controller.ts, image.module.ts}
 │       │   ├── application/

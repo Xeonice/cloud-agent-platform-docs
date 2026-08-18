@@ -442,6 +442,14 @@ interface ProviderRegistry<T> {
 
 `plugins/<type>/<name>/index.ts` 导出实现，其 `package.json` 用**标准 `peerDependencies`** 声明契约兼容范围（见 §9），不引入自定义字段；`PluginLoader` 启动扫描后注册进同一 registry。⚠️ 进程内加载需信任来源（长期可选 worker_threads 隔离壳）。
 
+### 方式三（内建目录）：git 平台一等公民注册表
+
+与方式一/二"用户运行时注册第三方 provider"不同，**git 托管平台的一等公民目录是平台内建的、代码级的单一数据源**——`shared-kernel` 的 `GIT_PLATFORM_REGISTRY`（`github`/`gitlab`/`gitee`/`gitea` → `label` + `defaultHost`）。不做成运行时插件，因为公网 git SaaS 就那么几个，且"一等公民"要配套 SSH host-key pin（host key 是随平台发布固化的安全数据，不该由第三方运行时注入）。落 `shared-kernel` 是因为 credential 的 domain 与 contracts 都要用它，而 boundaries 禁 `domain→contracts`——shared-kernel 是两端唯一共同可依赖点（与 `git-remote.ts` 同性质）。
+
+- **单一源驱动、零 switch**：`GitPlatform` 类型、`GitPlatformSchema` zod 枚举、openapi 的 `platform` 枚举、`defaultHostFor()` host 推导，全部从这张 registry 派生（旧实现散在契约枚举 + 领域重复 type + `hostForPlatform` switch + 前端两处，已收敛）。
+- **加一个公网 SaaS 一等公民 = registry 加一行**（自动驱动上述全部；前端一份 `Record<Exclude<GitPlatform,'other'>,meta>` map 靠 TS 强制跟随，漏跟即编译报错）+（可选）在后端 `known-hosts` 按其 `defaultHost` 加一条 SSH pin（不加则 `accept-new` TOFU）。**无任何 switch/case 要改**。
+- **自建实例（Gitea / GitLab / GHE，任意内网 host）零代码改动**：认证/clone 逻辑按 **host + scheme + token/key** 驱动、**不认平台**（03 §7.3），自建走 `platform:'other'` + `allowed_hosts` + `accept-new` 即用。registry 只影响"公网 SaaS 的默认 host 推导 + 显示名 + SSH pin"这三件便利/加固事。
+
 ## 9. Contract 版本管理：抽成独立 npm 子包，版本交给 npm 管
 
 `packages/contracts` **就是一个真正发布的 npm 包** `@platform/sandbox-contracts`（含 §10 的 testkit 作为 `@platform/sandbox-contracts/testkit` 子路径导出）。版本管理因此不需要任何自研机制——semver、兼容范围解析、冲突检测、升级提示全是包管理器的既有能力：
