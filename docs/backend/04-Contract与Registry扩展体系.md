@@ -444,7 +444,7 @@ interface ProviderRegistry<T> {
 
 ### 方式三（内建目录）：git 平台一等公民注册表
 
-与方式一/二"用户运行时注册第三方 provider"不同，**git 托管平台的一等公民目录是平台内建的、代码级的单一数据源**——`shared-kernel` 的 `GIT_PLATFORM_REGISTRY`（`github`/`gitlab`/`gitee` → `label` + `defaultHost`）。不做成运行时插件，因为公网 git SaaS 就那么几个，且"一等公民"要配套 SSH host-key pin（host key 是随平台发布固化的安全数据，不该由第三方运行时注入）。落 `shared-kernel` 是因为 credential 的 domain 与 contracts 都要用它，而 boundaries 禁 `domain→contracts`——shared-kernel 是两端唯一共同可依赖点（与 `git-remote.ts` 同性质）。
+与方式一/二"用户运行时注册第三方 provider"不同，**git 托管平台的一等公民目录是平台内建的、代码级的单一数据源**——`shared-kernel` 的 `GIT_PLATFORM_REGISTRY`（`github`/`gitlab`/`gitee`/`gitea` → `label` + `defaultHost`）。不做成运行时插件，因为公网 git SaaS 就那么几个，且"一等公民"要配套 SSH host-key pin（host key 是随平台发布固化的安全数据，不该由第三方运行时注入）。落 `shared-kernel` 是因为 credential 的 domain 与 contracts 都要用它，而 boundaries 禁 `domain→contracts`——shared-kernel 是两端唯一共同可依赖点（与 `git-remote.ts` 同性质）。
 
 - **单一源驱动、零 switch**：`GitPlatform` 类型、`GitPlatformSchema` zod 枚举、openapi 的 `platform` 枚举、`defaultHostFor()` host 推导，全部从这张 registry 派生（旧实现散在契约枚举 + 领域重复 type + `hostForPlatform` switch + 前端两处，已收敛）。
 - **加一个公网 SaaS 一等公民 = registry 加一行**（自动驱动上述全部；前端一份 `Record<Exclude<GitPlatform,'other'>,meta>` map 靠 TS 强制跟随，漏跟即编译报错）+（可选）在后端 `known-hosts` 按其 `defaultHost` 加一条 SSH pin（不加则 `accept-new` TOFU）。**无任何 switch/case 要改**。
