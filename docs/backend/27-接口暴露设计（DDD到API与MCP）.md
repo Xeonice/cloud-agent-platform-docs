@@ -131,6 +131,12 @@
 3. **`AuthChallenge.expiresAt` 是绝对 ISO 时间**（testkit RA-05），倒计时按它算；进程重启会让 challenge 失效并返回 `AUTH_CHALLENGE_EXPIRED`——此时引导 [重新获取授权码] 即可（23 D-6）。
 4. **切模式的 409 不是错误而是分支**：目标模式没配凭证时后端返 409，前端应**就地展开该模式的配置面板**，配完自动切换（P21-3 §6）。
 
+**跨上下文门面装配（runtime 出口，S4 新增，与 git 的 `prepareGitAuth` 平行但语义不同）**：sandbox 启动注入凭证时（`materialize`，05 §4）不由 credential 上下文反向持有 sandbox exec，而是经 `CREDENTIAL_FACADE` 的**新增** runtime 出口方法交出凭证：
+
+- 契约：`CredentialFacade.prepareRuntimeCredential(runtimeId): Promise<RuntimeCredential>`（`packages/contracts/src/credential-facade.port.ts` 与 `prepareGitAuth` 并列）——内部 `forRuntime` 按 `runtime_settings.active_auth_method` 选生效凭证 → `credential/infrastructure` 解密产出 `RuntimeCredential`（**仍是受控明文包装 `SecretMaterial`，不是不透明句柄**）。
+- **与 git 出口的本质差异**：git 的 `GitAuthContext` 是**不注入沙箱**的不透明句柄（clone 在平台侧）；runtime 出口**要注入沙箱**，故交出 `RuntimeCredential` 由 sandbox 编排侧持 exec、调 `adapter.injectCredential(cred, exec)` 一次性写入（04 §3）。**复用门面装配与 UoW，但出口语义不同、不平移句柄形态**。
+- **方向纪律**：`credential` 不反向依赖 `sandbox` exec（避免 credential→sandbox 耦合）；明文以 `SecretMaterial` 短暂存在，经 runtime 注入路径一次性 exec 注入后 `zeroize()`（23 §8.2 放宽后的 I-CRD-2）。
+
 ---
 
 ## 5. credential 上下文（Git 凭证族）
@@ -146,7 +152,7 @@
 
 **跨上下文门面装配（A2 裁决）**：Git 凭证的**使用**（clone / `ls-remote`）不走上表的 command/query，而是经**第三个跨上下文门面** `CREDENTIAL_FACADE`（`packages/contracts/src/credential-facade.port.ts`，与 `SANDBOX_FACADE` / `PROJECT_FACADE` 同构）暴露：
 
-- 契约：`CredentialFacade.prepareGitAuth(kind: 'git-ssh-key'\|'git-https-token', host): Promise<GitAuthContext>`（`GitAuthContext = { env, gitSshCommand?, dispose() }`，23 §8）。
+- 契约：`CredentialFacade.prepareGitAuth(kind: 'git-ssh-key'\|'git-https-token', host, scheme): Promise<GitAuthContext>`（`scheme: GitRemoteScheme = 'http'\|'https'\|'ssh'\|'git'`，令 HTTPS helper key scheme 感知，明文 http 内网仓也命中，03 §7.3 C4；`GitAuthContext = { env, gitSshCommand?, dispose() }`，23 §8）。
 - 实现：`credential/application/credential-facade.adapter.ts`，内部 `forKind` 选凭证 → 校验 `host ∈ allowedHosts`（I-CRD-8）→ `credential/infrastructure` 解密 materialize 成句柄。
 - 消费方：project 的 **clone workflow** `@Inject(CREDENTIAL_FACADE)`；`POST /api/credentials/git/test` **复用同一 `prepareGitAuth` 路径**。**明文（`SecretMaterial`）永不越 credential/infrastructure 边界，consumer 只拿不透明句柄**（A1 / 03 §7.3）。
 

@@ -121,7 +121,7 @@ agent-platform-api/
 │       │   ├── application/
 │       │   │   ├── credential-application.service.ts
 │       │   │   ├── credential-vault.service.ts           # runtime 凭证 materialize 注入 sandbox 门面（05 §4）——不变
-│       │   │   ├── credential-facade.adapter.ts          # 跨上下文门面 CREDENTIAL_FACADE.prepareGitAuth(kind, host)→GitAuthContext（A2，23 §8.5 / 27 §5）
+│       │   │   ├── credential-facade.adapter.ts          # 跨上下文门面 CREDENTIAL_FACADE.prepareGitAuth(kind, host, scheme)→GitAuthContext（A2，23 §8.5 / 27 §5）
 │       │   │   ├── commands/{store-credential,revoke-credential,store-git-credential,test-git-credential}/
 │       │   │   ├── queries/{list-git-credentials,get-credential-status}/
 │       │   │   └── ports/crypto.port.ts
