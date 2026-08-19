@@ -1,6 +1,6 @@
 # 05 - Runtime 鉴权流转设计（帐号授权 + API key 双模式）
 
-> 状态：✅ 可评审（基于 2026-08 调研结论，CLI 行为已核实官方文档；§3.2 Git 凭证与 §4.1 镜像 env 边界按产品定稿补充）
+> 状态：✅ 实施前定稿（S4 实现前回写：2026-08 **live 技术验证**——真订阅真授权真跑——已落回 §1★/§2/§3★/§5.1/§6；§7 划定"S4 增量 vs S3 已复用"边界。CLI 行为除官方文档外补充实测形态：codex `auth.json` 结构 + claude token 从 stdout 出/OSC 8/pty 折行）
 > 关联文档：[04 Contract 体系](./04-Contract与Registry扩展体系.md) · [07 前端目录结构 §6 鉴权页](../frontend/07-前端目录结构与视图逻辑分离.md) · [03 §7.3 Git 凭证使用链路](./03-Sandbox调度中心.md) · [11 §1.1 auth helper 部署形态](../shared/11-部署与扩展预留.md)
 > 产品依据：[P20 §5](../product/20-核心使用链路.md) · [P21-3 凭证管理](../product/pages/21-3-凭证管理.md) · [P21-4 §10 运行参数](../product/pages/21-4-镜像管理.md)
 
@@ -9,10 +9,16 @@
 | | Claude Code CLI | Codex CLI |
 |---|---|---|
 | 订阅登录方式 | `claude setup-token`：打印 OAuth URL → 用户浏览器完成 claude.ai 订阅授权 → **把 code 粘贴回终端** | 三种：本机浏览器 OAuth；**`codex login --device-auth`（标准 RFC 8628 device-code，专为无浏览器环境）**；API key |
-| 凭证落盘 | `~/.claude/.credentials.json`（约 1 年有效） | `~/.codex/auth.json`（明文，须按密码级保护） |
+| 凭证落盘 | `setup-token` **不落盘**——1 年期 token（`sk-ant-oat01-…`）直接**打印到 stdout**（区别于交互式 `claude login` 才写 `~/.claude/.credentials.json`）；捕获后即注入 env，见 ★1 | `~/.codex/auth.json`（明文，须按密码级保护），实测顶层键见 ★2 |
 | 直接注入 | `CLAUDE_CODE_OAUTH_TOKEN` 环境变量 | `codex login --with-access-token` |
 | device-code 支持 | ❌ 无（社区 issue 强烈诉求中） | ✅ 有，code 15 分钟过期 |
 | **API key 支持** | ✅ `ANTHROPIC_API_KEY` 环境变量 | ✅ `OPENAI_API_KEY` 环境变量 / API key 登录 |
+
+> **★ 技术验证补充（2026-08 live，真订阅真授权真跑；下列是凭证落盘/输出的精确形态，比抽象设计更值钱，是解析器与注入器的直接实现指导）**
+>
+> - **★1 Claude `setup-token`（输出形态）**：授权 URL **藏在 OSC 8 超链接转义序列里**（`ESC ] 8 ; id=… ; <完整URL> …`），**可见文本里的 URL 会被 pty 截断** → 捕获器**必须解析 OSC 8 原始序列取完整 URL，不能简单 grep `https://`**。产出的 1 年期 token（`sk-ant-oat01-…`）**打印到 stdout、不落 `.credentials.json`**，且被 pty **按行折成多段** → 捕获后须**拼接并去空白**还原完整 token。注入形态：`CLAUDE_CODE_OAUTH_TOKEN` env。
+> - **★2 Codex `login --device-auth`（输出形态）**：输出是**纯文本** verification URL（`https://auth.openai.com/codex/device`）+ device-code（格式 `XXXX-XXXXX`，15 min 过期）→ **正则捕获稳**。凭证落 `~/.codex/auth.json`，实测顶层键：`auth_mode`、`tokens.{ id_token, access_token, refresh_token, account_id }`、`last_refresh`（chatgpt 订阅模式下 `OPENAI_API_KEY` 字段为 `null`）。**`auth.json` 含 `refresh_token` → 实证印证 §5.1 的刷新回写必要性**（access token 短期，须靠 refresh token 续期）。注入形态：`CODEX_AUTH_JSON` env / `codex login --with-access-token`（stdin）。
+> - **结论**：auth helper 的输出捕获器**必须 per-CLI 适配**（codex 抓纯文本 code + 读 auth.json 文件；claude 解析 OSC 8 URL + 从 stdout 拼 token），**不能用一套通用正则**——这是 §6「正则解析 stdout 脆弱」风险的具体化落地（§3 时序与 §6 缓解已据此细化）。
 
 > **setup-token 路径 MVP 即做，不推迟**（审计 P2-13 重新评估）：原建议基于 MVP 瘦身，而瘦身已被全部否决。现状是这条路径的契约与实现面**已经完整**——04 §3 的 `getAuthMethods/beginAuth/completeAuth` 覆盖 `paste-prompt` 形态、05 §3 有完整时序、25 §4.2 有 golden fixture 用例、P20 §5 的产品链路把「帐号授权」定为三分支之一。推迟它反而要**回头砍产品定稿的入口**（Claude Code 只剩 API key，用户的 Claude 订阅额度用不上），代价高于实现成本。
 
@@ -22,7 +28,7 @@
 
 ## 2. 核心设计决策
 
-**决策 A：鉴权与任务 sandbox 彻底解耦（凭证注入架构）。** 两个 CLI 的凭证均官方确认**可搬运**：Claude `setup-token` 产出 1 年期 token（`CLAUDE_CODE_OAUTH_TOKEN` 注入任意环境）；Codex `auth.json` 不绑定主机（官方 CI/CD 文档提供 `CODEX_AUTH_JSON` 注入模式）。因此登录流**不依赖任何任务 sandbox**——跑在平台管理的 **auth helper 执行环境**里（**默认形态：复用 AIO 镜像的常驻轻量 helper 容器；备选：后端宿主机自带两个 CLI**——部署形态与取舍见 [11 §1.1](../shared/11-部署与扩展预留.md)；对上层与前端完全透明），产出凭证入 Vault 后注入后续任意 sandbox。产品收益：拦截面板/凭证页内**即时完成**帐号授权，任务创建流程中不存在"等待登录"环节（产品 P20 §5 与此对齐）。
+**决策 A：鉴权与任务 sandbox 彻底解耦（凭证注入架构）。** 两个 CLI 的凭证均官方确认**可搬运**：Claude `setup-token` 产出 1 年期 token（`CLAUDE_CODE_OAUTH_TOKEN` 注入任意环境）；Codex `auth.json` 不绑定主机（官方 CI/CD 文档提供 `CODEX_AUTH_JSON` 注入模式）。因此登录流**不依赖任何任务 sandbox**——跑在平台管理的 **auth helper 执行环境**里（**默认形态：复用 AIO 镜像的常驻轻量 helper 容器；备选：后端宿主机自带两个 CLI**——部署形态与取舍见 [11 §1.1](../shared/11-部署与扩展预留.md)；对上层与前端完全透明），产出凭证入 Vault 后注入后续任意 sandbox。产品收益：拦截面板/凭证页内**即时完成**帐号授权，任务创建流程中不存在"等待登录"环节（产品 P20 §5 与此对齐）。**本决策已 live 验证（2026-08 技术验证）**：真订阅 → 真授权 → 捕获凭证 → **搬运到完全独立的隔离环境**（全新 `CLAUDE_CONFIG_DIR` / `CODEX_HOME`，只含搬运来的凭证，与登录时的 HOME 无任何共享）→ agent **真鉴权通过并调用模型干活**（claude 侧实测 agent 真读文件真出活；codex 侧实测真实会话建立、请求真打到 OpenAI，仅因测试账号额度用尽未出最终结果——鉴权/搬运/注入链路全通）。"凭证与登录 sandbox 解耦、可搬运注入任意 sandbox"不再是纸面推断。
 
 **创建流程的阶段序列因此固定为**：初始化 → 拉镜像 → 准备工作区 → 启动实例（凭证注入发生在此，用户无感）→ 连接终端（P20 §3.3）。**没有"等待登录"阶段**——任何在创建链路里等待鉴权的实现都是对本决策的违反。
 
@@ -39,10 +45,12 @@
 前端 ──POST /api/runtimes/:rt/auth/begin──▶ RuntimeApplicationService.beginAuth()
    │                                                        │
    │                                    在 auth helper 执行环境内（§2 决策 A）
-   │                                    spawn({tty:true}) 起交互式登录子命令（需要 TTY）
+   │                                    spawn({tty:true}) 起交互式登录子命令
+   │                                    ——【硬约束】必须真 pty：setup-token 与 device-auth
+   │                                       都检测 TTY，非 TTY 直接不启动/不输出（live 实测）
    │                                    ——不依赖、也不创建任何任务 sandbox
    │                                                        │
-   │                          RuntimeAdapter 从 pty 输出流正则捕获
+   │                          RuntimeAdapter 从 pty 输出流【per-CLI 适配】捕获（见下 ★）
    │                          AuthChallenge{ kind:'url'|'device-code'|'paste-prompt',
    │                            verificationUrl, userCode?, expiresAt, challengeRef, instructions }
    │                          （字段以文档 04 §3 为唯一定义处）
@@ -65,6 +73,15 @@
       或注入环境变量（CLAUDE_CODE_OAUTH_TOKEN / OPENAI_API_KEY），
       直到过期无需重复登录——登录一次，处处可用。
 ```
+
+> **★ auth helper 的输出捕获是 per-CLI 适配的，不是一套通用正则**（2026-08 live 实测，§1 ★ 的落地）：
+>
+> | CLI | Challenge 捕获（begin） | 凭证收编（complete） |
+> |---|---|---|
+> | **Codex `--device-auth`** | 从 stdout **纯文本正则**抓 device-code（`XXXX-XXXXX`，15 min）与 verification URL（`https://auth.openai.com/codex/device`）——稳 | **读 `~/.codex/auth.json` 文件**（含 `refresh_token`，见 §5.1） |
+> | **Claude `setup-token`** | **解析 OSC 8 转义序列**取完整授权 URL（可见文本 URL 会被截断，**不能 grep `https://`**） | 从 **stdout 拼 token**（`sk-ant-oat01-…` 被 pty 按行折成多段，去空白拼接还原；**不落 `.credentials.json`**） |
+>
+> 两条捕获路径都跑在 `spawn({tty:true})` 的**真 pty** 里——非 TTY 时两个 CLI 都不启动/不输出（上方时序图已标为硬约束）。解析器 per-CLI 分派 + golden fixture 覆盖两种输出形态，见 §6 与 25 §2.3。
 
 **REST 端点约定**（含全局前缀 `/api`，是前端 service 命名与 mock 的唯一权威，文档 07 §6 / 12 §4.2 与此对齐）：
 
@@ -210,8 +227,27 @@ P/scheduler/timers.ts#every(15min)
 
 | 风险 | 等级 | 缓解 |
 |---|---|---|
-| **正则解析 CLI stdout 是脆弱集成**（CLI 升级改输出格式即静默失效） | 高 | 每个 Adapter 加版本探测 + **golden-output 契约测试**（录制各 CLI 版本输出样本回放验证解析器），CI 定期跑 |
+| **解析 CLI stdout 是脆弱集成**（CLI 升级改输出格式即静默失效） | 高 | **捕获器 per-CLI，非通用正则**（2026-08 live 实测，§1★/§3★ 落地）：codex 纯文本 device-code + 读 `auth.json` 文件（稳）；claude 须**解析 OSC 8 转义序列**取完整 URL + 从 stdout **拼接被折行的 token**——简单 grep `https://` 会拿到截断 URL。配套：每个 Adapter 加版本探测 + **golden-output 契约测试**（fixture **必须逐字节录制两种输出形态**：codex device-auth 纯文本 + claude setup-token 的 OSC 8 序列与折行 token，见 25 §2.3），CI 定期回放验证解析器 |
 | Claude Code 无 device-code，粘贴流体验差 | 中 | 前端框架预留模式切换位；官方支持后仅改 Adapter 的 `getAuthMethods()` |
 | 服务端长期持有用户 OAuth 凭证的合规考量 | **高**（审计 P0-3 上调：默认监听 127.0.0.1 之前，这是本平台最大的单点风险——一台被公网暴露的实例等于泄露用户的 ChatGPT/Claude 订阅身份） | 产品文档明示 + 吊销/清除入口 + AES-256-GCM 加密（master key 规格见 §4.2）+ **默认只监听 127.0.0.1**（11 §1）+ **访问口令 Guard MVP 即启用**（11 §3.1） |
 | auth.json 明文落盘在容器内 | 中 | 容器单租户使用 + 卷权限 0600 + sandbox 销毁时清除 |
 | auth helper 环境缺 CLI 或版本漂移 | 低 | helper 容器用平台默认镜像（AIO 自带两 CLI）；启动时版本探测并纳入诊断项（P21-5） |
+
+## 7. 与 credential 上下文已实现部分的衔接（S4 增量边界）
+
+**一句话定位**：S3（Git 私有仓凭证）已落地 credential 限界上下文的 **git 半边 + 全部公共基础设施**；**S4（本文档）= 补 credential 的 runtime 半边**，大量复用已建的东西，**不是从零起**。credentials 表当初就按 `kind ∈ {runtime, git}` 的全列集 + 全 CHECK 建成（13 §2.5.1、23 §8），runtime 分支的列与约束**已在库里待命**——S4 **不改表结构**（`runtime_settings` 表、`credential_sandbox_bindings` 表也都已存在）。
+
+实现者据此一眼分清"要新建的"与"直接用的"：
+
+| # | S4 要新增（runtime 半边） | 对应的 S3 已建、直接复用（不重建） |
+|---|---|---|
+| 1 | **`Credential.createRuntime`** 工厂（`kind='runtime'`、`runtimeId` 非空、`mode='account'\|'api-key'`、`obtainedVia ∈ RuntimeAuthMethod`），并把实体现有的 git-only 收窄放宽——`credential.entity.ts` 现 `obtainedVia: GitObtainedVia`、`mode: null` 需拓成超集/可空二值 | `Credential` 聚合本体、`rehydrate`、`revoke()`/`Erased` 擦除、`assertUsable()`、`CredentialStored/CredentialRevoked` 事件（`createGit` 旁并列即可） |
+| 2 | **`RuntimeAuthMethod` 枚举** 加进 `obtained-via.vo.ts`（`setup-token` / `oauth-device` / `api-key` / `access-token-paste`，与 DB CHECK 已枚举的四值对齐） | `GitObtainedVia` 及其 wire↔domain 转换的既有写法（同文件并列一个 union + 映射） |
+| 3 | **runtime 凭证 materialize**：注入 sandbox——codex 写 `~/.codex/auth.json` 或 `CODEX_AUTH_JSON` env、claude 写 `CLAUDE_CODE_OAUTH_TOKEN` env（§3★ 注入形态） | `CREDENTIAL_FACADE` 门面装配、`GitAuthContext` 那套"不透明句柄、明文不越界"的出口范式（新增一个 runtime 出口方法，复用门面与 UoW） |
+| 4 | **`credential_sandbox_bindings` 注入台账写入路径启用**（git 侧 S3 写零行；runtime 侧 S4 才真正记账，支撑吊销联动清除） | 台账表结构、`CredentialSandboxBinding` 聚合、I-CSB-1/2 不变量、吊销联动机制（13 §2.5.2、23 §8.4，已就绪） |
+| 5 | **runtime 选择服务**：`CredentialSelectionService` 增 runtime 分支（输入 `runtimeId` + `runtime_settings.active_auth_method` → 选生效凭证），及 `PUT /auth-mode` 切换、目标模式无凭证 409（§4） | `forKind`（git 侧选择）的既有实现与 I-CRD-5 partial unique 索引（`uq_cred_runtime_active` 已在库里）；`runtime_settings.active_auth_method`（13 §2.3.1 已建） |
+| 6 | **auth helper**：per-CLI 捕获器（codex 纯文本 + 读 auth.json；claude OSC 8 + stdout 拼 token）+ `spawn({tty:true})` 真 pty；REST `auth/begin·status·complete·secret·auth-mode`（§3） | —（runtime 侧新增；与 git 的 `git-auth.materializer`/`git-ls-remote.tester` 平行，不复用其内部逻辑） |
+| 7 | **凭证刷新 scanner**（§5.1，仅 codex：`refresh_failures`/`last_refreshed_at` 列已在库） | AES-256-GCM crypto、master-key provider（§4.2）、`refresh_failures`/`last_refreshed_at`/`expires_at` 列（13 §2.5.1 已建） |
+| — | （公共基础设施一律复用，S4 一行不重写） | `SecretMaterial`（Buffer 脱敏）、`EncryptedBlob`/`Erased`、`MaskedIdentifier`、`aes-gcm.crypto`、`master-key.provider`、credentials 全列表 + 全 CHECK（I-CRD-1/3/5/8 的 runtime 分支已写死在 CHECK 里） |
+
+**边界纪律**：runtime 凭证 materialize **注入 sandbox**（写文件/env），git 凭证**只在平台进程内、绝不注入 sandbox**（§3.2）——两条管道共用 Vault/表/门面，但物化出口不同。这也是 `credential_sandbox_bindings` 只服务 runtime、对 git 写零行的原因（13 §2.5.2 I3）。
