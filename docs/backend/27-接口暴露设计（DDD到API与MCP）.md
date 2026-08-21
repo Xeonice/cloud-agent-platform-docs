@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **55**（+1：`GET /api/providers` 能力发现；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
+| REST 端点 | **57**（+1：`GET /api/providers` 能力发现；+2 实现期补录：`POST /api/projects/:id/cancel-clone`、`POST /api/access/unlock`；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
 | MCP tools | **10** | 02 §5.2 |
 | WS 通道 | **2**（`/events`、`/terminal`） | 10 §6.7 |
 | WS 事件类型 | **6** | 10 §3 |
@@ -101,7 +101,8 @@
 | `createProject` | `POST /api/projects` → **202** | `create_project` | `{ name, sourceType:'git'\|'empty', repoUrl?, repoBranch? }` | `{ projectId, cloneStatus:'cloning'\|'ready' }` | `create-project` command | I-PRJ-1/2/4（名称 1–40、全局唯一、总数 ≤50） | `INVALID_ARGUMENT`(400)、`ALREADY_EXISTS`(409) | `project.clone_progress` ×N |
 | `retryClone` | `POST /api/projects/:id/retry-clone` | — | 仅 `failed` 态可调；显式重置 `cloneStatus='cloning'` 重新入队 | `ProjectDto` | `retry-clone` command | I-PRJ-6（不允许隐式回退） | `INVALID_STATE`(409) | `project.clone_progress` ×N |
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
-| `deleteProject` / `cancelClone` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 取消克隆** | 204 | `delete-project` / `cancel-clone` | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
+| `cancelClone` | `POST /api/projects/:id/cancel-clone` | — | **只取消克隆、不删项目**：中止在跑的 clone（排队中的直接出队）；项目 id / 名称 / 已关联 Task 全部保留，之后仍可 `retryClone` 或 `convertToEmpty`。**非 cloning 态是 no-op**（回当前 `ProjectDto`，不报 409） | `ProjectDto`（`cloneStatus:'failed'`、`errorCode:'INTERRUPTED'`） | `cancel-clone` command | I-PRJ-6 | — | `project.clone_progress`（`phase:'failed'`） |
+| `deleteProject` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 先取消克隆再删**（要"取消但保留项目"用上一行的 `cancelClone`） | 204 | `delete-project` command | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
 | `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` | — | | `RetainedVolumeDto[]` | `list-retained-volumes` query | — | — | — |
 | （手动清理保留卷） | `DELETE /api/retained-volumes/:id` | — | | 204 | — | I-RV-2 | `NOT_FOUND` | — |
 
@@ -244,7 +245,8 @@
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：逐项 `event: check` + 末尾 `event: done` | — | 单项超时 5s，一项卡住不阻塞整轮；检查项含 **`DATA_ROOT` 文件系统类型与 reflink 支持** |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
 | `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 + 最近 testkit 结果 | — | 统一名（P1-6）。**⏳ 尚未落地**。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页 |
-| `health` | `GET /api/health` | | `{ ok: true }` | — | **唯一豁免访问口令的端点** |
+| `unlock`（访问口令提交） | `POST /api/access/unlock` | `{ passcode }` | `{ unlocked: true }` + `Set-Cookie: ap_session`（签名 `HttpOnly`，7 天） | `PASSCODE_INVALID`(401)、`PASSCODE_LOCKED`(429，含 `retryAfterSec`) | **MVP**（审计 P0-3）。**不进 MCP**（§1.2 判据②：凭证提交面）。未启用口令时直接回 `{ unlocked:true }`；连续 5 次错锁 5 分钟，**与 Guard 共用同一把锁**（11 §3.1） |
+| `health` | `GET /api/health` | | `{ ok: true }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |
 
 **SSE 消费提示**：`openapi-typescript` 只能生成响应 content-type，**帧类型要手写**并与 WS 协议文件同放（10 §6.7）。用 `fetch` + `ReadableStream`（需要 POST body，`EventSource` 不支持）。
@@ -397,7 +399,8 @@ Step2 确认：
 | 防线 | 位置 |
 |---|---|
 | openapi.json diff 入库版本 | 09 §2.3 第 4 道门 |
-| `10 §6` 路径集合 ⊇ `openapi.json` paths | 09 §2.4 `docs:check` |
+| `10 §6` 路径集合 ⊇ `openapi.json` paths | 09 §2.4 `docs:check` **B1**（已落地，`scripts/docs-check.mjs`） |
+| 本文 §2–§9 端点集合 == `10 §6` 端点集合 | 09 §2.4 `docs:check` **A4**（已落地，下一节的对账表由它自动核对） |
 | 前端 codegen 漂移检测 | 10 §2.1 |
 | WS 协议文件 hash 比对 | 10 §3 第 4 条 |
 | REST/MCP 同场景等价用例 | 25 §5.1 `E2E-1-mcp` |
@@ -408,11 +411,13 @@ Step2 确认：
 
 | 面 | 10/02 的总数 | 本文覆盖 | 差 |
 |---|---|---|---|
-| REST 端点（不含 v1.5 占位） | 55 | 55 | 0 |
+| REST 端点（不含 v1.5 占位） | 57 | 57 | 0 |
 | REST v1.5 占位 | 2 | 2（§9 标注） | 0 |
 | MCP tools | 10 | 10 | 0 |
 | WS 通道 | 2 | 2（§7） | 0 |
 | WS 事件类型 | 6 | 6（§10.8 全量表） | 0 |
 | SSE 端点 | 1 | 1（§9） | 0 |
+
+**"REST 端点"这一行现在是机器核对的**：`pnpm docs:check` 的 **A4** 把本文 §2–§9 表格里的路径集合与 `10 §6` 的路径集合做全等比较，任一侧多出一条就红并列出差集（09 §2.4）。**上表其余几行（MCP tools / WS 通道 / WS 事件 / SSE）仍是人工计数**（⏳，见 09 §2.4）。
 
 **本文任何一行与 10 / 02 / 23 / 25 不一致时，以那四份为准**——本文是汇聚视图，不是新的权威。发现不一致请当作上游漂移上报。

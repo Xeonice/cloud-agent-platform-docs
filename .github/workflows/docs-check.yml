@@ -1,0 +1,67 @@
+# 文档一致性门禁（权威定义：docs/shared/09-工程化规范.md §2.4）
+#
+# 这道门跑在**文档主仓**：
+#   A 类检查只读 docs/**，永远能跑；
+#   B 类检查（10 §6 ⊇ openapi.json paths）要读 api submodule 里的 openapi.json。
+# submodule 拉不到时脚本会「大声 skip」B1 并以 0 退出 —— 不让 A 类跟着瘫痪，
+# 但会在 job summary 里留一条 warning，避免被静默吞掉。
+#
+# 零依赖：scripts/docs-check.mjs 只用 Node 内置模块，**不需要 install**。
+name: docs-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 同一分支上新的 push 取消上一轮
+concurrency:
+  group: docs-check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check:
+    name: 文档一致性门禁
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout 主仓
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # .gitmodules 里 api/web 是 SSH remote 且指向另外两个仓库，默认 GITHUB_TOKEN
+      # 读不到；配了 SUBMODULE_TOKEN（有 repo 读权限的 PAT）才拉得动私有子仓。
+      # **拉不到不阻断**：下面的 docs:check 会把 B 类判成 skip。
+      # 只拉 api —— checker 只需要 api/openapi.json，web 用不上。
+      - name: 拉取 api submodule（可失败 → B 类走 skip）
+        id: submodule
+        continue-on-error: true
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            git config --global url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "git@github.com:"
+          else
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
+          fi
+          git submodule update --init --depth 1 api
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # 等价于 `pnpm docs:check`；零依赖所以不装包，checkout 完直接跑。
+      - name: docs:check
+        run: node scripts/docs-check.mjs
+
+      - name: 提示 B 类被跳过
+        if: ${{ steps.submodule.outcome != 'success' }}
+        run: echo "::warning title=B 类检查本轮未执行::api submodule 没拉到（未配 SUBMODULE_TOKEN？），'10 §6 ⊇ openapi.json paths' 这条本轮无人把关。"

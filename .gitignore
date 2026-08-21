@@ -6,3 +6,6 @@
 
 # 系统/编辑器
 .DS_Store
+
+# Node（主仓只有零依赖的 docs:check 脚本，正常不会有 node_modules）
+node_modules/
