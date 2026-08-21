@@ -41,10 +41,10 @@ agent-platform-api/
 │   ├── contracts/src/                       # 框架无关公共契约（未来可独立发包）
 │   │   ├── sandbox-provider.contract.ts
 │   │   ├── runtime-adapter.contract.ts
-│   │   ├── image-spec.contract.ts
+│   │   ├── image-spec.contract.ts           # ⏳ 未实现，随镜像管理切片落地（04 §7）
 │   │   ├── errors.ts                        # 统一错误模型（04 §4）
 │   │   ├── credential-facade.port.ts        # CREDENTIAL_FACADE token + GitAuthContext（跨上下文门面，与 SANDBOX/PROJECT_FACADE 同构，A2）
-│   │   ├── registry.tokens.ts
+│   │   ├── registry.tokens.ts               # 三个 DI token；IMAGE_SPEC_REGISTRY 目前仅占位（04 §8）
 │   │   └── testkit/                         # golden 契约测试套件（04 §10）
 │   ├── shared-kernel/src/
 │   │   ├── domain/{aggregate-root,entity,value-object,domain-event}.ts
@@ -77,6 +77,7 @@ agent-platform-api/
 │       │       ├── persistence/schema/*.{sqlite,pg}.ts   # 双方言（13 §5）
 │       │       ├── providers/aio/aio-sandbox.provider.ts          # 默认（04 §2.1）
 │       │       ├── providers/boxlite/boxlite-sandbox.provider.ts  # micro-VM
+│       │       ├── registry/provider-registry.ts         # SANDBOX_PROVIDER_REGISTRY 的实现（04 §8）
 │       │       ├── workspace/workspace-preparer.ts       # preparing-workspace 阶段（03 §7.6）
 │       │       ├── scheduler/{resource-pool.reader,first-fit-scheduler,sandbox.reaper}.ts   # reader 读库喂 domain 纯函数
 │       │       ├── observers/sandbox-status.observer.ts  # watchEvents 或轮询（04 §5/§6）
@@ -115,6 +116,7 @@ agent-platform-api/
 │       │       ├── persistence/sqlite/{runtime-settings,runtime-installation}.repository.impl.ts
 │       │       ├── adapters/claude-code/{claude-code.adapter,claude-code.output-parser}.ts
 │       │       ├── adapters/codex/{codex.adapter,codex.output-parser}.ts   # 解析器独立成文件 → golden fixture 靶子
+│       │       ├── registry/runtime-adapter.registry.ts   # RUNTIME_ADAPTER_REGISTRY 的实现（04 §8）
 │       │       └── helper/{auth-helper.container,auth-helper.host}.ts      # 两种形态（11 §1.1）
 │       ├── credential/                      # Vault；含 kind='git' 的 Git 凭证（05 §3.2）
 │       │   ├── interface/{http/credential.controller.ts, credential.module.ts}
@@ -187,9 +189,7 @@ agent-platform-api/
 │               ├── scheduler/{automation.scheduler,timeout.watchdog}.ts   # 每分钟扫描 / 硬超时（03 §8.1/§8.3）
 │               ├── notifier/{webhook.notifier,ssrf-guard}.ts              # trigger_on + SSRF（03 §8.5）
 │               └── logs/{run-log-store,log-rotator}.ts                    # 落盘 10MB×3 轮转（03 §8.6）
-└── platform/
-    ├── registry/{dynamic-module-registry,plugin-loader}.ts
-    ├── registry/{provider,runtime,image-spec}.registry.ts      # 三个 DI token registry（04 §8）
+└── platform/                                                   # 注意：这里没有 registry/ —— 见下方结构决定 4
     ├── config/{config.module,config.schema}.ts                 # @nestjs/config + zod 校验
     ├── persistence/{persistence.module,drizzle.connection,migrator,unit-of-work.impl}.ts
     ├── persistence/migrations/{sqlite,pg}/                     # 双方言各一套（13 §6）
@@ -203,11 +203,13 @@ agent-platform-api/
         └── access-passcode/{passcode.service,passcode.guard,failure-counter}.ts  # **MVP**（11 §3.1，审计 P0-3）
 ```
 
-**三条从调用图倒推出来的结构决定**（详见 26）：
+**四条从调用图倒推出来的结构决定**（详见 26）：
 
 1. **`interface/gateway/terminal.gateway.ts` 在 interface 而非 infrastructure**——WS 是三协议面之一（17 §2），它是协议壳，与 controller / mcp-tools 同层。
 2. **`application/workflows/*.workflow.ts` 是独立一类**——响应返回后的多步编排（provision / clone / scan-due / finalize-run）既不是命令处理器也不是基础设施，它是 application 层的编排单元。
 3. **`env-merge` 在 `image/domain/services/` 而非 application**——它是零 IO 纯函数（23 §9.5），放 domain 才能零 mock 穷举测试（25 T-IMG-11..14）。
+4. **两个 registry 不在 `platform/`，而在各自限界上下文的 infrastructure 下**——`SandboxProviderRegistry` 在 `sandbox/infrastructure/registry/provider-registry.ts`、`DefaultRuntimeAdapterRegistry` 在 `runtime/infrastructure/registry/runtime-adapter.registry.ts`；跨上下文的那一层——DI token（`packages/contracts/src/registry.tokens.ts`）与 `ProviderRegistry` / `RuntimeAdapterRegistry` 接口（各自的 `*.contract.ts`）——留在 `contracts`。**registry 归拥有该扩展点的上下文，token/接口留在 contracts 才是跨上下文的扩展缝**：第三方模块注入 token 即可注册（04 §8 方式一），`platform/` 无须知道 provider/adapter 的存在，也就没有一个"什么都放"的中心 registry 目录。
+   - 已实现的只有上面两个。`image-spec.registry.ts` **不存在**（`IMAGE_SPEC_REGISTRY` token 已预留，registry 与实现随镜像管理切片落地）；`dynamic-module-registry.ts` / `plugin-loader.ts` 也**不存在**（插件目录扫描标为后续，理由见 04 §8 方式二）。
 
 ## 3. 分层依赖规则（eslint-plugin-boundaries 强制）
 

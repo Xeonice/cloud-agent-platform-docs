@@ -14,15 +14,15 @@ sandbox、runtime、镜像三层都可由用户注册自己的实现；平台在
 3. **版本管理不自研**——契约抽成独立 npm 子包，semver / 兼容范围解析 / 升级提示全交给包管理器（§9）。
 
 ```
-packages/contracts/                 # → 发布为 @platform/sandbox-contracts
+packages/contracts/                 # 现名 @platform/contracts（private）；→ 发布为 @platform/sandbox-contracts（⏳ §9）
 ├── src/
 │   ├── sandbox-provider.contract.ts
 │   ├── runtime-adapter.contract.ts
-│   ├── image-spec.contract.ts
+│   ├── image-spec.contract.ts     # ⏳ 未实现，随镜像管理切片落地
 │   ├── errors.ts                  # 统一错误模型（§4）
-│   └── registry.tokens.ts
-├── testkit/                       # 契约一致性套件（§10），子路径导出 /testkit
-├── CHANGELOG.md                   # changesets 生成
+│   ├── registry.tokens.ts
+│   └── testkit/                   # 契约一致性套件（§10），子路径导出 /testkit
+├── CHANGELOG.md                   # ⏳ changesets 尚未接入（§9）
 └── package.json                   # version 即契约版本
 ```
 
@@ -430,27 +430,42 @@ interface ValidationResult {
 ### 方式一（主）：DI Token + 动态模块
 
 ```typescript
-export const SANDBOX_PROVIDER_REGISTRY = Symbol('SANDBOX_PROVIDER_REGISTRY');
-export const RUNTIME_ADAPTER_REGISTRY  = Symbol('RUNTIME_ADAPTER_REGISTRY');
-export const IMAGE_SPEC_REGISTRY       = Symbol('IMAGE_SPEC_REGISTRY');
+// packages/contracts/src/registry.tokens.ts
+export const SANDBOX_PROVIDER_REGISTRY = Symbol('SandboxProviderRegistry');
+export const RUNTIME_ADAPTER_REGISTRY  = Symbol('RuntimeAdapterRegistry');
+export const IMAGE_SPEC_REGISTRY       = Symbol('ImageSpecRegistry');   // ⏳ 仅占位，见下
 
-interface ProviderRegistry<T> {
-  register(impl: T, opts?: { default?: boolean }): void;
-  get(key: string): T;              // 未注册抛领域错误
-  getDefault(): T;
-  list(): T[];
+// packages/contracts/src/sandbox-provider.contract.ts
+export interface ProviderRegistry {
+  register(impl: SandboxProvider, opts?: { default?: boolean }): void;
+  get(name: string): SandboxProvider;    // 未注册抛 NOT_FOUND
+  has(name: string): boolean;
+  list(): SandboxProvider[];
+  readonly defaultProvider: string;      // 'aio'，被 register(x, { default: true }) 移动
+}
+
+// packages/contracts/src/runtime-adapter.contract.ts
+export interface RuntimeAdapterRegistry {
+  register(impl: RuntimeAdapter): void;  // 无 opts.default —— 见下方"两处设计取舍"①
+  get(id: string): RuntimeAdapter;       // 未注册抛错
+  has(id: string): boolean;
+  list(): RuntimeAdapter[];
 }
 ```
 
-各实现经 `XxxModule.register()` 在 `onModuleInit` 注册；内建 **`AioSandboxProvider`（`aio`，default）**、**`BoxLiteSandboxProvider`（`boxlite`）**、`ClaudeCodeAdapter`、`CodexAdapter`；未指定实现回退 default 条目。注册校验：name/id 唯一（冲突启动即 fail-fast）+ capabilities 完整性。
+**注册机制不是 `XxxModule.register()` 语法糖**：第三方模块在自己的 `@Module` 里注入 registry token，在自己的 `onModuleInit` 里调 `register()`——没有平台侧的动态模块工厂要写。内建 **`AioSandboxProvider`（`aio`，default）**、**`BoxliteSandboxProvider`（`boxlite`）**、`ClaudeCodeAdapter`、`CodexAdapter` 走的是**同一个** `register()`（构造器注入 → `this.register(x)`），因此只有一条注册路径、一次唯一性校验。`CreateSandbox.provider` 未指定时回退 `defaultProvider`；`CreateSandbox.runtime` 必填、无回退。注册校验：name/id 唯一，冲突启动即 fail-fast。
 
-> **落地状态（✅ 已实现）**：`ProviderRegistry.register(impl, opts?: { default?: boolean })` 与 `RuntimeAdapterRegistry.register(impl)` 都是 contract 接口的一部分并已公开实现；内建项也走同一个 `register()`（构造器注入 → `this.register(x)`），因此只有一条注册路径、一次唯一性校验；重名/重 id **抛错 fail-fast**（provider 抛 `ALREADY_EXISTS`）。`SANDBOX_PROVIDER_REGISTRY` 与 `RUNTIME_ADAPTER_REGISTRY` 两个 token 均由各自 `@Global` 模块 `exports`，所以第三方模块能真正注入到。
-> 两处与上面泛型签名的**有意差异**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填），加一个没有读者的选项正是本文档反对的死契约；② 注册期只校验唯一性，**capabilities 完整性由类型系统保证**（`SandboxProviderCapabilities` 6 位全必填，少一位编译不过，另有 wire schema 的编译期对齐守卫），无需运行时再查一遍。
+> **落地状态（✅ 已实现）**：上面的两个接口就是 `packages/contracts` 里的原文，`SandboxProviderRegistry`（sandbox/infrastructure/registry）与 `DefaultRuntimeAdapterRegistry`（runtime/infrastructure/registry）是它们的实现；重名/重 id **抛错 fail-fast**（provider 抛 `ALREADY_EXISTS`）。`SANDBOX_PROVIDER_REGISTRY` 与 `RUNTIME_ADAPTER_REGISTRY` 两个 token 均由各自 `@Global` 模块 `exports`，所以第三方模块能真正注入到。
+> 两处**设计取舍**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填），加一个没有读者的选项正是本文档反对的死契约；② 注册期只校验唯一性，**capabilities 完整性由类型系统保证**（`SandboxProviderCapabilities` 6 位全必填，少一位编译不过，另有 wire schema 的编译期对齐守卫），无需运行时再查一遍。
 > 验收：e2e `apps/api/test/e2e/registry-extension.e2e-spec.ts` 以一个"第三方 npm 包"形态的 `@Module` 注入两个 token 并在 `onModuleInit` 注册——**不改任何内建模块的 providers 数组、不改 registry 构造器**——随后 `GET /api/providers` 列出它、`POST /api/sandboxes` 经它 provision、`GET /api/runtimes` + `POST .../credentials/secret` 走它的 adapter。
+>
+> **`IMAGE_SPEC_REGISTRY`（⏳ 未实现）**：token 已在 `registry.tokens.ts` 预留，但它今天是一个**裸 Symbol**——没有接口、没有实现、没有 DI 绑定、没有任何注入点。image-spec registry 与其实现**随镜像管理切片落地**（届时 §7 的 ImageSpec contract 与 §10.4 的 IS-xx 条款一并生效）。在那之前，"provider / runtime / 镜像三层可注册"（产品 19 §1 原则 5）实际只有前两层是活的。
 
-### 方式二（补充）：插件目录扫描
+### 方式二（补充）：插件目录扫描 — ⏳ **后续，当前不做**
 
-`plugins/<type>/<name>/index.ts` 导出实现，其 `package.json` 用**标准 `peerDependencies`** 声明契约兼容范围（见 §9），不引入自定义字段；`PluginLoader` 启动扫描后注册进同一 registry。⚠️ 进程内加载需信任来源（长期可选 worker_threads 隔离壳）。
+设计意图保留：`plugins/<type>/<name>/index.ts` 导出实现，其 `package.json` 用**标准 `peerDependencies`** 声明契约兼容范围（见 §9），不引入自定义字段；`PluginLoader` 启动扫描后注册进同一 registry。⚠️ 进程内加载需信任来源（长期可选 worker_threads 隔离壳）。
+
+> **落地状态（⏳ 未实现）**：代码里**没有** `plugins/` 目录、没有 `PluginLoader`、没有 semver 校验。当前不做的两条理由：① 上面那条 ⚠️ 是本方式自带的——**进程内加载一个来路不明的 `index.ts` 等于把它当平台代码信任**，在没有隔离壳（worker_threads / 子进程）之前，这条通道的安全收益是负的；② 当前**没有任何 out-of-tree 消费者**，而方式一（DI token + `onModuleInit` 注册）已经把"不改内建代码即可扩展"这件事做到了，并有 e2e 验收——再加一条旁路只是多一个未被使用的攻击面。等真出现"用户把插件丢进目录就生效"的需求时再补，届时连同 §9 的 `semver.satisfies` 一起落地。
 
 ### 方式三（内建目录）：git 平台一等公民注册表
 
@@ -474,7 +489,9 @@ interface ProviderRegistry<T> {
 
 - **版本语义**（写进包的发布纪律）：**patch** = 实现无关的内部修复；**minor** = 新增可选方法/字段或新增能力位（旧插件不实现即该位 false，不破坏）；**major** = 必须方法签名变更 / 删字段。本文档这一版把 `exec`+`attachPty`→`spawn`、删 `healthCheck`、能力位 10→6，是一次 **major**。
 - **发布纪律**：`packages/contracts` 用 changesets 管理，任何改动必须带 changeset，CI 校验缺失即 fail——这是"有版本的公共契约"唯一需要自己加的一道闸。
-- **唯一保留的运行时校验**：仅"插件目录扫描"这条旁路（§8 方式二）绕过了包管理器，`PluginLoader` 对它保留一次 `semver.satisfies(installedContractVersion, pkg.peerDependencies['@platform/sandbox-contracts'])`，不满足拒绝注册。走 npm 安装的插件不需要这一步。
+- **唯一保留的运行时校验**（⏳ **随 §8 方式二一起未实现**）：仅"插件目录扫描"这条旁路绕过了包管理器，`PluginLoader` 对它保留一次 `semver.satisfies(installedContractVersion, pkg.peerDependencies['@platform/sandbox-contracts'])`，不满足拒绝注册。走 npm 安装的插件不需要这一步——而当前**只有** npm/方式一这一条路，所以这道运行时校验今天没有存在的对象，代码里也没有它。
+
+> **落地状态（⏳ 尚未发包）**：本节整节是**目标形态**。今天 `packages/contracts` 的 `name` 是 `@platform/contracts`、`private: true`，只在 workspace 内以 `workspace:*` 被消费；仓里没有 `.changeset/`，CI（`.github/workflows/ci.yml`）也没有 changeset 闸。上表右列的 npm 原生能力因此**都还没有真正接管**——只要还没有 out-of-tree 消费者，这是刻意不付的成本；一旦要对外分发，本节就是执行清单（改 `name`→`@platform/sandbox-contracts`、去 `private`、接 changesets、加 CI 闸）。全文出现的 `@platform/sandbox-contracts/…` 是发包后的名字，当前代码里对应 `@platform/contracts/…`。
 
 > 与文档 10「REST/WS 不发 npm 包」不冲突：那条结论针对的是**前后端接口类型**（REST 有 codegen、WS 有 hash 比对两条更优路径）。这里是**后端内部的插件 SPI**，消费方是第三方实现者、分发渠道本来就是 npm，发包是成本最低而非最高的选项。
 
@@ -482,25 +499,55 @@ interface ProviderRegistry<T> {
 
 **目的**：第三方实现跑通即视为合格插件，无需平台维护者逐个审查。**内建实现（`aio` / `boxlite` / ClaudeCode / Codex）在 CI 跑同一套 testkit——无双重标准**，也倒逼 testkit 覆盖全面。
 
-**形态**：`@platform/sandbox-contracts/testkit` 子路径导出（随契约包同版本发布，§9），导出 `runSandboxProviderContractTests(factory, opts)` 系列，内部 describe/it，按 capabilities 自动跳过未声明能力的用例。
+**形态**：`@platform/contracts/testkit` 子路径导出（发包后为 `@platform/sandbox-contracts/testkit`，§9），导出两个套件，内部 describe/it，按"声明了什么"自动决定条款必跑还是跳过。
 
 ```typescript
-import { runSandboxProviderContractTests } from '@platform/sandbox-contracts/testkit';
-runSandboxProviderContractTests(async () => new MyCustomSandboxProvider(testConfig));
+import {
+  runSandboxProviderContractTests,
+  runRuntimeAdapterContractTests,
+} from '@platform/contracts/testkit';
+
+// SandboxProvider：不传 context 只跑无宿主条款；传了才打开 live 条款
+runSandboxProviderContractTests('my-provider', () => new MyCustomSandboxProvider(cfg), {
+  context,                                   // 省略 ⇒ live 条款报告为 SKIPPED（附原因）
+  skipLiveReason: 'docker daemon unreachable',
+});
+
+// RuntimeAdapter：全部条款零 CLI / 零网络，任何环境都无条件跑
+runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
+  registryKey: 'my-agent',                   // RA-08：id 必须等于注册键
+  validApiKeySample: 'myk-0123456789abcdef', // RA-11 正例 + RA-14 自动注入用例
+  injectionCases: [{ label: '帐号凭证', credential, secrets: [token] }], // RA-14
+});
 // 全部 MUST 条款通过 = 兼容平台契约
 ```
+
+> **落地状态（✅ 已实现，范围见下）**：两个套件都已落地并进 `pnpm test:contract`（CI 的 `contract-testkit` 步骤，`.github/workflows/ci.yml`）。
+>
+> | 跑套件的实现 | 位置 | 跑到的条款 |
+> |---|---|---|
+> | `aio` / `boxlite`（**真实内建类**） | `packages/modules/sandbox/test/contract/builtin-providers.contract.spec.ts` | SP-00、CAP-01（结构半场）——**无条件跑**，构造这两个 provider 既不连 docker 也不起 micro-VM |
+> | `aio` / `boxlite`（**真实内建类，live**） | `apps/api/test/e2e/builtin-provider-contract.e2e-spec.ts` | 再加 SP-01（真 create→destroy）。宿主不可用时**大声 skip**（stderr 打黄框，说明缺什么），绝不假装通过 |
+> | `fake`（内存实现） | `packages/contracts/test/contract/sandbox-provider.contract.spec.ts` | SP-00、CAP-01、SP-01 |
+> | `codex` / `claude-code`（**真实内建 adapter**） | `packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts` | RA-03、RA-08 ~ RA-14（见 §10.3）——**无条件跑** |
+> | 第三方 provider + adapter | `apps/api/test/e2e/registry-extension.e2e-spec.ts`（注册链路验收，非 testkit） | —— |
+>
+> **live 条款的 skip 语义**：`runSandboxProviderContractTests` 只在**传入 `opts.context`** 时打开 live 条款；不传则该 describe 块以 `SKIPPED — <skipLiveReason>` 的标题出现在报告里（不是消失）。live 块之所以放在 e2e 而非 contract 工程：一要真宿主，二是 BoxLite **跨进程只允许一个 runtime per `BOXLITE_HOME`**，而 `e2e` 是 vitest workspace 里唯一 `singleFork` 的工程，`contract` 是并行的。
+>
+> **为什么 RuntimeAdapter 套件只覆盖一部分**：它刻意只收"零 CLI、零网络"的条款，这样它能在任何机器上无条件跑；需要真 CLI 的条款（RA-01/02 安装往返、RA-05 challenge 形状、RA-06 凭证材料）留给后续的 sandbox-run 切片。
 
 ### 10.1 判定标准（先有要求，用例只是要求的可执行表达）
 
 - **条款分级**：`MUST` = 平台有代码依赖这条行为，违反会导致平台逻辑出错；`SHOULD` = 违反不致命但会降级体验。
 - **准入线**：**全部 MUST 条款 100% 通过**才算合格实现；SHOULD 未过输出 warning 并计入报告，不阻断。
 - **能力位一致性**：声明为 `true` 的每个能力位，其挂靠条款自动**从跳过转为必跑**。声明 true 却跑不过 = 不合格（比不声明更严重，因为平台会据此走对应分支）。
-- **报告产物**：testkit 输出 `contract-conformance.json`（条款 id → pass/fail/skipped + 实测值），插件仓库 CI 与平台 CI 都留档；`GET /providers` 诊断接口可回显最近一次结果。
+- **报告产物**（⏳ **未实现，待有插件生态消费者时再做**）：设计意图是 testkit 输出 `contract-conformance.json`（条款 id → pass/fail/skipped + 实测值），插件仓库 CI 与平台 CI 都留档；`GET /providers` 诊断接口回显最近一次结果。今天两者都没有：报告的读者是"插件作者 + 审核者"，而当前没有 out-of-tree 插件，vitest 自己的 pass/fail/skipped 输出（条款 id 就写在用例名里）已经覆盖平台侧的全部需求；`GET /api/providers` 也**不**回显任何 conformance 字段——它只列 name / capabilities / isDefault（§5）。一旦真出现插件生态，这两件按本条落地。
 
 ### 10.2 SandboxProvider 条款
 
 | id | 级别 | 要求（规范原文） | 怎么判定（用例断言） |
 |---|:--:|---|---|
+| **SP-00** | MUST | `name` 是非空 registry 键 | 断言非空字符串；registry 以它为键，空串等于注册了一个取不出来的实现 |
 | SP-01 | MUST | `create()` 返回的句柄，其 `provider` 字段必须等于 `provider.name` | 断言 `handle.provider === provider.name`；否则 registry 路由会串到别的实现 |
 | SP-02 | MUST | `create()` 只创建不启动 | `create()` 后立即 `inspect()`，`lifecycleState` 不得为 `instance_running` |
 | SP-03 | MUST | 镜像不存在时必须抛 `IMAGE_PULL_FAILED`，不得抛裸 Error | 传入垃圾 ref，断言错误 `code`；平台靠 code 决定"回滚配额并置 failed"还是"重试" |
@@ -521,6 +568,8 @@ runSandboxProviderContractTests(async () => new MyCustomSandboxProvider(testConf
 | SP-U1 | MUST（`updateResources`） | 改配额后 `inspect().resourceUsage` 或实体限额随之变化，且**不重建**（句柄不变） | 断言前后 `providerSandboxId` 相同 |
 | SP-P1 | MUST（`pauseResume`） | pause 后 `inspect()` 为 `instance_paused`，resume 后回到 `instance_running` | 状态往返断言 |
 
+> **已落地的条款**：**SP-00**、**CAP-01 的结构半场**（六位能力位齐全且都是 boolean，另可用 `opts.expectedCapabilities` 逐位钉死）——这两条无宿主需求，`aio`/`boxlite`/fake 一律无条件跑；**SP-01** 为 live 条款，只在传入 `opts.context` 时打开。其余 SP-02 ~ SP-12 / SP-T\* / SP-V1 / SP-W1 / SP-U1 / SP-P1 与 CAP-01 的**行为半场**（声明 false 的位调用即抛 `UNSUPPORTED_CAPABILITY`）**尚未进 testkit**——它们都要真宿主，属 live 条款，随 sandbox-run 切片补齐；其中 create→exec→destroy、stop→start 数据留存、重启重连等路径今天由 `docker-backend.e2e` / `boxlite-provider.e2e` / `boxlite-microvm.e2e` 单独覆盖（不是 testkit 形态，所以第三方实现复用不到）。
+
 ### 10.3 RuntimeAdapter 条款
 
 | id | 级别 | 要求 | 怎么判定 |
@@ -532,6 +581,23 @@ runSandboxProviderContractTests(async () => new MyCustomSandboxProvider(testConf
 | RA-05 | MUST | `beginAuth()` 产出的 `AuthChallenge` 字段齐全（`instructions` / `challengeRef` 必填）且 `expiresAt` 是 ISO 绝对时间 | schema 校验；前端倒计时依赖 `expiresAt` 语义 |
 | RA-06 | MUST | `completeAuth()` 返回的 `credentialFiles[].content` 非空且路径为绝对路径 | 结构断言（内容不入日志、不写快照） |
 | RA-07 | MUST | `buildStartCommand()` / `buildAttachCommand()` 返回非空 `cmd`，且为纯函数（同输入同输出、无 IO） | 连调两次断言深相等 |
+| **RA-08** | MUST | `id` / `displayName` / `vendor` 非空，且 `id` **等于注册键** | 三个字段断言非空 + `adapter.id === opts.registryKey`；registry 以 `id` 为键，对不上则 `GET /api/runtimes` 里那一行永远取不出 adapter |
+| **RA-09** | MUST | `getAuthMethods()` 非空、无重复、且 ⊆ 契约闭集 `RUNTIME_AUTH_METHODS` | 逐项断言落在闭集里；前端鉴权页只认这四个值，越界的方式渲染不出来 |
+| **RA-10** | MUST | 每个声明的**交互式**方式（∈ `RUNTIME_BEGIN_METHODS`）`loginCommand(method)` 返回非空 argv，且是纯函数 | 断言 argv 非空、每个 token 非空字符串，连调两次深相等。非交互式方式（api-key / access-token-paste）允许抛 `UNSUPPORTED_METHOD`，不做断言 |
+| **RA-11** | MUST（声明了 `validateApiKey`） | 明显非法串必须被拒 | 喂 `''` / 空白 / 带空格串（可由 `opts.extraInvalidApiKeySamples` 追加本 provider 特有的反例）断言 `ok:false`；合法样例由 `opts.validApiKeySample` 传入，断言 `ok:true` |
+| **RA-12** | MUST（声明了 `credentialTtlMs`） | 键 ⊆ `RUNTIME_AUTH_METHODS` **且 ⊆ 自己 `getAuthMethods()`**，值为正有限数 | 逐条断言；值显式为 `undefined` 视同"无过期"（等价于不写），跳过。给一个自己不提供的方式配 TTL = 死配置 |
+| **RA-13** | MUST（声明了 `refreshCapability`） | `probeCommand` 非空、`parseRefreshedAuth` 是函数 | 结构断言；刷新扫描器（05 §5.1）就靠这两样，缺一它会静默跳过该 runtime |
+| **RA-14** | MUST | **密钥禁进 argv**：`injectCredential()` 构造的任何命令行都不得含凭证明文 | 用假 `SandboxExecFn` 捕获全部 argv，断言不含任何给定密钥片段（契约纪律来自 05 §4/§7 #3——`/proc/<pid>/cmdline` 在沙箱内可读，进了 argv 就是泄漏）。**只查 argv，不查 env**：api-key 形态本来就走 env 在沙箱启动时注入（05 §4.1 ④），查 env 会把合法通道判成违规 |
+
+> **已落地的条款**：**RA-03、RA-08 ~ RA-14**——全部零 CLI、零网络，`codex` / `claude-code` 两个真实内建 adapter 无条件跑（`packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts`）。
+>
+> **与上表的差异**：
+>
+> - **RA-01 / RA-02（安装往返）**：S4 的 `RuntimeAdapter` 契约里**还没有** `isInstalled()` / `install()`（见 `runtime-adapter.contract.ts` 顶部 NOTE：run 方法随后续 sandbox-run 切片加），无从断言。
+> - **RA-04（golden fixture 回放）**：不在 testkit 里，而在各 adapter 自己的解析器单测（`packages/modules/runtime/test/unit/output-parsers.spec.ts`）——fixture 是**每个 CLI 特有**的，做成通用套件参数收益低；`packages/contracts/src/testkit/fixtures/CLI-VERSION-MATRIX.md` 仍是版本矩阵的登记处。
+> - **RA-05 / RA-06**：要真跑一次 `beginAuth`/`completeAuth`（真 CLI + 真浏览器授权），不属"零 CLI"范围。
+> - **RA-07**：`buildStartCommand` / `buildAttachCommand` 同样还不在 S4 契约里；其"非空 argv + 纯函数"的判定纪律已由 **RA-10** 用在 `loginCommand` 上。
+> - **RA-03 的判定放宽**：`contracts` 里没有 adapter 错误**类**（`AdapterAuthError` 在 runtime 的 domain 层，第三方拿不到），所以断言是"必须 reject；若错误对象带 `code`，则必须是 `UNSUPPORTED_METHOD`"——裸 `Error` 容忍，错的 `code` 不容忍。
 
 ### 10.4 ImageSpecProvider 条款
 
@@ -542,6 +608,8 @@ runSandboxProviderContractTests(async () => new MyCustomSandboxProvider(testConf
 | IS-03 | MUST | `validate()` 违反入口约定 → `valid:false` 且 `errors` 非空并带可定位的 `path` | 断言 errors 结构，不接受只给 `valid:false` |
 | IS-04 | MUST | `validate()` 是纯判断，不修改入参、不产生副作用 | 深冻结入参后调用，断言不抛 |
 | IS-05 | SHOULD | 缺 tmux 等非致命项走 `warnings` 而非 `errors`（§7） | 断言该镜像 `valid:true` 且 warnings 命中对应 code |
+
+> **落地状态（⏳ 全部未实现）**：ImageSpec contract 本身还没有（`packages/contracts` 里没有 `image-spec.contract.ts`），`IMAGE_SPEC_REGISTRY` 只是一个占位 token（§8），所以本表五条一条都跑不了。整块随**镜像管理切片**落地。
 
 ## 11. 风险与备选
 
