@@ -265,3 +265,13 @@ P/scheduler/timers.ts#every(15min)
 | — | （公共基础设施一律复用，S4 一行不重写） | `SecretMaterial`（Buffer 脱敏）、`EncryptedBlob`/`Erased`、`MaskedIdentifier`、`aes-gcm.crypto`、`master-key.provider`、credentials 全列表 + 全 CHECK（I-CRD-1/3/5/8 的 runtime 分支已写死在 CHECK 里） |
 
 **边界纪律**：runtime 凭证 materialize **注入 sandbox**（写文件/env），git 凭证**只在平台进程内、绝不注入 sandbox**（§3.2）——两条管道共用 Vault/表/门面，但物化出口不同。这也是 `credential_sandbox_bindings` 只服务 runtime、对 git 写零行的原因（13 §2.5.2 I3）。
+
+### 7.1 S4 交付边界 vs 后续 slice（验收者须知：以下三处是"设计就绪、非本 slice 可用"，勿当已上线功能）
+
+本 slice（S4 runtime 鉴权）交付的是 **登录 → 收编凭证 → 存 Vault → 模式开关 → 吊销联动 → 刷新 scanner** 的闭环骨架。以下三块**代码/表结构已就位但尚未接线到真实运行时数据流**，验收时不应把它们当"端到端可用"：
+
+1. **AUTH_HELPER 当前是 host（管道）形态，不是真 pty 容器形态**。auth helper 现以宿主进程管道启动 CLI（`ProcessStream` 抽象已就位），**真 pty 容器形态 `SandboxProvider.spawn({tty:true})` 是后续 slice**。后果：host 形态下真 CLI 登录检测**非 TTY 不输出**交互式提示，**账号授权的"真登录闭环"依赖真 pty helper**——技术验证已证机制成立（解析器 golden fixture 逐字节保真、live 手测见 §2），但生产级"点一下就登录进去"须等 pty helper 落地。api-key 短路路径（§3.1，不经 helper/pty）**不受此限，本 slice 即完整可用**。
+
+2. **注入门面与 `credential_sandbox_bindings` 记账当前零真实调用方**。`CREDENTIAL_FACADE.prepareRuntimeCredential` / `injectCredential` / `recordRuntimeInjection` 三个方法 + `credential_sandbox_bindings` 表都已实现且单测覆盖，但**真正的 sandbox exec 注入接线属 S5 provision slice**（provision 起容器后 `prepare → inject → record` 三步接入）。本 slice 特意**留了干净接线点**（application 层 hook 注释已标，见 `sandbox-application.service` provision 路径与 `credential-revoked.handler`），**不是半接线的坏态**——`recordRuntimeInjection` 未被调用 ⇒ 台账当前为空 ⇒ 吊销联动当前遍历零 binding（符合预期，非 bug）。吊销联动逻辑本身（超时兜底 + 强制销毁 + 失败保留重试）已完整实现并单测，S5 接线后即自动生效。
+
+3. **secret-redactor 与 reserved-env 黑名单"定义好但未接线"**。日志/transcript 脱敏器（§4 per-CLI 两套）与镜像 env 保留名黑名单（§4.1）的**常量定义与判定函数已就位**，但**接入点在 transcript 落库 / env-merge 切片**——那两条链路本 slice 未交付，故这两套定义**当前不在任何热路径上生效**。验收者勿据"黑名单已存在"推断"env 覆盖已被拦截"——本 slice 的安全性来自 §4.1"凭证最后写入永远赢"的**顺序保证**，黑名单是后续切片的体验层前置提示。

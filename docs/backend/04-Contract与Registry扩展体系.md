@@ -187,14 +187,16 @@ interface SandboxProviderCapabilities {
 }
 ```
 
-| 能力位 | 平台对应的分支（§5 详列） | `aio` | `boxlite` |
-|---|---|---|---|
-| `spawnTty` | false → 终端页与 runtime 鉴权入口整体不可用，创建时即拒绝需要 TTY 的 runtime | ✅ | ✅ |
-| `volumeMount` | false → `stopped → starting` 不承诺数据保留，Reaper 的 idle 回收降级为直接 destroy（03 §4） | ✅ | ✅（Box 有状态） |
-| `updateResources` | false → 扩缩容转 "stop + 重建" | ✅ | 视版本 |
-| `pauseResume` | false → 前端不显示"暂停"按钮（经 `GET /providers` 下发） | ✅ | 视版本 |
-| `snapshot` | false → 显式要求 `requireSnapshot` 的创建请求直接拒绝，不进调度队列 | ❌ | ❌ |
-| `watchEvents` | false → `SandboxStatusObserver` 退化为轮询 `inspect()` | ✅ | ✅ |
+| 能力位 | 平台对应的分支（§5 详列） | `aio` | `boxlite` | 分支落地状态 |
+|---|---|---|---|---|
+| `spawnTty` | false → 终端页与 runtime 鉴权入口整体不可用，创建时即拒绝需要 TTY 的 runtime | ✅ | ✅ | ✅ 已实现（`SandboxApplicationService.assertCapabilities`：`spawnTty=false` 的 provider 在**进调度前**拒绝创建，`UNSUPPORTED_CAPABILITY` → 409） |
+| `volumeMount` | false → `stopped → starting` 不承诺数据保留，Reaper 的 idle 回收降级为直接 destroy（03 §4） | ✅ | ✅（Box 有状态） | ⏳ 分支随 **Reaper idle 回收切片**落地（当前平台只有 `idleTimeoutSec` 字段，无 idle 回收调度器，无处可挂分支）；能力位已经 `GET /api/providers` 下发，且可被创建请求的 `require.volumeMount` 静态校验 |
+| `updateResources` | false → 扩缩容转 "stop + 重建" | ✅ | 视版本 | ⏳ 分支随 **扩缩容端点切片**落地（当前 controller 只有 POST/GET/GET:id/DELETE:id，没有改配额入口）；能力位已下发 + 可被 `require.updateResources` 静态校验 |
+| `pauseResume` | false → 前端不显示"暂停"按钮（经 `GET /providers` 下发） | ✅ | 视版本 | ✅ 已实现（后端半场：`GET /api/providers` 逐 provider 下发 6 位；前端据此显隐按钮） |
+| `snapshot` | false → 显式要求 `requireSnapshot` 的创建请求直接拒绝，不进调度队列 | ❌ | ❌ | ✅ 已实现（`CreateSandbox.require.snapshot` → `assertCapabilities` 拒绝，不进调度、不落库、不调 `provider.create`） |
+| `watchEvents` | false → `SandboxStatusObserver` 退化为轮询 `inspect()` | ✅ | ✅ | ⏳ 分支随 **SandboxStatusObserver 切片**落地（当前平台没有该组件：状态由 application 主动转移，无 push/poll 二选一的位置）；能力位已下发 |
+
+> **落地状态列的读法**：本节的准入规则是"一个能力位必须对应一条平台分支"。三条标 ⏳ 的分支所依赖的平台组件（idle 回收调度器 / 扩缩容端点 / StatusObserver）**今天不存在**，因此不为它们伪造分支——那只会把死契约换一种形式。它们保留能力位的理由是：位本身已通过 `GET /api/providers` 下发给调用方，且创建请求可用 `require.*` 对其做静态校验（§5 第一行），即"位有真实读者，只是降级分支等组件到位再接"。组件落地时，本列改为 ✅ 并补 testkit 用例。
 
 **已删除的 4 位及理由**：`exec` / `attachPty` → 合并为必须方法 `spawn` 与 `spawnTty` 一位；`metricsStream` → 直接体现为 `inspect().resourceUsage` 有没有值，不需要单独声明；`networkPolicy` / `gpuAllocation` → 平台当前没有任何一条分支读它们，属于"提前占坑"。
 
@@ -245,6 +247,8 @@ interface RuntimeAdapter {
 | `buildStartCommand` | 无头任务模式的命令拼装（MCP `run_agent_task`，02 §5） | 起任务时 | 纯函数 |
 | `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
 | `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时 | 不实现则平台只透传原始字节 |
+
+> **实现补充（S4 后）**：adapter 另有一个**只读声明**字段 `credentialTtlMs?: Partial<Record<RuntimeAuthMethod, number>>`——"用某 method 拿到的凭证能活多久"。这是**厂商事实**（codex 的 access token ~1h、claude 的 setup-token ~1yr），必须由 adapter 声明：原先它以常量形式待在 application 层并按 **method** 分支，导致任何用 `oauth-device` 的第三方 runtime 都被安上 Codex 的 1 小时过期（真 bug）。未声明该 method ⇒ `expiresAt = null`（平台侧不设过期）。
 
 **支撑类型**：
 
@@ -352,12 +356,14 @@ interface 层再映射：
 ## 5. Capabilities 协商与降级规则
 
 
-| 场景                      | 规则                                                                                                                    |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| 创建前静态校验                 | 请求显式要求某能力（如 `requireSnapshot`）而 provider 为 false → application 层直接拒绝，不进调度队列                                           |
-| `watchEvents=false`     | 平台 `SandboxStatusObserver` 自动切轮询 `inspect()`（running 每 10s，idle/stopped 降频 60s）；push/poll 差异对 domain/application 完全封装 |
-| `updateResources=false` | 扩缩容请求转为 "stop + 重建" 组合；连无损重建都不支持（无持久卷）则拒绝并提示                                                                          |
-| 能力发现                    | capabilities 随 provider 写入 registry，`GET /providers` 只读暴露 → 前端据此动态显隐按钮（无 pauseResume 就不显示"暂停"）                        |
+| 场景                      | 规则                                                                                                                    | 落地状态 |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | --- |
+| 创建前静态校验                 | 请求显式要求某能力（如 `requireSnapshot`）而 provider 为 false → application 层直接拒绝，不进调度队列                                           | ✅ 已实现。`CreateSandbox.require: { spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }`（`requireSnapshot` 泛化为逐位一字段）→ `SandboxApplicationService.assertCapabilities` 在解析项目、落库、进调度**之前**抛 `SandboxProviderError(UNSUPPORTED_CAPABILITY)` → 409。这是 `UNSUPPORTED_CAPABILITY` 的**第一个真实抛出点**。`watchEvents` 刻意不可 require——push/poll 对调用方完全封装，"要求 watchEvents"对 API 调用方没有意义 |
+| `watchEvents=false`     | 平台 `SandboxStatusObserver` 自动切轮询 `inspect()`（running 每 10s，idle/stopped 降频 60s）；push/poll 差异对 domain/application 完全封装 | ⏳ 分支随 **SandboxStatusObserver 切片**落地——当前平台没有这个组件（状态由 application 在生命周期流程中主动转移），造一个观测器属于新功能，不在本切片内伪造分支。能力位仍经 `GET /api/providers` 下发 |
+| `updateResources=false` | 扩缩容请求转为 "stop + 重建" 组合；连无损重建都不支持（无持久卷）则拒绝并提示                                                                          | ⏳ 分支随 **扩缩容端点切片**落地——当前 sandbox controller 只有 POST / GET / GET:id / DELETE:id，没有改配额入口可降级。能力位仍经 `GET /api/providers` 下发，并可被 `require.updateResources` 静态校验 |
+| 能力发现                    | capabilities 随 provider 写入 registry，`GET /providers` 只读暴露 → 前端据此动态显隐按钮（无 pauseResume 就不显示"暂停"）                        | ✅ 已实现。`GET /api/providers`（sandbox 上下文 interface 层，zod + createZodDto，已进 openapi.json）返回 `{ name, capabilities（6 位全量）, isDefault }[]`。**registry 驱动**：第三方经 §8 方式一 `register()` 进来后自动出现在该端点（e2e `registry-extension.e2e-spec.ts` 有断言） |
+
+> **落地状态列的读法**：同 §2.5 末尾的说明——⏳ 的两条不是"忘了做"，而是**平台侧的降级对象今天不存在**（没有 StatusObserver、没有扩缩容端点）。能力位本身已有真实读者（`GET /api/providers` 下发 + `require.*` 静态校验），组件到位时把降级分支接上即可，contract 不需要改。
 
 
 ## 6. 生命周期事件上报：事件订阅优先，轮询兜底
@@ -437,6 +443,10 @@ interface ProviderRegistry<T> {
 ```
 
 各实现经 `XxxModule.register()` 在 `onModuleInit` 注册；内建 **`AioSandboxProvider`（`aio`，default）**、**`BoxLiteSandboxProvider`（`boxlite`）**、`ClaudeCodeAdapter`、`CodexAdapter`；未指定实现回退 default 条目。注册校验：name/id 唯一（冲突启动即 fail-fast）+ capabilities 完整性。
+
+> **落地状态（✅ 已实现）**：`ProviderRegistry.register(impl, opts?: { default?: boolean })` 与 `RuntimeAdapterRegistry.register(impl)` 都是 contract 接口的一部分并已公开实现；内建项也走同一个 `register()`（构造器注入 → `this.register(x)`），因此只有一条注册路径、一次唯一性校验；重名/重 id **抛错 fail-fast**（provider 抛 `ALREADY_EXISTS`）。`SANDBOX_PROVIDER_REGISTRY` 与 `RUNTIME_ADAPTER_REGISTRY` 两个 token 均由各自 `@Global` 模块 `exports`，所以第三方模块能真正注入到。
+> 两处与上面泛型签名的**有意差异**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填），加一个没有读者的选项正是本文档反对的死契约；② 注册期只校验唯一性，**capabilities 完整性由类型系统保证**（`SandboxProviderCapabilities` 6 位全必填，少一位编译不过，另有 wire schema 的编译期对齐守卫），无需运行时再查一遍。
+> 验收：e2e `apps/api/test/e2e/registry-extension.e2e-spec.ts` 以一个"第三方 npm 包"形态的 `@Module` 注入两个 token 并在 `onModuleInit` 注册——**不改任何内建模块的 providers 数组、不改 registry 构造器**——随后 `GET /api/providers` 列出它、`POST /api/sandboxes` 经它 provision、`GET /api/runtimes` + `POST .../credentials/secret` 走它的 adapter。
 
 ### 方式二（补充）：插件目录扫描
 
