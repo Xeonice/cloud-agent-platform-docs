@@ -472,6 +472,7 @@ class SandboxProviderError extends Error {
 // RuntimeAdapter 同构错误码：INSTALL_FAILED / AUTH_CHALLENGE_EXPIRED / AUTH_REJECTED
 //   / BINARY_NOT_FOUND / UNSUPPORTED_METHOD / PARSE_ERROR
 // ImageSpecProvider：REGISTRY_UNREACHABLE / REF_NOT_FOUND / MANIFEST_INVALID
+//   / IMAGE_CONTRACT_VIOLATION —— 运行期实测发现镜像违反 §7 约定（当前唯一触发点：缺 tmux）
 ```
 
 **分层映射原则**：infrastructure 抛 contract 层错误，只在 infrastructure→application 边界短暂穿越；application 统一 `mapProviderErrorToDomain()` 转为 domain 错误再上抛——**domain 层永不依赖 contract 包的错误类**（保持文档 01 的依赖方向纯净）。
@@ -488,9 +489,12 @@ interface 层再映射：
 | PERMISSION_DENIED                        | 403       | 同上                                                                                   |
 | TIMEOUT                                  | 504       | 同上                                                                                   |
 | **INSTALL_FAILED**（RuntimeAdapter）      | **500**   | 同上                                                                                   |
+| **IMAGE_CONTRACT_VIOLATION**（ImageSpec） | **500**   | 同上                                                                                   |
 | INTERNAL                                 | 500       | 同上                                                                                   |
 
 > **`INSTALL_FAILED` 的主要露出面不是 HTTP（S5 补，TASK-LAUNCH-DECISIONS T-3）**：装 CLI 发生在 202 之后的 provision workflow（03 §4.3 ③），用户此时早已拿到 202，**没有同步响应可承载它**。它的实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`，前端按 P22 §1 的人话表展示（"运行时 CLI 安装失败"）。上表那行 500 是为了**将来出现同步入口时有据可依**（如重试安装端点），以及满足 02 §6.2「任何错误码都必须有映射、绝不裸抛」的兜底纪律。产品文案与 REST/MCP 映射见 02 §6.1 与 P22 §1。
+
+> **`IMAGE_CONTRACT_VIOLATION`（2026-08 随「tmux 升 MUST」新增）**：镜像**注册期过了 `validate()`、运行期却被实测证伪**时抛它——当前唯一触发点是 `bootstrapAgentSession` 起会话前的 `command -v tmux` 未命中（§7 ★ / 03 §4.3 ⑤）。**为什么不复用 `MANIFEST_INVALID`**：那条是 `ImageSpecProvider.validate()/resolve()` 在注册期给出的静态判定，而本条发生在 provision 的 `starting` 段、由沙箱内实测触发，排障时「注册期就该拦住却没拦住」与「注册期判定已过期」是两个完全不同的下一步动作，合成一个码等于把这个区分抹掉。**露出面同 `INSTALL_FAILED`**：主路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`，上表那行 500 是为将来的同步入口与 02 §6.2 的兜底纪律留的；`retryable:false`（重试不会给镜像装上 tmux，正确动作是换镜像）。
 
 ## 5. Capabilities 协商与降级规则
 
@@ -562,15 +566,17 @@ interface ValidationResult {
 
 > 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
 
-镜像约定（写入用户文档）：必须含 bash；**建议含 tmux**——缺失时 `validate()` 产出 **warning（非 error）**，无 tmux 镜像仍可正常使用；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
+镜像约定（写入用户文档）：**必须含 bash 与 tmux**——tmux 于 2026-08 由用户裁决**从「建议」升为「必须」**（轨迹见下方 ★ 与 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）：缺 tmux 时 `validate()` 产出 **error（`IMAGE_TMUX_MISSING`）、`valid:false`、镜像不合格**，既不能注册也不能被 Task 选用（不再是 warning，无 tmux 镜像**不能**用）；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
 
 > **★ S5 技术验证对镜像约定的加严（2026-08 实测，数据见 §3 ★1）**
 >
 > - **"可预装或现装"这句话在真实量级下不对等，必须表态**：AIO 默认镜像 `agent-infra/sandbox:latest` 预装了 codex（`@openai/codex@0.139.0`）但**没有 claude-code**，现装 `npm i -g @anthropic-ai/claude-code` 实测 **753 秒（12.5 分钟）**；两个 CLI 都预装的对照镜像则是**零安装**。⇒ 镜像作者文档里写**强烈建议预装 `supportedRuntimes` 声明的每个 runtime**，并在 manifest 里如实声明——现装仍然能用，但要按分钟级预期而不是秒级。
-> - **tmux 的地位加严为「强烈建议」，且理由从「恢复现场」扩展到「会话保活」（S5 裁决 D-15，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**：agent 会话现在由 provision workflow 在 `starting` 段起（03 §4.3 ⑤），**先于任何 WS 连接存在**，因此「谁持有这个会话」成了镜像属性：
->   - **有 tmux（A 档）**：会话由沙箱内的 tmux server 持有，平台侧不保持任何连接，**平台重启不影响 agent**。
->   - **无 tmux（B 档）**：会话由终端网关持有 `ProcessStream` + ring buffer（06 §6）。两条代价必须让镜像作者知道——① **首次 attach 前的输出受 ring buffer 上限截断**（agent 可能已经刷了几万行，用户点开只看得到最后 N KB）；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**。
->   - **档位由沙箱内 `command -v tmux` 实测决定，不由本处的 `supportsTmux` 声明决定**（方法论同 §2.1★）。`supportsTmux` 保留其原职责：注册期给用户一条 warning。⚠️ 另注：本节散文说 `validate()` 会在 `ResolvedImageSpec` 上标记 `supportsTmux`，但上方 `ResolvedImageSpec` 的类型声明里**并没有这个字段**——**契约缺口，随镜像管理切片补**（TASK-LAUNCH-DECISIONS §1 第 2 条）；因为运行期判定已改为实测，它不阻塞 S5。
+> - **tmux 从「建议」升为「必须」（用户裁决 2026-08；取代 S5 裁决 D-15 原文的「强烈建议 + 两档降级」口径，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**：agent 会话由 provision workflow 在 `starting` 段起（03 §4.3 ⑤），**先于任何 WS 连接存在**，因此「谁持有这个会话」是镜像属性。
+>   - **升 MUST 之前的口径（存档，勿当现状读）**：tmux 曾是 SHOULD，缺失时 `validate()` 出 warning 并在 `ResolvedImageSpec` 上标 `supportsTmux:false`，`bootstrapAgentSession` 据此分两档——**A 档**会话由沙箱内 tmux server 持有；**B 档**（无 tmux）由终端网关持有 `ProcessStream` + ring buffer（06 §6），代价是 ① 首次 attach 前的输出受 ring buffer 上限截断、② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**。**B 档已整体取消。**
+>   - **取代理由**：代价②对一个把 Task 当第一概念的产品不可接受——「重启一次平台就打断用户正在跑的 agent」不是可以写进镜像约定让作者自担的代价；而两个内建镜像本来就自带 tmux，为一条没人走的降级路在平台侧长期养一个分支不划算。单档之后代价①也一并消失：scrollback 的权威是 tmux 的 `history-limit`，不再有网关缓冲的截断上限。
+>   - **现在的口径**：`validate()` 缺 tmux ⇒ `valid:false` + `errors[]` 含 `IMAGE_TMUX_MISSING`（testkit **IS-05 已随之从 SHOULD 升 MUST**，§10.4），镜像不能注册、不能被 Task 选用；`bootstrapAgentSession` 只有一档。
+>   - **注册期判定不免除运行期实测，且实测失败必须响亮**（方法论同 §2.1★）：`validate()` 是注册期静态判定，镜像换 tag、上游换 base image 都可能让它过期，所以 `bootstrapAgentSession` 起会话前仍跑一次 `command -v tmux`。**未命中不得静默降级**——实例转 `failed` + `failure_reason`，错误码 **`IMAGE_CONTRACT_VIOLATION`**（§4 / 02 §6.1 / P22 §1）。这与「agent 鉴权自检失败即 `start()` 响亮失败」（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」）是同一条纪律：**自检不过就失败，不要安静地退化成一个和用户预期不同的东西**。
+>   - **`supportsTmux` 字段就此删除，不要再补**（本次裁决顺带结掉的契约缺口）：它此前只活在本节散文里，`ResolvedImageSpec` 的类型声明中从来没有（TASK-LAUNCH-DECISIONS §1 第 2 条登记在案）。它的两个用途现在都不存在——注册期 warning 变成了 `errors[]` 里的一条 error，运行期分支随 B 档一起取消。**合格镜像一律有 tmux，没有需要这个字段回答的问题**；运行期唯一的真相来源是那次 `command -v tmux` 实测。
 > - **HOME 路径不属于约定的一部分**：⚠️ 原写"实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）"，**已更正**——那是 `docker run` 通道的观察；经平台真实 exec 通道实测，**两侧 `$HOME` 同为 `/home/gem`**（§2.1★）。这不改变本条的效力：约定只要求 **HOME 可写**，而且**恰恰因为"两侧碰巧一样"更容易诱人去硬编码，本条更要坚持**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。**S5 裁决 D-19 把这条落到了具体位置**：`RuntimeCredential.credentialFiles[].containerPath` 改为 `~/` 相对形态，`$HOME` 的展开**只发生在 `injectCredential(cred, exec)` 内部**（那里才有 `exec` 可探测）——`prepareRuntimeCredential(runtimeId)` 的签名里根本没有 sandbox，构造凭证时无从知道 `$HOME`（TASK-LAUNCH-DECISIONS T-6）。
 
 ## 8. Registry 注册机制（双通道）
@@ -710,7 +716,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | SP-12 | SHOULD | `stop()` 在 `timeoutSec` 内返回；超时转强制终止 | 起一个忽略 SIGTERM 的进程，断言仍能在 timeout+buffer 内停掉 |
 | **CAP-01** | MUST | **声明的每个能力位都必须与实际行为一致** | 对每个声明 `true` 的位跑其挂靠条款；对声明 `false` 的位，断言调用对应可选方法抛 `UNSUPPORTED_CAPABILITY` |
 | SP-T1 | MUST（`spawnTty`） | `spawn({tty:true})` 能双向收发，`resize()` 生效 | 写入 `stty size` 并 resize，断言输出的行列数随之变化 |
-| SP-T2 | **SHOULD**（`spawnTty`） | `ProcessStream.ref` 稳定可复用：用它作 `reuse` 重连回同一会话 | 建会话 → 写入标记 → 断开 → `spawn({reuse: ref})` → 断言能看到先前会话的现场。**降为 SHOULD（审计 P1-10）**：现场保活实际依赖镜像内的 tmux，而 §7 只把 tmux 定为 SHOULD——两者原先一个 MUST 一个 SHOULD 自相矛盾。不具备会话保活的实现**必须**降级为网关侧 ring buffer（06 §6），前端协议语义不变 |
+| SP-T2 | **SHOULD**（`spawnTty`） | `ProcessStream.ref` 稳定可复用：用它作 `reuse` 重连回同一会话 | 建会话 → 写入标记 → 断开 → `spawn({reuse: ref})` → 断言能看到先前会话的现场。**维持 SHOULD，但理由已更换（2026-08）**：原理由是「保活依赖 tmux 而 §7 只把 tmux 定为 SHOULD，一个 MUST 一个 SHOULD 自相矛盾」（审计 P1-10）——tmux 升 MUST 后该矛盾不复存在，原理由作废。**现在的理由更硬**：现场保活由**沙箱内的 tmux server**提供，与 provider 支不支持 `ref` 复用正交——网关重连时再跑一次 `tmux attach` 同样回到现场，并不要求 provider 复用同一个 `ProcessStream.ref`。因此 ref 复用是**省一次 spawn 的优化**，不是保活的前提，不该定成准入线。⚠️ 原文那句「不具备会话保活的实现必须降级为网关侧 ring buffer」**已随 B 档一起作废**（§7 ★ / 06 §6），不要再照它实现 |
 | SP-V1 | MUST（`volumeMount`） | `stop()` → `start()` 后工作区数据仍在 | 停机前写文件，重启后读出同一内容 |
 | SP-W1 | MUST（`watchEvents`） | 实体异常退出后 N 秒内产出 `kind:'died'` 事件 | 强杀实体，断言事件在窗口内到达且 `handle` 匹配 |
 | SP-U1 | MUST（`updateResources`） | 改配额后 `inspect().resourceUsage` 或实体限额随之变化，且**不重建**（句柄不变） | 断言前后 `providerSandboxId` 相同 |
@@ -760,7 +766,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | IS-02 | MUST | 不存在的 ref → 抛 `REF_NOT_FOUND` | 断言 code |
 | IS-03 | MUST | `validate()` 违反入口约定 → `valid:false` 且 `errors` 非空并带可定位的 `path` | 断言 errors 结构，不接受只给 `valid:false` |
 | IS-04 | MUST | `validate()` 是纯判断，不修改入参、不产生副作用 | 深冻结入参后调用，断言不抛 |
-| IS-05 | SHOULD | 缺 tmux 等非致命项走 `warnings` 而非 `errors`（§7） | 断言该镜像 `valid:true` 且 warnings 命中对应 code |
+| IS-05 | **MUST**（2026-08 由 SHOULD 升级，随「tmux 升 MUST」） | **缺 tmux ⇒ `valid:false` 且 `errors[]` 含 `IMAGE_TMUX_MISSING`**（§7）；真正的非致命项（如 `supportedRuntimes` 声明的 CLI 未预装）才走 `warnings` | 两个断言都要：① 无 tmux 的镜像 → `valid:false` 且 errors 命中 `IMAGE_TMUX_MISSING`；② 有 tmux 但未预装 CLI 的镜像 → `valid:true` 且 warnings 命中对应 code。**原条款（存档）**：本条曾是 SHOULD、要求「缺 tmux 走 warnings 而非 errors、该镜像 `valid:true`」——与 §7 当时把 tmux 定为 SHOULD 配套；tmux 升 MUST 后该断言会**反向**判定，必须整条改写而不是删掉 |
 
 > **落地状态（⏳ 全部未实现）**：ImageSpec contract 本身还没有（`packages/contracts` 里没有 `image-spec.contract.ts`），`IMAGE_SPEC_REGISTRY` 只是一个占位 token（§8），所以本表五条一条都跑不了。整块随**镜像管理切片**落地。
 

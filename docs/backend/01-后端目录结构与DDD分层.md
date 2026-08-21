@@ -169,7 +169,8 @@ agent-platform-api/
 │       │   └── infrastructure/
 │       │       ├── persistence/sqlite/terminal-session.repository.impl.ts
 │       │       ├── detector/{waiting-input.detector,activity-tracker}.ts   # 静默计时 + 活跃度（06 §8）
-│       │       └── session/{frame-batcher,ring-buffer}.ts  # 16ms 合并 / 无 tmux 降级（06 §6/§7）
+│       │       └── session/frame-batcher.ts               # 16ms 合并（06 §7）；⚠️ 同目录原有 ring-buffer.ts
+│       │                                                   #   （无 tmux 降级）已随 B 档取消而退役，见 06 §6.3
 │       └── automation/                      # v1.1：定时规则与调度
 │           ├── interface/{http/automation.controller.ts, automation.module.ts}
 │           ├── application/

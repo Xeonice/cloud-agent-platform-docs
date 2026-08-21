@@ -826,7 +826,7 @@ const app = {
             // 镜像管理状态
             images: [
                 { id: 'img-1', name: 'AIO（预置）', uri: 'ghcr.io/agent-infra/sandbox:latest', status: 'valid', isActive: true, supportedRuntimes: ['codex', 'claude-code'], vars: [] },
-                { id: 'img-2', name: 'ml-agent:v1.0（自定义）', uri: 'docker.io/myrepo/ml-agent:v1.0', status: 'warning', isActive: true, supportedRuntimes: ['codex'], warning: '缺少 tmux → 终端断线恢复将降级为缓冲重放', vars: [] },
+                { id: 'img-2', name: 'ml-agent:v1.0（自定义）', uri: 'docker.io/myrepo/ml-agent:v1.0', status: 'warning', isActive: true, supportedRuntimes: ['codex'], warning: '未预装 claude-code → 创建时需现装，约 12 分钟', vars: [] },
             ],
             editingImageVars: {},
             showImageEditForm: false,
@@ -2146,7 +2146,7 @@ const app = {
             if (r.status === 'success') {
                 validationHtml = `<div style="padding:8px; background:#c8e6c9; border-left:4px solid #4caf50; border-radius:2px; font-size:12px; margin-top:12px;">✅ 验证通过：镜像可用</div>`;
             } else if (r.status === 'warning') {
-                validationHtml = `<div style="padding:8px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:2px; font-size:12px; margin-top:12px;">⚠️ 验证通过但有警告：缺少 tmux → 终端断线恢复将降级</div>`;
+                validationHtml = `<div style="padding:8px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:2px; font-size:12px; margin-top:12px;">⚠️ 验证通过但有警告：未预装 claude-code → 创建时需现装约 12 分钟</div>`;
             } else {
                 validationHtml = `<div style="padding:8px; background:#ffcdd2; border-left:4px solid #f44336; border-radius:2px; font-size:12px; margin-top:12px;">❌ 验证失败：镜像不符合平台约定</div>`;
             }
@@ -2298,7 +2298,7 @@ const app = {
         } else if (status === 'warning') {
             result.innerHTML = `
                 <div style="padding:8px; background:#fff3cd; border-left:4px solid #ffc107; border-radius:2px; font-size:12px;">
-                    ⚠️ 验证通过但有警告：缺少 tmux → 终端断线恢复将降级
+                    ⚠️ 验证通过但有警告：未预装 claude-code → 创建时需现装约 12 分钟
                     <button class="btn" style="margin-left:8px; padding:4px 8px; font-size:10px;" onclick="app.saveImage('${uri}')">保存</button>
                 </div>
             `;

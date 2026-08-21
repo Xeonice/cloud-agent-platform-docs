@@ -10,7 +10,7 @@
 | # | 缺口 | 裁决 | 主要落点 |
 |---|---|---|---|
 | **T-1** | `initialPrompt` 有入参、有消费点、**中间没有存储** | 落 `sandboxes` 两列 + 聚合值对象 `InitialTask`；**`SandboxDto` 不回显** | 13 §2.1.1 · 23 §5.1/§5.3 · 10 §7.3 |
-| **T-2** | "启动时即执行"被绑在用户点开终端 | provision workflow 在 `starting` 内加 `bootstrapAgentSession`；**终端网关一律 attach** | 03 §4.3 · 24 §1 · 26 §1/§8 · 06 §3/§6 |
+| **T-2** | "启动时即执行"被绑在用户点开终端 | provision workflow 在 `starting` 内加 `bootstrapAgentSession`；**终端网关一律 attach**。**2026-08 修订：tmux 升 MUST，取消无 tmux 的 B 档** | 03 §4.3 · 24 §1 · 26 §1/§8 · 06 §3/§6 · 04 §7/§10.4 |
 | **T-3** | 装 CLI 这一步在时序/调用图里根本不存在；13 又要求初值在创建校验阶段落定 | `ensureRuntimeInstalled` 三步进 provision workflow；**写入不进 T1**；进度走新 WS 事件 | 13 §2.3.2 · 03 §4.3 · 23 §12 · 10 §3.1 |
 | **T-4** | 无头 Task 全链路悬空（无 handler、输出无传输、日志只有 automation 口径） | **不进 S5**，归后续切片；S5 live 验证证的是**机制**不是产品化 | 27 §2 · 02 §5.2 · 03 §8.3/§8.6 · 04 §3 |
 | **T-5** | "占位版 auth.json"无人构造；注入与刷新共用同一个带真 refresh_token 的对象 | **类型分家**（注入路径拿不到 `authFile`）+ 脱敏形态在**凭证出生时**由 adapter 产出 + 占位串进 shared-kernel + testkit 硬断言 | 05 §4.3 · 04 §3/§10.3 · 23 §8.2 |
@@ -19,7 +19,7 @@
 **三条贯穿全文的共性**（先说，免得后面重复）：
 
 1. **凡是需要 `exec` 的步骤，都必须排在 `provider.start()` + 沙箱内 agent 就绪探测之后**——`exec` 由 `spawn({tty:false})` 派生（04 §2.3），实例没跑起来就没有 `exec`。T-2/T-3/T-5/T-6 全落在 `starting` 段，顺序被这条钉死（顺带修掉 24 §1 / 26 §1 里"先注入凭证再 `provider.start`"的既有错序）。
-2. **凡是"沙箱内的运行时事实"（`$HOME`、CLI 在不在、tmux 有没有），一律经 `provider.spawn()` 实测，不由镜像声明或硬编码推断**——这是 04 §2.1★ 已经确立的方法论，T-2/T-3/T-6 只是把它用到三个新地方。
+2. **凡是"沙箱内的运行时事实"（`$HOME`、CLI 在不在、tmux 有没有），一律经 `provider.spawn()` 实测，不由镜像声明或硬编码推断**——这是 04 §2.1★ 已经确立的方法论，T-2/T-3/T-6 只是把它用到三个新地方。**2026-08 补一句**：实测的结论用来**判定成败**，不再用来**选降级档位**——tmux 实测不过是失败（T-2 修订），与 `injectCredential` 探不到 `$HOME`、`isInstalled` 装不上 CLI 一样响亮。
 3. **凡是跨 T1 → provision 边界的用户输入，都必须有存储**——provision workflow 只拿得到 `sandboxId`（26 §1），别的什么都没有。T-1 是这条的直接推论。
 
 ---
@@ -79,15 +79,50 @@ starting:  provider.start()  →  沙箱内 agent 就绪探测（03 §4）
 
 ### 无 tmux 镜像怎么办（本条最需要交代的一半）
 
-04 §7 明确 **tmux 是建议非必须**（缺失时 `validate()` 出 warning + `supportsTmux:false`，终端网关降级 ring buffer）。因此 `bootstrapAgentSession` 分两档，**且档位由沙箱内实测决定、不由镜像声明决定**：
+#### ⚠️ 2026-08 修订：tmux 升为 MUST，B 档取消（用户裁决）
+
+**现在的结论**：**tmux 是镜像必须项**（04 §7），`bootstrapAgentSession` **只有一档**：
+
+| 步 | 做什么 | 失败 |
+|---|---|---|
+| 自检 | 沙箱内 `command -v tmux` 实测 | **未命中 ⇒ 响亮失败**：`starting → failed` + `failure_reason` + 新错误码 **`IMAGE_CONTRACT_VIOLATION`**（04 §4 / 02 §6.1 / P22 §1）。**不得静默降级** |
+| 起会话 | `spawn({tty:true})` 跑 `tmux new-session -d -s platform-agent <cmd>`；会话由**沙箱内 tmux server 持有**，平台侧不保持任何连接；网关此后一律 `tmux attach` | 按 `starting` 失败补偿（24 §1.3） |
+
+**为什么改**（三条，缺一条都不足以推翻原裁决）：
+
+1. **B 档的代价②不可接受**：「平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断」。原裁决把它当成"写进镜像约定让镜像作者自担"的代价——但对一个**把 Task 当第一概念**的产品，"重启一次平台就打断用户正在跑的 agent"是产品级缺陷，不是镜像作者的选择题。
+2. **B 档实际上没人走**：两个内建镜像本来就自带 tmux。为一条零流量的降级路，平台侧要长期维护一个分支（网关自持 pty 的生命周期、ring buffer、"平台重启后会话不存在"的兜底路径），且这个分支**最难测、最容易腐化**。
+3. **平台逻辑收敛为单档**：会话持有方式不再是"镜像属性"，`bootstrapAgentSession`、终端网关、06 §6 三处同时少一个维度。
+
+**为什么不选"保留 B 档但默认关闭"之类的折中**：那等于把维护成本留下、把收益丢掉——分支还在、测试还要写，只是不再有人踩。要么支持要么不支持。
+
+**代价（明知并接受）**：自定义镜像的门槛提高了——用户拿一张随便的 base image 注册会被 `validate()` 拒。这是本次裁决**买单的那一半**，写进 04 §7 的镜像约定给用户看。
+
+#### 被取代的原方案（存档，勿当现状读）
+
+> 以下是本条**升 MUST 之前**的裁决原文形态。保留它是因为这份 ADR 的价值在存决策轨迹——知道"曾经有过 B 档、为什么有、为什么没了"，比只看到现状更能防止它被重新发明。
+
+原文口径：04 §7 明确 **tmux 是建议非必须**（缺失时 `validate()` 出 warning + `supportsTmux:false`，终端网关降级 ring buffer）。因此 `bootstrapAgentSession` 分两档，**且档位由沙箱内实测决定、不由镜像声明决定**：
 
 | 档 | 判定 | 形态 | 代价 |
 |---|---|---|---|
 | **A（首选）** | 沙箱内 `command -v tmux` 命中 | `spawn({tty:true})` 跑 `tmux new-session -d -s platform-agent <cmd>`；会话由 **tmux server 持有**，平台侧不需要保持任何连接。终端网关此后一律 `tmux attach` | 无 |
-| **B（降级）** | 沙箱内没有 tmux | `spawn({tty:true, cmd})` 由 **terminal 上下文（网关）持有 `ProcessStream`**，配 06 §6 既有的 ring buffer；**与断线重连的区别只有一个：没有 grace timer**——它不是"等前端回来"的临时保活，而是 sandbox 存续期内平台自持的会话 | ① 首次 attach 前的输出受 ring buffer 上限截断（超出部分不可回看）；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**（tmux 档不受影响）。两条都要在 04 §7 的镜像约定里写给镜像作者看 |
+| **~~B（降级）~~ 已取消** | 沙箱内没有 tmux | `spawn({tty:true, cmd})` 由 **terminal 上下文（网关）持有 `ProcessStream`**，配 06 §6 既有的 ring buffer；**与断线重连的区别只有一个：没有 grace timer**——它不是"等前端回来"的临时保活，而是 sandbox 存续期内平台自持的会话 | ① 首次 attach 前的输出受 ring buffer 上限截断（超出部分不可回看）；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**（tmux 档不受影响）。**② 正是本条被推翻的直接原因** |
 
-- **为什么用 `command -v tmux` 而不是 `ResolvedImageSpec.supportsTmux`**：与 04 §2.1★ 已确立的方法论一致——运行时事实一律实测。而且 `supportsTmux` 目前只在 04 §7 的散文里出现，`ResolvedImageSpec` 的类型声明里**并没有这个字段**（契约缺口，见"仍需处理"）；即使补上，它也只是注册期的静态声明，镜像换了 tag 就可能过期。`supportsTmux` 保留其原有职责：注册期给用户一条 warning。
-- **被否掉的第三种方案**：无 tmux 时把 `initialPrompt` 当无头任务跑（`spawn({tty:false})` + 日志文件）。否掉的理由是它同时破坏"终端可观察"（用户点开终端看到的是一个和 agent 无关的干净 shell）并且**提前实现 T-4 里刚决定不做的那套东西**（输出传输 + 日志存储），两头不讨好。
+- **为什么用 `command -v tmux` 而不是 `ResolvedImageSpec.supportsTmux`**：与 04 §2.1★ 已确立的方法论一致——运行时事实一律实测。而且 `supportsTmux` 目前只在 04 §7 的散文里出现，`ResolvedImageSpec` 的类型声明里**并没有这个字段**（契约缺口，见"仍需处理"）；即使补上，它也只是注册期的静态声明，镜像换了 tag 就可能过期。~~`supportsTmux` 保留其原有职责：注册期给用户一条 warning。~~ **⚠️ 这半句已作废**：升 MUST 后 warning 变成 error，`supportsTmux` **字段整体删除**（见下）。**实测这条方法论本身没变**，只是结论从"选档位"变成"判成败"。
+- **被否掉的第三种方案**：无 tmux 时把 `initialPrompt` 当无头任务跑（`spawn({tty:false})` + 日志文件）。否掉的理由是它同时破坏"终端可观察"（用户点开终端看到的是一个和 agent 无关的干净 shell）并且**提前实现 T-4 里刚决定不做的那套东西**（输出传输 + 日志存储），两头不讨好。**本条否决在升 MUST 后依然成立**（且更无关了——现在根本不存在"无 tmux 还要继续跑"的场景）。
+
+#### `supportsTmux` 字段的裁决：删除，不要再补
+
+原先登记的契约缺口是"散文说 `validate()` 会在 `ResolvedImageSpec` 上标 `supportsTmux`，但类型声明里没有这个字段"（§1 第 2 条）。**升 MUST 后本缺口以「删除该说法」关闭，而不是以「补上字段」关闭**：
+
+- 它的用途只有两个，现在都不存在了——**注册期 warning** 已变成 `errors[]` 里的一条 error（`IMAGE_TMUX_MISSING`），**运行期选档** 随 B 档一起取消。
+- 合格镜像一律有 tmux，**没有需要这个字段回答的问题**；运行期唯一的真相来源是那次 `command -v tmux` 实测。
+- 留一个"既不存在、又被散文引用"的字段是最坏的形态：既误导实现者去补，又没人说得清补了给谁用。
+
+#### ring buffer 的连带处置
+
+ring buffer 判定为 **B 档的产物、无独立用途**，随 B 档一起退役；判断依据（三条证据）写在 **06 §6.3**，不在本文重复。**但 `socketSessionKey` 与断线重连机制不连坐**——那是会话归属凭据，与档位无关（06 §6.2）。
 
 ### 落点
 
@@ -96,8 +131,11 @@ starting:  provider.start()  →  沙箱内 agent 就绪探测（03 §4）
 | `03 §4.3`（新） | `starting` 段的五步顺序 + 两档 bootstrap + 失败归属 |
 | `24 §1` 时序 · `24 §1.1/§1.2/§1.3` · `24 §8.1` | 时序图插步（并修正 `provider.start` 与 exec 类步骤的错序）、命令与服务表、事务表 |
 | `26 §1` 调用图 · `26 §1.2` 文件清单 · `26 §8` | `bootstrap-agent-session` 端口/实现；`openSession` 分支改写为"一律 attach" |
-| `06 §3` · `06 §6` | 初始指令不再由网关判定；B 档的"平台自持会话"语义 |
-| `04 §7` | 镜像约定加严：无 tmux 的两条实际代价 |
+| `06 §3` · `06 §6` | 初始指令不再由网关判定；~~B 档的"平台自持会话"语义~~ → **修订后**：§6 收敛为单档，新增 §6.3 记 ring buffer 的退役判定 |
+| `04 §7` | ~~镜像约定加严：无 tmux 的两条实际代价~~ → **修订后**：tmux 由 SHOULD 升 **MUST**（缺 tmux ⇒ `validate()` 出 error、镜像不合格）+ 删除 `supportsTmux` 说法 |
+| `04 §4` · `02 §6.1` · `P22 §1`（修订新增） | 新错误码 **`IMAGE_CONTRACT_VIOLATION`**（运行期实测证伪镜像约定）三处映射 |
+| `04 §10.4` IS-05（修订新增） | SHOULD → **MUST**，断言方向反转（缺 tmux ⇒ `valid:false`） |
+| `04 §10.2` SP-T2（修订新增） | 维持 SHOULD 但**更换理由**（原理由依赖"tmux 只是 SHOULD"，已作废） |
 | `02 §5.2` · `P20 §0` | `create_sandbox` 的"启动即开工"现在名副其实 |
 | `25 §5.1/§5.8` | `E2E-8-initialPrompt` 改写 + 新增 bootstrap 用例 |
 
@@ -229,7 +267,7 @@ starting:  provider.start()  →  沙箱内 agent 就绪探测（03 §4）
 | # | 事项 | 现状 |
 |---|---|---|
 | 1 | **契约层类型改动**：`InjectableRuntimeCredential` / `RefreshableRuntimeCredential` 拆分、`CredentialFacade.prepareForRefresh`、`containerPath` 注释、shared-kernel 占位常量 | 本文只定裁决，改动属下一步（用户已明示） |
-| 2 | **`ResolvedImageSpec` 没有 `supportsTmux` 字段** | 04 §7 的散文里说 `validate()` 会在 `ResolvedImageSpec` 上"标记 `supportsTmux:false`"，但 §7 的类型声明里没有这个字段。T-2 已把**运行期判定**改为沙箱内实测，所以它不阻塞 S5；但注册期 warning 要真能落地，仍需补这个字段（随镜像管理切片） |
-| 3 | **无 tmux 镜像下"平台重启即中断 agent 会话"是否可接受** | T-2 的 B 档代价已写明并写进镜像约定。若判定不可接受，唯一的正解是把 tmux 从"建议"升为"必须"（改 04 §7 + IS-05 从 SHOULD 升 MUST）——那是产品/运维口径的决定，不是技术能单方面定的 |
+| 2 | ~~**`ResolvedImageSpec` 没有 `supportsTmux` 字段**~~ | ✅ **已关闭（2026-08，随 tmux 升 MUST）——以「删掉该说法」关闭，不是以「补字段」关闭**。原状：04 §7 的散文说 `validate()` 会在 `ResolvedImageSpec` 上标记 `supportsTmux:false`，而类型声明里没有这个字段。升 MUST 后它的两个用途都消失（注册期 warning → error；运行期选档 → 单档），**不要再补这个字段**，理由见 T-2「`supportsTmux` 字段的裁决」 |
+| 3 | ~~**无 tmux 镜像下"平台重启即中断 agent 会话"是否可接受**~~ | ✅ **已拍板（2026-08，用户裁决）：不可接受**。按本行当时预判的"唯一正解"执行——tmux 从"建议"升为"必须"（04 §7 + IS-05 由 SHOULD 升 MUST），B 档取消。**这一行原样留着**：它记录了这个问题当初就被识别为"技术不能单方面定、必须由产品/运维口径拍"，而最终也确实是这样解决的 |
 | 4 | **`headless=true` 且带 `initialPrompt` 的创建请求**如何应答 | 当前接受但不起 agent（T-4 之前也是如此）。要不要在 S5 内改成 400 提示"无头 Task 暂未支持"，取决于自动化 v1.1 的排期——自动化创建的正是这种 Task，提前 400 会把 v1.1 的设计路径堵死。**当前裁决：不加 400，在 27 §2 写明边界** |
 | 5 | **02 §5.2 的 MCP tool 表与实际注册项的既有漂移** | 本次按实际改写（8 个已注册，另 5 个设计中未注册）。漂移不止 `run_agent_task` 一条——文档里没有的 `get_project` / `retry_clone` / `delete_project` 三个其实已注册。**MCP tool 计数目前仍是人工核对**（27 §12 已标 ⏳），建议后续给 `docs:check` 加一条 B 类检查 |

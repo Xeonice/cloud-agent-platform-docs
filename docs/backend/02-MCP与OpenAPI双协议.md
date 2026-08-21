@@ -172,7 +172,7 @@ export class SandboxMcpTools {
 
 ### 5.2 MCP Tool 面
 
-> **本表已按实际注册项对表（S5，2026-08）**：`落地` 列是**代码事实**（`@Tool()` 装饰器的实际注册），不是设计意图——此前本表与实际有双向漂移（表里有 5 个没注册的，实际注册的 3 个 project tool 表里没有）。**MCP tool 数目前仍是人工核对**（27 §12 已标 ⏳）。
+> **本表已按实际注册项对表（S5，2026-08）**：`落地` 列是**代码事实**（`@Tool()` 装饰器的实际注册），不是设计意图——此前本表与实际有双向漂移（表里有 5 个没注册的，实际注册的 3 个 project tool 表里没有）。**这条漂移现在由 `pnpm docs:check` 的 B2 机器把关**（09 §2.4）：api 源码里 `@Tool()` 实际注册的 tool 名集合必须**等于**本表「落地」列为 ✅ 的行集合，⏳ 行不参与相等判定；末尾「合计」句与 27 §1.3 / §12 的计数、名单也一并核对。改本表时请顺手重跑一次。
 
 | Tool | 对应 REST | 落地 | 说明 |
 |---|---|:--:|---|
@@ -237,7 +237,10 @@ data: {"okCount":5,"failCount":1,"totalMs":7310}
 | `DISK_INSUFFICIENT` | clone 前预检 / 工作区准备（03 §7.5–7.6） | **507**（Insufficient Storage） | tool 错误 + code | ❌ | "磁盘空间不足" → [运行诊断] |
 | `WORKSPACE_PREPARE_FAILED` | `preparing-workspace` 阶段（03 §7.6） | **500** | tool 错误 + code | ✅ | "准备工作区失败" → [重试] |
 | **`INSTALL_FAILED`** | `starting` 段装 runtime CLI（03 §4.3 ③） | **500** | tool 错误 + code | ✅ | "运行时 CLI 安装失败" → [重试] / [换一张预装该 CLI 的镜像]（04 §7） |
+| **`IMAGE_CONTRACT_VIOLATION`** | `starting` 段起 agent 会话前的镜像自检（03 §4.3 ⑤） | **500** | tool 错误 + code | ❌ | "镜像不满足平台约定（缺少 tmux）" → [换一张含 tmux 的镜像] / [查看镜像要求] |
 
+> **`IMAGE_CONTRACT_VIOLATION`（2026-08 随「tmux 升 MUST」新增，TASK-LAUNCH-DECISIONS T-2 修订）**：镜像**注册期过了 `validate()`、运行期却被 `command -v tmux` 实测证伪**时抛它（03 §4.3 ⑤）。`retryable:false`——重试不会给镜像装上 tmux，正确动作是换镜像。露出面同 `INSTALL_FAILED`（异步，主路径是 `starting → failed` + WS）。**不复用 `MANIFEST_INVALID`** 的理由见 04 §4。
+>
 > **`INSTALL_FAILED` 的主要露出面不是 HTTP**（S5 补，TASK-LAUNCH-DECISIONS T-3）：装 CLI 发生在 202 之后的 provision workflow，用户早已拿到 202，**没有同步响应可承载它**。实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`；表里那行 500 是为将来的同步入口（如重试安装端点）与 §6.2 的兜底纪律留的。**装 CLI 期间的进度**走 WS `runtime.install_progress`（10 §3.1）——实测现装 claude-code 可达 12.5 分钟（04 §3 ★1），没有它前端只能干等。
 
 映射纪律（三条，实现时按此写单测）：

@@ -58,7 +58,7 @@ boxlite 双实现、PG 双方言、契约发 npm 包、application 层全展开�
 | **P1-7** | Codex 凭证刷新回写只有一句话，缺整条组件，击穿"登录一次处处可用" | **先技术验证**（Codex 能否平台侧凭 refresh token 刷新）；A=平台侧统一刷新（推荐，与决策 A 一致）/ B=CredentialSyncBack 从 sandbox 回收。MVP 必补，落 05 §5 + 01 + 26 + 25 + 13 |
 | P1-8 | preparing-workspace 未进产品 6 态映射（11/12 态打架） | P21-4 §2.1 改"12 技术状态"，🟡 准备中补 preparing-workspace；04 §2.4 注释改 12；前端状态矩阵行数加 CI 断言 |
 | P1-9 | 磁盘不被调度，而它才是真实瓶颈 | ResourcePoolSnapshot 加 `totalDiskMb/usedDiskMb`；`disk_mb_reserved` 在互斥区内按 `baseline_size_bytes×1.2` 登记（消 TOCTOU）；P21-5 展示磁盘水位 + 保留卷占用治理横幅；11 §1 推荐 btrfs/xfs |
-| P1-10 | testkit SP-T2(MUST) 实际要求必有 tmux，与 04 §7(SHOULD) 矛盾 | SP-T2 降 SHOULD + 注明"无会话保活则降级网关 ring buffer"，或挂新能力位 `sessionReattach` |
+| P1-10 | testkit SP-T2(MUST) 实际要求必有 tmux，与 04 §7(SHOULD) 矛盾 | SP-T2 降 SHOULD + 注明"无会话保活则降级网关 ring buffer"，或挂新能力位 `sessionReattach`。**⚠️ 2026-08 部分被取代**：tmux 已升 MUST（04 §7），本行认定的矛盾前提消失，"降级网关 ring buffer"那半句作废。**SP-T2 仍维持 SHOULD，但换了理由**——保活由沙箱内 tmux 提供，与 provider 支不支持 `ref` 复用正交（04 §10.2）|
 | P1-11 | Vault master key 生成/存放/轮换/备份全未定义 | 05 新增 §4.2：优先读 `PLATFORM_MASTER_KEY` env，未设则首启生成 32 字节写 `${DATA_ROOT}/.master.key`(0600) + 提示；轮换=新 key 后台逐条重加密更新 `encryption_key_id`；备份不含 key，恢复缺 key 时凭证以 revoked 呈现引导重授权（不静默失败）；25 §3.4 补用例 |
 | P1-12 | waitingInput 派生字段取数违反分层 | terminal application 层暴露只读查询端口 `WaitingInputQueryPort`，sandbox 经 DI 注入；检测器仍在 terminal/infrastructure；同步 06 §8.2/01 §2/26 §9/23 §10.4 |
 | P1-13 | headless 的 timeoutMinutes 缺省未定义，撞 DB CHECK 抛 500 | 02 §5.1/§5.2 明写 headless=true 缺省 120；headless=false 传 timeout 一律 400；25 补 2 用例 |

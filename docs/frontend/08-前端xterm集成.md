@@ -128,7 +128,7 @@ CSS 随 `terminal` chunk 一起动态注入，**不放全局 layout**——否�
 - **指数退避 + jitter 重连**（上限次数 + 最大间隔；xterm 官方无内置重连，应用层实现是业界共识）
 - 断线时终端内 toast（sonner）提示"连接已断开，正在重连…"
 - **`socketSessionKey` 的持有与回带**：连接 URL 为 `/terminal?socketSessionKey=`（对外 camelCase，审计 P1-5；DB 列名 `socket_session_key` 是后端内部形态）。该 key **由服务端生成**（128 bit 随机串，开会话时随首帧下发，审计 P2-9 / 技术 06 §6）——**前端绝不自造、不用 sandboxId 或任何可猜值代替**：本平台没有用户体系，它是终端会话归属的唯一凭据，前端自选等于谁猜到谁就能 attach 别人的终端。ptySocket 只负责"存下来、重连时带回"，且**不写入 persist**（会话级凭据，随页面生命周期即可）
-- 重连成功后由后端恢复现场：**首选容器内 tmux re-attach 自动重绘**；镜像无 tmux 时降级为网关 ring buffer 重放最近 N KB（两方案对前端暴露同一协议语义，见文档 06 §6）
+- 重连成功后由后端恢复现场：**容器内 tmux re-attach 自动重绘**（tmux 是镜像必须项，技术 04 §7；~~镜像无 tmux 时降级为网关 ring buffer 重放最近 N KB~~ 已随无 tmux 降级档取消，见 06 §6.3）。**对前端没有影响**：协议语义一直是「重连 + 期待后端重绘」，只是后端不再有第二种实现
 - 心跳保活
 
 MVP 过渡策略：可先用 addon-attach 跑通链路，但 `ptySocket.ts` 从一开始就抽象为独立 service，后续替换为自定义协议成本可控。
@@ -229,7 +229,7 @@ interface TerminalRegistrySlice {
 - **LRU 淘汰**：并发实例超上限（**默认 4–6 个**）时，对最久未激活者 `terminal.dispose()` + 关 WS；可保留"最后一屏文本快照"作再次打开时的占位，真实内容依赖后端 replay。
   - **为什么是 4–6 而不是 8–10**（审计 P2-11）：每个启用 WebGL renderer 的 Terminal 各占一个 **WebGL 上下文**，而浏览器对同源页面的并发上下文数有硬上限（Chrome/Safari 量级在 **8–16**），**接近上限时最早的上下文会被浏览器主动回收**——表现为"切回某个旧终端，画面是黑的/花的，但没有任何报错"。把默认压到 4–6 是给上下文预算留安全余量，代价只是多一次 tmux re-attach（几百毫秒，且用户无感——见 §8 第一类场景，静默重建不提示）。
   - 上限做成**可配常量**而非硬编码；WebGL 不可用而降级到 canvas renderer 时可放宽到 8–10（无上下文约束），由 `useTerminalInstance` 按实际 renderer 决定。
-- **scrollback 权威在后端会话**（tmux session 首选 / 网关 ring buffer 降级，文档 06 §6）：前端实例保留只是渲染缓存。注意 tmux 路径下 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端会话能力决定。
+- **scrollback 权威在后端的 tmux session**（文档 06 §6；~~网关 ring buffer 降级~~ 已取消，06 §6.3）：前端实例保留只是渲染缓存。注意 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端 tmux 的 `history-limit` 决定。
 
 为什么不销毁重建：每次切换都会"清空→重连→重渲染 scrollback"闪烁 + 网络开销；后端若不支持 replay 则历史输出直接丢失。
 
@@ -355,7 +355,7 @@ data 帧 → lib/writeBatcher.ts#push(bytes)
 
 | 场景 | 后端语义 | 前端行为 | 文案纪律 |
 |---|---|---|---|
-| **WS 断线重连**（网络抖动、切标签、LRU 淘汰后重新点开） | **同一个会话**：tmux re-attach 恢复现场（镜像无 tmux 时降级 ring buffer 重放，§3） | 指数退避重连 + 顶部黄条"正在重连…（第 n 次）"；重连成功后**期待后端重绘**，前端不清屏、不自造历史 | 可以说"恢复现场" |
+| **WS 断线重连**（网络抖动、切标签、LRU 淘汰后重新点开） | **同一个会话**：tmux re-attach 恢复现场（§3；无 tmux 的降级档已取消，技术 06 §6.3） | 指数退避重连 + 顶部黄条"正在重连…（第 n 次）"；重连成功后**期待后端重绘**，前端不清屏、不自造历史 | 可以说"恢复现场" |
 | **idle 回收后重启**（30min 无终端活动 → Stop → 用户点 [重启]） | **新会话**：容器已停、pty 已销毁，重启后是全新的 agent 进程 | **必须新建 Terminal 实例 + 新 WS 连接**，不复用被回收 Task 的 registry entry；**前端不对新会话做任何 replay 期待**——空白终端是正确结果，不是 bug | 文案**不得暗示"恢复现场"**；产品定文为「重启会开启新的 agent 会话，之前的对话上下文不会保留；工作区文件已保留」，按钮文案 [重启并开新会话] |
 | **agent CLI 进程退出**（exit 137 OOM 等） | 会话内进程结束，pty 可能仍在 | 展示 exit code + 人话解释，提供 [重开会话] | — |
 

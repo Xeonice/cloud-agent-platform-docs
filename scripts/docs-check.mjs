@@ -7,12 +7,13 @@
 //
 // 检查分两类：
 //   A 类 —— 文档内部检查，只读 docs/**，始终跑。
-//   B 类 —— 依赖 api/openapi.json（submodule）的检查；submodule 未 checkout 时
-//           **大声 skip 而不失败**，让 A 类照常把关。
+//   B 类 —— 依赖 api submodule 的检查（B1 读 api/openapi.json，B2 扫 api 源码里的
+//           @Tool 注册）；submodule 未 checkout 时 **大声 skip 而不失败**，
+//           让 A 类照常把关。
 //
 // 用法：
 //   node scripts/docs-check.mjs             # 跑全部检查
-//   node scripts/docs-check.mjs --verbose   # 额外打印解析出的端点集合（排查用）
+//   node scripts/docs-check.mjs --verbose   # 额外打印解析出的端点集合 / MCP tool 集合（排查用）
 //
 // 退出码：有问题 1，全过 0。
 //
@@ -26,7 +27,12 @@ const OPENAPI = path.join(ROOT, 'api', 'openapi.json');
 
 const DOC_09 = 'docs/shared/09-工程化规范.md';
 const DOC_10 = 'docs/shared/10-接口契约与类型共享.md';
+const DOC_02 = 'docs/backend/02-MCP与OpenAPI双协议.md';
 const DOC_27 = 'docs/backend/27-接口暴露设计（DDD到API与MCP）.md';
+
+// B2 扫描 MCP tool 注册用的代码根目录（api submodule 内的源码，非生成物）
+const API_ROOT = path.join(ROOT, 'api');
+const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
 
 const VERBOSE = process.argv.includes('--verbose');
 
@@ -469,6 +475,304 @@ function checkOpenapiCoverage() {
 }
 
 // ---------------------------------------------------------------------------
+// B2 MCP tool 面对账：代码里实际注册的 tool 名集合 == 02 §5.2 标「✅ 已落地」的行
+//
+// 为什么要有这条：02 §5.2 与代码曾出现**双向漂移**——表里有 5 个从没注册过的
+// （`start_sandbox` / `stop_sandbox` / `get_sandbox` / `exec_in_sandbox` /
+// `run_agent_task`），而实际注册的 3 个 project tool（`get_project` /
+// `retry_clone` / `delete_project`）表里根本没有。27 §12 的对账靠人工，抓不住。
+//
+// 口径：
+//   ① 代码侧 = api 源码里 `@Tool({ name: '…' })` 的实际注册（排除 node_modules /
+//      dist / 测试文件——那些不是运行期被 Nest 发现的 provider）；顺带校验带 @Tool
+//      的类确实出现在某个 *.module.ts 里，否则装饰器写了也不会被注册；
+//   ② 文档侧 = 02 §5.2 表格里「落地」列为 ✅ 的行；⏳ 的行是**设计中未注册**，
+//      按定义就不该出现在代码里，**不参与相等判定**（但会被反向校验：⏳ 的 tool
+//      若在代码里出现，说明落地了却忘了改状态，同样报错）；
+//   ③ 顺带核对三处计数与本表同源：02 §5.2 的「合计」句、27 §1.3、27 §12
+//      （09 §2.4「暴露面计数核对」里 MCP tools 那一行由此落地）。
+// ---------------------------------------------------------------------------
+
+/** 递归收集 api 源码里的 .ts（跳过依赖、构建产物、测试） */
+function walkApiTs(dir, out = []) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) {
+      if (['node_modules', 'dist', 'build', 'coverage', '.git', '.turbo'].includes(e.name)) continue;
+      if (e.name === 'test' || e.name === '__tests__') continue; // 测试里的 @Tool 不是运行期注册
+      walkApiTs(p, out);
+    } else if (e.name.endsWith('.ts') && !/\.(spec|test|d)\.ts$/.test(e.name)) {
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * 从 `@Tool(` 处按括号配对切出实参文本（跳过字符串字面量里的括号）。
+ * 返回 null 表示括号没配平（文件被截断之类），交给调用方报"无法静态解析"。
+ */
+function sliceCallArgs(src, openParenIdx) {
+  let depth = 0;
+  let quote = null;
+  for (let i = openParenIdx; i < src.length; i += 1) {
+    const ch = src[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === "'" || ch === '"' || ch === '`') quote = ch;
+    else if (ch === '(') depth += 1;
+    else if (ch === ')') {
+      depth -= 1;
+      if (depth === 0) return src.slice(openParenIdx + 1, i);
+    }
+  }
+  return null;
+}
+
+/** 代码侧：Map<toolName, "file:line">，外加 unresolved（无法静态解析的 @Tool） */
+function scanRegisteredTools() {
+  const tools = new Map();
+  const unresolved = [];
+  const toolClasses = new Map(); // 类名 → 首次出现的 file:line
+  const moduleFiles = [];
+  const files = API_SRC_ROOTS.flatMap((r) => walkApiTs(r));
+
+  for (const f of files) {
+    const src = read(f);
+    if (f.endsWith('.module.ts')) moduleFiles.push(f);
+    if (!src.includes('@Tool')) continue;
+    const lineAt = (idx) => src.slice(0, idx).split('\n').length;
+
+    for (const m of src.matchAll(/@Tool\s*\(/g)) {
+      const open = m.index + m[0].length - 1;
+      const where = `${rel(f)}:${lineAt(m.index)}`;
+      // 装饰器所属的类：往前找最近的 `class X`
+      const before = src.slice(0, m.index);
+      const cls = [...before.matchAll(/\bclass\s+([A-Za-z0-9_$]+)/g)].pop();
+      const args = sliceCallArgs(src, open);
+      if (args === null) {
+        unresolved.push({ where, why: '`@Tool(` 括号未配平，无法切出实参' });
+        continue;
+      }
+      // 形态一：@Tool('name', …) —— 位置参数
+      const positional = args.match(/^\s*(['"`])([A-Za-z0-9_.\-]+)\1/);
+      // 形态二：@Tool({ name: 'x', … }) —— 对象参数（本仓实际形态）
+      const named = args.match(/[{,]\s*name\s*:\s*(['"`])([A-Za-z0-9_.\-]+)\1/);
+      const name = named?.[2] ?? positional?.[2];
+      if (!name) {
+        const snippet = args.replace(/\s+/g, ' ').trim().slice(0, 90);
+        unresolved.push({
+          where,
+          why: `取不到字面量 tool 名（可能用了常量/模板串/展开）：@Tool(${snippet}${args.length > 90 ? '…' : ''})`,
+        });
+        continue;
+      }
+      if (!tools.has(name)) tools.set(name, where);
+      if (cls && !toolClasses.has(cls[1])) toolClasses.set(cls[1], where);
+    }
+  }
+
+  // 带 @Tool 的类必须被某个 *.module.ts 收进 providers，否则 Nest 根本发现不了它
+  const moduleSrc = moduleFiles.map((f) => read(f)).join('\n');
+  const orphanClasses = [...toolClasses.entries()]
+    .filter(([cls]) => !new RegExp(`\\b${cls}\\b`).test(moduleSrc))
+    .map(([cls, where]) => ({ cls, where }));
+
+  return { tools, unresolved, orphanClasses, scanned: files.length };
+}
+
+/** 文档侧：02 §5.2 的 tool 表 → { registered, pending, malformed } */
+function parseToolTable() {
+  const file = path.join(ROOT, DOC_02);
+  const lines = sliceSections(file, (lvl, txt) => {
+    if (lvl <= 3) return /^5\.2\b/.test(txt); // 进 ### 5.2 开，遇到下一个 ≤### 标题关
+    return undefined;
+  });
+
+  const registered = new Map(); // name → 表内原文行
+  const pending = new Map();
+  const malformed = [];
+
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t.startsWith('|') || /^\|[\s|:-]*$/.test(t)) continue;
+    const cells = tableCells(t);
+    if (cells.length < 4) continue; // 只认 4 列的 tool 表（Tool | 对应 REST | 落地 | 说明）
+    const decl = cells[0];
+    if (/^\**Tool\**$/.test(decl)) continue; // 表头
+    // **只扫第 1 格（声明列）**——说明列里大量顺带提到别的 tool 名
+    //（"调用方轮询 `list_projects` 或 `get_project`"），扫进来就分不清声明与提及了。
+    const names = [...decl.matchAll(/`([^`]+)`/g)]
+      .map((m) => m[1].trim())
+      .filter((n) => /^[a-z][a-z0-9_]*$/.test(n));
+    if (names.length === 0) continue;
+    const status = cells[2];
+    const ok = status.includes('✅');
+    const wip = status.includes('⏳');
+    if (ok === wip) {
+      malformed.push(
+        `02 §5.2 行「${names.join(' / ')}」的「落地」列是「${status}」，既不是 ✅ 也不是 ⏳\n` +
+          `        → 落地列只接受 ✅（已注册）或 ⏳（设计中未注册），改成其中之一`,
+      );
+      continue;
+    }
+    for (const n of names) (ok ? registered : pending).set(n, t);
+  }
+  return { registered, pending, malformed };
+}
+
+/** 抓 "N 设计 / M 已注册" 与 "⏳ K 个设计中未注册[：名单]" 的所有出处 */
+function parseToolCounts(docRel) {
+  const file = path.join(ROOT, docRel);
+  const out = [];
+  read(file).split('\n').forEach((line, i) => {
+    const pair =
+      line.match(/(\d+)\s*设计\s*\/\s*\*{0,2}\s*(\d+)\s*已注册/) ||
+      line.match(/设计\s*(\d+)\s*个[，,]\s*\*{0,2}已注册\s*(\d+)\s*个/);
+    if (!pair) return;
+    const wip = line.match(/⏳\s*(\d+)\s*个设计中未注册/);
+    const namesAfter = line.includes('未注册：')
+      ? line.slice(line.indexOf('未注册：'))
+      : line.slice(pair.index + pair[0].length);
+    const names = [...namesAfter.matchAll(/`([^`]+)`/g)]
+      .map((m) => m[1].trim())
+      .filter((n) => /^[a-z][a-z0-9_]*$/.test(n));
+    out.push({
+      where: `${docRel}:${i + 1}`,
+      design: Number(pair[1]),
+      registered: Number(pair[2]),
+      wip: wip ? Number(wip[1]) : null,
+      names,
+    });
+  });
+  return out;
+}
+
+function checkMcpToolParity() {
+  const apiUsable = API_SRC_ROOTS.some((d) => fs.existsSync(d));
+  if (!apiUsable) {
+    record('B', 'B2', 'MCP tool 面对账', 'skip', `SKIP —— 找不到 ${rel(API_SRC_ROOTS[1])}`, [
+      '──────────────────────────────────────────────────────────────',
+      'api submodule 未 checkout —— 本轮「没有人」在把关',
+      '「代码注册了 tool 却没同步 02 §5.2」/「表里挂着从没注册过的 tool」这类',
+      '双向漂移（09 §2.4 · B2）。',
+      '  本地：git submodule update --init api',
+      '  CI  ：给仓库配 SUBMODULE_TOKEN secret（见 .github/workflows/docs-check.yml）',
+      '──────────────────────────────────────────────────────────────',
+    ]);
+    return;
+  }
+
+  const code = scanRegisteredTools();
+  const doc = parseToolTable();
+
+  if (VERBOSE) {
+    console.log(`  [verbose] api 源码扫了 ${code.scanned} 个 .ts，解析出 ${code.tools.size} 个已注册 tool：`);
+    [...code.tools.entries()].sort().forEach(([n, w]) => console.log(`            ${n}  (${w})`));
+    console.log(`  [verbose] 02 §5.2 ✅ ${doc.registered.size} 个 / ⏳ ${doc.pending.size} 个：`);
+    console.log(`            ✅ ${[...doc.registered.keys()].sort().join('、') || '(空)'}`);
+    console.log(`            ⏳ ${[...doc.pending.keys()].sort().join('、') || '(空)'}`);
+  }
+
+  const details = [...doc.malformed];
+
+  for (const u of code.unresolved) {
+    details.push(
+      `无法静态解析的 @Tool：${u.where}\n` +
+        `        → ${u.why}\n` +
+        `        → 把 tool 名写成字面量（\`@Tool({ name: 'xxx' })\`），否则门禁看不见它`,
+    );
+  }
+  for (const o of code.orphanClasses) {
+    details.push(
+      `${o.cls} 带 @Tool 但没出现在任何 *.module.ts（${o.where}）\n` +
+        `        → 它不会被 Nest 发现，等于没注册；把它加进对应模块的 providers`,
+    );
+  }
+
+  // ① 核心判据：代码集合 == 02 §5.2 的 ✅ 集合
+  const onlyInCode = [...code.tools.keys()].filter((n) => !doc.registered.has(n)).sort();
+  const onlyInDoc = [...doc.registered.keys()].filter((n) => !code.tools.has(n)).sort();
+
+  for (const n of onlyInCode) {
+    if (doc.pending.has(n)) {
+      details.push(
+        `\`${n}\` 代码里已注册（${code.tools.get(n)}），但 02 §5.2 仍标 ⏳ 设计中未注册\n` +
+          `        → 到 ${DOC_02} §5.2 把该行「落地」列改成 ✅，并同步末尾「合计」句与 27 §1.3 / §12 的计数`,
+      );
+    } else {
+      details.push(
+        `\`${n}\` 代码里已注册（${code.tools.get(n)}），02 §5.2 表里没有这一行\n` +
+          `        → 到 ${DOC_02} §5.2 补一行（Tool / 对应 REST / 落地=✅ / 说明），并同步「合计」句与 27 §1.3 / §12 的计数`,
+      );
+    }
+  }
+  for (const n of onlyInDoc) {
+    details.push(
+      `\`${n}\` 在 02 §5.2 标为 ✅ 已落地，但代码里没有对应的 \`@Tool({ name: '${n}' })\`\n` +
+        `        → 要么到 api 的 \`*.mcp-tools.ts\` 里真的注册它，要么把该行「落地」列改回 ⏳（并同步各处计数）`,
+    );
+  }
+
+  // ② 三处计数与本表同源（02 §5.2 合计句 / 27 §1.3 / 27 §12）
+  const design = doc.registered.size + doc.pending.size;
+  const counted = [...parseToolCounts(DOC_02), ...parseToolCounts(DOC_27)];
+  if (counted.length === 0) {
+    details.push(
+      `没在 ${DOC_02} / ${DOC_27} 里找到任何「N 设计 / M 已注册」计数句\n` +
+        `        → 计数句是 B2 顺带核对的对象，被删掉就没人盯计数漂移了；补回去`,
+    );
+  }
+  for (const c of counted) {
+    if (c.design !== design || c.registered !== doc.registered.size) {
+      details.push(
+        `${c.where} 的计数「${c.design} 设计 / ${c.registered} 已注册」与 02 §5.2 表实际（${design} 设计 / ${doc.registered.size} 已注册）不符\n` +
+          `        → 02 §5.2 表是权威，改这一处的数字`,
+      );
+    }
+    if (c.wip !== null && c.wip !== doc.pending.size) {
+      details.push(
+        `${c.where} 的「⏳ ${c.wip} 个设计中未注册」与 02 §5.2 表实际（${doc.pending.size} 个 ⏳）不符\n` +
+          `        → 改这一处的数字`,
+      );
+    }
+    // 计数句后面若列了名单，名单也要与表一致（列了就得对，没列不强求）
+    if (c.names.length > 0) {
+      const expect = c.registered === c.names.length ? doc.registered : doc.pending;
+      const label = expect === doc.registered ? '✅ 已注册' : '⏳ 未注册';
+      const extra = c.names.filter((n) => !expect.has(n)).sort();
+      const miss = [...expect.keys()].filter((n) => !c.names.includes(n)).sort();
+      if (extra.length || miss.length) {
+        details.push(
+          `${c.where} 列的 tool 名单与 02 §5.2 的「${label}」集合不一致` +
+            `${extra.length ? `；名单多出 ${extra.map((n) => `\`${n}\``).join('、')}` : ''}` +
+            `${miss.length ? `；名单漏了 ${miss.map((n) => `\`${n}\``).join('、')}` : ''}\n` +
+            `        → 以 02 §5.2 表为准改这一处的名单`,
+        );
+      }
+    }
+  }
+
+  const summary =
+    `代码注册 ${code.tools.size} 个 tool，02 §5.2 = ${design} 设计 / ${doc.registered.size} 已注册`;
+  if (details.length === 0) {
+    record('B', 'B2', 'MCP tool 面对账', 'ok',
+      `${summary}，集合相等（${doc.pending.size} 个 ⏳ 不参与判定），${counted.length} 处计数句同源`);
+    return;
+  }
+  record('B', 'B2', 'MCP tool 面对账', 'fail', `${summary}，${details.length} 项不一致`, details);
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 console.log('▶ docs:check —— 文档一致性门禁（权威定义：docs/shared/09-工程化规范.md §2.4）');
@@ -480,6 +784,7 @@ checkSectionRefs();
 checkReadmeInventory();
 checkCapabilityCatalog();
 checkOpenapiCoverage();
+checkMcpToolParity();
 
 const ICON = { ok: '✔', fail: '✗', skip: '⚠' };
 
@@ -490,7 +795,7 @@ const padName = (s) => s + ' '.repeat(Math.max(0, NAME_COL - width(s)));
 
 const GROUPS = [
   ['A', 'A. 文档内部检查（不依赖 submodule，始终跑）'],
-  ['B', 'B. 依赖 api/openapi.json 的检查（submodule 缺失即 skip，不判失败）'],
+  ['B', 'B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）'],
 ];
 
 for (const [cls, title] of GROUPS) {

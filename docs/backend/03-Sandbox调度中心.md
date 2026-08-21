@@ -191,15 +191,18 @@ starting ─┬─ ① provider.start(handle)
 - **终端网关此后一律 attach 已存在的会话，自己不再判断「首次」**（06 §3 / 26 §8 已改写）。
 - **只对 `headless=false` 执行**。`headless=true` 的执行路径属后续切片（§8.3 / TASK-LAUNCH-DECISIONS T-4），S5 内不起 agent。
 
-**两档形态（tmux 是建议非必须，04 §7）——档位由沙箱内实测决定，不由镜像声明决定**：
+**单档形态（tmux 是镜像**必须**项，04 §7；2026-08 用户裁决，取代原 A/B 两档）**：
 
-| 档 | 判定 | 形态 | 代价 |
-|---|---|---|---|
-| **A（首选）** | 沙箱内 `command -v tmux` 命中 | `spawn({tty:true})` 跑 `tmux new-session -d -s platform-agent <cmd>`，会话由 **tmux server 持有**，平台侧不需要保持任何连接；网关此后 `tmux attach` | 无 |
-| **B（降级）** | 沙箱内没有 tmux | `spawn({tty:true, cmd})` 由 **terminal 网关持有 `ProcessStream`** + 06 §6 既有 ring buffer；**与断线重连的唯一区别是没有 grace timer**——它是 sandbox 存续期内平台自持的会话 | ① 首次 attach 前的输出受 ring buffer 上限截断；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**（A 档不受影响）。两条写进 04 §7 给镜像作者看 |
+| 步 | 做什么 | 失败怎么办 |
+|---|---|---|
+| ⑤.1 **自检** | 沙箱内 `command -v tmux` **实测** | **未命中 ⇒ 响亮失败**：`starting → failed` + `failure_reason`（人话："镜像缺少 tmux，不满足平台约定"），错误码 **`IMAGE_CONTRACT_VIOLATION`**（04 §4 / 02 §6.1 / P22 §1），补偿动作与 `starting` 失败同（24 §1.3）。**不得静默降级** |
+| ⑤.2 **起会话** | `spawn({tty:true})` 跑 `tmux new-session -d -s platform-agent <cmd>`；会话由**沙箱内的 tmux server 持有**，平台侧不保持任何连接；网关此后一律 `tmux attach`（06 §3/§6） | 按 `starting` 失败处理 |
 
-- **为什么用 `command -v tmux` 而不是 `ResolvedImageSpec.supportsTmux`**：与 04 §2.1★ 的方法论一致（运行时事实一律实测）；且 `supportsTmux` 目前只在 04 §7 的散文里，`ResolvedImageSpec` 的类型声明里并没有这个字段。`supportsTmux` 保留其原职责：注册期给用户一条 warning。
-- **被否掉的方案**：无 tmux 时把 `initialPrompt` 当无头任务跑（`spawn({tty:false})` + 日志文件）。它同时破坏「终端可观察」（用户点开终端看到的是与 agent 无关的干净 shell），并且**提前实现 T-4 里刚决定不做的那套东西**（输出传输 + 日志存储）。
+- **为什么仍要实测，而不是信 `validate()` 的结论**：与 04 §2.1★ 的方法论一致——沙箱内的运行时事实一律实测。`validate()` 是注册期的静态判定，镜像换 tag、上游换 base image 都可能让它过期。（原先写的「不用 `ResolvedImageSpec.supportsTmux` 判定」这条更强了一步：**那个字段已经删除**，04 §7 ★。）
+- **为什么实测不过要响亮失败而不是降级**：这与「agent 鉴权自检失败即 `start()` 响亮失败」（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」）是同一条纪律——自检的意义就在于不过就停，静默降级会把「镜像不合格」伪装成「产品行为不一样」，等用户在平台重启后丢了会话才发现。
+- **被取代的 B 档（存档，勿当现状读）**：镜像无 tmux 时由**终端网关持有 `ProcessStream`** + 06 §6 的 ring buffer 兜底。**取消理由**：它的代价②是「平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断」，对一个把 Task 当第一概念的产品不可接受；且两个内建镜像本来就自带 tmux，这条降级路没人走却要平台长期养一个分支。完整轨迹见 04 §7 ★ 与 TASK-LAUNCH-DECISIONS T-2。
+- **更早被否掉的第三种方案**：无 tmux 时把 `initialPrompt` 当无头任务跑（`spawn({tty:false})` + 日志文件）。它同时破坏「终端可观察」（用户点开终端看到的是与 agent 无关的干净 shell），并且**提前实现 T-4 里刚决定不做的那套东西**（输出传输 + 日志存储）。
+- **实现期可选的快速失败**（不改本节五步语义）：⑤.1 的探测**可以前移到 ② 之后**当作「镜像约定自检」，好处是缺 tmux 的镜像不必先白等 ③ 现装 CLI 的十几分钟才失败。语义等价（同一次实测、同一个错误码），是否前移由实现切片定。
 
 ## 5. CPU 限额的两种模式（按 sandbox tier 提供）
 
