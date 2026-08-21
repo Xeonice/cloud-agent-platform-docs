@@ -317,9 +317,12 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
        3. chown 到容器内运行用户（HOME/工作区可写是镜像约定，04 §7）
        4. 标记文件改为 ready
    → creating（provider.create 时把该目录作为 host-path 挂载，源已存在）
-   → starting（凭证 materialize + injectCredential，05 §4）
+   → starting（凭证 materialize + injectCredential，05 §4；注入形态与落点见下）
 ```
 
+- **`starting` 阶段的凭证注入步（S5 provision 接线点，05 §7.1 第 2 条留的那个）**：`prepare → inject → record` 三步——`CREDENTIAL_FACADE.prepareRuntimeCredential` → `adapter.injectCredential(cred, exec)` 一次性 exec → 写 `credential_sandbox_bindings` 台账（吊销联动依赖它，05 §4 吊销行）。两条实现纪律来自 **S5 技术验证（2026-08 真容器实测）**：
+  - **注入形态按 05 §4 的最小暴露优先级，且已按实测修订**：codex 落 `0600` 的 `auth.json` 且 **`refresh_token` 值替换为占位串**（字段必须保留——直接删会 `missing field 'refresh_token'`；真值绝不进沙箱，05 §1★★）；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env。
+  - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000），硬编码在 boxlite 上必错（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
 - **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
 - **取消的清理**：用户在进度卡取消或进程重启后发现残留 → 扫 `workspaces/` 下标记文件为 `preparing` 的目录，一律 `rm -rf`（启动对账，13 §4）。半成品目录没有任何保留价值。
 - **`ready` 孤儿目录清理**（交叉评审 P2-8）：销毁 keepVolume 流程中"`provider.destroy` 后、打 `kept` 标记/登记 `RetainedVolume` 前"崩溃，会留下标记仍为 `ready` 且 DB 无 `retained_volumes` 记录的孤儿目录。启动对账补一条判据：**sandbox 已 destroyed/failed 但目录标记仍 `ready` 且无 retained 记录 → `rm -rf`**（有 retained 记录的 `kept` 目录才保留）。
@@ -367,6 +370,7 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 - **默认 2h**，规则可配 30min / 1h / 2h / 4h（`automations.timeout_minutes`，13 §2；P20 §0 决策 5 与 P21-7 §3.2 同源）。
 - 计时起点是 Task 转 `running` 的时刻（不含排队与拉镜像——否则慢网络会吃掉用户的执行预算）。
 - 超时动作：kill 进程 → sandbox 转 `failed`（`failure_reason='automation timeout'`）→ run 记 `status='timeout'`，**并计入 `consecutive_failures`**（P20 §9.9 明确要求）。
+- **kill 必须是强制的，不能等 CLI 自己退（S5 技术验证，2026-08 实测）**：CLI **不一定会收敛**。同一场景（无凭证起无头任务）两个 runtime 表现相反——**codex 反复重试 `401 Unauthorized`**（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** + "Not logged in"。实测的触发条件（无凭证）会被 §8.2 决策表第 2 条挡在前面，但暴露的是**通用性质**：持续性 API 错误（凭证运行中失效、网络中断、上游持续 5xx）都会让 codex 走进同一条不退出的重连循环。⇒ 到点先 `SIGTERM` 给一个清理窗口、**超时未退即 `SIGKILL` 强杀**，并连带 destroy 实例（进程死了但容器还在同样是资源泄漏）；adapter 可在 `buildStartCommand` 里带上 CLI 自己的超时旗标作为第一道，但**平台侧这一刀才是唯一可靠的兜底**（04 §3 ★3）。
 - 与 idle 回收的关系：无头 Task 没有终端，**不参与 idle 回收**（§4.2），硬超时是它唯一的兜底。
 - 手动发起的交互式 Task 不受本条约束（其兜底是 idle 30min + 硬超时 24h，P20 §0）。
 

@@ -1,6 +1,7 @@
 # 05 - Runtime 鉴权流转设计（帐号授权 + API key 双模式）
 
 > 状态：✅ 实施前定稿（S4 实现前回写：2026-08 **live 技术验证**——真订阅真授权真跑——已落回 §1★/§2/§3★/§5.1/§6；§7 划定"S4 增量 vs S3 已复用"边界。CLI 行为除官方文档外补充实测形态：codex `auth.json` 结构 + claude token 从 stdout 出/OSC 8/pty 折行）
+> **⚠️ S5 技术验证修订（2026-08，真容器 + 真订阅凭证 + agent 真干活）**：**注入形态已被实测推翻并改写**——`--with-access-token`（stdin）档在真容器里失败，不再是默认；改为"注入 `refresh_token` 值被占位替换的 `0600` auth.json"。**P0-3 的安全裁决本身（真 refresh_token 永不进沙箱）不变，变的只是实现形态**。修订落点：§1★★（证据与裁决）· §2 决策 A（闭环背书）· §3 时序 · §4 物化行 · §6 · §7 #3。
 > 关联文档：[04 Contract 体系](./04-Contract与Registry扩展体系.md) · [07 前端目录结构 §6 鉴权页](../frontend/07-前端目录结构与视图逻辑分离.md) · [03 §7.3 Git 凭证使用链路](./03-Sandbox调度中心.md) · [11 §1.1 auth helper 部署形态](../shared/11-部署与扩展预留.md)
 > 产品依据：[P20 §5](../product/20-核心使用链路.md) · [P21-3 凭证管理](../product/pages/21-3-凭证管理.md) · [P21-4 §10 运行参数](../product/pages/21-4-镜像管理.md)
 
@@ -17,8 +18,30 @@
 > **★ 技术验证补充（2026-08 live，真订阅真授权真跑；下列是凭证落盘/输出的精确形态，比抽象设计更值钱，是解析器与注入器的直接实现指导）**
 >
 > - **★1 Claude `setup-token`（输出形态）**：授权 URL **藏在 OSC 8 超链接转义序列里**（`ESC ] 8 ; id=… ; <完整URL> …`），**可见文本里的 URL 会被 pty 截断** → 捕获器**必须解析 OSC 8 原始序列取完整 URL，不能简单 grep `https://`**。产出的 1 年期 token（`sk-ant-oat01-…`）**打印到 stdout、不落 `.credentials.json`**，且被 pty **按行折成多段** → 捕获后须**拼接并去空白**还原完整 token。**捕获入口明文纪律（P1-4a）**：token 捕获后**立即包进 `SecretMaterial`（`Buffer` 承载）**，捕获入口**不产生裸 `string`**；用于折行拼接的 pty 原始 buffer 用完 `fill(0)`（与 23 §8.3 `SecretMaterial` 同纪律）。注入形态：`CLAUDE_CODE_OAUTH_TOKEN` env。
-> - **★2 Codex `login --device-auth`（输出形态）**：输出是**纯文本** verification URL（`https://auth.openai.com/codex/device`）+ device-code（格式 `XXXX-XXXXX`，15 min 过期）→ **正则捕获稳**。凭证落 `~/.codex/auth.json`，实测顶层键：`auth_mode`、`tokens.{ id_token, access_token, refresh_token, account_id }`、`last_refresh`（chatgpt 订阅模式下 `OPENAI_API_KEY` 字段为 `null`）。**`auth.json` 含 `refresh_token` → 实证印证 §5.1 的刷新回写必要性**（access token 短期，须靠 refresh token 续期）。**注入形态（最小暴露优先，见 §4/§7 #3）：`codex login --with-access-token`（stdin，只喂短期 access token，refresh token 永不进沙箱）为默认；仅当 CLI 强依赖文件时才落 `~/.codex/auth.json`（0600、随沙箱销毁）；**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（含 refresh_token，沙箱内 `echo $CODEX_AUTH_JSON` 即可盗走，见 §3/§7）。
+> - **★2 Codex `login --device-auth`（输出形态）**：输出是**纯文本** verification URL（`https://auth.openai.com/codex/device`）+ device-code（格式 `XXXX-XXXXX`，15 min 过期）→ **正则捕获稳**。凭证落 `~/.codex/auth.json`，实测顶层键：`auth_mode`、`tokens.{ id_token, access_token, refresh_token, account_id }`、`last_refresh`（chatgpt 订阅模式下 `OPENAI_API_KEY` 字段为 `null`）。**`auth.json` 含 `refresh_token` → 实证印证 §5.1 的刷新回写必要性**（access token 短期，须靠 refresh token 续期）。**注入形态（最小暴露优先，见 §4/§7 #3）**：落 `0600` 的 `~/.codex/auth.json`（随沙箱销毁）、其中 `refresh_token` 值替换为占位串；**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（含 refresh_token，沙箱内 `echo $CODEX_AUTH_JSON` 即可盗走，见 §3/§7）。**⚠️ 本行原定"`codex login --with-access-token`（stdin，只喂短期 access token）为默认"，已被 S5 技术验证推翻**——该档降为可选/版本敏感档，证据与新优先级见下方 ★★。
 > - **结论**：auth helper 的输出捕获器**必须 per-CLI 适配**（codex 抓纯文本 code + 读 auth.json 文件；claude 解析 OSC 8 URL + 从 stdout 拼 token），**不能用一套通用正则**——这是 §6「正则解析 stdout 脆弱」风险的具体化落地（§3 时序与 §6 缓解已据此细化）。
+
+> **★★ S5 技术验证修订（2026-08，真容器 + 真订阅凭证 + agent 真干活）——推翻上方 ★2 的"stdin 档为默认"；P0-3 的安全裁决本身不变，只改实现形态**
+>
+> ★2 当初把 `codex login --with-access-token`（stdin）定为默认档，依据是"只喂短期 access token 暴露面最小"这条**推理**。S5 开工前把它放进**真 sandbox 容器**跑，三条实测把它推翻：
+>
+> | # | 实测形态 | 结果 |
+> |---|---|---|
+> | ① | 从 `auth.json` 取出 `tokens.access_token` 喂 `codex login --with-access-token`（stdin） | ❌ `Error logging in with access token: agent identity JWT payload is not valid JSON` |
+> | ② | 注入 auth.json，但**直接删掉 `refresh_token` 字段** | ❌ `missing field 'refresh_token' at line 1 column 3835`（serde 反序列化要求该字段**存在**） |
+> | ③ | 注入 `0600` auth.json，`refresh_token` **字段保留、值替换为占位串**（如 `REDACTED-NOT-A-REAL-REFRESH-TOKEN`） | ✅ **跑通**——agent 真鉴权、真干活，**21,192 tokens**（值取空串 `""` 同样 exit=0） |
+>
+> **① 不是传输问题、也不是 token 本身的问题**——三个假设已逐一排除，不是推断：**传输完整**（容器内收到 **1796 字节**，与宿主一致）；**token 合法**（3 段 RS256 JWT，payload 能正常 base64 解码出 ChatGPT account claims）；**真因是版本敏感**——宿主 codex **0.147.0** 产出的 token，被容器内 codex **0.139.0** 消费。⇒ 这条通道**对 CLI 版本漂移脆弱**（与 §6 首行"解析 CLI stdout 是脆弱集成"同一类风险，只是挪到了鉴权入口），**不能作为默认档**。
+>
+> **修订后的注入优先级**（§3 时序 / §4 物化行 / §7 #3 已同步改写）：
+>
+> **① 注入 `0600` auth.json，其中 `refresh_token` 值替换为占位串（真值绝不进沙箱）> ②（可选 / 版本敏感）`--with-access-token`（stdin），须与产出该 token 的 CLI 版本匹配 > ③（禁用）整份含真 `refresh_token` 的 auth.json —— 无论 env 还是文件**
+>
+> **为什么"占位串"可行、而"删字段"不行**：`auth.json` 的 schema **要求 `refresh_token` 字段存在**（②的报错原文即是证据），但 codex 在沙箱内**只用 `access_token` 鉴权**——刷新由平台侧统一做（§5.1 方案 A：在 auth helper 的临时 HOME 里、用平台自己那份含真 refresh_token 的副本触发刷新），**沙箱从来不需要 refresh 能力**。占位串因此同时满足"字段在"与"真值不出平台"两个约束。
+>
+> **P0-3 的安全裁决本身不变**：真 refresh_token 永不进沙箱——沙箱内 `cat ~/.codex/auth.json` 拿到的 `refresh_token` 是占位串，拿不到那个"可脱离平台无限续期、平台无法上游吊销"的凭据。**变的只是实现形态**（从"stdin 只喂 access token"变成"注入一份 refresh_token 被占位替换的 auth.json"），不是安全目标的让步。
+>
+> **凭证物化路径走运行时 `$HOME`，不硬编码**：实测 aio 的 `$HOME=/root`（uid=0），boxlite 的 `$HOME=/home/gem`（uid=1000）——**硬编码 `/root` 在 boxlite 上必错**。`credentialFiles[].containerPath` 里的 `~/.codex/auth.json` / `~/.claude/.credentials.json` 必须在注入时用**沙箱内实际的 `$HOME`** 展开：04 §7 的镜像约定只承诺"HOME 可写"，从未承诺 HOME 是哪个路径。provider 身份与能力差异全表见 04 §2.1★。
 
 > **setup-token 路径 MVP 即做，不推迟**（审计 P2-13 重新评估）：原建议基于 MVP 瘦身，而瘦身已被全部否决。现状是这条路径的契约与实现面**已经完整**——04 §3 的 `getAuthMethods/beginAuth/completeAuth` 覆盖 `paste-prompt` 形态、05 §3 有完整时序、25 §4.2 有 golden fixture 用例、P20 §5 的产品链路把「帐号授权」定为三分支之一。推迟它反而要**回头砍产品定稿的入口**（Claude Code 只剩 API key，用户的 Claude 订阅额度用不上），代价高于实现成本。
 
@@ -29,6 +52,8 @@
 ## 2. 核心设计决策
 
 **决策 A：鉴权与任务 sandbox 彻底解耦（凭证注入架构）。** 两个 CLI 的凭证均官方确认**可搬运**：Claude `setup-token` 产出 1 年期 token（`CLAUDE_CODE_OAUTH_TOKEN` 注入任意环境）；Codex `auth.json` 不绑定主机（官方 CI/CD 文档提供 `CODEX_AUTH_JSON` 注入模式）。因此登录流**不依赖任何任务 sandbox**——跑在平台管理的 **auth helper 执行环境**里（**默认形态：复用 AIO 镜像的常驻轻量 helper 容器；备选：后端宿主机自带两个 CLI**——部署形态与取舍见 [11 §1.1](../shared/11-部署与扩展预留.md)；对上层与前端完全透明），产出凭证入 Vault 后注入后续任意 sandbox。产品收益：拦截面板/凭证页内**即时完成**帐号授权，任务创建流程中不存在"等待登录"环节（产品 P20 §5 与此对齐）。**本决策已 live 验证（2026-08 技术验证）**：真订阅 → 真授权 → 捕获凭证 → **搬运到完全独立的隔离环境**（全新 `CLAUDE_CONFIG_DIR` / `CODEX_HOME`，只含搬运来的凭证，与登录时的 HOME 无任何共享）→ agent **真鉴权通过并调用模型干活**（claude 侧实测 agent 真读文件真出活；codex 侧实测真实会话建立、请求真打到 OpenAI，仅因测试账号额度用尽未出最终结果——鉴权/搬运/注入链路全通）。"凭证与登录 sandbox 解耦、可搬运注入任意 sandbox"不再是纸面推断。
+
+**S5 技术验证把这条闭环补到端到端（2026-08，真容器 + 真订阅凭证 + agent 真干活）**：真 ChatGPT 订阅授权 → 捕获凭证 → **注入真 sandbox 容器**（`refresh_token` 占位替换，§1★★）→ agent 在容器内**真鉴权、真读工作区、真改文件、真建文件** → **宿主侧可见且功能正确**。宿主实证不是日志断言而是文件事实：`add.js` 被改成 `return a + b`、`FIXED.md` 被新建、宿主 `node` 跑出 `add(2,3) = 5`；工作区 bind mount **双向可见、uid 映射正常**（印证 03 §7.1 的宿主目录两级工作区模型）。至此"登录一次 → 注入任意 sandbox → agent 真干活"三段全部有实测背书；§7.1 第 2 条列的"注入门面零真实调用方"由 S5 provision 接线消解（接线点见 03 §7.6）。
 
 **创建流程的阶段序列因此固定为**：初始化 → 拉镜像 → 准备工作区 → 启动实例（凭证注入发生在此，用户无感）→ 连接终端（P20 §3.3）。**没有"等待登录"阶段**——任何在创建链路里等待鉴权的实现都是对本决策的违反。
 
@@ -76,8 +101,12 @@
       （CREDENTIAL_FACADE.prepareRuntimeCredential(runtimeId)，受控明文包装，
        非不透明句柄——因 runtime 要注入沙箱；credential 不反向持 sandbox exec，
        见 §4 与 27 §4）→ sandbox 编排侧以 adapter.injectCredential(cred, exec)
-      【一次性 exec】按【最小暴露形态优先级】写入（§4/§7 #3）：
-        access-token-only（stdin）  >  0600 文件  >  (禁用) 整份 env
+      【一次性 exec】按【最小暴露形态优先级】写入（§4/§7 #3；S5 实测修订见 §1★★）：
+        ① 0600 auth.json —— refresh_token 值=占位串，真值绝不进沙箱
+             （落点按沙箱内实际 $HOME 展开，不硬编码 /root）
+        > ② (可选/版本敏感) --with-access-token（stdin）
+             —— 须与产出该 token 的 CLI 版本匹配，版本漂移即失败
+        > ③ (禁用) 整份含真 refresh_token 的 auth.json —— env 与文件同禁
       直到过期无需重复登录——登录一次，处处可用。
 ```
 
@@ -141,7 +170,7 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 | 方面 | 设计 |
 |---|---|
 | 存储 | 凭证 blob AES-256-GCM 加密落库；密钥来自本地 master key（起步），可选系统 keychain（keytar）；生产建议 KMS |
-| 物化 | `materialize(credentialRef, sandboxHandle)` 按 **最小暴露形态优先级**（§7 #3，adapter 契约固化）注入：**① access-token-only（stdin，如 codex `login --with-access-token`，只给短期 access token，refresh token 永不进沙箱）> ② `0600` 文件（`~/.codex/auth.json` / `~/.claude/.credentials.json`，随沙箱销毁）> ③（禁用）整份 env**——**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（含 refresh_token，沙箱内 shell 一条 `echo` 即可盗走 → 脱离平台无限续期、平台无法上游吊销，P0-3）。刷新由平台侧统一做（§5.1），沙箱不需要 refresh token。api-key 类凭证走 env（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`，本就非长期订阅身份）。**出口纪律见下方「runtime 出口通用明文纪律」** |
+| 物化 | `materialize(credentialRef, sandboxHandle)` 按 **最小暴露形态优先级**（§7 #3，adapter 契约固化）注入。**优先级已按 S5 技术验证修订（§1★★）**：**① `0600` 文件（`~/.codex/auth.json` / `~/.claude/.credentials.json`，随沙箱销毁）且 `refresh_token` 值替换为占位串——字段必须保留（删掉会报 `missing field 'refresh_token'`），真值绝不进沙箱 > ②（可选 / 版本敏感）access-token-only（stdin，codex `login --with-access-token`），只在注入端与产出端 CLI 版本匹配时可用——实测 0.147.0 产的 token 喂给 0.139.0 直接被拒 > ③（禁用）整份含真 refresh_token 的 auth.json，env 与文件同禁**——**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（沙箱内 shell 一条 `echo` 即可盗走 → 脱离平台无限续期、平台无法上游吊销，P0-3）。刷新由平台侧统一做（§5.1），沙箱不需要 refresh 能力——这正是占位串成立的前提。**落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**（实测 aio=`/root`、boxlite=`/home/gem`，04 §2.1★）。api-key 类凭证走 env（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`，本就非长期订阅身份）。**出口纪律见下方「runtime 出口通用明文纪律」** |
 | **模式开关（二选一，全局生效）** | 同一 runtime 两类凭证**可留存**（credentials 表多行，切回无需重新登录），但**同一时刻只有一个模式生效**：`runtime_settings.active_auth_method`（13 §2）决定 materialize 取哪条凭证。切换经 `PUT /api/runtimes/:rt/auth-mode`，**立即全局生效**（已运行 sandbox 不受影响，下次启动/新建时按新模式注入）；切换到未配置凭证的模式时接口返回 409，前端引导先补配 |
 | 回显 | REST/MCP 响应**永不回传明文**；只回显掩码标识（`sk-...ab12` / 邮箱）与过期时间 |
 | 吊销 | 管理接口 **revoke**（非物理删除）：置 `revoked_at` + 物理擦除密文字段，元数据保留供审计（文档 13 §2 credentials）。**对运行中沙箱的联动（P0-4）**：env 形态（`CLAUDE_CODE_OAUTH_TOKEN` 及 codex 若走 env）注入进程后**外部无法 `unset`**——"联动清除 env"物理做不到，是假承诺。因此**唯一可靠手段是按 `credential_sandbox_bindings` 台账强制重启/销毁所有 bound 的活沙箱**；删文件/改 env 仅对"CLI 每次调用重读凭证"的文件形态有意义、**对已缓存进程无效**。**吊销延迟语义明示**（前端 21-3 吊销确认文案同源）："吊销会重启正在使用该凭证的运行实例；已泄漏到沙箱外的 token 无法追回。" **exec 清除失败兜底**（容器忙/不健康）：超时**升级为强制销毁**，不静默记 error |
@@ -243,7 +272,8 @@ P/scheduler/timers.ts#every(15min)
 | Claude Code 无 device-code，粘贴流体验差 | 中 | 前端框架预留模式切换位；官方支持后仅改 Adapter 的 `getAuthMethods()` |
 | 服务端长期持有用户 OAuth 凭证的合规考量 | **高**（审计 P0-3 上调：默认监听 127.0.0.1 之前，这是本平台最大的单点风险——一台被公网暴露的实例等于泄露用户的 ChatGPT/Claude 订阅身份） | 产品文档明示 + 吊销/清除入口 + AES-256-GCM 加密（master key 规格见 §4.2）+ **默认只监听 127.0.0.1**（11 §1）+ **访问口令 Guard MVP 即启用**（11 §3.1） |
 | auth.json 明文落盘在容器内 | 中 | 容器单租户使用 + 卷权限 0600 + sandbox 销毁时清除 |
-| **CODEX_AUTH_JSON env 注入整份 auth.json（含 refresh_token）→ 沙箱内 `echo` 即可盗走，脱离平台无限续期、平台无法上游吊销 → 永久订阅盗用** | **高（P0-3）** | **默认走 `codex login --with-access-token`（stdin，只给短期 access token，refresh token 永不进沙箱）；仅 CLI 强依赖文件时落 `0600` auth.json、随沙箱销毁；绝不用 `CODEX_AUTH_JSON` env 整份注入**（注入形态优先级见 §4/§7 #3，adapter 契约固化）。刷新由平台侧统一做（§5.1），沙箱不需要 refresh token |
+| **整份 auth.json（含真 refresh_token）进沙箱 → 沙箱内 `echo`/`cat` 即可盗走，脱离平台无限续期、平台无法上游吊销 → 永久订阅盗用** | **高（P0-3）** | **裁决不变、形态经 S5 实测修订（§1★★）**：注入 `0600` auth.json 且 **`refresh_token` 值替换为占位串**（字段必须保留——删字段会 `missing field 'refresh_token'`；codex 只用 `access_token` 鉴权，刷新由平台侧统一做，§5.1）；`--with-access-token`（stdin）降为**可选 / 版本敏感**档；**绝不用 `CODEX_AUTH_JSON` env 整份注入，也不落含真 refresh_token 的文件**（注入形态优先级见 §4/§7 #3，adapter 契约固化） |
+| **`--with-access-token`（stdin）跨 CLI 版本失效**（把它当默认档会让整条注入链路随镜像里的 CLI 版本静默瘫痪） | 中（S5 新增） | **实测证据**：宿主 codex 0.147.0 产出的 access token 喂给容器内 0.139.0 → `agent identity JWT payload is not valid JSON`；传输完整（1796 字节一致）、token 合法（RS256 JWT payload 可解）均已排除，**真因就是版本漂移**。缓解：该档**降为可选**、默认走占位 auth.json（§1★★）；若确要启用，adapter 须校验注入端与沙箱内 CLI 版本一致，并按 04 §10.3 RA-04 的同一纪律为每个支持版本留 fixture |
 | **凭证明文经日志/transcript 泄漏** | 中（P1-4b） | 日志脱敏 **per-CLI 分两套**：claude token 走高熵密钥模式 + **折行分片拼接前预脱敏**（对 `sk-ant-oat01-` 前缀及后续折行片段先打码再拼，防"分片各自不像、拼起来才是"）；codex device-code 是非密钥可显示；terminal transcript 落库前过同一脱敏器（§4） |
 | auth helper 环境缺 CLI 或版本漂移 | 低 | helper 容器用平台默认镜像（AIO 自带两 CLI）；启动时版本探测并纳入诊断项（P21-5） |
 
@@ -257,7 +287,7 @@ P/scheduler/timers.ts#every(15min)
 |---|---|---|
 | 1 | **`Credential.createRuntime`** 工厂（`kind='runtime'`、`runtimeId` 非空、`mode='account'\|'api-key'`、`obtainedVia ∈ RuntimeAuthMethod`），并把实体现有的 git-only 收窄放宽——`credential.entity.ts` 现 `obtainedVia: GitObtainedVia`、`mode: null` 需拓成超集/可空二值 | `Credential` 聚合本体、`rehydrate`、`revoke()`/`Erased` 擦除、`assertUsable()`、`CredentialStored/CredentialRevoked` 事件（`createGit` 旁并列即可） |
 | 2 | **`RuntimeAuthMethod` 枚举** 加进 `obtained-via.vo.ts`（`setup-token` / `oauth-device` / `api-key` / `access-token-paste`，与 DB CHECK 已枚举的四值对齐） | `GitObtainedVia` 及其 wire↔domain 转换的既有写法（同文件并列一个 union + 映射） |
-| 3 | **runtime 凭证 materialize**：注入 sandbox 按**最小暴露形态优先级**（§4）——codex 默认 `login --with-access-token`（stdin，短期 access token，refresh token 不进沙箱）> 必要时 `0600` 的 `~/.codex/auth.json`；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env；**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（P0-3，adapter 契约固化） | `CREDENTIAL_FACADE` 门面装配与 UoW 复用；但 **runtime 出口是新增方法**（git 是**不注入沙箱**的不透明句柄 `GitAuthContext`、runtime 是**注入沙箱**的凭证交付 `RuntimeCredential` 受控明文包装）——**出口语义不同、不平移句柄形态**（P0-2，27 §4）；共守"明文不越界"的通用出口纪律（§4 / 23 §8.2） |
+| 3 | **runtime 凭证 materialize**：注入 sandbox 按**最小暴露形态优先级**（§4；**形态经 S5 技术验证修订，见 §1★★**）——codex 默认落 `0600` 的 `~/.codex/auth.json` 且 **`refresh_token` 值替换为占位串**（字段保留、真值不进沙箱），`login --with-access-token`（stdin）降为**可选 / 版本敏感**档；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env；**绝不注入含真 refresh_token 的整份 auth.json（env 与文件同禁）**（P0-3，adapter 契约固化）。落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root` | `CREDENTIAL_FACADE` 门面装配与 UoW 复用；但 **runtime 出口是新增方法**（git 是**不注入沙箱**的不透明句柄 `GitAuthContext`、runtime 是**注入沙箱**的凭证交付 `RuntimeCredential` 受控明文包装）——**出口语义不同、不平移句柄形态**（P0-2，27 §4）；共守"明文不越界"的通用出口纪律（§4 / 23 §8.2） |
 | 4 | **`credential_sandbox_bindings` 表本身 + 注入台账写入路径**：**该表未落库（只在文档），S4 新增 Drizzle 表定义 + 迁移**（对 `credentials` FK `RESTRICT`、对 `sandboxes` FK `CASCADE`，13 §2.5.2）；并启用记账写入路径（runtime 侧真正记账，支撑吊销联动——对运行中沙箱是**强制重启/销毁 bound 活沙箱**，§4 吊销行） | `CredentialSandboxBinding` 聚合建模、I-CSB-1/2 不变量、吊销联动机制的**设计**（13 §2.5.2、23 §8.4）——**设计已就绪，但表结构 S4 才落地** |
 | 5 | **`runtime_settings` 表本身 + runtime 选择服务**：**该表未落库（只在文档），S4 新增 Drizzle 表定义 + 迁移**（`runtime_id` PK + `active_auth_method` CHECK，13 §2.3.1）；`CredentialSelectionService` 增 runtime 分支（输入 `runtimeId` + `runtime_settings.active_auth_method` → 选生效凭证），及 `PUT /auth-mode` 切换、目标模式无凭证 409（§4） | `forKind`（git 侧选择）的既有实现与 I-CRD-5 partial unique 索引（`uq_cred_runtime_active` 已随 `credentials` 表在库里）；`runtime_settings` 的**表设计**（13 §2.3.1，设计就绪但 S4 才落地） |
 | 6 | **auth helper**：per-CLI 捕获器（codex 纯文本 + 读 auth.json；claude OSC 8 + stdout 拼 token）+ `spawn({tty:true})` 真 pty；REST `auth/begin·status·complete·secret·auth-mode`（§3） | —（runtime 侧新增；与 git 的 `git-auth.materializer`/`git-ls-remote.tester` 平行，不复用其内部逻辑） |

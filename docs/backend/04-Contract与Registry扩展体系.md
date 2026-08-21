@@ -47,6 +47,22 @@ packages/contracts/                 # 现名 @platform/contracts（private）；
 
 > 隔离强度的进一步演进（gVisor / Firecracker 等，见文档 11 §5）不需要改 contract：`boxlite` 已经把"contract 能不能容纳非容器实现"这件事验证过一遍了。
 
+> **★ S5 技术验证：两个内建方案的真实身份/能力差异（2026-08，同一镜像 `agent-infra/sandbox:latest`，只换 provider 实测）**
+>
+> | 维度 | `aio`（docker 容器） | `boxlite`（microVM） |
+> |---|---|---|
+> | 运行身份 | `uid=0` root | `uid=1000` gem |
+> | `CapEff` | `a80425fb`（Docker 默认档） | `0000000000000000`（**零**） |
+> | sudo | root，无需 | **免密 sudo 可用** |
+> | `$HOME` | `/root` | `/home/gem` |
+> | npm prefix | `/opt/nodejs/22` | `/home/gem/.npm-global` |
+>
+> 这正是 §2.0 第 3 条「双实现验证」要暴露的那类差异：**同一份契约能被两侧满足，但 adapter 与平台逻辑不得依赖任一侧的特定值**。三条直接后果已分别落到条款上：
+>
+> 1. **凭证物化按运行时 `$HOME` 展开、不硬编码 `/root`**——硬编码在 boxlite 上必错（05 §4、05 §1★★）；§7 的镜像约定只承诺"HOME 可写"，从不承诺 HOME 是哪个路径。
+> 2. **`isInstalled` 必须走 `command -v` / PATH 查找**——CLI 装到哪里随 npm prefix 变（§3 与 §10.3 RA-01）。
+> 3. **install-on-start 在两侧都成立**——boxlite 虽非 root、`CapEff` 为零，但用户级 npm prefix 把 CLI 装进 `$HOME`，**不需要 root**（§3 ★1）。
+
 ### 2.2 必须实现的 6 个方法（每个方法平台拿它干什么）
 
 ```typescript
@@ -236,17 +252,53 @@ interface RuntimeAdapter {
 
 | 方法 | 平台拿它干什么 | 谁在什么时候调 | 要点 |
 |---|---|---|---|
-| `getInstallPlan` | 创建 sandbox 前预估"这个镜像要不要装、装多久"，用于决定 `runtime_installations.status` 初值与是否提示用户换镜像 | 创建流程校验阶段 | 纯函数，不产生副作用、不碰网络 |
-| `isInstalled` | 幂等判断，避免每次启动都重装 | `install` 之前；健康检查时复查 | 洁净环境必须返回 false（testkit RA-01） |
-| `install` | 按 plan 真正装 CLI | `isInstalled=false` 且策略为 `install-on-start` 时 | 必须可重入：中途失败后重调不能留半个环境 |
+| `getInstallPlan` | 创建 sandbox 前预估"这个镜像要不要装、装多久"，用于决定 `runtime_installations.status` 初值（13 §2.3.2）与是否提示用户换镜像 | 创建流程校验阶段 | 纯函数，不产生副作用、不碰网络。**判据是（镜像, runtime）这一对，不是 runtime 单独**——同一 runtime 在不同镜像上一个零安装、一个要装 12.5 分钟（S5 实测见下方 ★1） |
+| `isInstalled` | 幂等判断，避免每次启动都重装 | `install` 之前；健康检查时复查 | 洁净环境必须返回 false（testkit RA-01）。**必须走 `command -v` / PATH 查找，绝不硬编码安装路径**——同一 runtime 在 aio 与 boxlite 下装的位置不同（§2.1★），硬编码会让 boxlite 侧永远判"没装"并反复重装 |
+| `install` | 按 plan 真正装 CLI | `isInstalled=false` 且策略为 `install-on-start` 时 | 必须可重入：中途失败后重调不能留半个环境（实测重入仅 **6 秒**，几乎免费——不必设计增量恢复，★1） |
 | `getAuthMethods` | 决定前端鉴权页给这个 provider 渲染哪种模式；Claude 官方支持 device-code 后**只改这里**（05 §6） | 鉴权页加载、`beginAuth` 前校验 | 返回顺序即推荐优先级 |
 | `beginAuth` | 在容器内起交互式登录命令，从**增量 pty 输出**里正则捕获 URL / device-code，交前端展示 | `POST .../auth/begin`（05 §3） | 脆弱点：CLI 改输出格式即失效 → golden fixture 兜底（§10 RA-04） |
 | `completeAuth` | 把用户贴回来的 code 写进 pty stdin（或持续读输出等登录完成），产出可入库的凭证 | `POST .../auth/complete` | 返回的 `credentialFiles.content` 是明文，**只在内存流转**，落库前必经 Vault 加密 |
 | `createCredentialFromSecret`（可选） | 把用户直接提交的 API key / access token 构造成可入库凭证（注入形态由 adapter 决定：env 变量或 config 文件） | `POST /api/runtimes/:rt/credentials/secret`（05 §3.1） | **不需要 sandbox 宿主**；可含轻量格式校验；同样只在内存流转、Vault 加密落库 |
 | `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | 创建带 runtime 的 sandbox 时（05 §4 materialize） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态遵守最小暴露优先级**：access-token-only（stdin）> `0600` 文件 >（禁用）整份 env——**绝不 `CODEX_AUTH_JSON` env 注入整份 auth.json**（05 §4/§7 #3，adapter 契约固化） |
-| `buildStartCommand` | 无头任务模式的命令拼装（MCP `run_agent_task`，02 §5） | 起任务时 | 纯函数 |
+| `buildStartCommand` | 无头任务模式的命令拼装（MCP `run_agent_task`，02 §5） | 起任务时 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
 | `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
 | `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时 | 不实现则平台只透传原始字节 |
+
+> **★1 install 策略：优先"镜像预装"，install-on-start 是兜底（S5 技术验证，2026-08 实测）**
+>
+> | 镜像 | codex | claude-code |
+> |---|---|---|
+> | `agent-infra/sandbox:latest`（AIO 默认） | ✅ **预装** `@openai/codex@0.139.0` | ❌ 无 → 现装 `npm i -g @anthropic-ai/claude-code` 耗时 **753 秒（12.5 分钟）**，装后 2.1.238 |
+> | `cap-boxlite-sandbox:yolo-20260725-claude-2.1.207`（对照） | ✅ 预装 0.144.1 | ✅ 预装 2.1.207 |
+>
+> 三条结论：
+>
+> 1. **`getInstallPlan(imageSpec)` 按（镜像, runtime）这一对判断不是过度设计**——同一个 `claude-code`，在一张镜像上要装 12.5 分钟、在另一张上零安装。现在这是实测数据而不是假想场景。
+> 2. **强烈建议预装**（§7 镜像约定已据此加严）。install-on-start 只作兜底：12.5 分钟会把创建链路的「启动实例」阶段拖成用户以为卡死的黑洞（P20 §3.3 的四阶段进度卡撑不住这个量级）。
+> 3. **重入只要 6 秒**——RA-02 的"可重入"在真镜像上不仅成立，而且几乎免费；失败重跑不需要设计增量恢复逻辑。
+>
+> **install-on-start 在两个 provider 上都可行**：aio 是 root、npm prefix `/opt/nodejs/22`；boxlite 是 `uid=1000` 且 `CapEff` 为零，但靠**用户级 npm prefix `/home/gem/.npm-global`** 装进 `$HOME`，**不需要 root**（另有免密 sudo 可用）。这同时是 `isInstalled` 必须走 PATH 查找、不能硬编码路径的直接原因（§2.1★）。
+
+> **★2 runtime 自带的内层沙箱必须由 `buildStartCommand` 统一关闭（S5 技术验证，2026-08 实测）——这是 adapter 级差异，不进平台通用逻辑**
+>
+> codex 自带 **bwrap**（bubblewrap）沙箱，其威胁模型是"跑在开发者笔记本上、外面没有任何隔离层"。在我们的沙箱里它要**再嵌套一层 namespace**：
+>
+> | namespace | `aio`（docker 容器） | `boxlite`（microVM） |
+> |---|---|---|
+> | user namespace | ❌ `Operation not permitted` | ✅ 可创建 |
+> | **mount namespace** | ❌ | ❌ **也被拒** |
+>
+> bwrap 需要 mount ns 做 bind mount ⇒ **两个 provider 都起不来，不存在"provider 不对称"**——这一条必须写明，否则很容易被误判成 boxlite 的能力缺口而去补一个 capability 位（违反 §2.5 的加位规则）。第一次真跑的表现极具迷惑性：**鉴权成功、模型真跑了 13,093 tokens，但所有文件操作被拦**，agent 回报 `bwrap: No permissions to create a new namespace`，最后只能说"我改不了文件"——既不是鉴权失败，也不报错退出。
+>
+> **为什么关掉它不削弱安全**（这是本条的关键论证，不是图省事）：真正的隔离边界是容器 / microVM 本身；而**平台自己的 in-sandbox 数据面 agent 就是一个无鉴权 root shell**——`POST /v1/shell/exec`，代码注释原文 *"the agent is an unauthenticated shell"*，正因如此它只绑 `127.0.0.1`（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」；实现见 `docker-container-backend.ts` 的 `PortBindings: { HostIp: '127.0.0.1' }`）——**终端功能本身就靠它**。也就是说容器内早已可任意执行，内层 bwrap **挡不住任何新东西**。反过来，要让 bwrap 跑起来只能给容器 `--cap-add SYS_ADMIN` / `seccomp=unconfined`：**为了一层冗余的内层，去削弱真正起作用的外层，方向是反的**。
+>
+> **实现形态 per-runtime，由 adapter 封装**：codex 用 `-s danger-full-access`（实测可行）或 `--dangerously-bypass-approvals-and-sandbox`（帮助原文：*"Intended solely for running in environments that are externally sandboxed"*——我们正是那个 external sandbox）。**claude 没有 bwrap**，走 permission/approval 模型（`--permission-mode` / `--dangerously-skip-permissions`，帮助原文 *"Recommended only for sandboxes with no internet access"*——它本来就假设自己跑在外部沙箱里）。**两者形态毫无共性 ⇒ 只能落在 `buildStartCommand` 里 per-runtime 封装，绝不抽成平台通用规则**（否则平台就要开始认识每个 CLI 的沙箱旗标，正是本节开篇"adapter 封装某个 agent CLI 的怪癖"要挡住的东西）。
+
+> **★3 无头任务必须有超时 + 强制 kill 兜底，不能指望 CLI 自己收敛（S5 技术验证，2026-08 实测）**
+>
+> 同一场景（**无凭证**起无头任务）两个 CLI 的表现完全不同：**codex 不会干净退出**——反复重试 `401 Unauthorized`（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** 并打印 "Not logged in"。
+>
+> 实测的触发条件（无凭证）本身会被 03 §8.2 决策表第 2 条挡在前面，但它暴露的是**通用性质**：codex 遇到持续性 API 错误会一直重连而不退出——**凭证运行中失效、网络中断、上游持续 5xx 都会走到同一条不退出的重连循环**。⇒ 平台的硬超时不是"以防万一"，而是**已知有 runtime 会挂在那里**：无头任务执行必须有超时 + 到点强制 kill（落点见 03 §8.3）。`buildStartCommand` 可以带上 CLI 自己的超时旗标作为第一道，但**平台侧的 kill 才是唯一可靠的那道**。
 
 > **实现补充（S4 后）**：adapter 另有一个**只读声明**字段 `credentialTtlMs?: Partial<Record<RuntimeAuthMethod, number>>`——"用某 method 拿到的凭证能活多久"。这是**厂商事实**（codex 的 access token ~1h、claude 的 setup-token ~1yr），必须由 adapter 声明：原先它以常量形式待在 application 层并按 **method** 分支，导致任何用 `oauth-device` 的第三方 runtime 都被安上 Codex 的 1 小时过期（真 bug）。未声明该 method ⇒ `expiresAt = null`（平台侧不设过期）。
 
@@ -423,7 +475,12 @@ interface ValidationResult {
 
 > 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
 
-镜像约定（写入用户文档）：必须含 bash；**建议含 tmux**——缺失时 `validate()` 产出 **warning（非 error）** 并在 `ResolvedImageSpec` 标记 `supportsTmux: false`，终端网关据此在 tmux re-attach 与 ring buffer 两方案间自动选择（文档 06 §6），无 tmux 镜像仍可正常使用；runtime CLI 可预装或由 install plan 现装；HOME 可写（凭证物化需要）。
+镜像约定（写入用户文档）：必须含 bash；**建议含 tmux**——缺失时 `validate()` 产出 **warning（非 error）** 并在 `ResolvedImageSpec` 标记 `supportsTmux: false`，终端网关据此在 tmux re-attach 与 ring buffer 两方案间自动选择（文档 06 §6），无 tmux 镜像仍可正常使用；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
+
+> **★ S5 技术验证对镜像约定的加严（2026-08 实测，数据见 §3 ★1）**
+>
+> - **"可预装或现装"这句话在真实量级下不对等，必须表态**：AIO 默认镜像 `agent-infra/sandbox:latest` 预装了 codex（`@openai/codex@0.139.0`）但**没有 claude-code**，现装 `npm i -g @anthropic-ai/claude-code` 实测 **753 秒（12.5 分钟）**；两个 CLI 都预装的对照镜像则是**零安装**。⇒ 镜像作者文档里写**强烈建议预装 `supportedRuntimes` 声明的每个 runtime**，并在 manifest 里如实声明——现装仍然能用，但要按分钟级预期而不是秒级。
+> - **HOME 路径不属于约定的一部分**：实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）。约定只要求 **HOME 可写**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。
 
 ## 8. Registry 注册机制（双通道）
 
@@ -574,7 +631,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 
 | id | 级别 | 要求 | 怎么判定 |
 |---|:--:|---|---|
-| RA-01 | MUST | 洁净环境 `isInstalled()` 返回 false；`install()` 之后返回 true | 在干净镜像里跑完整安装往返 |
+| RA-01 | MUST | 洁净环境 `isInstalled()` 返回 false；`install()` 之后返回 true。**判定必须走 `command -v` / PATH 查找，不得硬编码安装路径** | 在干净镜像里跑完整安装往返，**并在两个 provider 上各跑一次**——同一 runtime 在 aio（root，npm prefix `/opt/nodejs/22`）与 boxlite（uid 1000，npm prefix `/home/gem/.npm-global`）下装的位置不同（§2.1★），硬编码路径的实现会在 boxlite 上永远判"没装"并反复重装，而"洁净环境返回 false"这一条**照样通过**——所以必须把双 provider 往返写进判定，单侧跑绿不算数 |
 | RA-02 | MUST | `install()` 可重入：中途失败后重跑能收敛到已安装 | 注入一次失败后重跑，断言最终 `isInstalled()` 为 true |
 | RA-03 | MUST | `beginAuth()` 收到 `getAuthMethods()` 之外的 method 必须抛 `UNSUPPORTED_METHOD` | 传非法 method 断言 code |
 | **RA-04** | MUST | `parseOutput()` / 鉴权解析器对**录制的真实 CLI 输出 fixture** 产出预期结果 | 回放各 CLI 版本的 golden fixture；这就是 05 §6"CLI 升级改输出格式导致静默失效"风险的落地防线——CLI 一改输出，此条第一时间红。**每支持一个新 CLI 版本必须新增一份 fixture** |
@@ -622,6 +679,9 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | 事件流断连漏事件 | §6 重连补偿对账 |
 | **`aio` 上游镜像变更**（agent-infra 改入口/端口/预置 CLI） | ImageSpec `validate()` 校验入口约定 + 锁 digest（§7 IS-01）；testkit 在 CI 定期对最新镜像回归 |
 | **`boxlite` 相对年轻**，能力位可能随版本变动 | 能力位由实现在注册时**实测上报**而非硬编码；CAP-01 条款保证声明与行为一致，不一致启动即 fail-fast |
+| **runtime CLI 自带的内层沙箱在外层沙箱内起不来**（codex bwrap：mount ns 在 aio/boxlite 两侧都被拒 → 鉴权成功但文件操作全被拦，表现为"agent 说改不了文件"） | `buildStartCommand` per-runtime 关掉内层（§3 ★2）；**不为它给容器加 `SYS_ADMIN`/`seccomp=unconfined`**——那是拿真正起作用的外层去换一层冗余的内层 |
+| **runtime CLI 现装拖垮创建链路**（实测 12.5 分钟） | §7 加严为强烈建议预装；`getInstallPlan` 按（镜像, runtime）对判定并回填 `runtime_installations.status` 初值（13 §2.3.2），前端据此提示换镜像（§3 ★1） |
+| **平台侧硬编码沙箱内路径**（`/root`、npm prefix、CLI 安装位置）在另一 provider 上静默失效 | §2.1★ 的差异表是准入清单：凭证物化按 `$HOME` 展开、`isInstalled` 走 PATH；§10.3 RA-01 要求双 provider 各跑一次安装往返，单侧跑绿不算数 |
 | 契约发包带来的版本碎片（多个插件锁不同 major） | peerDependencies 让冲突在**安装期**暴露而非运行期；平台同时只支持一个 major |
 
 
