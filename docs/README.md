@@ -1,9 +1,10 @@
 # 云 Agent 管理平台 — 实现方案文档索引
 
 > 全部 **30 篇**编号文档已完成，可逐篇评审（00 + 01–18 + P19–P22 + 23–27 + 28 前后端各一份）；
-> 另有 **16 篇**逐页规格（`product/pages/` 与 `frontend/pages/` 各 8 篇）与 **2 份**决策存档。
+> 另有 **16 篇**逐页规格（`product/pages/` 与 `frontend/pages/` 各 8 篇）与 **3 份**决策存档。
 > 架构审计的裁决存档见 [AUDIT-DECISIONS.md](./AUDIT-DECISIONS.md)——**它与技术文档冲突时以它为准**；
-> 沙箱运行时的架构决策见 [SANDBOX-RUNTIME-DECISIONS.md](./SANDBOX-RUNTIME-DECISIONS.md)（S1 定基线的 ADR）。
+> 沙箱运行时的架构决策见 [SANDBOX-RUNTIME-DECISIONS.md](./SANDBOX-RUNTIME-DECISIONS.md)（S1 定基线的 ADR）；
+> Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5 开工前的 ADR，同样**与技术文档冲突时以它为准**）。
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
 > 目录已按归属切分，对应未来拆仓去向：`backend/` 整体归后端仓库，`frontend/` 整体归前端仓库，`shared/` 与 `00` 双仓各持一份（或放独立契约仓）。
 
@@ -14,6 +15,7 @@ docs/
 ├── README.md                # 本索引
 ├── AUDIT-DECISIONS.md       # 架构审计裁决存档（P0/P1/P2 处置，权威）
 ├── SANDBOX-RUNTIME-DECISIONS.md  # 沙箱运行时架构决策（S1 定基线 ADR：控制面/数据面分离 + provider 选型）
+├── TASK-LAUNCH-DECISIONS.md # Task 发起链路裁决存档（S5 开工前 6 条：initialPrompt 落库 / 启动即执行 / install 编排 / 无头范围 / 占位 auth.json / $HOME 展开）
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
@@ -99,6 +101,7 @@ docs/
 | 28 | [类型与领域类型详细设计（后端）](./backend/28-类型与领域类型详细设计.md) | 后端实际 TS 类型声明：branded ID / 聚合类型 / DB row，以及 wire↔domain↔row 三层映射 | ✅ 可评审 |
 | 28 | [前端类型详细设计](./frontend/28-前端类型详细设计.md) | 生成类型（`openapi.d.ts`）怎么消费 + store / query key / props / 纯函数的类型契约 | ✅ 可评审 |
 | ADR | [沙箱运行时架构决策](./SANDBOX-RUNTIME-DECISIONS.md) | S1 定基线：控制面 / 数据面分离（沙箱内 agent 暴露 fs/process/pty）与 provider 选型，据此回改 04/06/03/13/P19 | ✅ 已决策 |
+| ADR | [Task 发起链路决策存档](./TASK-LAUNCH-DECISIONS.md) | S5 开工前 6 条：`initialPrompt` 落库 / 「启动即执行」由 provision 触发 / install 编排与事务归属 / 无头 Task 出 S5 / 占位版 auth.json 的类型分家 / `$HOME` 展开点，据此回改 13/23/24/26/03/04/05/02/27/10/25/P20/P22 | ✅ 已决策 |
 
 **前端 `pages/` 逐页设计**（与产品页同号同名，F21-x，共 8 篇）：入口见 [前端页面设计总纲](./frontend/pages/README.md)。
 

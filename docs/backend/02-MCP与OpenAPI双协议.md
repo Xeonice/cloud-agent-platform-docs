@@ -92,7 +92,7 @@ export class SandboxMcpTools {
 |---|---|
 | `GET /api/sandboxes?projectId=&status=` | 列表；**按项目过滤**是产品主链路的默认形态（P20 §2.2）；响应含派生字段 `waitingInput`（取数经 terminal 的只读查询端口，审计 P1-12 / 06 §8.2） |
 | `GET /api/sandboxes/:id` | 详情 + 资源占用 + `waitingInput` |
-| `POST /api/sandboxes` | 创建，**202 + pending 记录**；body `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；进度经 WS `sandbox.status_changed` 推送。**`timeoutMinutes` 缺省规则（审计 P1-13）**：`headless=true` 且未传 → 服务端补 **120**；`headless=false` 且传了 → **400 `INVALID_ARGUMENT`**（交互式 Task 的兜底是 idle + 24h，不接受硬超时）。不这样定的话请求会一路撞到 DB 的 CHECK 上抛 500（13 §2.1 I-SBX-5）。**`require: { spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }`** 是能力前置条件（**刻意无 `watchEvents`**，04 §5）：要求的位而所选 provider 声明 `false` → **409 `UNSUPPORTED_CAPABILITY`**，校验在**解析项目/落库/进调度之前**（03 §3.1） |
+| `POST /api/sandboxes` | 创建，**202 + pending 记录**；body `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；进度经 WS `sandbox.status_changed` 推送。**`timeoutMinutes` 缺省规则（审计 P1-13）**：`headless=true` 且未传 → 服务端补 **120**；`headless=false` 且传了 → **400 `INVALID_ARGUMENT`**（交互式 Task 的兜底是 idle + 24h，不接受硬超时）。不这样定的话请求会一路撞到 DB 的 CHECK 上抛 500（13 §2.1 I-SBX-5）。**`require: { spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }`** 是能力前置条件（**刻意无 `watchEvents`**，04 §5）：要求的位而所选 provider 声明 `false` → **409 `UNSUPPORTED_CAPABILITY`**，校验在**解析项目/落库/进调度之前**（03 §3.1）。**`initialPrompt` 的处置（S5 裁决 D-14，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-1）**：① **落库** `sandboxes.initial_prompt`（13 §2.1.1）——它的消费点在 202 之后的 provision workflow，跨了请求边界就必须有存储；② T1 内同时按 P21-1 §9 从它**派生默认任务名**写入 `sandboxes.name`；③ **不进任何响应 DTO**（10 §7.3）。**它由 provision 的 `bootstrapAgentSession` 执行（03 §4.3 ⑤），不再依赖用户点开终端** |
 | **`GET /api/providers`** | **能力发现**：`ProviderDto[]`（扁平数组）`{ name, capabilities(6 位全量), isDefault }`。**registry 驱动**——第三方经 04 §8 注册后自动出现，本 controller 不改一行。前端据此渲染 provider 选项与按能力显隐控件。**不进 MCP**（§5.2 末段 / 27 §11.3） |
 | `POST /api/sandboxes/:id/{start,stop}` | 生命周期 |
 | **`DELETE /api/sandboxes/:id { keepVolume?: boolean }`** | 销毁；`keepVolume=true` 保留工作区卷并登记 `retained_volumes`（03 §7.7 / P20 §6）。**DELETE 带 body 不是所有客户端都友好**，因此同时接受 query 形式 `?keepVolume=true`，两者等价、query 优先 |
@@ -172,16 +172,24 @@ export class SandboxMcpTools {
 
 ### 5.2 MCP Tool 面
 
-| Tool | 对应 REST | 说明 |
-|---|---|---|
-| `list_sandboxes` | GET /sandboxes | 状态过滤；支持 `projectId` |
-| `create_sandbox` | POST /sandboxes | image + runtime 参数；`initialPrompt` **可选**（交互式会话的初始任务指令，映射 RuntimeTaskSpec.prompt，04 §3——agent CLI 启动即带指令开工）；`projectId` **可选**（缺省落到默认项目）；quota 为**可选**（缺省由平台自动分配——镜像 resource_defaults + 调度策略，03 §1；UI 不暴露此参数）；**`require` 可选**——与 REST 共用同一份 `CreateSandboxSchema`，因此该参数是**加字段即自动获得的，MCP 壳没写一行代码**（§3 zod 单源的直接结果；27 §11.1） |
-| `start_sandbox` / `stop_sandbox` / `destroy_sandbox` | POST /sandboxes/:id/{start,stop} · DELETE | 生命周期；**`destroy_sandbox` 带 `keepVolume?: boolean` 参数**（默认 **false**——MCP 是程序化消费方，默认不留下需要人工清理的卷；UI 侧的默认勾选保留是产品层的表单默认值，两者不冲突） |
-| `get_sandbox` | GET /sandboxes/:id | 详情 + 资源占用 |
-| `exec_in_sandbox` | POST /sandboxes/:id/exec | 非交互命令执行（交互式 TTY 走 WS，不进 MCP） |
-| `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | 无头模式跑 codex/claude code 任务 |
-| **`list_projects`** | GET /projects | 上层 agent 先看有哪些工作区（P20 §9.4） |
-| **`create_project`** | POST /projects | 异步 clone：tool **立即返回** `{ projectId, cloneStatus:'cloning' }`，调用方轮询 `list_projects` 或 `get_project` 直到 `ready`——MCP 无推送通道，不能让 tool 调用挂 30 分钟 |
+> **本表已按实际注册项对表（S5，2026-08）**：`落地` 列是**代码事实**（`@Tool()` 装饰器的实际注册），不是设计意图——此前本表与实际有双向漂移（表里有 5 个没注册的，实际注册的 3 个 project tool 表里没有）。**MCP tool 数目前仍是人工核对**（27 §12 已标 ⏳）。
+
+| Tool | 对应 REST | 落地 | 说明 |
+|---|---|:--:|---|
+| `list_sandboxes` | GET /sandboxes | ✅ | 状态过滤；支持 `projectId` |
+| `create_sandbox` | POST /sandboxes | ✅ | image + runtime 参数；`initialPrompt` **可选**（交互式会话的初始任务指令，映射 RuntimeTaskSpec.prompt，04 §3——**agent CLI 启动即带指令开工，S5 起由 provision 的 `bootstrapAgentSession` 保证，03 §4.3 ⑤**）；`projectId` **可选**（缺省落到默认项目）；quota 为**可选**（缺省由平台自动分配——镜像 resource_defaults + 调度策略，03 §1；UI 不暴露此参数）；**`require` 可选**——与 REST 共用同一份 `CreateSandboxSchema`，因此该参数是**加字段即自动获得的，MCP 壳没写一行代码**（§3 zod 单源的直接结果；27 §11.1） |
+| `destroy_sandbox` | DELETE /sandboxes/:id | ✅ | 带 `keepVolume?: boolean` 参数（默认 **false**——MCP 是程序化消费方，默认不留下需要人工清理的卷；UI 侧的默认勾选保留是产品层的表单默认值，两者不冲突） |
+| `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ⏳ | 生命周期；REST 已有，MCP 壳待补 |
+| `get_sandbox` | GET /sandboxes/:id | ⏳ | 详情 + 资源占用 |
+| `exec_in_sandbox` | POST /sandboxes/:id/exec | ⏳ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP） |
+| `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | ⏳ **不进 S5** | 无头模式跑 codex/claude code 任务。**整块归后续切片**（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-4）：缺 command handler、**输出传输未定案**（全平台只有 1 个 SSE 端点且是诊断，7 条 WS 事件里没有任务输出）、**日志存储只有 automation 口径**（`automation_runs.log_path`，03 §8.6）⇒ 非自动化的无头 Task 没有 run 记录、无 logPath、无查询端点、无 exit 落点。**注意区分**：S5 的 live 技术验证跑的正是无头路径（`codex exec`），那证明的是**机制成立**，不等于产品化的无头 Task 已就绪 |
+| **`list_projects`** | GET /projects | ✅ | 上层 agent 先看有哪些工作区（P20 §9.4） |
+| **`create_project`** | POST /projects | ✅ | 异步 clone：tool **立即返回** `{ projectId, cloneStatus:'cloning' }`，调用方轮询 `list_projects` 或 `get_project` 直到 `ready`——MCP 无推送通道，不能让 tool 调用挂 30 分钟 |
+| **`get_project`** | GET /projects/:id | ✅ | **本表此前漏收**：`create_project` 之后轮询 `cloneStatus` 就靠它 |
+| **`retry_clone`** | POST /projects/:id/retry-clone | ✅ | **本表此前漏收** |
+| **`delete_project`** | DELETE /projects/:id | ✅ | **本表此前漏收** |
+
+**合计：设计 13 个，已注册 8 个**（`create_sandbox` · `list_sandboxes` · `destroy_sandbox` · `create_project` · `list_projects` · `get_project` · `retry_clone` · `delete_project`）。27 §1.3 / §12 的计数与本表同源。
 
 镜像管理、凭证配置、自动化规则、系统初始化**不进 MCP 面**：它们是管理员的一次性配置动作，交给 LLM 调用方既无价值也扩大攻击面（凭证类接口尤甚）。**`GET /api/providers`（能力发现）同样不进 MCP，但理由是另一条**：它不涉及安全，而是**UI 管道**——读者是要渲染 provider 单选框的前端；agent 调用方拿到这张表没有可做的决策（不传 `provider` 即用默认档，能力不匹配后端以 409 明确拒绝），为一个无决策的只读列表多开 tool 只是徒增 MCP 面（27 §2 / §11.3）。**Git 凭证端点族（`GET /api/credentials?kind=git`、`POST /api/credentials/git`、`POST /api/credentials/git/test`、`DELETE /api/credentials/git/:id`）明确仅 REST、不进 MCP**（I5；27 §11.3 差异清单同源）。
 
@@ -228,6 +236,9 @@ data: {"okCount":5,"failCount":1,"totalMs":7310}
 | `CLONE_FAILED_PERMISSION` | 项目 clone（03 §7.5） | **403** | tool 错误 + code | ❌ | "克隆失败：无权访问该仓库" → [配置 Git 凭证] |
 | `DISK_INSUFFICIENT` | clone 前预检 / 工作区准备（03 §7.5–7.6） | **507**（Insufficient Storage） | tool 错误 + code | ❌ | "磁盘空间不足" → [运行诊断] |
 | `WORKSPACE_PREPARE_FAILED` | `preparing-workspace` 阶段（03 §7.6） | **500** | tool 错误 + code | ✅ | "准备工作区失败" → [重试] |
+| **`INSTALL_FAILED`** | `starting` 段装 runtime CLI（03 §4.3 ③） | **500** | tool 错误 + code | ✅ | "运行时 CLI 安装失败" → [重试] / [换一张预装该 CLI 的镜像]（04 §7） |
+
+> **`INSTALL_FAILED` 的主要露出面不是 HTTP**（S5 补，TASK-LAUNCH-DECISIONS T-3）：装 CLI 发生在 202 之后的 provision workflow，用户早已拿到 202，**没有同步响应可承载它**。实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`；表里那行 500 是为将来的同步入口（如重试安装端点）与 §6.2 的兜底纪律留的。**装 CLI 期间的进度**走 WS `runtime.install_progress`（10 §3.1）——实测现装 claude-code 可达 12.5 分钟（04 §3 ★1），没有它前端只能干等。
 
 映射纪律（三条，实现时按此写单测）：
 

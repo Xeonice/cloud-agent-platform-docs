@@ -1,6 +1,7 @@
 # 06 - TTY 终端链路设计（后端半段）
 
 > 状态：✅ 可评审（基于 2026-08 调研结论；§8 按产品定稿 P20 §9.8 补充 waiting-input 检测）
+> **⚠️ S5 裁决改写（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2 / 裁决 D-15）**：**agent 会话不再由终端网关创建**——它在 provision workflow 的 `starting` 段由 `bootstrapAgentSession` 起好（03 §4.3 ⑤），网关**一律 attach**。改写落点：§3（初始任务指令）· §6（两档方案从「断线重连方案」升格为「会话持有方式」）· §9。
 > 关联文档：[08 前端 xterm 集成](../frontend/08-前端xterm集成.md) · [04 Contract 体系](./04-Contract与Registry扩展体系.md) · [10 WS 协议类型](../shared/10-接口契约与类型共享.md) · [03 §4.1/§4.2 判定口径定案](./03-Sandbox调度中心.md)
 
 ## 1. 链路总览
@@ -8,8 +9,10 @@
 ```
 前端 xterm ◀─WS /terminal─▶ TerminalGateway ◀─ProcessStream─▶ provider.spawn({tty:true}) ─▶ sandbox 实例
                                 (socket.io)      (04 §2.4)        aio / boxlite                  │
-                                                                                            tmux session
+                                                                                       tmux session（A 档）
                                                                                               └─ codex/claude CLI
+                                                                （会话由 provision 的 bootstrapAgentSession 起，03 §4.3 ⑤；
+                                                                 无 tmux 时降级为网关自持 ProcessStream —— B 档，§6）
 ```
 
 ## 2. 网关选型
@@ -23,7 +26,10 @@
 终端会话即 `SandboxProvider.spawn({ tty: true, cols, rows, reuse? })` 返回的 **`ProcessStream`**（定义见文档 04 §2.4，本文不重复声明）：
 
 - `ref` 落库 `terminal_sessions.exec_id`；`reuse` 传同一 ref 复用既有会话（断线重连，§6）。
-- **初始任务指令**：Task 携带 `initialPrompt` 时（产品 P20 §3.2），首个会话的 `cmd` 由 adapter 按 `RuntimeTaskSpec.prompt` 组装为"带指令启动 CLI"（`buildStartCommand` 的交互式用法：headless=false）；未携带则用 `buildAttachCommand()` 纯净进入。
+- **初始任务指令：⚠️ 已挪出网关（S5 裁决 D-15，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**。此前本条写的是「首个会话的 `cmd` 由 adapter 按 `RuntimeTaskSpec.prompt` 组装为带指令启动 CLI」——**该逻辑现在属于 provision workflow 的 `bootstrapAgentSession`**（03 §4.3 ⑤）：agent 会话在 `starting` 段就已经起好并开始执行，与用户有没有点开终端无关。
+  - **网关侧的新规则：一律 attach 已存在的 agent 会话**（A 档 `tmux attach`，B 档复用网关自持的 `ProcessStream`，§6），**不判断「首次」、不调 `buildStartCommand`**。
+  - **为什么必须挪**：绑在 `openSession` 上时，① 用户创建完关掉浏览器 ⇒ 指令永不执行；② **MCP `create_sandbox` 根本没有终端 ⇒ 必不执行**，与 02 §5.2 的说明正面矛盾；③ P20 §0「启动时即执行」是产品承诺。
+  - **兜底**：会话意外不存在时（如无 tmux 镜像下平台重启，§6），网关按 `buildAttachCommand()` 起一个干净会话并记 warning——**不重放 `initialPrompt`**（消费标记见 23 I-SBX-10）。
 - 网关拿到的是**已解复用的干净字节流**——流头、多路复用、tty 下 stderr 合并全部由 provider 内部消化（04 §2.2 的 spawn 语义），网关不做任何解码。
 
 实现对照（04 §2.2）：
@@ -49,14 +55,20 @@ node-pty 仅在未来"本地进程 provider"场景才需要（node-gyp 原生编
 
 ## 6. 断线重连与 scrollback（关键设计）
 
-**首选方案：tmux re-attach**
+> **⚠️ 本节的适用面已扩大（S5 裁决 D-15）**：两档方案原先只服务「断线重连」；现在它们**同时是 agent 会话的持有方式**——会话由 `bootstrapAgentSession` 在 `starting` 段建立（03 §4.3 ⑤），先于任何 WS 连接存在。档位**由沙箱内 `command -v tmux` 实测决定**，不由 `ResolvedImageSpec.supportsTmux` 决定（方法论同 04 §2.1★：运行时事实一律实测；且 `supportsTmux` 只在 04 §7 的散文里，`ResolvedImageSpec` 类型声明里并没有这个字段）。
 
-- sandbox 内 CLI 跑在 `tmux` session 中（镜像约定必须含 tmux，见文档 04 §7）；网关始终 attach 该 session。
-- WS 断开 = detach；重连 = re-attach 同一 tmux session。**天然保活 + 恢复现场**，无需自建缓冲，CLI 进程完全不受前端断连影响。
+**A 档（首选）：tmux**
 
-**备选方案（镜像无 tmux 时降级）：网关侧 ring buffer**
+- sandbox 内 CLI 跑在 `tmux` session（`platform-agent`）中（镜像约定**建议**含 tmux，见文档 04 §7——**是建议不是必须**，这正是要有 B 档的原因）；会话由**沙箱内的 tmux server 持有**，平台侧不需要保持任何连接。
+- 网关始终 attach 该 session。WS 断开 = detach；重连 = re-attach。**天然保活 + 恢复现场**，无需自建缓冲，CLI 进程完全不受前端断连、也不受平台重启影响。
 
-- 网关维护最近 N KB 输出的 ring buffer + grace timer（如 60s）。
+**B 档（镜像无 tmux 时降级）：网关侧持有 pty + ring buffer**
+
+- **归属语义（S5 改动）**：`ProcessStream` 由**网关持有**，生命周期跟随 sandbox 而不是跟随某次 WS 连接——**与断线重连的唯一区别是没有 grace timer**（它不是「等前端回来」的临时保活，而是平台自持的会话）。
+- **两条必须写明的代价**（已同步进 04 §7 的镜像约定，给镜像作者看）：
+  1. 首次 attach 前的输出受 ring buffer 上限截断——`bootstrapAgentSession` 起的 agent 可能已经刷了几万行，用户点开终端只看得到最后 N KB；
+  2. **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**（A 档不受影响）。网关重启后按 §3 的兜底起干净会话并记 warning。
+- 网关维护最近 N KB 输出的 ring buffer + grace timer（如 60s，**仅用于断线重连场景**）。
 - 断线后延迟销毁 pty；前端凭 `socketSessionKey`（经 WS 连接 URL query 携带 `?socketSessionKey=`，不占用帧协议）在窗口期内重连 → 复用 pty + 补发缓冲（对应前端的 replay 请求，文档 08 §3）。
 - **`socketSessionKey` 由服务端生成（审计 P2-9）**：开会话时服务端产出 128 bit 随机串随首帧下发，前端只负责持久化并在重连时带回。**不能让前端自选**——它是重连凭据，前端自选意味着猜到或拿到别人的 key 就能 attach 到别人的终端（本平台没有用户体系，这是唯一的会话归属凭据）。同时校验：重连请求携带的 key 必须属于**未 closed** 的会话，且该 sandbox 未销毁。
 - **命名边界（审计 P1-5 的延伸裁决）**：**DB 列是 `socket_session_key`（snake），对外的 URL query 参数与 TS 字段是 `socketSessionKey`（camel）**，映射在 gateway 层完成——与全局约定一致（对外一律 camelCase，DB 一律 snake_case，02 §5.1）。看到两种写法**不是漏改**：query 参数属对外契约、列名属存储。
@@ -108,7 +120,8 @@ interface WaitingInputDetector {
 | 风险 | 缓解 |
 |---|---|
 | tty 模式误用 demux 导致输出乱码 | 已收敛为 provider 实现内部注意事项（§3）；testkit 的 spawn 条款覆盖 |
-| tmux 依赖对镜像的侵入 | ImageSpec validate 产 warning + `supportsTmux` 标记（04 §7）；无 tmux 自动降级 ring buffer |
+| tmux 依赖对镜像的侵入 | ImageSpec validate 产 warning + `supportsTmux` 标记（04 §7）；无 tmux 自动降级 B 档（§6）。**注册期的 `supportsTmux` 只用于出 warning，运行期档位一律靠沙箱内 `command -v tmux` 实测**（04 §2.1★ 方法论） |
+| **无 tmux 镜像下平台重启中断 agent 会话**（§6 B 档代价②，S5 新增） | 已在 04 §7 的镜像约定里写明，并把「强烈建议含 tmux」的理由从「恢复现场」扩展到「会话保活」；网关重启后按 §3 兜底起干净会话并记 warning，**不重放 `initialPrompt`**（23 I-SBX-10） |
 | node-pty 原生编译坑 | 两个内建实现不依赖 node-pty；仅未来本地进程 provider 需要 |
 | WS 网关成为单点瓶颈 | 单机可接受；多节点时网关随 RemoteSandboxProvider 代理化（文档 11） |
 | **提示符启发式误报/漏报**（§8） | 只驱动展示、不驱动任何决策（03 §4.1 红线）；阈值与正则集可配；`tailBuffer` 上限 4KB 防高频输出撑内存 |

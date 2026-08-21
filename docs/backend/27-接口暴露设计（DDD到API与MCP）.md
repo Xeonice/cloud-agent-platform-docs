@@ -46,9 +46,9 @@
 | 面 | 数量 | 权威清单 |
 |---|---|---|
 | REST 端点 | **57**（+1：`GET /api/providers` 能力发现；+2 实现期补录：`POST /api/projects/:id/cancel-clone`、`POST /api/access/unlock`；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
-| MCP tools | **10** | 02 §5.2 |
+| MCP tools | **13 设计 / 8 已注册**（⏳ 5 个设计中未注册：`start_sandbox` · `stop_sandbox` · `get_sandbox` · `exec_in_sandbox` · `run_agent_task`；`run_agent_task` 的不进 S5 是显式裁决，见 §2） | 02 §5.2 |
 | WS 通道 | **2**（`/events`、`/terminal`） | 10 §6.7 |
-| WS 事件类型 | **6** | 10 §3 |
+| WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
 | SSE 端点 | **1**（`POST /api/system/diagnose`） | 02 §5.3 |
 
 ### 1.4 能力表的读法（§2–§9 通用）
@@ -70,21 +70,29 @@
 |---|---|---|---|---|---|---|---|---|
 | `listSandboxes` | `GET /api/sandboxes?projectId=&status=` | `list_sandboxes` | 按项目过滤是主链路默认形态 | `SandboxDto[]`，含派生 `waitingInput` | `list-sandboxes` query | — | — | — |
 | `getSandbox` | `GET /api/sandboxes/:id` | `get_sandbox` | | `SandboxDto` + 资源占用 | `get-sandbox` query | — | `NOT_FOUND` | — |
-| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed` |
+| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、**`INSTALL_FAILED`**(500，装 CLI 失败，04 §4 / 03 §4.3 ③)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed`（+ `starting` 期间 0..n 条 **`runtime.install_progress`**） |
 | `startSandbox` | `POST /api/sandboxes/:id/start` | `start_sandbox` | | `SandboxDto` | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace） | `INVALID_STATE`(409)、`RESOURCE_EXHAUSTED`(429) | `sandbox.status_changed` |
 | `stopSandbox` | `POST /api/sandboxes/:id/stop` | `stop_sandbox` | | `SandboxDto` | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409) | `sandbox.status_changed` |
 | `destroySandbox` | `DELETE /api/sandboxes/:id` | `destroy_sandbox` | **`{ keepVolume?: boolean }`**（body 或 `?keepVolume=`，query 优先）。**默认值两面不同**：REST 由前端表单传（UI 默认勾选保留）；**MCP 默认 `false`** | 204 | `destroy-sandbox` command | I-SBX-4、I-RV-1/3 | `INVALID_STATE`(409) | `sandbox.status_changed` → `sandbox.removed` |
 | `execInSandbox` | `POST /api/sandboxes/:id/exec` | `exec_in_sandbox` | 非交互命令；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }` | — | I-SBX-3 | `INVALID_STATE`(409)、`TIMEOUT`(504) | — |
-| `runAgentTask` | `POST /api/sandboxes/:id/runtimes/:rt/tasks` | `run_agent_task` | `RuntimeTaskSpec`（04 §3） | 流式 `RuntimeEvent` 或结果 | — | I-SBX-5 | `INVALID_STATE`(409)、`AUTH_REJECTED` | — |
+| `runAgentTask` **⏳ 不进 S5** | `POST /api/sandboxes/:id/runtimes/:rt/tasks` | `run_agent_task`（**未注册**） | `RuntimeTaskSpec`（04 §3） | 流式 `RuntimeEvent` 或结果 | —（**无 handler**） | I-SBX-5 | `INVALID_STATE`(409)、`AUTH_REJECTED` | —（**输出传输未定案**） |
 | `listProviders`（能力发现） | `GET /api/providers` → **200** | **不进 MCP**（理由见下方引注） | — | `ProviderDto[]`（**扁平数组**）：`{ name, capabilities(6 位全量), isDefault }` | —（`SandboxApplicationService.listProviders()` 直读 provider registry，无 command/query handler、无持久化） | — | —（只读；registry 为空时返回 `[]` 而非 404） | — |
 
-**前端要知道的五件事**：
+**前端要知道的七件事**：
 
 1. **创建是异步的**：`POST` 返回 202 与一条 `pending` 记录，**真正的进度全在 WS**。技术状态序列是 `pending→scheduling→preparing-workspace→creating→starting→running`，而产品进度卡是四格「初始化 / 拉取镜像 / 准备工作区 / 启动实例」——**两者顺序不同是刻意的**，映射关系：`preparing-workspace`→「准备工作区」、`creating`→「拉取镜像」（03 §4.0）。
 2. **`waitingInput` 是派生字段**：来自网关内存态（经 terminal 的只读查询端口，06 §8.2），**只驱动展示、不改主状态**；网关重启后会短暂回落 `false`，这是可接受的（03 §4.1 红线）。
 3. **资源/配额对用户完全不可见**（P22 §4.6）：`quota` 只为程序化消费方保留，UI 不要暴露。
 4. **provider 选项与默认档一律来自 `GET /api/providers`，前端不得枚举闭集**：响应是扁平数组，默认档是数组里 `isDefault` 为 true 的那一项（**没有顶层 default 字段**）。第三方 provider 经 04 §8 注册后自动出现在该端点、进而自动出现在 UI，**前端零改动**。`capabilities` 6 位全量下发，用于按能力显隐控件（无 `pauseResume` 就不渲染「暂停」）。前端消费形态（query key / staleTime / 加载失败空三态）见前端 15 §2.1–§2.2 与 F21-2 §4.1。
-5. **`require` 的失败是 409 而非创建失败**：能力不匹配在 **application 层最前面**就被拒（早于项目解析、早于落库、早于进调度队列，03 §3），因此**拿不到 sandbox id、列表里不会留下 `failed` 记录**，前端应就地提示改选 provider，而不是走"创建失败重试"那条路。另有一条**无条件**规则不由 `require` 表达：所选 provider `spawnTty=false` 一律拒绝——本平台每个 agent runtime 都要 TTY（04 §2.5）。`watchEvents` **刻意不可 require**：push/poll 对调用方完全封装，要求它没有可观测意义（04 §5）。
+5. **`initialPrompt` 后端落库、但不回显**（S5 裁决 D-14，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-1）：它落 `sandboxes.initial_prompt`（13 §2.1.1，跨 T1 → provision 边界必须有存储），但**不进 `SandboxDto`**（10 §7.3 已写明理由——主要是 MCP 面的暴露）。**前端需要的默认任务名由后端算好放在 `SandboxDto.name` 里**（P21-1 §9 规则），前端刷新后不必自己重算，也不需要留着 prompt。前端"任务指令不落 persist"的红线（15 §3.5）不受影响。
+6. **「启动时即执行」已由后端保证，不再依赖前端点开终端**（裁决 D-15，03 §4.3 ⑤）：agent 会话在 `starting` 段就起好并开始跑；前端打开终端时**看到的是已在执行中的会话**（可能已经刷了一屏输出）。**MCP `create_sandbox` 同理**——它没有终端，但指令照样执行。相应地，`starting` 状态的停留时间可能很长（装 CLI 实测可达 12.5 分钟），前端应消费 `runtime.install_progress`（§10.8）给出子文案，而不是把长时间的 `starting` 当成卡死。
+7. **`require` 的失败是 409 而非创建失败**：能力不匹配在 **application 层最前面**就被拒（早于项目解析、早于落库、早于进调度队列，03 §3），因此**拿不到 sandbox id、列表里不会留下 `failed` 记录**，前端应就地提示改选 provider，而不是走"创建失败重试"那条路。另有一条**无条件**规则不由 `require` 表达：所选 provider `spawnTty=false` 一律拒绝——本平台每个 agent runtime 都要 TTY（04 §2.5）。`watchEvents` **刻意不可 require**：push/poll 对调用方完全封装，要求它没有可观测意义（04 §5）。
+
+> **无头 Task 的 S5 边界（TASK-LAUNCH-DECISIONS T-4）**：`runAgentTask` 那一行**整块不进 S5**——它缺 command handler；**输出传输未定案**（全平台只有 1 个 SSE 端点且是诊断，7 条 WS 事件里没有任务输出）；**日志存储只有 automation 口径**（`automation_runs.log_path`，03 §8.6）⇒ 非自动化的无头 Task 没有 run 记录、没有 `logPath`、没有查询端点、没有 exit 落点；MCP 侧 `run_agent_task` **未注册**（02 §5.2）。把它做对 = 把日志存储从 automation 口径**上提为 Task 口径**，是一整块新设计。
+>
+> **必须与另一件事分清**：**S5 的 live 技术验证跑的正是无头路径（`codex exec`）**——它证明的是**机制成立**（CLI 装得上、凭证注得进、内层 bwrap 关得掉、agent 真能改文件、不收敛的进程杀得死），这些结论已定、不需要重验；但**产品化的无头 Task**（MCP `run_agent_task` + 产物回传 + 日志）是后续切片。相关结论的落点标注见 04 §3 ★3 与 03 §8.3 / §8.6。
+>
+> **顺带一个边界**：`headless=true` 且带 `initialPrompt` 的创建请求**当前接受但不起 agent**（`bootstrapAgentSession` 只对 `headless=false` 执行，03 §4.3 ⑤）。**刻意不加 400**——自动化 v1.1 创建的正是这种 Task（03 §8.2 决策表第 4 条），提前拒绝会把 v1.1 的设计路径堵死。
 
 > **`GET /api/providers` 为什么不进 MCP**（判据见 §1.2）：**能力发现是 UI 管道**——它的读者是"要渲染一个 provider 单选框"的前端。agent 调用方拿到这张表**没有可做的决策**：`create_sandbox` 的 `provider` 缺省即用默认档，能力不匹配后端会以 409 明确拒绝（上一条），所以 agent 既不需要先查一遍再挑，也不需要靠它自检。为一个无决策的只读列表多开一个 tool，只是徒增 MCP 面。**注意 §9 平台面另有一个同名能力 `listProviders`（`GET /api/system/providers`，运维看板，尚未落地）——两者不是一回事**，本行是 sandbox 上下文的 `SandboxApplicationService.listProviders()`。
 
@@ -198,7 +206,7 @@
 |---|---|---|---|---|---|---|---|
 | 建立/恢复终端会话 | `WS /terminal?socketSessionKey=` | **不进 MCP** | `socketSessionKey` **由服务端生成**（首次连接后下发），前端只负责存回带 | `PtyServerFrame`：`data`(base64) / `exit` / `pong` | I-TRM-1/3 | 握手失败（口令未通过）；key 不属未 closed 会话 → 拒绝 | — |
 | 输入 / resize / 心跳 | 同上 | — | `PtyClientFrame`：`input` / `resize{cols,rows}` / `ping` | — | I-TRM-2（cols/rows ≥ 1） | — | `sandbox.waiting_input`（翻转时） |
-| 订阅全局事件 | `WS /events` | **不进 MCP** | — | `SandboxWsEvent`（6 种，10 §3） | — | — | 见 §10.3 |
+| 订阅全局事件 | `WS /events` | **不进 MCP** | — | `SandboxWsEvent`（**7** 种，10 §3） | — | — | 见 §10.3 |
 
 **前端要知道的三件事**：
 
@@ -344,7 +352,7 @@ Step2 确认：
 访问口令：PUT /api/system/access-passcode { action } → 明文只回显一次，务必提示用户立即保存
 ```
 
-### 10.8 WS 事件 → 前端动作对照（6 种，全量）
+### 10.8 WS 事件 → 前端动作对照（7 种，全量）
 
 | 事件 | 前端动作 | 可丢失？ |
 |---|---|---|
@@ -354,6 +362,7 @@ Step2 确认：
 | `sandbox.waiting_input` | 切 🔵 等待输入 图标；**只展示不改主状态** | **是**（有 REST `waitingInput` 兜底） |
 | `project.clone_progress` | 创建弹层进度态 / slow 提示 / failed 分支 | **是**（`cloneStatus` 兜底） |
 | `runtime-auth.status_changed` | invalidate `['runtime-auth']` + 过期横幅 | 否 |
+| **`runtime.install_progress`** | 进度卡「启动实例」格子下补子文案（「正在安装 claude-code…」）；`failed` 不单独处置，紧随的 `sandbox.status_changed → failed` 才是权威 | 否（进 Outbox——漏一帧会让子文案永久停在旧值） |
 
 ---
 
@@ -413,9 +422,9 @@ Step2 确认：
 |---|---|---|---|
 | REST 端点（不含 v1.5 占位） | 57 | 57 | 0 |
 | REST v1.5 占位 | 2 | 2（§9 标注） | 0 |
-| MCP tools | 10 | 10 | 0 |
+| MCP tools | 13 设计 / **8 已注册** | 13 | 0（⏳ 5 个设计中未注册，§1.3 列名） |
 | WS 通道 | 2 | 2（§7） | 0 |
-| WS 事件类型 | 6 | 6（§10.8 全量表） | 0 |
+| WS 事件类型 | 7 | 7（§10.8 全量表） | 0 |
 | SSE 端点 | 1 | 1（§9） | 0 |
 
 **"REST 端点"这一行现在是机器核对的**：`pnpm docs:check` 的 **A4** 把本文 §2–§9 表格里的路径集合与 `10 §6` 的路径集合做全等比较，任一侧多出一条就红并列出差集（09 §2.4）。**上表其余几行（MCP tools / WS 通道 / WS 事件 / SSE）仍是人工计数**（⏳，见 09 §2.4）。

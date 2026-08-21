@@ -313,7 +313,11 @@ interface RuntimeAdapter {
   // 纯函数构造凭证形态（credentialFiles / env），无需任何宿主
   createCredentialFromSecret?(method: 'api-key' | 'access-token-paste',
                               secret: string): Promise<RuntimeCredential>;
-  injectCredential(cred: RuntimeCredential, exec: SandboxExecFn): Promise<void>;
+  // ★ S5 裁决 D-18（TASK-LAUNCH-DECISIONS T-5）：注入路径的入参类型【没有 authFile 字段】。
+  //   InjectableRuntimeCredential = RuntimeCredential 去掉 authFile。真 refresh_token 在类型层面
+  //   就到不了这里；带 authFile 的 RefreshableRuntimeCredential 只交给 05 §5.1 的刷新扫描器。
+  //   （契约层的类型拆分属下一步改动，本文先固化裁决。）
+  injectCredential(cred: InjectableRuntimeCredential, exec: SandboxExecFn): Promise<void>;
 
   // 运行
   buildStartCommand(task: RuntimeTaskSpec): SandboxCommand;
@@ -331,8 +335,8 @@ interface RuntimeAdapter {
 | `beginAuth` | 在容器内起交互式登录命令，从**增量 pty 输出**里正则捕获 URL / device-code，交前端展示 | `POST .../auth/begin`（05 §3） | 脆弱点：CLI 改输出格式即失效 → golden fixture 兜底（§10 RA-04） |
 | `completeAuth` | 把用户贴回来的 code 写进 pty stdin（或持续读输出等登录完成），产出可入库的凭证 | `POST .../auth/complete` | 返回的 `credentialFiles.content` 是明文，**只在内存流转**，落库前必经 Vault 加密 |
 | `createCredentialFromSecret`（可选） | 把用户直接提交的 API key / access token 构造成可入库凭证（注入形态由 adapter 决定：env 变量或 config 文件） | `POST /api/runtimes/:rt/credentials/secret`（05 §3.1） | **不需要 sandbox 宿主**；可含轻量格式校验；同样只在内存流转、Vault 加密落库 |
-| `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | 创建带 runtime 的 sandbox 时（05 §4 materialize） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态见 05 §4 / §1★★——本表刻意不复述优先级**（此处原先那份"access-token-only（stdin）> `0600` 文件 >（禁用）整份 env"**已被 05 §1★★ 的 S5 实测推翻**：stdin 档版本敏感、已降为可选，且在当前 exec 通道上还会被静默丢弃（§2.3★）。优先级只在 05 §4 存一份，本处只留指针——同一条规则两处各存一份正是这次自相矛盾的成因）。不变的硬红线：**绝不 `CODEX_AUTH_JSON` env 注入整份含真 refresh_token 的 auth.json**（P0-3，05 §4/§7 #3，adapter 契约固化） |
-| `buildStartCommand` | 无头任务模式的命令拼装（MCP `run_agent_task`，02 §5） | 起任务时 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
+| `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | **provision workflow `starting` 段的第 ④ 步**（03 §4.3）——**必须排在 `provider.start()` 之后**：`exec` 由 `spawn({tty:false})` 派生（§2.3），实例没跑起来根本没有 `exec`（此前 24 §1 / 26 §1 的顺序是错的，S5 已更正） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态见 05 §4 / §1★★——本表刻意不复述优先级**（此处原先那份"access-token-only（stdin）> `0600` 文件 >（禁用）整份 env"**已被 05 §1★★ 的 S5 实测推翻**：stdin 档版本敏感、已降为可选，且在当前 exec 通道上还会被静默丢弃（§2.3★）。优先级只在 05 §4 存一份，本处只留指针——同一条规则两处各存一份正是这次自相矛盾的成因）。不变的硬红线：**绝不 `CODEX_AUTH_JSON` env 注入整份含真 refresh_token 的 auth.json**（P0-3，05 §4/§7 #3，adapter 契约固化） |
+| `buildStartCommand` | **两种用法共用一个方法**：① **交互式**（`headless:false`，S5 主路径）——provision 的 `bootstrapAgentSession` 用它把 `initialPrompt` 拼成"带指令启动 CLI"（03 §4.3 ⑤）；② **无头**（`headless:true`，MCP `run_agent_task`，02 §5）——**产品化不进 S5**（TASK-LAUNCH-DECISIONS T-4） | ① provision `starting` 段第 ⑤ 步；② 后续切片 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
 | `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
 | `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时 | 不实现则平台只透传原始字节 |
 
@@ -367,6 +371,8 @@ interface RuntimeAdapter {
 > **实现形态 per-runtime，由 adapter 封装**：codex 用 `-s danger-full-access`（实测可行）或 `--dangerously-bypass-approvals-and-sandbox`（帮助原文：*"Intended solely for running in environments that are externally sandboxed"*——我们正是那个 external sandbox）。**claude 没有 bwrap**，走 permission/approval 模型（`--permission-mode` / `--dangerously-skip-permissions`，帮助原文 *"Recommended only for sandboxes with no internet access"*——它本来就假设自己跑在外部沙箱里）。**两者形态毫无共性 ⇒ 只能落在 `buildStartCommand` 里 per-runtime 封装，绝不抽成平台通用规则**（否则平台就要开始认识每个 CLI 的沙箱旗标，正是本节开篇"adapter 封装某个 agent CLI 的怪癖"要挡住的东西）。
 
 > **★3 无头任务必须有超时 + 强制 kill 兜底，不能指望 CLI 自己收敛（S5 技术验证，2026-08 实测）**
+>
+> **落点（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-4）：本条结论已定、不需要重验，但落点在 S5 之后的切片**——无头 Task 整块不进 S5（缺 command handler、缺输出传输定案、日志存储只有 automation 口径）。**S5 的 live 技术验证跑的正是无头路径（`codex exec`），它证明的是机制成立，不等于产品化的无头 Task 已经就绪。** S5 内的交互式 Task 不依赖本条：它的兜底是 idle 回收 + 硬超时 24h（P20 §0）。
 >
 > 同一场景（**无凭证**起无头任务）两个 CLI 的表现完全不同：**codex 不会干净退出**——反复重试 `401 Unauthorized`（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** 并打印 "Not logged in"。
 >
@@ -405,8 +411,15 @@ interface RuntimeCredential {
   maskedIdentifier?: string;
   issuedAt: string;
   expiresAt?: string;
+  // ★ S5 裁决 D-19（TASK-LAUNCH-DECISIONS T-6）：containerPath 是【~/ 相对形态】（如 '~/.codex/auth.json'），
+  //   【不是绝对路径】—— prepareRuntimeCredential(runtimeId) 的签名里根本没有 sandbox，构造这份凭证时
+  //   不知道要注进哪个沙箱、更不知道它的 $HOME；同一份凭证本就要能注入不同沙箱。$HOME 只在
+  //   injectCredential(cred, exec) 内部靠 exec 实测展开（testkit RA-06 已同步改判据）。
   credentialFiles: Array<{ containerPath: string; content: string; mode?: string }>;
   // content 明文只在内存流转，落库前必须经 CredentialVault 加密（文档 05/13）
+  // ★ codex 的 auth.json 走【出生时脱敏】：completeAuth / parseRefreshedAuth 产出凭证时就同时给出
+  //   ① 脱敏版（refresh_token 值 = shared-kernel 占位常量，字段保留）落 credentialFiles，
+  //   ② 完整版落平台专用的 authFile。注入路径直接取①，【不做任何 JSON 解析或字段改写】（05 §4.3）。
 }
 
 interface RuntimeTaskSpec {
@@ -474,8 +487,10 @@ interface 层再映射：
 | ALREADY_EXISTS / INVALID_STATE           | 409       | 同上                                                                                   |
 | PERMISSION_DENIED                        | 403       | 同上                                                                                   |
 | TIMEOUT                                  | 504       | 同上                                                                                   |
+| **INSTALL_FAILED**（RuntimeAdapter）      | **500**   | 同上                                                                                   |
 | INTERNAL                                 | 500       | 同上                                                                                   |
 
+> **`INSTALL_FAILED` 的主要露出面不是 HTTP（S5 补，TASK-LAUNCH-DECISIONS T-3）**：装 CLI 发生在 202 之后的 provision workflow（03 §4.3 ③），用户此时早已拿到 202，**没有同步响应可承载它**。它的实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`，前端按 P22 §1 的人话表展示（"运行时 CLI 安装失败"）。上表那行 500 是为了**将来出现同步入口时有据可依**（如重试安装端点），以及满足 02 §6.2「任何错误码都必须有映射、绝不裸抛」的兜底纪律。产品文案与 REST/MCP 映射见 02 §6.1 与 P22 §1。
 
 ## 5. Capabilities 协商与降级规则
 
@@ -547,12 +562,16 @@ interface ValidationResult {
 
 > 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
 
-镜像约定（写入用户文档）：必须含 bash；**建议含 tmux**——缺失时 `validate()` 产出 **warning（非 error）** 并在 `ResolvedImageSpec` 标记 `supportsTmux: false`，终端网关据此在 tmux re-attach 与 ring buffer 两方案间自动选择（文档 06 §6），无 tmux 镜像仍可正常使用；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
+镜像约定（写入用户文档）：必须含 bash；**建议含 tmux**——缺失时 `validate()` 产出 **warning（非 error）**，无 tmux 镜像仍可正常使用；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
 
 > **★ S5 技术验证对镜像约定的加严（2026-08 实测，数据见 §3 ★1）**
 >
 > - **"可预装或现装"这句话在真实量级下不对等，必须表态**：AIO 默认镜像 `agent-infra/sandbox:latest` 预装了 codex（`@openai/codex@0.139.0`）但**没有 claude-code**，现装 `npm i -g @anthropic-ai/claude-code` 实测 **753 秒（12.5 分钟）**；两个 CLI 都预装的对照镜像则是**零安装**。⇒ 镜像作者文档里写**强烈建议预装 `supportedRuntimes` 声明的每个 runtime**，并在 manifest 里如实声明——现装仍然能用，但要按分钟级预期而不是秒级。
-> - **HOME 路径不属于约定的一部分**：⚠️ 原写"实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）"，**已更正**——那是 `docker run` 通道的观察；经平台真实 exec 通道实测，**两侧 `$HOME` 同为 `/home/gem`**（§2.1★）。这不改变本条的效力：约定只要求 **HOME 可写**，而且**恰恰因为"两侧碰巧一样"更容易诱人去硬编码，本条更要坚持**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。
+> - **tmux 的地位加严为「强烈建议」，且理由从「恢复现场」扩展到「会话保活」（S5 裁决 D-15，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**：agent 会话现在由 provision workflow 在 `starting` 段起（03 §4.3 ⑤），**先于任何 WS 连接存在**，因此「谁持有这个会话」成了镜像属性：
+>   - **有 tmux（A 档）**：会话由沙箱内的 tmux server 持有，平台侧不保持任何连接，**平台重启不影响 agent**。
+>   - **无 tmux（B 档）**：会话由终端网关持有 `ProcessStream` + ring buffer（06 §6）。两条代价必须让镜像作者知道——① **首次 attach 前的输出受 ring buffer 上限截断**（agent 可能已经刷了几万行，用户点开只看得到最后 N KB）；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**。
+>   - **档位由沙箱内 `command -v tmux` 实测决定，不由本处的 `supportsTmux` 声明决定**（方法论同 §2.1★）。`supportsTmux` 保留其原职责：注册期给用户一条 warning。⚠️ 另注：本节散文说 `validate()` 会在 `ResolvedImageSpec` 上标记 `supportsTmux`，但上方 `ResolvedImageSpec` 的类型声明里**并没有这个字段**——**契约缺口，随镜像管理切片补**（TASK-LAUNCH-DECISIONS §1 第 2 条）；因为运行期判定已改为实测，它不阻塞 S5。
+> - **HOME 路径不属于约定的一部分**：⚠️ 原写"实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）"，**已更正**——那是 `docker run` 通道的观察；经平台真实 exec 通道实测，**两侧 `$HOME` 同为 `/home/gem`**（§2.1★）。这不改变本条的效力：约定只要求 **HOME 可写**，而且**恰恰因为"两侧碰巧一样"更容易诱人去硬编码，本条更要坚持**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。**S5 裁决 D-19 把这条落到了具体位置**：`RuntimeCredential.credentialFiles[].containerPath` 改为 `~/` 相对形态，`$HOME` 的展开**只发生在 `injectCredential(cred, exec)` 内部**（那里才有 `exec` 可探测）——`prepareRuntimeCredential(runtimeId)` 的签名里根本没有 sandbox，构造凭证时无从知道 `$HOME`（TASK-LAUNCH-DECISIONS T-6）。
 
 ## 8. Registry 注册机制（双通道）
 
@@ -708,7 +727,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | RA-03 | MUST | `beginAuth()` 收到 `getAuthMethods()` 之外的 method 必须抛 `UNSUPPORTED_METHOD` | 传非法 method 断言 code |
 | **RA-04** | MUST | `parseOutput()` / 鉴权解析器对**录制的真实 CLI 输出 fixture** 产出预期结果 | 回放各 CLI 版本的 golden fixture；这就是 05 §6"CLI 升级改输出格式导致静默失效"风险的落地防线——CLI 一改输出，此条第一时间红。**每支持一个新 CLI 版本必须新增一份 fixture** |
 | RA-05 | MUST | `beginAuth()` 产出的 `AuthChallenge` 字段齐全（`instructions` / `challengeRef` 必填）且 `expiresAt` 是 ISO 绝对时间 | schema 校验；前端倒计时依赖 `expiresAt` 语义 |
-| RA-06 | MUST | `completeAuth()` 返回的 `credentialFiles[].content` 非空且路径为绝对路径 | 结构断言（内容不入日志、不写快照） |
+| **RA-06** | MUST | `completeAuth()` 返回的 `credentialFiles[].content` 非空；**`containerPath` 必须是 `~/` 相对形态**（⚠️ **原判据「路径为绝对路径」已被 S5 裁决 D-19 推翻**，TASK-LAUNCH-DECISIONS T-6） | 结构断言（内容不入日志、不写快照）+ **断言 `containerPath` 不以 `/` 开头、以 `~/` 开头**。理由：`prepareRuntimeCredential(runtimeId)` 的签名里没有 sandbox，构造凭证时不知道目标沙箱的 `$HOME`；同一份凭证要能注入不同沙箱。绝对路径要么写死 `/root`（两个 provider 都错，§2.1★）、要么把凭证绑死在一个沙箱上 |
 | RA-07 | MUST | `buildStartCommand()` / `buildAttachCommand()` 返回非空 `cmd`，且为纯函数（同输入同输出、无 IO） | 连调两次断言深相等 |
 | **RA-08** | MUST | `id` / `displayName` / `vendor` 非空，且 `id` **等于注册键** | 三个字段断言非空 + `adapter.id === opts.registryKey`；registry 以 `id` 为键，对不上则 `GET /api/runtimes` 里那一行永远取不出 adapter |
 | **RA-09** | MUST | `getAuthMethods()` 非空、无重复、且 ⊆ 契约闭集 `RUNTIME_AUTH_METHODS` | 逐项断言落在闭集里；前端鉴权页只认这四个值，越界的方式渲染不出来 |
@@ -716,6 +735,9 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | **RA-11** | MUST（声明了 `validateApiKey`） | 明显非法串必须被拒 | 喂 `''` / 空白 / 带空格串（可由 `opts.extraInvalidApiKeySamples` 追加本 provider 特有的反例）断言 `ok:false`；合法样例由 `opts.validApiKeySample` 传入，断言 `ok:true` |
 | **RA-12** | MUST（声明了 `credentialTtlMs`） | 键 ⊆ `RUNTIME_AUTH_METHODS` **且 ⊆ 自己 `getAuthMethods()`**，值为正有限数 | 逐条断言；值显式为 `undefined` 视同"无过期"（等价于不写），跳过。给一个自己不提供的方式配 TTL = 死配置 |
 | **RA-13** | MUST（声明了 `refreshCapability`） | `probeCommand` 非空、`parseRefreshedAuth` 是函数 | 结构断言；刷新扫描器（05 §5.1）就靠这两样，缺一它会静默跳过该 runtime |
+| **RA-15** | MUST | **真 `refresh_token` 禁进沙箱（P0-3 的机械验证，S5 裁决 D-18）**：`injectCredential()` 交给 `exec` 的**全部字节**里不得出现该凭证的真 `refresh_token` 值 | 用假 `SandboxExecFn` 捕获**三条通道的全部字节**——argv、stdin、以及任何写文件命令的内容（含 heredoc / `printf` 参数）——断言不含真 `refresh_token` 子串。**与 RA-14 的区别**：RA-14 只查 argv（env 是合法通道），本条查**全部**，因为 refresh_token 走**任何**通道进沙箱都是违规 |
+| **RA-16** | MUST（产出 auth 文件的 runtime） | 注入产物里 `refresh_token` **字段保留、值恰等于占位常量** | 解析注入的 auth 文件内容，断言 `tokens.refresh_token === RUNTIME_REFRESH_TOKEN_PLACEHOLDER`（shared-kernel 常量）。**不能是缺失、也不能是空串**——删字段会让 codex 报 `missing field 'refresh_token'`（05 §1★★ 实测） |
+| **RA-17** | MUST | **`authFile` 非空时仍不泄漏**：用一条「凭证确实带着完整 auth.json 存在库里」的用例跑 RA-15/RA-16 | 构造带真 `authFile` 的凭证记录 → 走完整 `prepareRuntimeCredential → injectCredential` 路径 → 断言 RA-15/16 仍然通过。**这一条专门盯「分支漏改」**：注入与刷新此前共用同一个对象，只要有一个分支忘了脱敏就泄漏（裁决 D-18 用类型分家把它变成编译期问题，本条是运行期复核） |
 | **RA-14** | MUST | **密钥禁进 argv**：`injectCredential()` 构造的任何命令行都不得含凭证明文 | 用假 `SandboxExecFn` 捕获全部 argv，断言不含任何给定密钥片段（契约纪律来自 05 §4/§7 #3——`/proc/<pid>/cmdline` 在沙箱内可读，进了 argv 就是泄漏）。**只查 argv，不查 env**：api-key 形态本来就走 env 在沙箱启动时注入（05 §4.1 ④），查 env 会把合法通道判成违规 |
 
 > **已落地的条款**：**RA-03、RA-08 ~ RA-14**——全部零 CLI、零网络，`codex` / `claude-code` 两个真实内建 adapter 无条件跑（`packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts`）。
@@ -726,6 +748,8 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 > - **RA-04（golden fixture 回放）**：不在 testkit 里，而在各 adapter 自己的解析器单测（`packages/modules/runtime/test/unit/output-parsers.spec.ts`）——fixture 是**每个 CLI 特有**的，做成通用套件参数收益低；`packages/contracts/src/testkit/fixtures/CLI-VERSION-MATRIX.md` 仍是版本矩阵的登记处。
 > - **RA-05 / RA-06**：要真跑一次 `beginAuth`/`completeAuth`（真 CLI + 真浏览器授权），不属"零 CLI"范围。
 > - **RA-07**：`buildStartCommand` / `buildAttachCommand` 同样还不在 S4 契约里；其"非空 argv + 纯函数"的判定纪律已由 **RA-10** 用在 `loginCommand` 上。
+> - **RA-15 / RA-16 / RA-17（S5 新增）**：要等契约层的类型拆分（`InjectableRuntimeCredential` / `RefreshableRuntimeCredential`）与 shared-kernel 占位常量落地后才能写；三条都是**零 CLI、零网络**（假 `exec` 即可），落地后进无条件跑的那一组。落点见 25 §3.4 / §4.3。
+> - **RA-06 的判据已随 D-19 改写**（上表），实现时注意别照抄旧的"绝对路径"断言。
 > - **RA-03 的判定放宽**：`contracts` 里没有 adapter 错误**类**（`AdapterAuthError` 在 runtime 的 domain 层，第三方拿不到），所以断言是"必须 reject；若错误对象带 `code`，则必须是 `UNSUPPORTED_METHOD`"——裸 `Error` 容忍，错的 `code` 不容忍。
 
 ### 10.4 ImageSpecProvider 条款

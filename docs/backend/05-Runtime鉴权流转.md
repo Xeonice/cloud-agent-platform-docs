@@ -2,6 +2,7 @@
 
 > 状态：✅ 实施前定稿（S4 实现前回写：2026-08 **live 技术验证**——真订阅真授权真跑——已落回 §1★/§2/§3★/§5.1/§6；§7 划定"S4 增量 vs S3 已复用"边界。CLI 行为除官方文档外补充实测形态：codex `auth.json` 结构 + claude token 从 stdout 出/OSC 8/pty 折行）
 > **⚠️ S5 技术验证修订（2026-08，真容器 + 真订阅凭证 + agent 真干活）**：**注入形态已被实测推翻并改写**——`--with-access-token`（stdin）档在真容器里失败，不再是默认；改为"注入 `refresh_token` 值被占位替换的 `0600` auth.json"。**P0-3 的安全裁决本身（真 refresh_token 永不进沙箱）不变，变的只是实现形态**。修订落点：§1★★（证据与裁决）· §2 决策 A（闭环背书）· §3 时序 · §4 物化行 · §6 · §7 #3。
+> **⚠️ S5 开工前补裁（2026-08，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-5 / T-6）**：新增 **§4.3**——注入路径与刷新路径**类型分家**（注入出口结构上没有 `authFile`）、脱敏 auth.json 由 adapter 在**凭证出生时**产出、占位串进 shared-kernel、`$HOME` 只在 `injectCredential` 内展开、testkit RA-15/16/17 兜底。**P0-3 的裁决本身仍不变**，本次补的是「谁构造、在哪一步、怎么机械验证」。
 > 关联文档：[04 Contract 体系](./04-Contract与Registry扩展体系.md) · [07 前端目录结构 §6 鉴权页](../frontend/07-前端目录结构与视图逻辑分离.md) · [03 §7.3 Git 凭证使用链路](./03-Sandbox调度中心.md) · [11 §1.1 auth helper 部署形态](../shared/11-部署与扩展预留.md)
 > 产品依据：[P20 §5](../product/20-核心使用链路.md) · [P21-3 凭证管理](../product/pages/21-3-凭证管理.md) · [P21-4 §10 运行参数](../product/pages/21-4-镜像管理.md)
 
@@ -172,7 +173,7 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 | 方面 | 设计 |
 |---|---|
 | 存储 | 凭证 blob AES-256-GCM 加密落库；密钥来自本地 master key（起步），可选系统 keychain（keytar）；生产建议 KMS |
-| 物化 | `materialize(credentialRef, sandboxHandle)` 按 **最小暴露形态优先级**（§7 #3，adapter 契约固化）注入。**优先级已按 S5 技术验证修订（§1★★）**：**① `0600` 文件（`~/.codex/auth.json` / `~/.claude/.credentials.json`，随沙箱销毁）且 `refresh_token` 值替换为占位串——字段必须保留（删掉会报 `missing field 'refresh_token'`），真值绝不进沙箱 > ②（可选 / 版本敏感）access-token-only（stdin，codex `login --with-access-token`），只在注入端与产出端 CLI 版本匹配时可用——实测 0.147.0 产的 token 喂给 0.139.0 直接被拒（⚠️ 原附注「当前 data-plane 的 `exec` 会静默丢弃 stdin，补齐前这一档不具备可实现性」**已撤销**——那是调错端点造成的假象，`ProcessSpec.stdin` 现已可用，04 §2.3★；**版本敏感这一条不变**） > ③（禁用）整份含真 refresh_token 的 auth.json，env 与文件同禁**——**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（沙箱内 shell 一条 `echo` 即可盗走 → 脱离平台无限续期、平台无法上游吊销，P0-3）。刷新由平台侧统一做（§5.1），沙箱不需要 refresh 能力——这正是占位串成立的前提。**落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**（⚠️ 原括注"实测 aio=`/root`、boxlite=`/home/gem`"**已更正**：经平台 exec 通道实测两侧同为 `/home/gem`，硬编码 `/root` 两侧都错——04 §2.1★）。api-key 类凭证走 env（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`，本就非长期订阅身份）。**出口纪律见下方「runtime 出口通用明文纪律」** |
+| 物化 | `materialize(credentialRef, sandboxHandle)` 按 **最小暴露形态优先级**（§7 #3，adapter 契约固化）注入。**优先级已按 S5 技术验证修订（§1★★）**：**① `0600` 文件（`~/.codex/auth.json` / `~/.claude/.credentials.json`，随沙箱销毁）且 `refresh_token` 值替换为占位串——字段必须保留（删掉会报 `missing field 'refresh_token'`），真值绝不进沙箱 > ②（可选 / 版本敏感）access-token-only（stdin，codex `login --with-access-token`），只在注入端与产出端 CLI 版本匹配时可用——实测 0.147.0 产的 token 喂给 0.139.0 直接被拒（⚠️ 原附注「当前 data-plane 的 `exec` 会静默丢弃 stdin，补齐前这一档不具备可实现性」**已撤销**——那是调错端点造成的假象，`ProcessSpec.stdin` 现已可用，04 §2.3★；**版本敏感这一条不变**） > ③（禁用）整份含真 refresh_token 的 auth.json，env 与文件同禁**——**绝不用 `CODEX_AUTH_JSON` env 注入整份 auth.json**（沙箱内 shell 一条 `echo` 即可盗走 → 脱离平台无限续期、平台无法上游吊销，P0-3）。刷新由平台侧统一做（§5.1），沙箱不需要 refresh 能力——这正是占位串成立的前提。**落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**（⚠️ 原括注"实测 aio=`/root`、boxlite=`/home/gem`"**已更正**：经平台 exec 通道实测两侧同为 `/home/gem`，硬编码 `/root` 两侧都错——04 §2.1★）。**展开发生在哪一步、由谁构造脱敏文件，见 §4.3（S5 裁决 D-18 / D-19）**。api-key 类凭证走 env（`OPENAI_API_KEY` / `ANTHROPIC_API_KEY`，本就非长期订阅身份）。**出口纪律见下方「runtime 出口通用明文纪律」** |
 | **模式开关（二选一，全局生效）** | 同一 runtime 两类凭证**可留存**（credentials 表多行，切回无需重新登录），但**同一时刻只有一个模式生效**：`runtime_settings.active_auth_method`（13 §2）决定 materialize 取哪条凭证。切换经 `PUT /api/runtimes/:rt/auth-mode`，**立即全局生效**（已运行 sandbox 不受影响，下次启动/新建时按新模式注入）；切换到未配置凭证的模式时接口返回 409，前端引导先补配 |
 | 回显 | REST/MCP 响应**永不回传明文**；只回显掩码标识（`sk-...ab12` / 邮箱）与过期时间 |
 | 吊销 | 管理接口 **revoke**（非物理删除）：置 `revoked_at` + 物理擦除密文字段，元数据保留供审计（文档 13 §2 credentials）。**对运行中沙箱的联动（P0-4）**：env 形态（`CLAUDE_CODE_OAUTH_TOKEN` 及 codex 若走 env）注入进程后**外部无法 `unset`**——"联动清除 env"物理做不到，是假承诺。因此**唯一可靠手段是按 `credential_sandbox_bindings` 台账强制重启/销毁所有 bound 的活沙箱**；删文件/改 env 仅对"CLI 每次调用重读凭证"的文件形态有意义、**对已缓存进程无效**。**吊销延迟语义明示**（前端 21-3 吊销确认文案同源）："吊销会重启正在使用该凭证的运行实例；已泄漏到沙箱外的 token 无法追回。" **exec 清除失败兜底**（容器忙/不健康）：超时**升级为强制销毁**，不静默记 error |
@@ -229,6 +230,63 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 | **备份** | 备份导出（v1.5）**默认不含 master key，也不含凭证密文**（P22 §4.18）；文档明示"备份不含密钥，换机恢复后需重新授权"，不给用户"备份了就万事大吉"的错觉 |
 | **多用户/KMS 演进** | `encryption_key_id` 已为多 key 共存留位；接 KMS 时只换 `CryptoPort` 实现，密文格式不变 |
 
+### 4.3 注入路径与刷新路径的结构性隔离（S5 裁决 D-18 / D-19）
+
+> 权威裁决见 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-5 / T-6。§4 与 §1★★ 定了**注入什么形态**，本节定**谁构造它、在哪一步、怎么保证不泄漏**。
+
+#### 4.3.1 问题：两条路径此前共用同一个带真 `refresh_token` 的对象
+
+S4 落地的现状是：`prepareActive()`（注入路径）与 `materializeById()`（刷新路径）返回**同一个** `MaterializedRuntimeCredential`，其 `authFile` 字段就是**含真 `refresh_token` 的整份文件**；而"注入时不许写它"这条红线的**唯一防线是一句注释**（`/** PLATFORM-ONLY … never injected (P0-3) */`）。同时 S5 要求注入"一份 `refresh_token` 被占位串替换的 auth.json"，而**这个转换函数在代码库里根本不存在**，也没定该挂哪层。两件事叠在一起，实现者最省事的写法就是"在注入前 parse 一下、改一个字段"——**漏一个分支真 refresh_token 就进沙箱了**，而这正是 P0-3 要防的那个后果（沙箱内一条 `echo` 即可盗走 → 脱离平台无限续期、平台无法上游吊销）。
+
+#### 4.3.2 裁决（四条）
+
+**① 类型分家：把纪律换成类型系统保证。**
+
+| 出口 | 类型 | 谁调 |
+|---|---|---|
+| **注入** | `prepareRuntimeCredential(runtimeId): Promise<InjectableRuntimeCredential>`——**结构上没有 `authFile` 字段** | provision workflow 的第 ④ 步（03 §4.3） |
+| **刷新** | `prepareForRefresh(credentialId): Promise<RefreshableRuntimeCredential>`（= injectable + `authFile`） | **只有 §5.1 的刷新扫描器** |
+
+`injectCredential(cred: InjectableRuntimeCredential, exec)` ⇒ **"注入路径拿不到真 refresh_token"成为编译期事实**，而不是一句注释。这条同时进 23 I-CRD-9 与 04 §3 的 contract 草图。
+
+**② 脱敏形态在"凭证出生时"由 adapter 产出，注入路径上不做任何转换。**
+
+`completeAuth` / `createCredentialFromSecret` / `parseRefreshedAuth`（RA-13）产出凭证时，**同时**给出两份：
+
+```
+RuntimeSecretPayload {
+  credentialFiles: [{ containerPath: '~/.codex/auth.json', content: <脱敏版>, mode: '0600' }],
+                                  // refresh_token 值 = 占位常量，【字段保留】（删字段会报 missing field）
+  authFile: <完整版，含真 refresh_token>,   // 平台专用，只喂刷新扫描器
+}
+```
+
+两个字段**本来就是分开的**（S4 已有），落库时各存各的。credential 上下文只做**取舍**（注入给 `credentialFiles`、刷新给 `authFile`）与出口纪律（`SecretMaterial` / `use()` / `finally zeroize()`），**不解析任何 provider 的 JSON**；`injectCredential` 只负责"把这份 content 写到目标路径、`0600`"，**不 parse、不改字段**。
+
+> **⚠️ 这一条与最初的提案不同，理由必须写明**：提案是"**脱敏后的 auth.json 由 credential 上下文构造**"。目标（adapter 不该在注入路径上摸到真 refresh_token）是对的，但**构造放进 credential 上下文会撞另一条更基本的边界**——auth.json 的字段结构是"某个 agent CLI 的怪癖"，04 §3 开篇就把这类知识划给 adapter。credential 上下文一旦要 parse codex 的 JSON，就必须 `if (runtimeId === 'codex')`，而 runtime 是 **registry 可扩展的开放 id**（10 §7.2）：第三方注册一个凭证文件格式不同的 runtime，credential 上下文当场失效。
+>
+> **改用"出生时脱敏"严格更强**：现场脱敏至少要把真值传进注入路径一次，而现在**连传都不传**。
+>
+> **一个必须承认的边界**：`completeAuth` / `parseRefreshedAuth` **本来就会看到真 refresh_token**——它们正是从登录 pty / 刷新回写里把它捞出来的那一方，这无法避免。所以可执行的红线不是"adapter 永不接触真 refresh_token"，而是：
+>
+> > **`injectCredential` 永远拿不到真 refresh_token**（由①的类型分家保证）；采集侧的 `completeAuth` / `parseRefreshedAuth` 照本文 §4 与 23 §8.3 的通用出口纪律办（`Buffer` 承载、`use()` 借出、`finally zeroize()`、永不进 argv / 日志）。
+>
+> 这条红线**可被 testkit RA-15/16/17 机械验证**，而"adapter 不该看见"验证不了。
+
+**③ 占位串定为 shared-kernel 的一个常量**（如 `RUNTIME_REFRESH_TOKEN_PLACEHOLDER`）。它要同时被 **domain**（断言）、**adapter / infrastructure**（构造）、**contracts 里的 testkit**（断言）三方引用，而 23 §4.5 禁止 domain import contracts ⇒ **shared-kernel 是唯一三方都够得着的位置**。**绝不允许每处各写一个字面量**——那样 testkit 断言的和 adapter 写进去的可以静默地不是同一个串。
+
+**④ testkit 加硬断言（比任何论证都硬）**：04 §10.3 新增 **RA-15**（注入交给 `exec` 的**全部字节**——argv + stdin + 写文件内容——不含真 refresh_token）、**RA-16**（`tokens.refresh_token` **恰等于**占位常量，不是缺失也不是空串）、**RA-17**（走一条 `authFile` 非空的用例仍不泄漏，专盯"分支漏改"）。落到用例见 25 §3.4 / §4.3。
+
+#### 4.3.3 `$HOME` 何时展开（裁决 D-19）
+
+- **`credentialFiles[].containerPath` 的语义改为 `~/` 相对路径**（如 `~/.codex/auth.json`），**不接受绝对路径**。
+- **`$HOME` 展开只能发生在 `injectCredential(cred, exec)` 内部**——那里才有 `exec` 可以真探测（一次 `printf '%s' "$HOME"` 或 `cd ~ && pwd`），且每个沙箱各探各的、结果**不跨沙箱复用**。
+- **为什么不能提前展开**：`prepareRuntimeCredential(runtimeId)` 的签名里**只有 runtimeId**——构造凭证的那一刻，credential 上下文根本不知道这份凭证要注进哪个沙箱。而**同一份凭证本来就要能注入不同沙箱**（"登录一次、处处可用"是 §2 决策 A 的全部意义），提前展开等于把凭证绑死在一个沙箱上。
+- **"碰巧一样"不构成硬编码的理由**：04 §2.1★ 实测两个 provider 经平台通道看到的 `$HOME` 同为 `/home/gem`，但 04 §7 已明确"HOME 路径不属于镜像约定的一部分"，并专门写了"恰恰因为两侧碰巧一样更容易诱人硬编码，本条更要坚持"。第三方镜像、上游镜像升级、换 base image 都会打破它。
+- **配套改动（属下一步的契约层）**：`RuntimeCredential.credentialFiles[].containerPath` 现有的 **"Absolute container paths" 类型注释必须改掉**；testkit **RA-06 的判据已同步改写**（04 §10.3）——原文要求"路径为绝对路径"，与本条正面冲突。
+
+> **本节只写文档裁决**：`packages/contracts` 的类型拆分、`CredentialFacade.prepareForRefresh`、shared-kernel 常量、`containerPath` 注释，全部属**下一步**的契约层改动。
+
 ## 5. 过期与续期
 
 - Vault 记录 `expiresAt`（Claude token 约 1 年；Codex 按 OAuth 刷新语义）。
@@ -245,7 +303,7 @@ P/scheduler/timers.ts#every(15min)
 └─ M/credential/infrastructure/refresh/credential-refresh.scanner.ts#runOnce()
    ├─ credential.repository.listRefreshDue(now)      ← expires_at - now < refreshLeadTime（默认 30min）
    └─ 逐条：
-      ├─ auth helper 内用 `mkdtemp` 起**唯一** HOME/`CLAUDE_CONFIG_DIR`/`CODEX_HOME`（P1-3，照搬 git-auth.materializer 范式，与交互登录彼此隔离），materialize 当前凭证进去
+      ├─ auth helper 内用 `mkdtemp` 起**唯一** HOME/`CLAUDE_CONFIG_DIR`/`CODEX_HOME`（P1-3，照搬 git-auth.materializer 范式，与交互登录彼此隔离），经 **`prepareForRefresh(credentialId)`**（§4.3，**唯一持有真 `refresh_token` 的出口**）把**完整** auth.json 写进去
       ├─ 让 CLI 执行一条**最廉价的、会触发刷新的命令**（如 `codex whoami` / 版本探测）
       ├─ CLI 自行用 refresh token 换新 token 并回写 auth.json
       ├─ 平台重新读取 auth.json → 新密文 + 新 expires_at 覆写同一条 credentials 记录
@@ -289,7 +347,7 @@ P/scheduler/timers.ts#every(15min)
 |---|---|---|
 | 1 | **`Credential.createRuntime`** 工厂（`kind='runtime'`、`runtimeId` 非空、`mode='account'\|'api-key'`、`obtainedVia ∈ RuntimeAuthMethod`），并把实体现有的 git-only 收窄放宽——`credential.entity.ts` 现 `obtainedVia: GitObtainedVia`、`mode: null` 需拓成超集/可空二值 | `Credential` 聚合本体、`rehydrate`、`revoke()`/`Erased` 擦除、`assertUsable()`、`CredentialStored/CredentialRevoked` 事件（`createGit` 旁并列即可） |
 | 2 | **`RuntimeAuthMethod` 枚举** 加进 `obtained-via.vo.ts`（`setup-token` / `oauth-device` / `api-key` / `access-token-paste`，与 DB CHECK 已枚举的四值对齐） | `GitObtainedVia` 及其 wire↔domain 转换的既有写法（同文件并列一个 union + 映射） |
-| 3 | **runtime 凭证 materialize**：注入 sandbox 按**最小暴露形态优先级**（§4；**形态经 S5 技术验证修订，见 §1★★**）——codex 默认落 `0600` 的 `~/.codex/auth.json` 且 **`refresh_token` 值替换为占位串**（字段保留、真值不进沙箱），`login --with-access-token`（stdin）降为**可选 / 版本敏感**档；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env；**绝不注入含真 refresh_token 的整份 auth.json（env 与文件同禁）**（P0-3，adapter 契约固化）。落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root` | `CREDENTIAL_FACADE` 门面装配与 UoW 复用；但 **runtime 出口是新增方法**（git 是**不注入沙箱**的不透明句柄 `GitAuthContext`、runtime 是**注入沙箱**的凭证交付 `RuntimeCredential` 受控明文包装）——**出口语义不同、不平移句柄形态**（P0-2，27 §4）；共守"明文不越界"的通用出口纪律（§4 / 23 §8.2） |
+| 3 | **runtime 凭证 materialize**：注入 sandbox 按**最小暴露形态优先级**（§4；**形态经 S5 技术验证修订，见 §1★★**）——codex 默认落 `0600` 的 `~/.codex/auth.json` 且 **`refresh_token` 值替换为占位串**（字段保留、真值不进沙箱），`login --with-access-token`（stdin）降为**可选 / 版本敏感**档；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env；**绝不注入含真 refresh_token 的整份 auth.json（env 与文件同禁）**（P0-3，adapter 契约固化）。落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`。**⚠️ S5 补齐了"谁构造、在哪一步"（§4.3）**：注入与刷新**类型分家**（注入出口没有 `authFile` 字段）· 脱敏形态在**凭证出生时**由 adapter 产出并单独存字段 · 占位串进 shared-kernel · `$HOME` 只在 `injectCredential` 内展开 · testkit RA-15/16/17 兜底 | `CREDENTIAL_FACADE` 门面装配与 UoW 复用；但 **runtime 出口是新增方法**（git 是**不注入沙箱**的不透明句柄 `GitAuthContext`、runtime 是**注入沙箱**的凭证交付 `RuntimeCredential` 受控明文包装）——**出口语义不同、不平移句柄形态**（P0-2，27 §4）；共守"明文不越界"的通用出口纪律（§4 / 23 §8.2） |
 | 4 | **`credential_sandbox_bindings` 表本身 + 注入台账写入路径**：**该表未落库（只在文档），S4 新增 Drizzle 表定义 + 迁移**（对 `credentials` FK `RESTRICT`、对 `sandboxes` FK `CASCADE`，13 §2.5.2）；并启用记账写入路径（runtime 侧真正记账，支撑吊销联动——对运行中沙箱是**强制重启/销毁 bound 活沙箱**，§4 吊销行） | `CredentialSandboxBinding` 聚合建模、I-CSB-1/2 不变量、吊销联动机制的**设计**（13 §2.5.2、23 §8.4）——**设计已就绪，但表结构 S4 才落地** |
 | 5 | **`runtime_settings` 表本身 + runtime 选择服务**：**该表未落库（只在文档），S4 新增 Drizzle 表定义 + 迁移**（`runtime_id` PK + `active_auth_method` CHECK，13 §2.3.1）；`CredentialSelectionService` 增 runtime 分支（输入 `runtimeId` + `runtime_settings.active_auth_method` → 选生效凭证），及 `PUT /auth-mode` 切换、目标模式无凭证 409（§4） | `forKind`（git 侧选择）的既有实现与 I-CRD-5 partial unique 索引（`uq_cred_runtime_active` 已随 `credentials` 表在库里）；`runtime_settings` 的**表设计**（13 §2.3.1，设计就绪但 S4 才落地） |
 | 6 | **auth helper**：per-CLI 捕获器（codex 纯文本 + 读 auth.json；claude OSC 8 + stdout 拼 token）+ `spawn({tty:true})` 真 pty；REST `auth/begin·status·complete·secret·auth-mode`（§3） | —（runtime 侧新增；与 git 的 `git-auth.materializer`/`git-ls-remote.tester` 平行，不复用其内部逻辑） |
@@ -304,6 +362,6 @@ P/scheduler/timers.ts#every(15min)
 
 1. **AUTH_HELPER 当前是 host（管道）形态，不是真 pty 容器形态**。auth helper 现以宿主进程管道启动 CLI（`ProcessStream` 抽象已就位），**真 pty 容器形态 `SandboxProvider.spawn({tty:true})` 是后续 slice**。后果：host 形态下真 CLI 登录检测**非 TTY 不输出**交互式提示，**账号授权的"真登录闭环"依赖真 pty helper**——技术验证已证机制成立（解析器 golden fixture 逐字节保真、live 手测见 §2），但生产级"点一下就登录进去"须等 pty helper 落地。api-key 短路路径（§3.1，不经 helper/pty）**不受此限，本 slice 即完整可用**。
 
-2. **注入门面与 `credential_sandbox_bindings` 记账当前零真实调用方**。`CREDENTIAL_FACADE.prepareRuntimeCredential` / `injectCredential` / `recordRuntimeInjection` 三个方法 + `credential_sandbox_bindings` 表都已实现且单测覆盖，但**真正的 sandbox exec 注入接线属 S5 provision slice**（provision 起容器后 `prepare → inject → record` 三步接入）。本 slice 特意**留了干净接线点**（application 层 hook 注释已标，见 `sandbox-application.service` provision 路径与 `credential-revoked.handler`），**不是半接线的坏态**——`recordRuntimeInjection` 未被调用 ⇒ 台账当前为空 ⇒ 吊销联动当前遍历零 binding（符合预期，非 bug）。吊销联动逻辑本身（超时兜底 + 强制销毁 + 失败保留重试）已完整实现并单测，S5 接线后即自动生效。
+2. **注入门面与 `credential_sandbox_bindings` 记账当前零真实调用方**。`CREDENTIAL_FACADE.prepareRuntimeCredential` / `injectCredential` / `recordRuntimeInjection` 三个方法 + `credential_sandbox_bindings` 表都已实现且单测覆盖，但**真正的 sandbox exec 注入接线属 S5 provision slice**（provision 起容器后 `prepare → inject → record` 三步接入——**这句「起容器后」是对的，而 24 §1 / 26 §1 此前画成了「先注入再 start」，S5 已按本句更正**；接线的确切位置是 03 §4.3 的第 ④ 步）。本 slice 特意**留了干净接线点**（application 层 hook 注释已标，见 `sandbox-application.service` provision 路径与 `credential-revoked.handler`），**不是半接线的坏态**——`recordRuntimeInjection` 未被调用 ⇒ 台账当前为空 ⇒ 吊销联动当前遍历零 binding（符合预期，非 bug）。吊销联动逻辑本身（超时兜底 + 强制销毁 + 失败保留重试）已完整实现并单测，S5 接线后即自动生效。
 
 3. **secret-redactor 与 reserved-env 黑名单"定义好但未接线"**。日志/transcript 脱敏器（§4 per-CLI 两套）与镜像 env 保留名黑名单（§4.1）的**常量定义与判定函数已就位**，但**接入点在 transcript 落库 / env-merge 切片**——那两条链路本 slice 未交付，故这两套定义**当前不在任何热路径上生效**。验收者勿据"黑名单已存在"推断"env 覆盖已被拦截"——本 slice 的安全性来自 §4.1"凭证最后写入永远赢"的**顺序保证**，黑名单是后续切片的体验层前置提示。

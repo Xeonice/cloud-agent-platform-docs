@@ -66,7 +66,7 @@ agent-platform-api/
 │       │   │   └── dto/*.schema.ts                       # zod 单一来源（02 §3）
 │       │   ├── domain/
 │       │   │   ├── entities/{sandbox,state-transition,resource-allocation}.entity.ts
-│       │   │   ├── value-objects/{sandbox-status,resource-quota,provider-handle,workspace-ref,execution-policy,labels}.vo.ts
+│       │   │   ├── value-objects/{sandbox-status,resource-quota,provider-handle,workspace-ref,execution-policy,initial-task,labels}.vo.ts
 │       │   │   ├── services/{scheduling,resource-pool}.domain-service.ts   # 纯函数
 │       │   │   ├── services/{sandbox-transition,workspace-naming}.policy.ts
 │       │   │   ├── events/{sandbox-created,sandbox-state-changed,sandbox-destroyed,sandbox-workspace-prepare-failed,sandbox-reconciled-as-orphan}.event.ts

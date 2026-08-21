@@ -98,6 +98,7 @@ stopped/failed → destroying → destroyed（终态）
 - 领域层**显式转移表 + guard** 实现（不引入 XState 这类较重依赖，接口设计不排斥未来替换为 XState v5）。
 - **镜像拉取的职责归属（审计 P2-10）**：`creating` 阶段的"拉镜像"由 **`provider.create()` 内部负责**（04 testkit SP-03 要求镜像不存在时抛 `IMAGE_PULL_FAILED`），平台**不单独调用任何拉取接口**；`ImageSpecProvider.resolve()`（IS-01）只做**元数据解析与 digest 获取**，不拉层数据。两者职责不重叠：一个负责"这个 ref 长什么样、合不合规"，一个负责"把它变成能跑的实体"。
 - **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 agent（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**⚠️ 实现上是 publish 到宿主 loopback（`127.0.0.1` + 临时端口），不是"不 publish"**——原文"仅内网可达、不 publish 到宿主外部"与实现不符，已按实现更正；这是一处安全面（宿主本地任意进程可直连一个无鉴权 shell），⏳ 留待 Step 4 加固，权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
+- **`starting` 段内有五步编排**（`provider.start` → agent 就绪探测 → 装 CLI → 注入凭证 → 起 agent 会话），见 **§4.3**——顺序被「exec 要求实例已在跑」这条物理约束钉死。
 - 每次转移落库并发 `SandboxStateChanged` 领域事件 → WS 事件通道推送前端 + terminal 上下文级联处理。
 - **idle 回收**：可配置 `idleTimeoutSec`，后台 `SandboxReaper` 定时扫描，无活动则 running→idle→stopped，**释放配额但保留数据卷**，可快速重新拉起。判定口径见 §4.2。
 - 非法转移抛领域错误，interface 层翻译为 409。
@@ -154,6 +155,51 @@ stopped/failed → destroying → destroyed（终态）
 - `sandboxes.last_active_at` 的唯一写入方是 TerminalGateway：每收到 pty `data` 帧或客户端 `input` 帧即刷新，**落库节流 ≥10s 一次**（内存里实时、DB 里粗粒度，Reaper 的分钟级扫描不需要秒级精度）。
 - **无终端会话的 sandbox**：无头 Task 不走 idle 回收（无终端可言），只受硬超时约束（§8.3）；交互式 Task 的终端全部关闭后 `last_active_at` 停止更新，idle 计时正常推进。
 - **重启语义**：`stopped → starting` 开的是**新的 agent 会话**——tmux 现场恢复（06 §6）**只适用于 WS 断线重连**，不适用于 idle 回收后重启。stop 时 tmux server 随实例一起停止，重启后是全新 session；工作区文件在卷上保留。前端文案不得暗示"恢复现场"（P22 §2 已定文案）。
+
+### 4.3 `starting` 段的五步编排（Task 真正开跑的地方）
+
+> 权威裁决见 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2 / T-3；时序见 24 §1、调用图见 26 §1。**本节不新增任何状态**——五步全在 `starting` 之内，失败一律按 `starting` 失败补偿（24 §1.3）。
+
+```
+starting ─┬─ ① provider.start(handle)
+          ├─ ② 沙箱内 agent（:8080）就绪探测                  ← §4 既有条款
+          ├─ ③ ensureRuntimeInstalled(runtimeId, exec)        ← 装 CLI（T-3）
+          ├─ ④ prepareRuntimeCredential → injectCredential → recordRuntimeInjection   ← 注入凭证（05 §4.3）
+          ├─ ⑤ bootstrapAgentSession(sandboxId, initialTask)  ← 起 agent 会话（T-2）
+          └─ running
+```
+
+**⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且沙箱内 agent 已就绪。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
+
+#### ③ `ensureRuntimeInstalled`：装 CLI
+
+| 子步 | 做什么 | 落点 |
+|---|---|---|
+| `getInstallPlan(imageSpec)` | **纯函数**，判据是（镜像, runtime）这一对（04 §3 ★1） | 创建校验阶段也调它一次，但那次只用来**给用户提示**（「这张镜像上 claude-code 要装 12.5 分钟」），**不写库** |
+| `isInstalled(exec)` | 走 `command -v` + `--version` **实测**，绝不硬编码路径（04 §2.1★） | 决定 `runtime_installations.status` 是 `installed` 还是 `not_installed` |
+| `install(exec)` | 仅当上一步为 false 且策略为 `install-on-start`；期间状态转 `installing` | 可重入（实测重跑仅 6 秒，04 §3 ★1） |
+
+- **写库全部在本段的短事务里，绝不进创建事务 T1**（13 §2.3.2 / 23 §4.3 已存档否决理由）。
+- **进度可见**：`RuntimeInstallationStateChanged` → WS `runtime.install_progress`（23 §12 / 10 §3.1）。现装可达 **12.5 分钟**，没有这条事件前端只能盯着「启动实例」格子干等。
+- **失败**：`starting → failed` + `failure_reason`（人话），错误码 **`INSTALL_FAILED`**（04 §4 / 02 §6.1 / P22 §1）；补偿动作与 `starting` 失败同（24 §1.3）。
+
+#### ⑤ `bootstrapAgentSession`：让「启动时即执行」名副其实
+
+产品 P20 §0 与 02 §5.2 都承诺「agent 启动时即执行」，但原设计把它绑在 `openSession` 的**首个会话**上（06 §3），后果有三：① 用户创建完关掉浏览器 ⇒ 指令永不执行；② **MCP `create_sandbox` 根本没有终端 ⇒ 必不执行**；③ S5 已 live 验证的「agent 真改文件」闭环在设计上没有触发路径。改为 provision 触发后三者同时消失。
+
+- **命令选择**：`initialTask.prompt` 非空 ⇒ `buildStartCommand({ prompt, headless:false })`；为空 ⇒ `buildAttachCommand()`。成功后置 `initial_prompt_consumed_at`（23 I-SBX-10），**重启不重放**。
+- **终端网关此后一律 attach 已存在的会话，自己不再判断「首次」**（06 §3 / 26 §8 已改写）。
+- **只对 `headless=false` 执行**。`headless=true` 的执行路径属后续切片（§8.3 / TASK-LAUNCH-DECISIONS T-4），S5 内不起 agent。
+
+**两档形态（tmux 是建议非必须，04 §7）——档位由沙箱内实测决定，不由镜像声明决定**：
+
+| 档 | 判定 | 形态 | 代价 |
+|---|---|---|---|
+| **A（首选）** | 沙箱内 `command -v tmux` 命中 | `spawn({tty:true})` 跑 `tmux new-session -d -s platform-agent <cmd>`，会话由 **tmux server 持有**，平台侧不需要保持任何连接；网关此后 `tmux attach` | 无 |
+| **B（降级）** | 沙箱内没有 tmux | `spawn({tty:true, cmd})` 由 **terminal 网关持有 `ProcessStream`** + 06 §6 既有 ring buffer；**与断线重连的唯一区别是没有 grace timer**——它是 sandbox 存续期内平台自持的会话 | ① 首次 attach 前的输出受 ring buffer 上限截断；② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**（A 档不受影响）。两条写进 04 §7 给镜像作者看 |
+
+- **为什么用 `command -v tmux` 而不是 `ResolvedImageSpec.supportsTmux`**：与 04 §2.1★ 的方法论一致（运行时事实一律实测）；且 `supportsTmux` 目前只在 04 §7 的散文里，`ResolvedImageSpec` 的类型声明里并没有这个字段。`supportsTmux` 保留其原职责：注册期给用户一条 warning。
+- **被否掉的方案**：无 tmux 时把 `initialPrompt` 当无头任务跑（`spawn({tty:false})` + 日志文件）。它同时破坏「终端可观察」（用户点开终端看到的是与 agent 无关的干净 shell），并且**提前实现 T-4 里刚决定不做的那套东西**（输出传输 + 日志存储）。
 
 ## 5. CPU 限额的两种模式（按 sandbox tier 提供）
 
@@ -372,6 +418,8 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 
 ### 8.3 无头 Task 硬超时
 
+> **落点提示（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-4）：本节的结论已定、但落点在 S5 之后的切片。** 无头 Task（`run_agent_task` / 自动化触发）整块不进 S5——它缺 command handler、缺输出传输定案、且日志存储只有 automation 口径（§8.6）。本节的两阶段 kill 与 `timeoutMs → hard_timeout` 映射都是 S5 live 技术验证跑出来的**已验证机制**，不需要重验，但**实现落在后续切片**。**交互式 Task 不受影响**：它的兜底是 idle 回收（30min）+ 硬超时 24h（P20 §0），不依赖本节。
+
 - **默认 2h**，规则可配 30min / 1h / 2h / 4h（`automations.timeout_minutes`，13 §2；P20 §0 决策 5 与 P21-7 §3.2 同源）。
 - 计时起点是 Task 转 `running` 的时刻（不含排队与拉镜像——否则慢网络会吃掉用户的执行预算）。
 - 超时动作：kill 进程 → sandbox 转 `failed`（`failure_reason='automation timeout'`）→ run 记 `status='timeout'`，**并计入 `consecutive_failures`**（P20 §9.9 明确要求）。
@@ -408,6 +456,8 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 | 测试 | 规则表单 [测试连接]（P21-7 §3.2）→ `POST /api/automations/webhook-test { url }` 发一条 `event:'test'` 的样例载荷，同上超时与 SSRF 规则 |
 
 ### 8.6 无头 Task 的 stdout/stderr 完整捕获（P21-7 §9 缺口②）
+
+> **落点提示（TASK-LAUNCH-DECISIONS T-4）：结论已定、落点在后续切片。** 并且要注意本节写的是 **automation 口径**——日志路径挂在 `automation_runs.log_path` 上（13 §2.7.2）。**非自动化的无头 Task（MCP `run_agent_task`）没有 run 记录**，因而没有 `logPath`、没有查询端点、没有 exit 落点。把它做对 = 把日志存储从 automation 口径**上提为 Task 口径**（新表 / 新端点），这正是无头 Task 不进 S5 的主要理由之一。
 
 `RuntimeAdapter.parseOutput` 产出的是**结构化 `RuntimeEvent`**（04 §3），用于进度展示；原始字节另需一条独立链路：
 
