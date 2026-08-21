@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **54**（另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
+| REST 端点 | **55**（+1：`GET /api/providers` 能力发现；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
 | MCP tools | **10** | 02 §5.2 |
 | WS 通道 | **2**（`/events`、`/terminal`） | 10 §6.7 |
 | WS 事件类型 | **6** | 10 §3 |
@@ -70,18 +70,23 @@
 |---|---|---|---|---|---|---|---|---|
 | `listSandboxes` | `GET /api/sandboxes?projectId=&status=` | `list_sandboxes` | 按项目过滤是主链路默认形态 | `SandboxDto[]`，含派生 `waitingInput` | `list-sandboxes` query | — | — | — |
 | `getSandbox` | `GET /api/sandboxes/:id` | `get_sandbox` | | `SandboxDto` + 资源占用 | `get-sandbox` query | — | `NOT_FOUND` | — |
-| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400** | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | `RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed` |
+| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed` |
 | `startSandbox` | `POST /api/sandboxes/:id/start` | `start_sandbox` | | `SandboxDto` | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace） | `INVALID_STATE`(409)、`RESOURCE_EXHAUSTED`(429) | `sandbox.status_changed` |
 | `stopSandbox` | `POST /api/sandboxes/:id/stop` | `stop_sandbox` | | `SandboxDto` | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409) | `sandbox.status_changed` |
 | `destroySandbox` | `DELETE /api/sandboxes/:id` | `destroy_sandbox` | **`{ keepVolume?: boolean }`**（body 或 `?keepVolume=`，query 优先）。**默认值两面不同**：REST 由前端表单传（UI 默认勾选保留）；**MCP 默认 `false`** | 204 | `destroy-sandbox` command | I-SBX-4、I-RV-1/3 | `INVALID_STATE`(409) | `sandbox.status_changed` → `sandbox.removed` |
 | `execInSandbox` | `POST /api/sandboxes/:id/exec` | `exec_in_sandbox` | 非交互命令；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }` | — | I-SBX-3 | `INVALID_STATE`(409)、`TIMEOUT`(504) | — |
 | `runAgentTask` | `POST /api/sandboxes/:id/runtimes/:rt/tasks` | `run_agent_task` | `RuntimeTaskSpec`（04 §3） | 流式 `RuntimeEvent` 或结果 | — | I-SBX-5 | `INVALID_STATE`(409)、`AUTH_REJECTED` | — |
+| `listProviders`（能力发现） | `GET /api/providers` → **200** | **不进 MCP**（理由见下方引注） | — | `ProviderDto[]`（**扁平数组**）：`{ name, capabilities(6 位全量), isDefault }` | —（`SandboxApplicationService.listProviders()` 直读 provider registry，无 command/query handler、无持久化） | — | —（只读；registry 为空时返回 `[]` 而非 404） | — |
 
-**前端要知道的三件事**：
+**前端要知道的五件事**：
 
 1. **创建是异步的**：`POST` 返回 202 与一条 `pending` 记录，**真正的进度全在 WS**。技术状态序列是 `pending→scheduling→preparing-workspace→creating→starting→running`，而产品进度卡是四格「初始化 / 拉取镜像 / 准备工作区 / 启动实例」——**两者顺序不同是刻意的**，映射关系：`preparing-workspace`→「准备工作区」、`creating`→「拉取镜像」（03 §4.0）。
 2. **`waitingInput` 是派生字段**：来自网关内存态（经 terminal 的只读查询端口，06 §8.2），**只驱动展示、不改主状态**；网关重启后会短暂回落 `false`，这是可接受的（03 §4.1 红线）。
 3. **资源/配额对用户完全不可见**（P22 §4.6）：`quota` 只为程序化消费方保留，UI 不要暴露。
+4. **provider 选项与默认档一律来自 `GET /api/providers`，前端不得枚举闭集**：响应是扁平数组，默认档是数组里 `isDefault` 为 true 的那一项（**没有顶层 default 字段**）。第三方 provider 经 04 §8 注册后自动出现在该端点、进而自动出现在 UI，**前端零改动**。`capabilities` 6 位全量下发，用于按能力显隐控件（无 `pauseResume` 就不渲染「暂停」）。前端消费形态（query key / staleTime / 加载失败空三态）见前端 15 §2.1–§2.2 与 F21-2 §4.1。
+5. **`require` 的失败是 409 而非创建失败**：能力不匹配在 **application 层最前面**就被拒（早于项目解析、早于落库、早于进调度队列，03 §3），因此**拿不到 sandbox id、列表里不会留下 `failed` 记录**，前端应就地提示改选 provider，而不是走"创建失败重试"那条路。另有一条**无条件**规则不由 `require` 表达：所选 provider `spawnTty=false` 一律拒绝——本平台每个 agent runtime 都要 TTY（04 §2.5）。`watchEvents` **刻意不可 require**：push/poll 对调用方完全封装，要求它没有可观测意义（04 §5）。
+
+> **`GET /api/providers` 为什么不进 MCP**（判据见 §1.2）：**能力发现是 UI 管道**——它的读者是"要渲染一个 provider 单选框"的前端。agent 调用方拿到这张表**没有可做的决策**：`create_sandbox` 的 `provider` 缺省即用默认档，能力不匹配后端会以 409 明确拒绝（上一条），所以 agent 既不需要先查一遍再挑，也不需要靠它自检。为一个无决策的只读列表多开一个 tool，只是徒增 MCP 面。**注意 §9 平台面另有一个同名能力 `listProviders`（`GET /api/system/providers`，运维看板，尚未落地）——两者不是一回事**，本行是 sandbox 上下文的 `SandboxApplicationService.listProviders()`。
 
 ---
 
@@ -238,7 +243,7 @@
 | `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：逐项 `event: check` + 末尾 `event: done` | — | 单项超时 5s，一项卡住不阻塞整轮；检查项含 **`DATA_ROOT` 文件系统类型与 reflink 支持** |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
-| `listProviders` | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 最近 testkit 结果 | — | 统一名（P1-6） |
+| `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 + 最近 testkit 结果 | — | 统一名（P1-6）。**⏳ 尚未落地**。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页 |
 | `health` | `GET /api/health` | | `{ ok: true }` | — | **唯一豁免访问口令的端点** |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |
 
@@ -356,6 +361,8 @@ Step2 确认：
 
 两个协议面注入**同一个 application service 实例**（02 §1），且 DTO 来自**同一份 zod schema**（02 §3）——因此一致性是结构性的，不是靠人对齐。
 
+**最近一个实证**：`CreateSandboxSchema` 加 `require` 字段后，MCP tool `create_sandbox` **未写一行代码就获得了该参数**（`@Tool({parameters})` 用的就是同一个 schema），能力校验也在同一个 `SandboxApplicationService.create()` 里发生 → 两面同样返回 `UNSUPPORTED_CAPABILITY`。这正是"两层壳同一门面"想要的性质：**契约演进默认两面同步，不同步才需要专门写理由**（§11.4 那两条就是有理由的例外）。
+
 ### 11.2 验证方式
 
 25 §5 的 interface e2e 对**同一场景各跑一遍 REST 与 MCP**并断言结果等价（如 `E2E-1-mcp`：经 MCP `create_sandbox` 走一遍，结果与 REST 等价）。这是"两层壳同一门面"的唯一可执行证明。
@@ -364,6 +371,7 @@ Step2 确认：
 
 | REST 有、MCP 无 | 为什么 |
 |---|---|
+| **`GET /api/providers`（能力发现）** | **它是 UI 管道**：读者是要渲染 provider 单选框的前端。agent 拿这张表无决策可做——不传 `provider` 即用默认档，能力不匹配后端以 409 `UNSUPPORTED_CAPABILITY` 明确拒绝（§2 第 5 条）。多开一个无决策的只读 tool 只是徒增 MCP 面 |
 | project 的 `get` / `delete` / `retryClone`、保留卷两个端点 | 上层 agent 只需要"看有哪些工作区 / 建一个"，删除与重试是人的决策 |
 | runtime 全部鉴权与凭证端点（8 个） | **安全**：一个被诱导的上层 agent 不该能吊销你的凭证或改生效模式 |
 | credential Git 凭证族（4 个） | 同上 |
@@ -400,7 +408,7 @@ Step2 确认：
 
 | 面 | 10/02 的总数 | 本文覆盖 | 差 |
 |---|---|---|---|
-| REST 端点（不含 v1.5 占位） | 54 | 54 | 0 |
+| REST 端点（不含 v1.5 占位） | 55 | 55 | 0 |
 | REST v1.5 占位 | 2 | 2（§9 标注） | 0 |
 | MCP tools | 10 | 10 | 0 |
 | WS 通道 | 2 | 2（§7） | 0 |

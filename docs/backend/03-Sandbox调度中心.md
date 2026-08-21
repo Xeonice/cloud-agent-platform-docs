@@ -51,16 +51,35 @@ interface SchedulingStrategy {
 
 ## 3. 并发控制（防超分配）
 
+- **能力静态校验是创建链路的第 0 步**，在进队列之前就把不可能成功的请求挡掉（详见 §3.1）。
 - 资源池"读-改-写"（校验剩余容量 → 登记占用）必须在**临界区**内完成：`async-mutex` 或 Promise 链式队列，只把「配额登记/释放」这一小段串行化。
 - 慢 IO（拉镜像、起容器）在临界区**外**并行执行；失败时回滚已登记配额。
 - 所有创建/销毁请求先进 `SchedulerQueue`（FIFO），保证公平性与可预测性。
 
 ```
-请求 → SchedulerQueue(FIFO) → [互斥区: 校验+登记配额] → 并行: 拉镜像/create/start
-                                       │ 失败
-                                       ▼
-                                  回滚配额登记 → 状态 failed
+请求 → [能力静态校验] → 解析项目 → 落 pending 记录 → SchedulerQueue(FIFO)
+         │ 不满足                                              │
+         ▼                                                     ▼
+  409 UNSUPPORTED_CAPABILITY              [互斥区: 校验+登记配额] → 并行: 拉镜像/create/start
+  （零副作用：不落库、不进队列）                        │ 失败
+                                                      ▼
+                                              回滚配额登记 → 状态 failed
 ```
+
+### 3.1 创建前的能力静态校验（04 §5 「创建前静态校验」的落点）
+
+`SandboxApplicationService.assertCapabilities()` 是创建链路上**第一个**执行的检查，位置在 `create()` 的最前面——**早于项目解析、早于落库、早于进调度队列**。两条规则：
+
+| 规则 | 判定 | 为什么是无条件/可选 |
+|---|---|---|
+| **`spawnTty` 无条件必需** | 所选 provider `capabilities.spawnTty === false` → 直接拒绝，**与请求传没传 `require` 无关** | 本平台每个 agent runtime 都要 TTY（终端页 + runtime 鉴权入口，04 §2.5 `spawnTty` 行）。不支持 TTY 的 provider 承载不了**任何** sandbox，与其让它建完再在终端环节失败，不如建不出来 |
+| **`require.*` 逐位校验** | 请求显式要求某位为 `true` 而 provider 声明 `false` → 拒绝。可要求的位：`spawnTty` / `volumeMount` / `updateResources` / `pauseResume` / `snapshot` | 调用方对隔离档位有硬需求时（如"必须能快照"），**宁可在入口拒绝，也不要深入到 provisioning 里才炸**。**刻意不含 `watchEvents`**——push/poll 对调用方完全封装（04 §5），要求它没有可观测意义 |
+
+两条都抛 `SandboxProviderError(UNSUPPORTED_CAPABILITY)`，经 04 §4 同一张 contract→HTTP 映射表出 **409**。这是 `UNSUPPORTED_CAPABILITY` 在平台里的**第一个真实抛出点**（此前该码只存在于映射表中）。
+
+> **"零副作用"是这一步的关键性质，不只是"早"**：校验失败时**没有 sandbox 记录落库、没有配额登记、`provider.create()` 一次都没被调用、不产生任何 WS 事件**（单测 `capability-negotiation.spec.ts` 逐条断言 `provider.create` 未被调用且仓储零行）。因此调用方拿不到 sandbox id，前端**不应**按"创建失败可重试"渲染，而应就地提示改选 provider——这与 `WORKSPACE_PREPARE_FAILED` 那类"已落库、已进调度、中途失败"的错误在产品语义上完全不同（27 §2）。
+>
+> 顺带一提，**放在项目解析之前也是有意的**：能力不匹配是"这个请求本身不可能成功"，与项目存不存在、能不能接任务无关；先做项目解析只会让一个必然被拒的请求多打一次 DB。
 
 ## 4. 生命周期状态机
 
