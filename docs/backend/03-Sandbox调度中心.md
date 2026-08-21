@@ -242,7 +242,7 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 1. **DooD 下 named volume 的复制无解**——平台进程在容器里，要把基线复制进 named volume 得再起一个挂载两卷的临时容器，一次 Task 创建多一次容器生命周期；宿主目录只是一次 `cp -a`。
 2. **CoW 只有文件系统给得了**：`--reflink=auto` 在 btrfs/xfs 上让"每 Task 独立副本"的磁盘成本从 N×仓库体积降到接近 1×，这是本方案最大的收益（磁盘是真实瓶颈，§1）。
 3. **可观测**：出问题时运维能直接 `ls` / `du` 看工作区，不必 `docker volume inspect`。
-4. **代价与边界**：① 宿主路径与容器路径必须一致（compose 用绝对路径挂载，11 §1）；② 文件属主/权限要与沙箱内运行用户对齐——**准备阶段实际做的是 `chmod 0777`，不是 `chown`**（原文写 `chown`，已按实现更正；原因与安全影响见 §7.6）；③ 跨文件系统时 `--reflink` 静默退化为全量拷贝，**必须在启动诊断里报出 DATA_ROOT 的文件系统类型**，否则用户会在 ext4 上疑惑磁盘为什么涨得快。
+4. **代价与边界**：① 宿主路径与容器路径必须一致（compose 用绝对路径挂载，11 §1）；② 文件属主/权限要与沙箱内运行用户对齐——**准备阶段实际做的是父目录 `chmod 0700` + 工作区 `chmod 0777`，不是 `chown`**（原文写 `chown`，已按实现更正；原因见 §7.6）；③ 跨文件系统时 `--reflink` 静默退化为全量拷贝，**必须在启动诊断里报出 DATA_ROOT 的文件系统类型**，否则用户会在 ext4 上疑惑磁盘为什么涨得快。
 
 空项目（`source_type='empty'`）没有基线目录，Task 级直接 `mkdir` 空目录。
 `projects.workspace_mode='shared'`（v1.1 协作共享卷）时跳过复制，直接把 `baselines/<projectId>` 以 rw 挂载——本文档只留分支位，v1.1 再细化并发写保护。
@@ -360,17 +360,19 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
        1. mkdir DATA_ROOT/workspaces/<sandboxId> + 写标记文件 .platform-workspace-state=preparing
        2. cp -a --reflink=auto  baselines/<projectId>/.  →  workspaces/<sandboxId>/
           （空项目：跳过复制，留空目录）
-       3. chmod 0777（⚠️ 原文写 "chown 到容器内运行用户"，与实现不符——按实现更正，理由与安全影响见下方 ⚠️ 块）
+       3. 父目录 workspaces/ chmod 0700 + 工作区目录 chmod 0777（⚠️ 原文写 "chown 到容器内运行用户"，与实现不符——按实现更正，理由见下方块）
        4. 标记文件改为 ready
    → creating（provider.create 时把该目录作为 host-path 挂载，源已存在）
    → starting（凭证 materialize + injectCredential，05 §4；注入形态与落点见下）
 ```
 
-- **⚠️ 工作区权限：文档原写 `chown`，实现是 `chmod 0777` —— 已按实现更正，并据实登记为一处安全面（⏳ 留待 Step 4 加固）**
-  - **实现事实**：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 在 `prepare()` 末尾对工作区目录 `chmod(hostPath, 0o777)`，**全程没有任何 `chown`**。类注释自陈了原因：bind mount 进沙箱后属主显示为 **root**（docker 与 BoxLite 都**不重映射宿主属主**），而 in-sandbox agent 以非 root 用户 **`gem`** 跑，**实测 0755 ⇒ `Permission denied`，0777 ⇒ 可读写**。
-  - **为什么 `chown` 当时没做成**：宿主侧要 `chown` 到"沙箱内运行用户"，前提是知道那个 uid **且宿主有权改属主**（通常要 root）。0777 是绕过这两个前提的最短路径。
-  - **安全影响（据实登记，别当作已解决）**：0777 是**宿主侧**的可达面——宿主上任意本地用户都能读写该 sandbox 的整个工作区（含 clone 下来的私有仓源码，以及注入落盘的凭证若落在工作区内）。它与上面 agent 端口 loopback publish 是**同一类问题**：单机形态为了跑通而放开的宿主本地面。
-  - **⏳ Step 4 的目标形态**：`chown` 到沙箱内运行用户的 uid（`gem`=1000，但**必须运行时探测、不硬编码**——理由同 04 §2.1★ 的方法论条款）+ `chmod 0700`；宿主无 `chown` 权限时退回 user namespace remap 或 rootless 形态。改动前后都要有一条 e2e 断言"agent 能在 `/workspace` 读写"。
+- **✅ 工作区权限（Step 4 已加固）：工作区目录 0777 保留，可达面收在父目录 `workspaces/` 的 0700 上**
+  - **实现事实**：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 的 `prepare()` 先 `mkdir` 并把 `${DATA_ROOT}/workspaces` `chmod 0o700`（**每次 prepare 都做**，把加固前遗留、或被部署脚本重建成 0755 的父目录一并收紧），再在末尾对工作区目录 `chmod(hostPath, 0o777)`。
+  - **为什么工作区目录仍是 0777**：bind mount 进沙箱后属主显示为 **root**（docker 与 BoxLite 都**不重映射宿主属主**），而 in-sandbox agent 以非 root 用户 **`gem`** 跑，**实测 0755 ⇒ `Permission denied`，0777 ⇒ 可读写**。
+  - **为什么不 `chown`（两条硬约束，都成立）**：① 宿主侧 `chown` 到别的 uid 需要 root/CAP_CHOWN，平台进程通常没有；② **更关键**——本阶段**根本拿不到那个 uid**：流水线顺序是 `preparing-workspace` **先于** `creating`，chmod 发生时实例还不存在，没有对象可探测，而本节自己禁止硬编码 1000。所以“运行时探测 uid 后 chown”在这个插入点不可实现，除非额外起一个探测容器。
+  - **为什么 0700 父目录就够**：0777 的目录**够不到就不是可达面**。POSIX 目录的 `x` 位控制 traverse——父目录 0700 且属平台用户时，宿主上**其他本地用户**对 `workspaces/<id>/…` 的读与写（含 `unlink`/`create`，即投喂 `AGENTS.md` / `.mcp.json` 的路径）**一律 EACCES**。**实测**（Linux 同内核对照）：父 0700 ⇒ 另一 uid 读失败、在 0777 子目录内建文件也失败；父改 0755 ⇒ 两者立刻成功。bind mount 不受影响——挂载源由**宿主的容器运行时（root）**解析，不走调用方的 traverse 权限；实测 0700 父目录下的 0777 子目录挂进沙箱后 `gem` 照常读写。
+  - **残留风险（如实说明，别当已解决）**：这挡住的是**其他本地用户**，**挡不住以平台用户身份运行的其他进程**（同一 uid 天然可 traverse）。同 uid 进程本来就能读 `platform.db` 与 `.master.key`，所以不是新增暴露面，但也意味着本条**不是**“同用户隔离”。真正消除它需要独立 uid / user namespace remap / rootless 形态——属部署形态问题，不在本层解决。
+  - **回归**：`workspace-permissions.spec.ts`（父 0700 + 子 0777 + 旧 0755 父目录被收紧）；两条真实例 e2e（`terminal-container` / `boxlite-microvm`）在断言“沙箱内能读写 `/workspace`、宿主与沙箱双向可见”的同时断言这两个 mode。
 - **`starting` 阶段的凭证注入步（S5 provision 接线点，05 §7.1 第 2 条留的那个）**：`prepare → inject → record` 三步——`CREDENTIAL_FACADE.prepareRuntimeCredential` → `adapter.injectCredential(cred, exec)` 一次性 exec → 写 `credential_sandbox_bindings` 台账（吊销联动依赖它，05 §4 吊销行）。两条实现纪律来自 **S5 技术验证（2026-08 真容器实测）**：
   - **注入形态按 05 §4 的最小暴露优先级，且已按实测修订**：codex 落 `0600` 的 `auth.json` 且 **`refresh_token` 值替换为占位串**（字段必须保留——直接删会 `missing field 'refresh_token'`；真值绝不进沙箱，05 §1★★）；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env。
   - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——⚠️ 原写"实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000）"，**已更正**：那是 `docker run` 通道的观察，平台走的是 in-sandbox agent（以 `gem` 用户跑），**真实通道下两侧 `$HOME` 同为 `/home/gem`**——所以硬编码 `/root` 在**两侧都必错**（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
@@ -478,6 +480,7 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 | **非 CoW 文件系统上磁盘暴涨**（ext4 静默退化为全量拷贝） | 启动诊断显式报出 fs 类型与是否支持 reflink；文档明示推荐 btrfs/xfs（11 §1） |
 | **提示符启发式误报**（§4.1） | 定死"只驱动展示、不驱动决策"红线；阈值与正则集可配；宁可漏报 |
 | **半成品工作区目录残留占满磁盘**（§7.6） | 目录标记文件 `.platform-workspace-state=preparing` + 启动对账无条件 `rm -rf` |
+| **⏳ backlog：boxlite `detach:true` 的残留 Box 让宿主端口活过后端**（ADR 决策 B） | 现状只有"DB 里没有该 sandbox ⇒ 收 Box"这一条判据（`runtime-reconciler.ts` 按 `platform-boxlite-` 前缀），**够不到**"DB 里有行、但行已 destroyed / 端口已换、Box 仍在转发"的情况。加固 1 之后残留端口至少是**带鉴权**的（token 随行消亡即失效），所以不是敞口 shell，只是端口与资源泄漏。**本轮不做**；目标形态：启动对账按 DB 的 `agent_endpoint_port` + 终态行反查并回收残留 Box |
 | **clone 子进程僵死**（§7.2） | 30min 硬超时 + `GIT_TERMINAL_PROMPT=0` 禁交互 + 进程重启时按 `INTERRUPTED` 判死不续跑 |
 | **自动化规则刷屏**（失败每分钟重试、webhook 轰炸） | §8.4 先降频再禁用；webhook 投递失败不重试到底（2 次即放弃） |
 | **无头日志写满磁盘**（§8.6） | 10MB × 3 分片轮转 + 保留期清理 |

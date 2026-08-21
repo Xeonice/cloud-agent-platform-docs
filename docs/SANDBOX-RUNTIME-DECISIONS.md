@@ -63,15 +63,21 @@
 
 ## 安全姿态（收敛 S1 审查 P1）
 
-- **agent 端口不对外网暴露**：⚠️ **本条原写"容器 `:8080` 仅经 docker 内部网络对 backend 可达，绝不 publish 到宿主外部接口"——与实现不符，已按实现更正。**
-  **实现是 publish 到宿主 loopback**：aio 走 dockerode `PortBindings: { "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] }`（内核分配临时端口，`docker-container-backend.ts`）；boxlite 走 `ports: [{ hostPort, guestPort: 8080, hostIp: "127.0.0.1" }]` 且 `detach: true`（端口转发随 microVM 存活，跨后端重启仍可达，`boxlite-sandbox.provider.ts`）。选它的原因是单机形态（含 macOS Docker Desktop，容器 IP 宿主不可达）拿不到内部网络地址。
-  **⚠️ 这是一处真实安全面，据实登记（⏳ 留待 Step 4 加固）**：`127.0.0.1` 挡住的是**外部主机**，挡不住**宿主本机**——宿主上任意本地进程（任意用户、任意脚本）都能直接 `POST http://127.0.0.1:<port>/v1/bash/exec`，那是一个**无鉴权 shell**（代码注释原文 *"the agent is an unauthenticated shell"*），等于绕开平台全部鉴权直接在沙箱内任意执行。可选加固方向：生产形态改走共享 docker 网络 + 不 publish（11 §1）；或给 agent 加一次性 token；或改 unix socket。**在加固前，任何"agent 端口不可达"的安全论证都不成立。**
+- **agent 端口的可达面 + 鉴权（Step 4 已加固）**：
+  **端口形态（未变，据实记录）**：aio 走 dockerode `PortBindings: { "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] }`（内核分配临时端口，`docker-container-backend.ts`）；boxlite 走 `ports: [{ hostPort, guestPort: 8080, hostIp: "127.0.0.1" }]` 且 `detach: true`（端口转发随 microVM 存活，跨后端重启仍可达，`boxlite-sandbox.provider.ts`）。选它的原因是单机形态（含 macOS Docker Desktop，容器 IP 宿主不可达）拿不到内部网络地址。**⚠️ 原文写"仅经 docker 内部网络对 backend 可达、绝不 publish 到宿主"——与实现不符，已按实现更正。**
+  **原风险**：`127.0.0.1` 挡的是**外部主机**，挡不住**宿主本机**——加固前宿主上任意本地进程（任意用户、任意脚本，例如 `npm install` 的 postinstall）都能直接 `POST http://127.0.0.1:<port>/v1/bash/exec`，那是一个**无鉴权 shell**，绕开平台全部鉴权在沙箱内任意执行、读走凭证与私有仓源码。
+  **✅ 加固形态：用 agent 自带的鉴权网关（探明 2026-08，实测真镜像 `ghcr.io/agent-infra/sandbox:latest`）**。AIO 镜像**原生支持鉴权，只是默认关**：`/opt/gem/entrypoint.sh` 依据环境变量 `JWT_PUBLIC_KEY` 是否非空，在 `nginx-server-without-auth.conf` 与 `nginx-server-with-auth.conf` 之间切换前门。开启后除 `GET /v1/ping` 外**所有路由**都过 nginx `auth_request` → agent 自己的 `GET /auth`（`gem/routers/auth.py`）：base64 解码 `JWT_PUBLIC_KEY` 得到 PEM 公钥，**只认 RS256**（`jwt_algorithms=["RS256"]` 硬编码、无 env 覆盖），不校验 `aud`/`iss`，`exp` 存在才校验。
+  **实现**：两个 provider 在 `create()` 各自生成一次性 RSA-2048 密钥对（`agent-auth.ts`）——公钥经 `ctx.env.JWT_PUBLIC_KEY` 注入实例（**平台的值覆盖调用方的值**：空值会把镜像切回免鉴权配置），用私钥签一枚 claim 极简（`sub`+`jti`，无 `exp`/`aud`）的 RS256 JWT 后**私钥即丢弃**；token 挂在 `SandboxHandle.agentAuthToken` 上由平台持久化（`sandboxes.agent_auth_token`），客户端每次 HTTP 调用带 `Authorization: Bearer`。
+  **websocket（PTY）走 ticket**：运行时的 WHATWG `WebSocket` **不能带请求头**，token 无法随 upgrade 走。agent 正好为此留了口子——`POST /tickets`（自身受 Bearer 保护）签发短票，`GET /auth` **优先**从 nginx 的 `X-Original-URI` 里读 `ticket` 查询参数。所以 `openTerminal` 先用 token 换票、再把票拼进 `ws /v1/shell/ws?ticket=…`；**换票失败绝不降级为匿名连接**（`aio-sandbox-agent.client.ts`）。
+  **就绪门槛同时变成鉴权自检**：`waitForAgent` 现在要求**带 token 的请求 2xx**（证明前门 + auth 后端 + 注入的公钥三者都活了，第一次 exec 不会撞上半启动的网关），并且**匿名请求必须被拒**——镜像若忽略 `JWT_PUBLIC_KEY`，实例会在 `start()` **响亮失败**而不是安静地继续当开放 shell。
+  **实测证据**：匿名 `POST /v1/bash/exec` / `POST /v1/file/read` ⇒ 401；伪造 Bearer ⇒ 401；匿名 ws upgrade ⇒ 拒绝；平台带 token 的 exec 与 PTY ⇒ 正常（`apps/api/test/e2e/aio-agent-auth.e2e-spec.ts`，8 条断言全过）。
+  **残留风险（如实登记）**：token 与 `platform.db` 同处 `DATA_ROOT`，**以平台用户身份运行的进程**仍能读出它——那类进程本来也能读 `.master.key`，所以不是新增暴露面，但本条买到的是"挡住盲扫 loopback 与其他本地用户"，**不是**"同用户隔离"。**复议触发条件不变且升 P0**：一旦引入端口转发、多用户、或把 agent 端口暴露到非 loopback/远程可达，必须重新评估（届时应改走共享 docker 网络 + 不 publish，或 unix socket）。
 - **前端→网关鉴权**：终端 socket.io 握手纳入访问口令/会话校验（修 S1 审查 P1-1，`PasscodeGuard` 对 ws 上下文自豁免的洞）。
-- 组合（**现状**）：外层前端→网关认口令；内层网关→agent 走**宿主 loopback**。⚠️ 原写"走内网、不外露"，已按实现更正——**内层这一段今天没有鉴权，只靠 loopback 限定"外部主机不可达"**，宿主本机不在保护范围内。⏳ Step 4 之前，这条组合只成立一半。
+- 组合（**加固后**）：外层前端→网关认口令；内层网关→agent 走**宿主 loopback + 每沙箱一枚 RS256 bearer token**。⚠️ 原写"走内网、不外露"，已按实现更正；内层这一段**现在有鉴权**，loopback 只是纵深的第一层而非唯一防线。剩下的缺口是同一 uid 的本地进程（见上条残留风险）。
 
 ## 影响面
 
-- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox agent，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox agent；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露 agent 端口——**实现为宿主 loopback publish**，见上「安全姿态」+ 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（agent 端点运行时解析、**不落库**）· P19（boxlite 措辞已正确，无需改）。
+- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox agent，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox agent；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露 agent 端口——**实现为宿主 loopback publish**，见上「安全姿态」+ 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（agent 端点：`aio` 运行时解析不落库，`boxlite` 的转发端口与**两侧的 agent bearer token** 必须落库——⚠️ 原写"一律不落库"，已按实现更正，见 13 §2.1.1）· P19（boxlite 措辞已正确，无需改）。
 - **代码 refactor（S1 之上）**：
   - 后端：**provider 的 `spawn` 实现**从 docker exec 换成 `AioSandboxAgentClient(ws /v1/shell/ws)`（`tty:false` 走 exec 端点——当时是 `/v1/shell/exec`，**现为 `/v1/bash/exec`**，见 04 §2.3★），**网关保持不变**；`DockerExecAgentClient` 降为 fallback；boxlite 控制面接 BoxLite SDK；容器/Box 创建暴露 agent 端口（**实现为宿主 loopback publish**）+ 就绪探测；provision 失败销毁容器/Box（修审查 P1-2）；WS 握手口令校验（修 P1-1）。
   - 前端：**契约不变**，仅并入 S1 审查的 P0（连接抖动）+ P1（onInvalidFrame 接线）修复。
