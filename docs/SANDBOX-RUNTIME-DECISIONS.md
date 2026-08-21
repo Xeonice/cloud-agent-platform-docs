@@ -10,7 +10,7 @@
 - **控制面**（NestJS backend + dockerode / containerd）：沙箱生命周期 `create/start/stop/destroy/inspect`。provider 特定。
 - **数据面**：`exec / pty / fs` 走**沙箱内 agent**。aio/boxlite = **AIO Sandbox 自带 API**（`http://<container>:8080`，agent-infra/sandbox）：
   - 交互终端：`ws /v1/shell/ws`
-  - 命令执行：`POST /v1/shell/exec`、`/v1/bash/*`（有状态、stdout/stderr 分离、poll/wait/view）
+  - 命令执行：**`POST /v1/bash/exec`**（有状态会话，原生带 `env`/`exec_dir`/`hard_timeout`，stdout/stderr 分离 + `exit_code`）+ 同族的 `/v1/bash/kill`（真实信号）。⚠️ **不是 `/v1/shell/exec`**——那个端点只收 `command`/`exec_dir`/`timeout`，**没有 `env`/stdin/signal**（实测，04 §2.3★）
   - 文件（后续切片）：其 File API
 - **裸镜像 fallback**：`DockerExecAgentClient`（宿主 `docker exec`），仅用于**无内置 agent 的镜像**（如 S1 alpine e2e）。是 fallback，不是主路。
 - **未来 microVM**（Kata/Firecracker）：**同一数据面契约**，agent 经 vsock/网络；**终端/exec 契约零改动**。
@@ -25,7 +25,7 @@
 - **为什么是它、不是 gVisor/Kata/Firecracker**：本平台单机私有化、**部署目标含 macOS**，gVisor 是 Linux-only、Firecracker/Kata 需 KVM/Linux，**都上不了 Mac 原生**。BoxLite 是当前唯一能在 Mac（Apple Silicon / Hypervisor.framework）原生跑"独立内核 microVM"的选型——boxlite 这一档从设计之初就是为此而生（P19"独立内核微虚拟机"措辞正确，无需修订）。
 - **控制面差异**：aio 生命周期用 dockerode（docker daemon）；boxlite 生命周期用 **BoxLite SDK/API**（非 docker）。数据面（沙箱内 `:8080` agent）两档统一。
 - **落地门槛：已实测通过 ✅**（本机 macOS 15.5 / Apple Silicon）：
-  - **aio(Docker)**：`/v1/shell/exec` + `ws /v1/shell/ws` 终端 ✅；Chromium 经 CDP 真导航 example.com 拿到标题 ✅（在 AIO 镜像 amd64/QEMU 副本上实测；arm64 原生功能等价、未复测）。
+  - **aio(Docker)**：`/v1/shell/exec`（S1 当时的验证端点；**数据面现已切到 `/v1/bash/exec`**，见 04 §2.3★）+ `ws /v1/shell/ws` 终端 ✅；Chromium 经 CDP 真导航 example.com 拿到标题 ✅（在 AIO 镜像 amd64/QEMU 副本上实测；arm64 原生功能等价、未复测）。
   - **boxlite(BoxLite microVM)**：microVM 起 ✅（aarch64, kernel 6.12, Hypervisor.framework, ~6s）；exec/并发 ✅；**Chromium 148 在 microVM 内起动 + 本地渲染 + 联网导航 ✅**（唯一告警 headless 无 dbus，无害，exit 0）。
   - **Box 内 `:8080` 访问机制（此前未知，已确认）**：BoxLite SDK `SimpleBox({ ports:[{hostPort, guestPort}] })` 做端口转发，实测 host→VM HTTP 200。数据面模型在 boxlite 上成立。
 
@@ -54,7 +54,7 @@
 - **契约面不变**：04 的 `SandboxProvider.spawn({tty}) → ProcessStream` 已是实现无关的正确抽象（04 §2.2/§2.4）。**本决策不改 04 契约**，只钉死 aio/boxlite 的**实现形态**：
   - `spawn` 由 **in-sandbox agent 数据面**支撑，**不是宿主 docker exec**：
     - `tty:true` → 连 AIO `ws /v1/shell/ws`，包装成 `ProcessStream`（翻译见上表）。
-    - `tty:false` → 走 AIO `POST /v1/shell/exec`（收集输出到 EOF；即 04 §2.3 的 `toExecFn` 语义）。
+    - `tty:false` → 走 AIO **`POST /v1/bash/exec`**（收集输出到 EOF；即 04 §2.3 的 `toExecFn` 语义）。**选它而不是 `/v1/shell/exec`：后者不支持 `env`/stdin/signal**，`/v1/bash/exec` 原生带 `env`/`exec_dir`/`hard_timeout`，配套 `/v1/bash/kill` 投递真实信号（能力面与实测见 04 §2.3★）。
   - 裸镜像 fallback：`DockerExecAgentClient`（docker exec 包装成同一 `ProcessStream`）。
 - **控制面按 provider 分实现**（04 §2.2 已列）：`AioSandboxProvider`→dockerode（经 socket-proxy，11 §1）；`BoxliteSandboxProvider`→BoxLite SDK（`@boxlite-ai/boxlite`，进程内嵌，无 daemon）。
 - provider capability 增：`hasInSandboxAgent: boolean`、`agentPort`（默认 8080）、`isolationKind: 'docker-container'|'boxlite-microvm'`。
@@ -63,15 +63,17 @@
 
 ## 安全姿态（收敛 S1 审查 P1）
 
-- **agent 端口内部可达**：容器 `:8080` 仅经 docker 内部网络对 backend 可达，**绝不 publish 到宿主外部接口**（否则等于开放未认证 shell）。
+- **agent 端口不对外网暴露**：⚠️ **本条原写"容器 `:8080` 仅经 docker 内部网络对 backend 可达，绝不 publish 到宿主外部接口"——与实现不符，已按实现更正。**
+  **实现是 publish 到宿主 loopback**：aio 走 dockerode `PortBindings: { "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: "" }] }`（内核分配临时端口，`docker-container-backend.ts`）；boxlite 走 `ports: [{ hostPort, guestPort: 8080, hostIp: "127.0.0.1" }]` 且 `detach: true`（端口转发随 microVM 存活，跨后端重启仍可达，`boxlite-sandbox.provider.ts`）。选它的原因是单机形态（含 macOS Docker Desktop，容器 IP 宿主不可达）拿不到内部网络地址。
+  **⚠️ 这是一处真实安全面，据实登记（⏳ 留待 Step 4 加固）**：`127.0.0.1` 挡住的是**外部主机**，挡不住**宿主本机**——宿主上任意本地进程（任意用户、任意脚本）都能直接 `POST http://127.0.0.1:<port>/v1/bash/exec`，那是一个**无鉴权 shell**（代码注释原文 *"the agent is an unauthenticated shell"*），等于绕开平台全部鉴权直接在沙箱内任意执行。可选加固方向：生产形态改走共享 docker 网络 + 不 publish（11 §1）；或给 agent 加一次性 token；或改 unix socket。**在加固前，任何"agent 端口不可达"的安全论证都不成立。**
 - **前端→网关鉴权**：终端 socket.io 握手纳入访问口令/会话校验（修 S1 审查 P1-1，`PasscodeGuard` 对 ws 上下文自豁免的洞）。
-- 组合：外层前端→网关认口令；内层网关→agent 走内网、不外露。
+- 组合（**现状**）：外层前端→网关认口令；内层网关→agent 走**宿主 loopback**。⚠️ 原写"走内网、不外露"，已按实现更正——**内层这一段今天没有鉴权，只靠 loopback 限定"外部主机不可达"**，宿主本机不在保护范围内。⏳ Step 4 之前，这条组合只成立一半。
 
 ## 影响面
 
-- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox agent，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox agent；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露内网 agent 端口 + 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（agent 端点运行时解析、**不落库**）· P19（boxlite 措辞已正确，无需改）。
+- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox agent，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox agent；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露 agent 端口——**实现为宿主 loopback publish**，见上「安全姿态」+ 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（agent 端点运行时解析、**不落库**）· P19（boxlite 措辞已正确，无需改）。
 - **代码 refactor（S1 之上）**：
-  - 后端：**provider 的 `spawn` 实现**从 docker exec 换成 `AioSandboxAgentClient(ws /v1/shell/ws)`（`tty:false` 走 `/v1/shell/exec`），**网关保持不变**；`DockerExecAgentClient` 降为 fallback；boxlite 控制面接 BoxLite SDK；容器/Box 创建暴露内网 agent 端口 + 就绪探测；provision 失败销毁容器/Box（修审查 P1-2）；WS 握手口令校验（修 P1-1）。
+  - 后端：**provider 的 `spawn` 实现**从 docker exec 换成 `AioSandboxAgentClient(ws /v1/shell/ws)`（`tty:false` 走 exec 端点——当时是 `/v1/shell/exec`，**现为 `/v1/bash/exec`**，见 04 §2.3★），**网关保持不变**；`DockerExecAgentClient` 降为 fallback；boxlite 控制面接 BoxLite SDK；容器/Box 创建暴露 agent 端口（**实现为宿主 loopback publish**）+ 就绪探测；provision 失败销毁容器/Box（修审查 P1-2）；WS 握手口令校验（修 P1-1）。
   - 前端：**契约不变**，仅并入 S1 审查的 P0（连接抖动）+ P1（onInvalidFrame 接线）修复。
 - **验证**：docker/boxlite e2e 改用 **AIO Sandbox 镜像**（含 `:8080`）跑真 `ws /v1/shell/ws` 终端；boxlite 档经 BoxLite 起 Box（宿主未装 BoxLite 则该档 skip loud，不静默假过）。
 

@@ -47,21 +47,31 @@ packages/contracts/                 # 现名 @platform/contracts（private）；
 
 > 隔离强度的进一步演进（gVisor / Firecracker 等，见文档 11 §5）不需要改 contract：`boxlite` 已经把"contract 能不能容纳非容器实现"这件事验证过一遍了。
 
-> **★ S5 技术验证：两个内建方案的真实身份/能力差异（2026-08，同一镜像 `agent-infra/sandbox:latest`，只换 provider 实测）**
+> **★ S5 技术验证 · 纠错重写（2026-08）：经平台真实执行通道实测的两侧事实——原差异表已被推翻**
 >
-> | 维度 | `aio`（docker 容器） | `boxlite`（microVM） |
+> ⚠️ **本节此前那张差异表（`aio` = `uid=0` root / `CapEff=a80425fb` / `$HOME=/root` / npm prefix `/opt/nodejs/22`，`boxlite` = `uid=1000` gem / `/home/gem`）以及由它推出的"两 provider 身份/能力不同"这个前提，已被推翻并删除，不要再引用。**
+>
+> **错在哪：验证走错了通道。**那批数据是用 `docker run --entrypoint bash` 直接进容器量的——那条路径进去确实是 `root`、`HOME=/root`；但**平台从不走那条路**：平台的 `spawn` 走 **in-sandbox agent 的 HTTP exec 端点**（当时是 `/v1/shell/exec`，现已切到 `/v1/bash/exec`——见 §2.3★；身份结论不受端点切换影响）（§2.2 映射表、[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)），而**该 agent 以非 root 用户 `gem` 运行**。代码侧其实早有旁证：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 的类注释写着 *"the in-sandbox AIO agent runs as the NON-root user `gem`"*，工作区 0755 会 `Permission denied`、只能放到 0777。
+>
+> **用平台真实通道重测（真 `AioSandboxProvider.spawn`，同一镜像 `agent-infra/sandbox:latest`，只换 provider）——两侧一致，不存在"身份不同"**：
+>
+> | 维度（一律经平台 `spawn` 通道实测） | `aio`（docker 容器） | `boxlite`（microVM） |
 > |---|---|---|
-> | 运行身份 | `uid=0` root | `uid=1000` gem |
-> | `CapEff` | `a80425fb`（Docker 默认档） | `0000000000000000`（**零**） |
-> | sudo | root，无需 | **免密 sudo 可用** |
-> | `$HOME` | `/root` | `/home/gem` |
-> | npm prefix | `/opt/nodejs/22` | `/home/gem/.npm-global` |
+> | 运行身份 | `gem`（agent 的运行用户；HOME/prefix 与右列一致佐证） | `uid=1000` gem |
+> | `$HOME` | `/home/gem` | `/home/gem` |
+> | npm prefix（`npm config get prefix`） | `/home/gem/.npm-global` | `/home/gem/.npm-global` |
+> | `PATH` | 两侧**相同**，且含用户级 prefix：`/opt/gem/bin:/home/gem/.fnm_shell/bin:/opt/nodejs/22/bin:…:/home/gem/.npm-global/bin:/home/gem/.local/bin:…` | 同左 |
+> | `command -v codex` | `/home/gem/.fnm_shell/bin/codex`（**fnm shim**，不是 `/opt/nodejs/22/bin/codex`） | 同左 |
 >
-> 这正是 §2.0 第 3 条「双实现验证」要暴露的那类差异：**同一份契约能被两侧满足，但 adapter 与平台逻辑不得依赖任一侧的特定值**。三条直接后果已分别落到条款上：
+> **⛔ 方法论教训（本次纠错真正的产出，比表格本身更值钱）：平台行为必须用平台自己的执行路径验证。**`docker run` / `docker exec` 进容器测出来的身份、HOME、PATH，**不代表平台看到的身份**——同一个容器，宿主直连是一条路径，in-sandbox agent 是另一条，用户与环境都不同。凡是要写进契约条款的"运行时事实"，必须经 `provider.spawn()` 取得；用别的通道量出来的数字一律不作数、不写进文档。
 >
-> 1. **凭证物化按运行时 `$HOME` 展开、不硬编码 `/root`**——硬编码在 boxlite 上必错（05 §4、05 §1★★）；§7 的镜像约定只承诺"HOME 可写"，从不承诺 HOME 是哪个路径。
-> 2. **`isInstalled` 必须走 `command -v` / PATH 查找**——CLI 装到哪里随 npm prefix 变（§3 与 §10.3 RA-01）。
-> 3. **install-on-start 在两侧都成立**——boxlite 虽非 root、`CapEff` 为零，但用户级 npm prefix 把 CLI 装进 `$HOME`，**不需要 root**（§3 ★1）。
+> **仍然成立的三条条款（结论不变，理由已按新事实改写）**：
+>
+> 1. **凭证物化按运行时 `$HOME` 展开、不硬编码**——真实通道下 `HOME=/home/gem`，**硬编码 `/root` 必错**（05 §4、05 §1★★）；§7 的镜像约定只承诺"HOME 可写"，从不承诺 HOME 是哪个路径。
+> 2. **`isInstalled` 必须走 `command -v` / PATH 查找**——理由**已更正**：不再是"两侧 npm prefix 不同"（实测**相同**），而是 ① prefix 是**用户级非标准位置** `/home/gem/.npm-global`，② `codex` 实际解析到 **fnm shim** `/home/gem/.fnm_shell/bin/codex` 而非 npm prefix 下的路径 ⇒ **硬编码任何具体路径都会错**（§3 `isInstalled` 行、§10.3 RA-01）。**正面证据（已实测，不再是推理）**：往 `$(npm config get prefix)/bin` 放一个可执行文件后，**新起一次 exec 跑 `command -v` 能找到它**（`/home/gem/.npm-global/bin/probecli`）——PATH 查找这条路在平台真实通道上是通的。
+> 3. **install-on-start 在两侧都成立**——两侧都以非 root 的 `gem` 跑，但用户级 npm prefix 把 CLI 装进 `$HOME`，**不需要 root**（§3 ★1）。
+>
+> **真正的 provider 差异在别处**：`boxlite` 是 microVM、每个 Box 有**独立 Linux 内核**（硬件辅助隔离），`aio` 是共享宿主内核的容器——这条由上面的方案表承载，不依赖任何沙箱内身份。**⏳ 其余维度（`CapEff`、免密 sudo 是否可用、seccomp 档位等）此前的数值全部取自 `docker run` 通道、未经平台通道复核，已从本表删除；需要时用 `spawn` 通道重测后再写回。**
 
 ### 2.2 必须实现的 6 个方法（每个方法平台拿它干什么）
 
@@ -98,11 +108,11 @@ interface SandboxProvider {
 |---|---|---|
 | create / start / stop / destroy | OCI 容器 create/start/stop/rm（经 socket proxy，文档 11 §1） | BoxLite 库调用创建/启动/停止/销毁 Box |
 | inspect | 容器 inspect + 健康探针 | Box 状态查询 |
-| spawn(tty=false) | 经 in-sandbox agent `POST /v1/shell/exec`（收集输出到 EOF） | 同左（Box 内 `:8080`，端口转发） |
+| spawn(tty=false) | 经 in-sandbox agent `POST /v1/bash/exec`（收集输出到 EOF）——**选它而不是 `/v1/shell/exec`，是因为后者不支持 `env`/stdin/signal**（§2.3★） | 同左（Box 内 `:8080`，端口转发） |
 | spawn(tty=true) | 经 in-sandbox agent `ws /v1/shell/ws`，翻译成 `ProcessStream` | 同左（Box 内 `:8080`，端口转发） |
 | watchEvents | ✅ 原生事件流 | ✅ 库回调包装成同一 `AsyncIterable` |
 
-> **数据面 = 沙箱内 agent（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/shell/exec` 命令）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**仅内网可达、就绪探测、不外泄**。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
+> **数据面 = 沙箱内 agent（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/bash/exec` 一次性命令；**命令面选 `/v1/bash/exec` 而非 `/v1/shell/exec`，因为后者不支持 `env`/stdin/signal**，实测能力面见 §2.3★）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**⚠️ 实现上 publish 到宿主 loopback（`127.0.0.1` + 临时端口）**（原文"仅内网可达、不外泄"与实现不符，已按实现更正）+ 就绪探测；宿主本地任意进程可直连该无鉴权 shell，⏳ 待 Step 4 加固——登记见该 ADR「安全姿态」。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
 
 ### 2.3 为什么把 `exec` / `attachPty` / `healthCheck` 从必须方法里删掉
 
@@ -115,6 +125,68 @@ interface SandboxProvider {
 结果：第三方需要实现的必须方法从 **9 个降到 6 个**，可选方法 2 个。
 
 > 与文档 06 的衔接：06 §3 的 `PtyStream` 就是 `spawn({tty:true})` 返回的 `ProcessStream`，**不再单独定义**——以本节为准，06 只保留实现对照表。
+
+> **★ S5 技术验证 · 二次纠错（2026-08）：`ProcessSpec` 的能力已基本兑现——此前判定"agent 做不到"，错在【我们一直在调一个能力最弱的端点】**
+>
+> **头条不是"补齐了实现"，而是"我们一直在敲错门"。**本节上一版写的是：`stdin` / `env` / `cwd` / `timeoutMs` / `kill()` **五项全被静默丢弃**、`⏳ S5 待补齐`，并把原因归给"agent 侧没有对应能力"。**这个前提是错的。**起真镜像（`localhost:5001/agent-infra/sandbox:latest`）拉 `GET /v1/openapi.json`（⚠️ **只有这一个路径拿得到**——`/openapi.json` 与 `/docs` 都 404）后发现：agent 暴露的是 **~120 个端点**，而我们从头到尾只用了其中**能力最弱的那一个**——`POST /v1/shell/exec`。换一个端点，五项里四项是**原生透传**，剩下一项（stdin）用一次文件重定向合成即可。
+>
+> **⛔ 方法论教训（本次真正的产出；与 §2.1★ 的"验证走错通道"是同一类错，这已经是第二次）：把一条限制写进设计之前，先探明依赖方 API 的真实能力面。**两次踩的是同一个坑——**用错入口，然后把这个入口的边界当成对方的能力上限**：§2.1★ 是"拿 `docker run` 量出来的身份当成平台看到的身份"，本节是"拿 `/v1/shell/exec` 量出来的能力当成 agent 的能力上限"。落成纪律：**写"依赖方做不到 XX"之前，必须先把对方的端点/参数清单拉全**（openapi / `--help` / 源码，任选但要拉全），并在文档里注明**探过哪些入口**；只试过一条路就下的否定结论，不许写进契约。
+>
+> **agent 端点能力面（实测真镜像，2026-08）**：
+>
+> | 端点 | body 实际支持的字段 | 实测结论 |
+> |---|---|---|
+> | `POST /v1/shell/exec`（**旧；平台已不再使用**，agent 侧仍在） | 仅 `command` / `exec_dir` / `timeout` / `hard_timeout` | **没有 `env`**（传了被静默吞：`{command:'echo E=$PROBE', env:{PROBE:'x'}}` ⇒ `E=`）、没有 stdin、没有 signal ⇒ 上一版"五项全 ✗"量的其实是**这一个端点**的边界 |
+> | `POST /v1/bash/exec`（**现用**） | `session_id` / `command` / `exec_dir` / **`env`** / `async_mode` / `timeout` / **`hard_timeout`** / `max_output_length` | 全部**原生生效**；返回 **stdout / stderr 分离 + `exit_code` + `command_id`** |
+> | `POST /v1/bash/kill` | `session_id` + `signal`（`SIGTERM`/`SIGKILL`/`SIGINT`，只此三种） | **真实信号投递**：`sleep 60` 被杀回 `exit_code:-15`，且**在飞的同步 exec 请求立刻解阻塞** |
+> | `POST /v1/file/write` | `file` / `content` / `encoding` / `append` | 内容走 **HTTP body**——不经过命令行 |
+> | `POST /v1/bash/write` | `session_id` / `command_id` / `input` | 能往 stdin 写字节，**但发不出 EOF**（`\x04`、空串都只当普通字节——该 stdin 是 socket 不是 tty）⇒ **没有采用**，理由见下 |
+> | `ws /v1/shell/ws` | 上行 `input` / `resize`；下行 `output` / `ping` / `session_id` / `ready` | 交互终端；**不提供任何进程管理接口**，见下 |
+>
+> **现在的能力表**（真 `AioSandboxProvider.spawn` 实测；`aio` 与 `boxlite` **共用同一个 data-plane 客户端**，故两侧同表现）：
+>
+> | `ProcessSpec` / `ProcessStream` 能力 | 现状 | 怎么做到的 |
+> |---|---|---|
+> | `cmd` | ✓ | argv 逐元素 POSIX 引用后拼成 shell 串（中立契约收 argv，agent 跑 shell 字符串） |
+> | `cwd` | ✓ | **原生透传** → `exec_dir` |
+> | `env` | ✓ | **原生透传** → `env`，**逐字、客户端零转义**（agent 自己物化，注入面见下） |
+> | `timeoutMs` | ✓ | **原生透传** → `hard_timeout`（秒）——**agent 在沙箱内真杀**；客户端另有 `timeoutMs + 5s` 的 `AbortController`，**仅作传输层兜底**。超时统一上报 **`exit=124`**（对齐 03 §8.3 既有的 codex 口径，而不是 agent 内部的 `-1`） |
+> | `stdin`（`tty:false`） | ✓ | **唯一需要合成的一项**：`mkdir -m 700 -- /tmp/.platform-stdin-<128bit hex>`（**不带 `-p`**——原子、路径已存在即失败，防抢占）→ `POST /v1/file/write` 把明文放进 **HTTP body** → 命令包成 `__platform_rc=0; <argv> < '<file>' \|\| __platform_rc=$?; rm -rf -- '<dir>'; ( exit $__platform_rc )`。⇒ **命令行里只有路径、没有内容**，且**保留原始退出码**；`finally` 再补一次**不带 abort** 的 `rm -rf`（kill 路径下 in-command 的 `rm` 根本没机会跑）并 close agent session（否则 session 在 agent 侧累积） |
+> | `kill()`（`tty:false`） | ✓ **真杀** | `session_id` 改为**客户端生成、请求发出前就持有**（它就是 kill 句柄，否则命令跑完之前无处可杀）→ `POST /v1/bash/kill`。默认两阶段：`SIGTERM` → **5s 宽限** → `SIGKILL`；显式传 signal 则按传的投递（非三种之一降级为 `SIGTERM`）。**只有 agent 不可达时**才退回 abort fetch（03 §8.3） |
+> | `kill()`（`tty:true`） | ⚠️ 真 SIGINT + **尽力而为** | 见下"仍然存在的限制" |
+> | `user` | ✗ **显式抛错** | agent 无任何用户切换参数 ⇒ 抛 `UNSUPPORTED_CAPABILITY`（§4），**不再静默丢弃** |
+> | `command -v` / PATH 查找 | ✓ | §2.1★ 条款 2 的正面证据 |
+>
+> **三条决定了实现形态的关键实测**：
+>
+> 1. **`hard_timeout` 是真杀，不是 HTTP 超时**：`sleep 30` + `hard_timeout:2` ⇒ **2.0s** 返回 `status:timed_out`，且沙箱内 `pgrep` **查不到残留**。这是"平台侧到点强制 kill"（§3 ★3、03 §8.3）今天真正的底座。
+> 2. **`env` 会进 argv ⇒ 它不是密钥通道**：agent 把 `env` 物化成 `export K=V` 拼进 `bash -c '<script>'`。注入测试（值传 `'; touch /tmp/PWNED; echo '`）**没有逃逸**（agent 侧引用正确），但沙箱内 `ps -eo args` **能看到 env 的值**。同理 **`command` 本身在 `ps` / `/proc/<pid>/cmdline` 里全文可见** ⇒ **"用 heredoc 把密钥塞进命令串"的方案已否决**（会直接违反 05 §7 #3 / RA-14）。密钥只能走 HTTP body（`/v1/file/write`）或沙箱创建时的 `SandboxProviderContext.env`。
+> 3. **ws PTY 没有进程管理**：ws 的 `session_id` 与 `/v1/shell/sessions` 是**两套命名空间**——`POST /v1/shell/kill`、`DELETE /v1/shell/sessions/{id}` 对 ws 的 session_id 一律回 `Session not found`；而且**单纯关 ws 不杀任何东西**（前台 `sleep 444` 与 `/bin/bash -i` 在关闭 8s 后仍在 ⇒ **每断一次终端就泄漏一个 shell**）。但**写 ETX（0x03）真的经 tty 行规程给前台进程组投递了 SIGINT**，再写 `exit\n` 能让 `bash -i` 退出。
+>
+> **仍然存在的限制（据实登记，不要读成"全好了"）**：
+>
+> - **`ProcessSpec.user` 不支持** —— agent API 里没有这个参数。现在是**显式抛 `UNSUPPORTED_CAPABILITY`**（比静默丢弃好，但能力本身仍然没有）。要切用户只能改镜像/入口。
+> - **`tty:true` 的 `kill()` 是尽力而为** —— 先 ETX（真 SIGINT）、再 `exit\n`（顺带修掉"每断线泄漏一个 `bash -i`"）、最后关 socket。**忽略 SIGINT 的进程仍可能存活**；**唯一有保证的兜底是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以 03 §8.3 的"连带 destroy 实例"不是可选项。
+> - **`tty:true` 一侧 `spec.cmd` 仍然没传进去（⏳ 未解决）** —— provider 调的是 `client.openTerminal(cols, rows)`，终端固定起 agent 的默认 shell；**adapter 的 `buildAttachCommand()` 至今无处落地**（§3 契约里有、06 §3 与 P20 §3 的链路指望它）。这条**不在本次修复范围内**，随终端切片解决。
+> - **没有用 `/v1/bash/write` 做 stdin** —— 它写得进字节但**发不出 EOF**，`codex login --with-access-token` 这类"读到 EOF 才动作"的命令会**挂死**。所以 stdin 走文件重定向（`< file` 有真 fd 0、有真 EOF），而不是这条上行通道。
+> - **`env` / `command` 在沙箱内的 `ps` 可见** —— 见上第 2 条。**per-call `env` 不是密钥通道**，这条不随本次修复改变。
+>
+> **曾经的根因（保留：这是怎么错的）与现状**：
+>
+> - **曾经**：`api/packages/modules/sandbox/src/infrastructure/providers/aio/aio-sandbox-agent.client.ts` 的 `exec(spec)` **只用 `spec.cmd`**——argv 逐个 shell-quote 拼成一串，`POST /v1/shell/exec { command }`，`env` / `cwd` / `user` / `timeoutMs` / `reuse` **从不读取**；`AioExecProcessStream.kill()` 只把本地 promise settle 掉，**不向远端发任何信号**。
+> - **现状**：同一个文件已整体切到 `POST /v1/bash/exec` + `/v1/bash/kill` + `/v1/file/write`，映射与合成见上表；`user` 改为显式抛错。**`tty:true` 一侧的 `spec.cmd` 未传入这条仍然成立**（见上）。
+> - **为什么当时没发现**：因为 `/v1/shell/exec` **能跑通命令**——它只是把其余字段静默吞掉，表现为"命令确实跑了、语义没生效"。**能跑通 ≠ 能力到顶**，这正是上面那条方法论教训的具体形态。
+>
+> **对设计的约束（已按修复后的事实更新）**：
+>
+> - **凭证注入可以依赖 `stdin` 了** —— 05 §1★★ 把 `--with-access-token`（stdin）档降级的**第二重理由（"这条通道会静默丢 stdin"）已不成立并撤销**；**第一重理由（CLI 版本敏感，实测 0.147.0 产的 token 喂 0.139.0 直接被拒）仍然成立**，该档因此**仍是可选 / 版本敏感档**，默认档不变。
+> - **api-key 形态的 env 注入仍落在沙箱创建时**（`SandboxProviderContext.env`，§2.4）—— 理由**已更换**：不再是"per-call `env` 会被丢弃"（现在生效了），而是 **per-call `env` 会进 argv、沙箱内 `ps` 可见**（上文第 2 条）。
+> - **"到点强制 kill"现在有底座了** —— `timeoutMs`→`hard_timeout` 真杀 + `ProcessStream.kill()` 真信号（03 §8.3 已按此改写）。**但交互式终端那一侧仍只是尽力而为**，兜底仍是 `destroy()`。
+>
+> **验证与仍缺的条款**：
+>
+> - **已有 e2e**：`apps/api/test/e2e/aio-exec-capabilities.e2e-spec.ts`（真镜像，10 例全过），含 `env`/`cwd`/`stdin`/`hard_timeout`/两阶段 kill/`user` 抛错，以及**"密钥不出现在沙箱内 `ps` 与 `/proc/*/cmdline`"**——该用例带**防空断言的反向 sanity**（先证明探针能抓到故意泄漏的值，再断言真实路径抓不到），避免"探针本身失效"造成的假绿。
+> - **⏳ 建议补条款（上一版提出的这条仍然有效，只是不再是"实现欠账"而是"契约欠账"）**：§10.2 现有 SP-\* 里**没有一条**钉住 `env` / `cwd` / `stdin` / 超时 / 远端 kill。实现侧已有上面那套 e2e，但那是**平台自测**，第三方实现复用不到；这些语义要进 testkit 才算对所有 provider 生效。补条款时注意它们都需要真宿主，属 live 条款（§10.2 的分档规则）。
 
 ### 2.4 支撑类型（附字段用途）
 
@@ -253,13 +325,13 @@ interface RuntimeAdapter {
 | 方法 | 平台拿它干什么 | 谁在什么时候调 | 要点 |
 |---|---|---|---|
 | `getInstallPlan` | 创建 sandbox 前预估"这个镜像要不要装、装多久"，用于决定 `runtime_installations.status` 初值（13 §2.3.2）与是否提示用户换镜像 | 创建流程校验阶段 | 纯函数，不产生副作用、不碰网络。**判据是（镜像, runtime）这一对，不是 runtime 单独**——同一 runtime 在不同镜像上一个零安装、一个要装 12.5 分钟（S5 实测见下方 ★1） |
-| `isInstalled` | 幂等判断，避免每次启动都重装 | `install` 之前；健康检查时复查 | 洁净环境必须返回 false（testkit RA-01）。**必须走 `command -v` / PATH 查找，绝不硬编码安装路径**——同一 runtime 在 aio 与 boxlite 下装的位置不同（§2.1★），硬编码会让 boxlite 侧永远判"没装"并反复重装 |
+| `isInstalled` | 幂等判断，避免每次启动都重装 | `install` 之前；健康检查时复查 | 洁净环境必须返回 false（testkit RA-01）。**必须走 `command -v` / PATH 查找，绝不硬编码安装路径**——**理由已更正（§2.1★）**：旧说法"同一 runtime 在 aio 与 boxlite 下装的位置不同"**已被推翻**（经平台 exec 通道实测，两侧 npm prefix 相同）；真正的理由是 ① prefix 是**用户级非标准位置** `/home/gem/.npm-global`，② `codex` 实际解析到 **fnm shim** `/home/gem/.fnm_shell/bin/codex` 而非 prefix 下的路径 ⇒ **硬编码任何具体路径都会错**。**PATH 查找已实测可用**：往 `$(npm config get prefix)/bin` 放可执行文件后，新起一次 exec 的 `command -v` 能找到（`/home/gem/.npm-global/bin/probecli`） |
 | `install` | 按 plan 真正装 CLI | `isInstalled=false` 且策略为 `install-on-start` 时 | 必须可重入：中途失败后重调不能留半个环境（实测重入仅 **6 秒**，几乎免费——不必设计增量恢复，★1） |
 | `getAuthMethods` | 决定前端鉴权页给这个 provider 渲染哪种模式；Claude 官方支持 device-code 后**只改这里**（05 §6） | 鉴权页加载、`beginAuth` 前校验 | 返回顺序即推荐优先级 |
 | `beginAuth` | 在容器内起交互式登录命令，从**增量 pty 输出**里正则捕获 URL / device-code，交前端展示 | `POST .../auth/begin`（05 §3） | 脆弱点：CLI 改输出格式即失效 → golden fixture 兜底（§10 RA-04） |
 | `completeAuth` | 把用户贴回来的 code 写进 pty stdin（或持续读输出等登录完成），产出可入库的凭证 | `POST .../auth/complete` | 返回的 `credentialFiles.content` 是明文，**只在内存流转**，落库前必经 Vault 加密 |
 | `createCredentialFromSecret`（可选） | 把用户直接提交的 API key / access token 构造成可入库凭证（注入形态由 adapter 决定：env 变量或 config 文件） | `POST /api/runtimes/:rt/credentials/secret`（05 §3.1） | **不需要 sandbox 宿主**；可含轻量格式校验；同样只在内存流转、Vault 加密落库 |
-| `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | 创建带 runtime 的 sandbox 时（05 §4 materialize） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态遵守最小暴露优先级**：access-token-only（stdin）> `0600` 文件 >（禁用）整份 env——**绝不 `CODEX_AUTH_JSON` env 注入整份 auth.json**（05 §4/§7 #3，adapter 契约固化） |
+| `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | 创建带 runtime 的 sandbox 时（05 §4 materialize） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态见 05 §4 / §1★★——本表刻意不复述优先级**（此处原先那份"access-token-only（stdin）> `0600` 文件 >（禁用）整份 env"**已被 05 §1★★ 的 S5 实测推翻**：stdin 档版本敏感、已降为可选，且在当前 exec 通道上还会被静默丢弃（§2.3★）。优先级只在 05 §4 存一份，本处只留指针——同一条规则两处各存一份正是这次自相矛盾的成因）。不变的硬红线：**绝不 `CODEX_AUTH_JSON` env 注入整份含真 refresh_token 的 auth.json**（P0-3，05 §4/§7 #3，adapter 契约固化） |
 | `buildStartCommand` | 无头任务模式的命令拼装（MCP `run_agent_task`，02 §5） | 起任务时 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
 | `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
 | `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时 | 不实现则平台只透传原始字节 |
@@ -277,7 +349,7 @@ interface RuntimeAdapter {
 > 2. **强烈建议预装**（§7 镜像约定已据此加严）。install-on-start 只作兜底：12.5 分钟会把创建链路的「启动实例」阶段拖成用户以为卡死的黑洞（P20 §3.3 的四阶段进度卡撑不住这个量级）。
 > 3. **重入只要 6 秒**——RA-02 的"可重入"在真镜像上不仅成立，而且几乎免费；失败重跑不需要设计增量恢复逻辑。
 >
-> **install-on-start 在两个 provider 上都可行**：aio 是 root、npm prefix `/opt/nodejs/22`；boxlite 是 `uid=1000` 且 `CapEff` 为零，但靠**用户级 npm prefix `/home/gem/.npm-global`** 装进 `$HOME`，**不需要 root**（另有免密 sudo 可用）。这同时是 `isInstalled` 必须走 PATH 查找、不能硬编码路径的直接原因（§2.1★）。
+> **install-on-start 在两个 provider 上都可行**：**⚠️ 本段原写"aio 是 root、npm prefix `/opt/nodejs/22`；boxlite 是 uid=1000 且 CapEff 为零"，已被推翻**（那是 `docker run` 通道的观察，平台不走那条路——见 §2.1★）。经平台真实 exec 通道实测：**两侧都以非 root 的 `gem` 跑**，npm prefix 同为用户级 `/home/gem/.npm-global`，CLI 装进 `$HOME`，**两侧都不需要 root**。这同时是 `isInstalled` 必须走 PATH 查找、不能硬编码路径的直接原因（§2.1★，理由已更正）。
 
 > **★2 runtime 自带的内层沙箱必须由 `buildStartCommand` 统一关闭（S5 技术验证，2026-08 实测）——这是 adapter 级差异，不进平台通用逻辑**
 >
@@ -290,7 +362,7 @@ interface RuntimeAdapter {
 >
 > bwrap 需要 mount ns 做 bind mount ⇒ **两个 provider 都起不来，不存在"provider 不对称"**——这一条必须写明，否则很容易被误判成 boxlite 的能力缺口而去补一个 capability 位（违反 §2.5 的加位规则）。第一次真跑的表现极具迷惑性：**鉴权成功、模型真跑了 13,093 tokens，但所有文件操作被拦**，agent 回报 `bwrap: No permissions to create a new namespace`，最后只能说"我改不了文件"——既不是鉴权失败，也不报错退出。
 >
-> **为什么关掉它不削弱安全**（这是本条的关键论证，不是图省事）：真正的隔离边界是容器 / microVM 本身；而**平台自己的 in-sandbox 数据面 agent 就是一个无鉴权 root shell**——`POST /v1/shell/exec`，代码注释原文 *"the agent is an unauthenticated shell"*，正因如此它只绑 `127.0.0.1`（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」；实现见 `docker-container-backend.ts` 的 `PortBindings: { HostIp: '127.0.0.1' }`）——**终端功能本身就靠它**。也就是说容器内早已可任意执行，内层 bwrap **挡不住任何新东西**。反过来，要让 bwrap 跑起来只能给容器 `--cap-add SYS_ADMIN` / `seccomp=unconfined`：**为了一层冗余的内层，去削弱真正起作用的外层，方向是反的**。
+> **为什么关掉它不削弱安全**（这是本条的关键论证，不是图省事）：真正的隔离边界是容器 / microVM 本身；而**平台自己的 in-sandbox 数据面 agent 就是一个无鉴权 shell**（⚠️ 原写"无鉴权 **root** shell"，**已更正**：该 agent 以非 root 用户 `gem` 运行，见 §2.1★；论证不受影响——沙箱内可任意执行这一点与是不是 root 无关）——`POST /v1/bash/exec`，代码注释原文 *"the agent is an unauthenticated shell"*，正因如此它**只 publish 到宿主 loopback**（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」；实现见 `docker-container-backend.ts` 的 `PortBindings: { HostIp: '127.0.0.1' }`）——**终端功能本身就靠它**。也就是说容器内早已可任意执行，内层 bwrap **挡不住任何新东西**。反过来，要让 bwrap 跑起来只能给容器 `--cap-add SYS_ADMIN` / `seccomp=unconfined`：**为了一层冗余的内层，去削弱真正起作用的外层，方向是反的**。
 >
 > **实现形态 per-runtime，由 adapter 封装**：codex 用 `-s danger-full-access`（实测可行）或 `--dangerously-bypass-approvals-and-sandbox`（帮助原文：*"Intended solely for running in environments that are externally sandboxed"*——我们正是那个 external sandbox）。**claude 没有 bwrap**，走 permission/approval 模型（`--permission-mode` / `--dangerously-skip-permissions`，帮助原文 *"Recommended only for sandboxes with no internet access"*——它本来就假设自己跑在外部沙箱里）。**两者形态毫无共性 ⇒ 只能落在 `buildStartCommand` 里 per-runtime 封装，绝不抽成平台通用规则**（否则平台就要开始认识每个 CLI 的沙箱旗标，正是本节开篇"adapter 封装某个 agent CLI 的怪癖"要挡住的东西）。
 
@@ -480,7 +552,7 @@ interface ValidationResult {
 > **★ S5 技术验证对镜像约定的加严（2026-08 实测，数据见 §3 ★1）**
 >
 > - **"可预装或现装"这句话在真实量级下不对等，必须表态**：AIO 默认镜像 `agent-infra/sandbox:latest` 预装了 codex（`@openai/codex@0.139.0`）但**没有 claude-code**，现装 `npm i -g @anthropic-ai/claude-code` 实测 **753 秒（12.5 分钟）**；两个 CLI 都预装的对照镜像则是**零安装**。⇒ 镜像作者文档里写**强烈建议预装 `supportedRuntimes` 声明的每个 runtime**，并在 manifest 里如实声明——现装仍然能用，但要按分钟级预期而不是秒级。
-> - **HOME 路径不属于约定的一部分**：实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）。约定只要求 **HOME 可写**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。
+> - **HOME 路径不属于约定的一部分**：⚠️ 原写"实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）"，**已更正**——那是 `docker run` 通道的观察；经平台真实 exec 通道实测，**两侧 `$HOME` 同为 `/home/gem`**（§2.1★）。这不改变本条的效力：约定只要求 **HOME 可写**，而且**恰恰因为"两侧碰巧一样"更容易诱人去硬编码，本条更要坚持**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。
 
 ## 8. Registry 注册机制（双通道）
 
@@ -631,7 +703,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 
 | id | 级别 | 要求 | 怎么判定 |
 |---|:--:|---|---|
-| RA-01 | MUST | 洁净环境 `isInstalled()` 返回 false；`install()` 之后返回 true。**判定必须走 `command -v` / PATH 查找，不得硬编码安装路径** | 在干净镜像里跑完整安装往返，**并在两个 provider 上各跑一次**——同一 runtime 在 aio（root，npm prefix `/opt/nodejs/22`）与 boxlite（uid 1000，npm prefix `/home/gem/.npm-global`）下装的位置不同（§2.1★），硬编码路径的实现会在 boxlite 上永远判"没装"并反复重装，而"洁净环境返回 false"这一条**照样通过**——所以必须把双 provider 往返写进判定，单侧跑绿不算数 |
+| RA-01 | MUST | 洁净环境 `isInstalled()` 返回 false；`install()` 之后返回 true。**判定必须走 `command -v` / PATH 查找，不得硬编码安装路径** | 在干净镜像里跑完整安装往返，**并在两个 provider 上各跑一次**。⚠️ **判定理由已更正（§2.1★）**：旧理由"同一 runtime 在 aio（root，prefix `/opt/nodejs/22`）与 boxlite（uid 1000，prefix `/home/gem/.npm-global`）下装的位置不同"**已被推翻**——经平台 exec 通道实测两侧位置**相同**。真正的理由是：prefix 是**用户级非标准位置** `/home/gem/.npm-global`，且 `codex` 解析到 **fnm shim** `/home/gem/.fnm_shell/bin/codex` ⇒ 硬编码任何具体路径都会错，而"洁净环境返回 false"这一条**照样通过**、抓不到它。**双 provider 往返仍然保留**（理由改为防回归：两侧共用同一 data-plane 客户端，任一侧的镜像/PATH 变动都可能只在单侧显形），单侧跑绿不算数 |
 | RA-02 | MUST | `install()` 可重入：中途失败后重跑能收敛到已安装 | 注入一次失败后重跑，断言最终 `isInstalled()` 为 true |
 | RA-03 | MUST | `beginAuth()` 收到 `getAuthMethods()` 之外的 method 必须抛 `UNSUPPORTED_METHOD` | 传非法 method 断言 code |
 | **RA-04** | MUST | `parseOutput()` / 鉴权解析器对**录制的真实 CLI 输出 fixture** 产出预期结果 | 回放各 CLI 版本的 golden fixture；这就是 05 §6"CLI 升级改输出格式导致静默失效"风险的落地防线——CLI 一改输出，此条第一时间红。**每支持一个新 CLI 版本必须新增一份 fixture** |
@@ -681,7 +753,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | **`boxlite` 相对年轻**，能力位可能随版本变动 | 能力位由实现在注册时**实测上报**而非硬编码；CAP-01 条款保证声明与行为一致，不一致启动即 fail-fast |
 | **runtime CLI 自带的内层沙箱在外层沙箱内起不来**（codex bwrap：mount ns 在 aio/boxlite 两侧都被拒 → 鉴权成功但文件操作全被拦，表现为"agent 说改不了文件"） | `buildStartCommand` per-runtime 关掉内层（§3 ★2）；**不为它给容器加 `SYS_ADMIN`/`seccomp=unconfined`**——那是拿真正起作用的外层去换一层冗余的内层 |
 | **runtime CLI 现装拖垮创建链路**（实测 12.5 分钟） | §7 加严为强烈建议预装；`getInstallPlan` 按（镜像, runtime）对判定并回填 `runtime_installations.status` 初值（13 §2.3.2），前端据此提示换镜像（§3 ★1） |
-| **平台侧硬编码沙箱内路径**（`/root`、npm prefix、CLI 安装位置）在另一 provider 上静默失效 | §2.1★ 的差异表是准入清单：凭证物化按 `$HOME` 展开、`isInstalled` 走 PATH；§10.3 RA-01 要求双 provider 各跑一次安装往返，单侧跑绿不算数 |
+| **平台侧硬编码沙箱内路径**（`/root`、npm prefix、CLI 安装位置）静默失效——**风险来源已更正**：不是"两 provider 路径不同"（实测相同，§2.1★），而是路径本身是**用户级非标准位置 + fnm shim**，且随镜像/CLI 版本漂移 | §2.1★ 的实测表 + 方法论条款（运行时事实一律经 `provider.spawn()` 取得，不用 `docker run` 通道量）：凭证物化按 `$HOME` 展开、`isInstalled` 走 `command -v`；§10.3 RA-01 要求双 provider 各跑一次安装往返，单侧跑绿不算数 |
 | 契约发包带来的版本碎片（多个插件锁不同 major） | peerDependencies 让冲突在**安装期**暴露而非运行期；平台同时只支持一个 major |
 
 

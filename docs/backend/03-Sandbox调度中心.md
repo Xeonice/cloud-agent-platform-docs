@@ -97,7 +97,7 @@ stopped/failed → destroying → destroyed（终态）
 
 - 领域层**显式转移表 + guard** 实现（不引入 XState 这类较重依赖，接口设计不排斥未来替换为 XState v5）。
 - **镜像拉取的职责归属（审计 P2-10）**：`creating` 阶段的"拉镜像"由 **`provider.create()` 内部负责**（04 testkit SP-03 要求镜像不存在时抛 `IMAGE_PULL_FAILED`），平台**不单独调用任何拉取接口**；`ImageSpecProvider.resolve()`（IS-01）只做**元数据解析与 digest 获取**，不拉层数据。两者职责不重叠：一个负责"这个 ref 长什么样、合不合规"，一个负责"把它变成能跑的实体"。
-- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 agent（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**仅内网可达、不 publish 到宿主外部**。
+- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 agent（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**⚠️ 实现上是 publish 到宿主 loopback（`127.0.0.1` + 临时端口），不是"不 publish"**——原文"仅内网可达、不 publish 到宿主外部"与实现不符，已按实现更正；这是一处安全面（宿主本地任意进程可直连一个无鉴权 shell），⏳ 留待 Step 4 加固，权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
 - 每次转移落库并发 `SandboxStateChanged` 领域事件 → WS 事件通道推送前端 + terminal 上下文级联处理。
 - **idle 回收**：可配置 `idleTimeoutSec`，后台 `SandboxReaper` 定时扫描，无活动则 running→idle→stopped，**释放配额但保留数据卷**，可快速重新拉起。判定口径见 §4.2。
 - 非法转移抛领域错误，interface 层翻译为 409。
@@ -196,7 +196,7 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 1. **DooD 下 named volume 的复制无解**——平台进程在容器里，要把基线复制进 named volume 得再起一个挂载两卷的临时容器，一次 Task 创建多一次容器生命周期；宿主目录只是一次 `cp -a`。
 2. **CoW 只有文件系统给得了**：`--reflink=auto` 在 btrfs/xfs 上让"每 Task 独立副本"的磁盘成本从 N×仓库体积降到接近 1×，这是本方案最大的收益（磁盘是真实瓶颈，§1）。
 3. **可观测**：出问题时运维能直接 `ls` / `du` 看工作区，不必 `docker volume inspect`。
-4. **代价与边界**：① 宿主路径与容器路径必须一致（compose 用绝对路径挂载，11 §1）；② 文件属主/权限要与容器内运行用户对齐（准备阶段 `chown` 一次）；③ 跨文件系统时 `--reflink` 静默退化为全量拷贝，**必须在启动诊断里报出 DATA_ROOT 的文件系统类型**，否则用户会在 ext4 上疑惑磁盘为什么涨得快。
+4. **代价与边界**：① 宿主路径与容器路径必须一致（compose 用绝对路径挂载，11 §1）；② 文件属主/权限要与沙箱内运行用户对齐——**准备阶段实际做的是 `chmod 0777`，不是 `chown`**（原文写 `chown`，已按实现更正；原因与安全影响见 §7.6）；③ 跨文件系统时 `--reflink` 静默退化为全量拷贝，**必须在启动诊断里报出 DATA_ROOT 的文件系统类型**，否则用户会在 ext4 上疑惑磁盘为什么涨得快。
 
 空项目（`source_type='empty'`）没有基线目录，Task 级直接 `mkdir` 空目录。
 `projects.workspace_mode='shared'`（v1.1 协作共享卷）时跳过复制，直接把 `baselines/<projectId>` 以 rw 挂载——本文档只留分支位，v1.1 再细化并发写保护。
@@ -314,15 +314,20 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
        1. mkdir DATA_ROOT/workspaces/<sandboxId> + 写标记文件 .platform-workspace-state=preparing
        2. cp -a --reflink=auto  baselines/<projectId>/.  →  workspaces/<sandboxId>/
           （空项目：跳过复制，留空目录）
-       3. chown 到容器内运行用户（HOME/工作区可写是镜像约定，04 §7）
+       3. chmod 0777（⚠️ 原文写 "chown 到容器内运行用户"，与实现不符——按实现更正，理由与安全影响见下方 ⚠️ 块）
        4. 标记文件改为 ready
    → creating（provider.create 时把该目录作为 host-path 挂载，源已存在）
    → starting（凭证 materialize + injectCredential，05 §4；注入形态与落点见下）
 ```
 
+- **⚠️ 工作区权限：文档原写 `chown`，实现是 `chmod 0777` —— 已按实现更正，并据实登记为一处安全面（⏳ 留待 Step 4 加固）**
+  - **实现事实**：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 在 `prepare()` 末尾对工作区目录 `chmod(hostPath, 0o777)`，**全程没有任何 `chown`**。类注释自陈了原因：bind mount 进沙箱后属主显示为 **root**（docker 与 BoxLite 都**不重映射宿主属主**），而 in-sandbox agent 以非 root 用户 **`gem`** 跑，**实测 0755 ⇒ `Permission denied`，0777 ⇒ 可读写**。
+  - **为什么 `chown` 当时没做成**：宿主侧要 `chown` 到"沙箱内运行用户"，前提是知道那个 uid **且宿主有权改属主**（通常要 root）。0777 是绕过这两个前提的最短路径。
+  - **安全影响（据实登记，别当作已解决）**：0777 是**宿主侧**的可达面——宿主上任意本地用户都能读写该 sandbox 的整个工作区（含 clone 下来的私有仓源码，以及注入落盘的凭证若落在工作区内）。它与上面 agent 端口 loopback publish 是**同一类问题**：单机形态为了跑通而放开的宿主本地面。
+  - **⏳ Step 4 的目标形态**：`chown` 到沙箱内运行用户的 uid（`gem`=1000，但**必须运行时探测、不硬编码**——理由同 04 §2.1★ 的方法论条款）+ `chmod 0700`；宿主无 `chown` 权限时退回 user namespace remap 或 rootless 形态。改动前后都要有一条 e2e 断言"agent 能在 `/workspace` 读写"。
 - **`starting` 阶段的凭证注入步（S5 provision 接线点，05 §7.1 第 2 条留的那个）**：`prepare → inject → record` 三步——`CREDENTIAL_FACADE.prepareRuntimeCredential` → `adapter.injectCredential(cred, exec)` 一次性 exec → 写 `credential_sandbox_bindings` 台账（吊销联动依赖它，05 §4 吊销行）。两条实现纪律来自 **S5 技术验证（2026-08 真容器实测）**：
   - **注入形态按 05 §4 的最小暴露优先级，且已按实测修订**：codex 落 `0600` 的 `auth.json` 且 **`refresh_token` 值替换为占位串**（字段必须保留——直接删会 `missing field 'refresh_token'`；真值绝不进沙箱，05 §1★★）；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env。
-  - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000），硬编码在 boxlite 上必错（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
+  - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——⚠️ 原写"实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000）"，**已更正**：那是 `docker run` 通道的观察，平台走的是 in-sandbox agent（以 `gem` 用户跑），**真实通道下两侧 `$HOME` 同为 `/home/gem`**——所以硬编码 `/root` 在**两侧都必错**（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
 - **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
 - **取消的清理**：用户在进度卡取消或进程重启后发现残留 → 扫 `workspaces/` 下标记文件为 `preparing` 的目录，一律 `rm -rf`（启动对账，13 §4）。半成品目录没有任何保留价值。
 - **`ready` 孤儿目录清理**（交叉评审 P2-8）：销毁 keepVolume 流程中"`provider.destroy` 后、打 `kept` 标记/登记 `RetainedVolume` 前"崩溃，会留下标记仍为 `ready` 且 DB 无 `retained_volumes` 记录的孤儿目录。启动对账补一条判据：**sandbox 已 destroyed/failed 但目录标记仍 `ready` 且无 retained 记录 → `rm -rf`**（有 retained 记录的 `kept` 目录才保留）。
@@ -371,6 +376,11 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 - 计时起点是 Task 转 `running` 的时刻（不含排队与拉镜像——否则慢网络会吃掉用户的执行预算）。
 - 超时动作：kill 进程 → sandbox 转 `failed`（`failure_reason='automation timeout'`）→ run 记 `status='timeout'`，**并计入 `consecutive_failures`**（P20 §9.9 明确要求）。
 - **kill 必须是强制的，不能等 CLI 自己退（S5 技术验证，2026-08 实测）**：CLI **不一定会收敛**。同一场景（无凭证起无头任务）两个 runtime 表现相反——**codex 反复重试 `401 Unauthorized`**（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** + "Not logged in"。实测的触发条件（无凭证）会被 §8.2 决策表第 2 条挡在前面，但暴露的是**通用性质**：持续性 API 错误（凭证运行中失效、网络中断、上游持续 5xx）都会让 codex 走进同一条不退出的重连循环。⇒ 到点先 `SIGTERM` 给一个清理窗口、**超时未退即 `SIGKILL` 强杀**，并连带 destroy 实例（进程死了但容器还在同样是资源泄漏）；adapter 可在 `buildStartCommand` 里带上 CLI 自己的超时旗标作为第一道，但**平台侧这一刀才是唯一可靠的兜底**（04 §3 ★3）。
+- **这一刀落在哪（2026-08 补，与实现对表）**：两阶段 kill 由**数据面**真正投递，不是纸面承诺——
+  - **无头 Task / 一次性 exec（`tty:false`）**：`ProcessStream.kill()` → 沙箱内 agent 的 `POST /v1/bash/kill`，**真实信号**（agent 只接受 `SIGTERM`/`SIGKILL`/`SIGINT`，其余降级为 `SIGTERM`）。默认走两阶段：`SIGTERM` → **5s 宽限** → 仍未退则 `SIGKILL`；显式传 `SIGKILL` 则不再降格。实测：被 `SIGTERM` 杀掉的命令回 `exit_code=-15`，且在飞的 exec 请求立刻解阻塞。
+  - **硬超时本身**：`ProcessSpec.timeoutMs` 直接映射到 agent 的 `hard_timeout`（秒），由 agent **在沙箱内强杀**远端进程，平台侧统一上报 `exit=124`（与本节 codex 实测的 `exit=124` 同义）。客户端另有一个 `timeoutMs + 5s` 的 abort，仅作传输兜底。
+  - **交互式终端（`tty:true`）**：agent **没有**给 ws PTY 会话提供任何进程管理接口（实测：`POST /v1/shell/kill` 与 `DELETE /v1/shell/sessions/{id}` 对 ws 的 session_id 一律回 `Session not found`；单纯关 ws **不会**杀掉 shell 及其前台作业）。所以 `kill()` 走 tty 自己的信号通道：先送 `ETX`（0x03，由行规程给前台进程组发 `SIGINT`），再送 `exit` 结束交互 shell（否则每断一次终端就泄漏一个 `bash -i`），最后关 socket。**忽略 SIGINT 的进程仍可能存活** —— 这条路是尽力而为。
+  - **唯一保证的兜底仍是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以本节"连带 destroy 实例"不是可选项。
 - 与 idle 回收的关系：无头 Task 没有终端，**不参与 idle 回收**（§4.2），硬超时是它唯一的兜底。
 - 手动发起的交互式 Task 不受本条约束（其兜底是 idle 30min + 硬超时 24h，P20 §0）。
 
