@@ -241,7 +241,7 @@ data: {"okCount":5,"failCount":1,"totalMs":7310}
 
 > **`IMAGE_CONTRACT_VIOLATION`（2026-08 随「tmux 升 MUST」新增，TASK-LAUNCH-DECISIONS T-2 修订）**：镜像**注册期过了 `validate()`、运行期却被 `command -v tmux` 实测证伪**时抛它（03 §4.3 ⑤）。`retryable:false`——重试不会给镜像装上 tmux，正确动作是换镜像。露出面同 `INSTALL_FAILED`（异步，主路径是 `starting → failed` + WS）。**不复用 `MANIFEST_INVALID`** 的理由见 04 §4。
 >
-> **`INSTALL_FAILED` 的主要露出面不是 HTTP**（S5 补，TASK-LAUNCH-DECISIONS T-3）：装 CLI 发生在 202 之后的 provision workflow，用户早已拿到 202，**没有同步响应可承载它**。实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`；表里那行 500 是为将来的同步入口（如重试安装端点）与 §6.2 的兜底纪律留的。**装 CLI 期间的进度**走 WS `runtime.install_progress`（10 §3.1）——实测现装 claude-code 可达 12.5 分钟（04 §3 ★1），没有它前端只能干等。
+> **`INSTALL_FAILED` 的主要露出面不是 HTTP**（S5 补，TASK-LAUNCH-DECISIONS T-3）：装 CLI 发生在 202 之后的 provision workflow，用户早已拿到 202，**没有同步响应可承载它**。实际路径是 `starting → failed` + `failure_code` / `failure_reason` + WS `sandbox.status_changed`（该事件在 `status:'failed'` 时带 **`errorCode`**）；表里那行 500 是为将来的同步入口（如重试安装端点）与 §6.2 的兜底纪律留的。**异步失败的错误码有两条出口，两条都是必需的**（S5 前端反馈）：WS 的 `errorCode` 给**即时**呈现，`SandboxDto.failureCode` 给**刷新后恢复**（WS 事件错过即丢，刷新一次原因就没了）。`IMAGE_CONTRACT_VIOLATION` 尤其依赖这两条——它**不经过** `runtime.install_progress`，没有它们前端只能出兜底人话。两处给的都是**码**，人话由前端按 §6.1 / P22 §1 查表出。**装 CLI 期间的进度**走 WS `runtime.install_progress`（10 §3.1）——实测现装 claude-code 可达 12.5 分钟（04 §3 ★1），没有它前端只能干等。
 
 映射纪律（三条，实现时按此写单测）：
 

@@ -161,15 +161,41 @@ stopped/failed → destroying → destroyed（终态）
 > 权威裁决见 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2 / T-3；时序见 24 §1、调用图见 26 §1。**本节不新增任何状态**——五步全在 `starting` 之内，失败一律按 `starting` 失败补偿（24 §1.3）。
 
 ```
+creating  ─── ⓪ prepareRuntimeCredential → env 形态并入 SandboxProviderContext.env
+              → provider.create(ctx)                          ← 见下方「凭证的两个注入时机」
+
 starting ─┬─ ① provider.start(handle)
           ├─ ② 沙箱内 agent（:8080）就绪探测                  ← §4 既有条款
           ├─ ③ ensureRuntimeInstalled(runtimeId, exec)        ← 装 CLI（T-3）
-          ├─ ④ prepareRuntimeCredential → injectCredential → recordRuntimeInjection   ← 注入凭证（05 §4.3）
+          ├─ ④ injectCredential → recordRuntimeInjection      ← 文件/stdin 形态注入（05 §4.3）
           ├─ ⑤ bootstrapAgentSession(sandboxId, initialTask)  ← 起 agent 会话（T-2）
           └─ running
 ```
 
 **⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且沙箱内 agent 已就绪。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
+
+#### ⚠️ 凭证的两个注入时机：**env 形态在 `create` 前，文件/stdin 形态在 `start` 后**（S5 实现修正，2026-08）
+
+**本条修正的是本节原文的一处遗漏，不是实现走样**：原文把「凭证注入」整体画成第 ④ 步、排在 `provider.start()` 之后。这对**文件形态**（codex 的 `~/.codex/auth.json`）完全正确——它要 `exec`，而 `exec` 要实例在跑。但它对 **env 形态**物理上做不到：
+
+- **claude-code 的账号凭证就是一个 env**（`CLAUDE_CODE_OAUTH_TOKEN`；api-key 模式的 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` 同理）。`ClaudeCodeAdapter.injectCredential` 因此**没有任何 exec 动作**——它本就声明「env 在沙箱启动时施加」。
+- **已经启动的进程无法追加 env**。等到第 ④ 步再谈 env 注入，那份凭证就永远进不了沙箱：agent 起来后是未登录状态，而平台会以为自己注入过了。
+- 04 §2.3★ 与 05 §4.1 其实早已各自写明「api-key 形态的 env 注入落在沙箱创建时（`SandboxProviderContext.env`）」——**只是本节的五步图没有把这条时机画进去**，实现按图施工就会漏掉整个 env 通道。
+
+**现在的口径（两个时机，一次解密）**：
+
+| 形态 | 时机 | 怎么做 | 为什么只能在这 |
+|---|---|---|---|
+| **env**（claude setup-token / 各家 api-key） | **`creating` 段，`provider.create()` 之前** | provision 先调一次 `prepareRuntimeCredential(runtimeId)`，把 `cred.env` **最后**合并进 `SandboxProviderContext.env`（05 §4.1「凭证永远赢」靠的就是这个「最后写入」的顺序，不是黑名单） | 进程启动后加不了 env |
+| **文件 / stdin**（codex 脱敏 `auth.json`、`--with-access-token`） | **`starting` 段第 ④ 步，`provider.start()` 之后** | 复用同一个凭证对象调 `adapter.injectCredential(cred, exec)` → `recordRuntimeInjection` → `finally cred.zeroize()` | 要 `exec`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3） |
+
+**三条要点，避免被读成「顺序松动了」**：
+
+1. **`injectCredential` 的位置没有变**——它仍然严格排在 `provider.start()` 之后，25 T-SBX-31 的断言语义不变（它断言的就是「`injectCredential` 在 `provider.start` 之后」）。挪到前面的只有 `prepareRuntimeCredential` 这一次**解密取值**。
+2. **只解密一次**：同一个 `InjectableRuntimeCredential` 对象横跨 `create` 与 ④，用完在 `finally` 里 `zeroize()`。解两次等于把明文在内存里多摊一份，没有任何收益。
+3. **per-call `env` 不是替代方案**：`ProcessSpec.env` 现在虽然生效了，但它会被 agent 物化成 `export K=V` 拼进命令串，**沙箱内 `ps` 可见**（04 §2.3★ 第 2 条）。所以 env 形态的凭证只能走沙箱创建时那一条通道。
+
+> **无凭证不算 provision 失败**（S5 实现裁定）：`prepareRuntimeCredential` 抛 `NO_CREDENTIAL` 时只记一条 WARN、照常继续起沙箱——用户完全可能先建任务再去授权，agent 自己会说「未登录」，这是可恢复状态，不该阻断创建。无头 Task 的「无凭证不触发」另由 §8.2 决策表第 2 条管。
 
 #### ③ `ensureRuntimeInstalled`：装 CLI
 
