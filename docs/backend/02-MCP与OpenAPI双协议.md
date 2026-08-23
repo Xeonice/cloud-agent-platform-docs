@@ -239,16 +239,23 @@ data: {"okCount":5,"failCount":1,"totalMs":7310}
 | `WORKSPACE_PREPARE_FAILED` | `preparing-workspace` 阶段（03 §7.6） | **500** | tool 错误 + code | ✅ | "准备工作区失败" → [重试] |
 | **`INSTALL_FAILED`** | `starting` 段装 runtime CLI（03 §4.3 ③） | **500** | tool 错误 + code | ✅ | "运行时 CLI 安装失败" → [重试] / [换一张预装该 CLI 的镜像]（04 §7） |
 | **`IMAGE_CONTRACT_VIOLATION`** | `starting` 段起 agent 会话前的镜像自检（03 §4.3 ⑤） | **500** | tool 错误 + code | ❌ | "镜像不满足平台约定（缺少 tmux）" → [换一张含 tmux 的镜像] / [查看镜像要求] |
+| **`UNKNOWN_PROVIDER`** | 建沙箱门口（04 §4.1 / §5） | **400** | tool 错误 + code | ❌ | "没有这个运行档位" → [改选运行档位]（**零副作用**：未创建任何任务） |
+| **`UNKNOWN_RUNTIME`** | 建沙箱门口（04 §4.1 / 14 §10）；另见异步 resume / terminal attach | **400** | tool 错误 + code | ❌ | "没有这个 runtime" → [改选 runtime]（**零副作用**） |
+| **`INVALID_IMAGE_REFERENCE`** | 建沙箱门口的镜像引用形状校验（04 §4.1） | **400** | tool 错误 + code | ❌ | "镜像地址非法（含空白或控制字符）" → [检查镜像地址]（**零副作用**） |
+| **`VALIDATION_FAILED`** | **任何**端点的 DTO schema 校验（全局 zod 管道，跑在 controller 之前；04 §4.2） | **400** | tool 错误 + code | ❌ | 直接展示后端给的那句话（"请求参数 initialPrompt 长度超过上限 8000 字符"）→ [就地改请求]（**零副作用**）。**不需要前端逐字段建表**：字段与规则由后端在 `message` / `details[]` 里说清 |
 
+> **`VALIDATION_FAILED`（2026-08 新增）**：它与表里其他码有一处**不同**——其余码是「某个具体环节坏了」，各自对应一句固定文案；这一条是「请求本身不合 schema」，**具体是哪个字段、违反了哪条规则每次都不一样**，所以人话由后端逐次生成放进 `message`（`details[]` 给逐项 `{path, code, message}`），前端**直接展示**即可，不必也无法建一张逐字段的文案表。`sideEffectFree: true` 在这里是**构造上**成立的（管道跑在 controller 之前），详见 04 §4.2。⚠️ `details` **只放路径 + 规则 + 期望，不回显用户提交的值**——zod 的 issue 原样透出会带 `received`，而校验失败的字段最可能是指令正文或明文凭证。
+>
 > **`IMAGE_CONTRACT_VIOLATION`（2026-08 随「tmux 升 MUST」新增，TASK-LAUNCH-DECISIONS T-2 修订）**：镜像**注册期过了 `validate()`、运行期却被 `command -v tmux` 实测证伪**时抛它（03 §4.3 ⑤）。`retryable:false`——重试不会给镜像装上 tmux，正确动作是换镜像。露出面同 `INSTALL_FAILED`（异步，主路径是 `starting → failed` + WS）。**不复用 `MANIFEST_INVALID`** 的理由见 04 §4。
 >
 > **`INSTALL_FAILED` 的主要露出面不是 HTTP**（S5 补，TASK-LAUNCH-DECISIONS T-3）：装 CLI 发生在 202 之后的 provision workflow，用户早已拿到 202，**没有同步响应可承载它**。实际路径是 `starting → failed` + `failure_code` / `failure_reason` + WS `sandbox.status_changed`（该事件在 `status:'failed'` 时带 **`errorCode`**）；表里那行 500 是为将来的同步入口（如重试安装端点）与 §6.2 的兜底纪律留的。**异步失败的错误码有两条出口，两条都是必需的**（S5 前端反馈）：WS 的 `errorCode` 给**即时**呈现，`SandboxDto.failureCode` 给**刷新后恢复**（WS 事件错过即丢，刷新一次原因就没了）。`IMAGE_CONTRACT_VIOLATION` 尤其依赖这两条——它**不经过** `runtime.install_progress`，没有它们前端只能出兜底人话。两处给的都是**码**，人话由前端按 §6.1 / P22 §1 查表出。**装 CLI 期间的进度**走 WS `runtime.install_progress`（10 §3.1）——实测现装 claude-code 可达 12.5 分钟（04 §3 ★1），没有它前端只能干等。
 
-映射纪律（三条，实现时按此写单测）：
+映射纪律（四条，实现时按此写单测）：
 
 1. **权限类与网络类必须分开**：`CLONE_FAILED_PERMISSION` 走 403 而非笼统 502——前端的分支引导（去配 Git 凭证 vs 重试）完全依赖这个区分（P22 §2）。
 2. **`retryable` 是响应体的一等字段**（`SandboxProviderError.retryable`，04 §4），前端据此决定是否渲染 [重试] 按钮，而不是靠 HTTP 状态码猜。
-3. **MCP 侧一律用 tool 层错误**（`isError: true` + 文本 + code 字段），不用 JSON-RPC 传输级错误——与 04 §4 的既有规则一致，让 LLM 调用方读得到具体原因。
+3. **`sideEffectFree` 同理，且是同一条纪律的第二次应用**（04 §4.1 / shared/10 §6.8）：「请求在落库前就被拒」与「已受理后失败」是两种事件，前端曾用 `httpStatus === 409` 当代理去区分——而四条门口拒绝里它只覆盖到一条。**表里新增的三条门口码都是 `retryable:❌ + sideEffectFree:✅`**；缺席该字段一律按「可能有副作用」读。
+4. **MCP 侧一律用 tool 层错误**（`isError: true` + 文本 + code 字段），不用 JSON-RPC 传输级错误——与 04 §4 的既有规则一致，让 LLM 调用方读得到具体原因。
 
 ### 6.2 未映射错误码的兜底
 

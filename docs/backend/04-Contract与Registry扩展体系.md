@@ -262,7 +262,22 @@ interface ProcessStream {
   resize(cols: number, rows: number): void;         // tty=false 时为 no-op
   onExit(cb: (code: number | null) => void): void;  // null = 被信号终止 / 会话 detach
   kill(signal?: NodeJS.Signals): Promise<void>;
+  detach(): void;   // ★ 松手但**不触碰对面进程**：关传输、放回调，一个字节都不写
 }
+```
+
+> **★ 为什么 `detach()` 不能用 `kill()` 顶替。** 对 PTY 来说 kill 的信号通道**就是
+> pty 本身** —— 它往终端里写 ETX + `exit\n`。那两下直接落进 tmux 面板里的 shell：
+> 先 SIGINT 掉用户正在跑的 agent，再试图结束它的 shell。而网关在 WS 断开时需要的
+> 恰恰是相反的动作（06 §6.2「WS 断开 = detach」，tmux 之所以是硬性镜像要求全部理由
+> 就是会话要活过前端断连）。只有 `kill()` 可用时，实现只能在"泄漏一条 WS"和"打断
+> 用户进程"之间二选一。
+>
+> ⚠️ 实现纪律：**先置内部的"已退出"标志再关传输**。多数实现把传输的 close/end 事件
+> 接到了"合成退出"上，只是"detach 方法体里不调它"挡不住——回调会经事件间接跑一遍，
+> 上层照样收到一次"进程已退出"。
+
+```ts
 
 interface VolumeMount {
   source: string;                // 由平台决定的来源标识；host-path 时是宿主绝对路径（03 §7.1）
@@ -491,6 +506,10 @@ interface RuntimeAdapter {
   getInstallPlan(imageSpec: ResolvedImageSpec): RuntimeInstallPlan;
   isInstalled(exec: SandboxExecFn): Promise<boolean>;
   install(exec: SandboxExecFn): Promise<void>;
+
+  // 启动前落盘（可选）：与凭证**无关**的一步 —— 注入只在有凭证时跑，而它要拆的
+  // 闸门（CLI 首次运行的交互提示）在没有凭证时照样拦。绝大多数 runtime 不需要。
+  seedStartupFiles?(spec: RuntimeStartupSpec, exec: SandboxExecFn): Promise<void>;
 
   // 鉴权（流转见文档 05）。注意收的是 ProcessStream 而非 SandboxExecFn：
   // 交互式登录命令永远不会退出，一次性 exec 既拿不到增量输出也写不了 stdin。
@@ -752,6 +771,64 @@ interface 层再映射：
 > **`INSTALL_FAILED` 的主要露出面不是 HTTP（S5 补，TASK-LAUNCH-DECISIONS T-3）**：装 CLI 发生在 202 之后的 provision workflow（03 §4.3 ③），用户此时早已拿到 202，**没有同步响应可承载它**。它的实际路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`，前端按 P22 §1 的人话表展示（"运行时 CLI 安装失败"）。上表那行 500 是为了**将来出现同步入口时有据可依**（如重试安装端点），以及满足 02 §6.2「任何错误码都必须有映射、绝不裸抛」的兜底纪律。产品文案与 REST/MCP 映射见 02 §6.1 与 P22 §1。
 
 > **`IMAGE_CONTRACT_VIOLATION`（2026-08 随「tmux 升 MUST」新增）**：镜像**注册期过了 `validate()`、运行期却被实测证伪**时抛它——当前唯一触发点是 `bootstrapAgentSession` 起会话前的 `command -v tmux` 未命中（§7 ★ / 03 §4.3 ⑤）。**为什么不复用 `MANIFEST_INVALID`**：那条是 `ImageSpecProvider.validate()/resolve()` 在注册期给出的静态判定，而本条发生在 provision 的 `starting` 段、由沙箱内实测触发，排障时「注册期就该拦住却没拦住」与「注册期判定已过期」是两个完全不同的下一步动作，合成一个码等于把这个区分抹掉。**露出面同 `INSTALL_FAILED`**：主路径是 `starting → failed` + `failure_reason` + WS `sandbox.status_changed`，上表那行 500 是为将来的同步入口与 02 §6.2 的兜底纪律留的；`retryable:false`（重试不会给镜像装上 tmux，正确动作是换镜像）。
+
+### 4.1 「门口拒绝」与 `sideEffectFree`（2026-08 新增）
+
+创建门（§5「创建前静态校验」）给出的拒绝与「受理后失败」是**两种事件**，用户能做的动作完全相反：
+
+- **门口拒绝** —— 不进调度、不落库、不调 `provider.create`。没有 sandbox id、列表里不留 `failed` 记录、没有任何东西可供 [重试] 作用 ⇒ 正确呈现是**就地改请求再发**。
+- **受理后失败** —— 已落库、`starting` 段中途挂掉（`INSTALL_FAILED` 等）⇒ 走失败卡 + [重试]。
+
+前端此前靠 `httpStatus === 409` 区分，**而四条门口拒绝里它只覆盖到一条**。因此错误信封新增一等字段 **`sideEffectFree?: boolean`**（权威定义见 [shared/10 §6.8](../shared/10-接口契约与类型共享.md)）：`true` = 这次请求在产生任何副作用之前就被拒；**缺席 = 未表态，按「可能有副作用」读**（optional 正是为此——漏标只退化回现状，必填则会让猜错的那条对着半成品说「什么都没发生」）。
+
+创建门全量清单（每条都 `retryable:false` + `sideEffectFree:true`）：
+
+| 拒绝 | 码 | REST | 说明 |
+|---|---|---|---|
+| provider 不在注册表 | **`UNKNOWN_PROVIDER`** | **400** | §8 开放注册表的入参问题，不是服务端故障 |
+| runtime 不在注册表 | `UNKNOWN_RUNTIME` | **400** | 同上，姊妹注册表（`UnknownRuntimeError`，见下） |
+| 镜像引用含空白/控制字符 | **`INVALID_IMAGE_REFERENCE`** | **400** | ref 会被拼进 registry 引用并回显进日志，`\x1b[` 即终端转义注入 |
+| 能力静态校验不通过 | `UNSUPPORTED_CAPABILITY` | 409 | §5，本表唯一原本就带信封的一条 |
+| 项目不存在 | `PROJECT_NOT_FOUND` | 404 | 门口的跨上下文只读校验（`ProjectFacade`，26 §3 link①） |
+| 项目尚不能接任务 | `PROJECT_NOT_READY` | 409 | `Project.assertCanAcceptTask`（I-PRJ） |
+
+> **门口拒绝一律 `retryable:false`，这是门的性质不是逐条判断**：门说的是「这个请求本身不被接受」，原样再发必然同样被拒——要变的是请求或它的前置条件。同 `UnknownRuntimeError` 那条既有理由：每按必败的 [重试] 比没有按钮更糟。
+>
+> **⚠️ 上表前三条此前根本不产出信封（本次一并修复）**：它们是裸 `BadRequestException(string)` 抛的，出线的是 Nest 默认 `{statusCode, message, error}`——**没有 `code`、没有 `retryable`**，前端 `toApiError` 判定「不是信封」后整体替换成 `{code:'UNKNOWN', message:'请求失败（HTTP 400）'}`。也就是说 §4 这套「统一错误模型」在这三条上**从未生效**，后端那句 `unknown runtime 'shell'` 从来没到过用户眼前。**给一个没人读的 body 加字段等于没加**，所以这三条先改成真信封，`sideEffectFree` 才有意义。`UNKNOWN_RUNTIME` 现在直接抛 `UnknownRuntimeError` 交给本节的映射表，而不是把同一件事再用字符串写一遍。
+>
+> **落地形态：位置换取，不是逐点标注**。创建门收敛成 `SandboxApplicationService.admit` 一个方法（不持 `uow`、不写库、不调度、不碰 `provider.create`），`atDoor` 在其出口统一打标——**创建门里只有这一处写这个字段**（全库另有一处：controller 之前的 zod 校验管道，§4.2——同样是位置换取，不是逐点标注）。于是新增的门口校验只要写在这个方法里就自动标对，作者不需要知道有这个字段；而逐点标注正是三条漏标的成因。守卫用例 `packages/modules/sandbox/test/application/create-door.spec.ts` 不测清单、测机制。
+>
+> **⏳ 尚未覆盖的门（已登记；本轮仍然未改）**：
+>
+> - `POST /api/sandboxes/:id/runtimes/:rt/tasks` 的准入（沙箱不存在 / 非 running / runtime 不匹配）同属零副作用，但它们今天仍是裸 `NotFoundException` / 未标注；
+> - 更广地说，application 层至今有 **35 处**拒绝是裸 `BadRequestException` / `NotFoundException` / `ConflictException` / … 抛/返的（27 处 `throw` + 8 处 `catch` 里 `return new …Exception(e.message)` 的映射器；2026-08 实测，口径见下），出线的仍是 Nest 默认 `{statusCode, message, error}`——**没有 `code`、没有 `retryable`**，前端一律降级成「请求失败（HTTP xxx）」。
+>
+> **§4.2 收编的不是它们**：那一节收的是 **DTO schema 校验**这一层（全局 pipe，在 controller 之前），而上面这 35 处是 controller 方法体/application 里**手写**的拒绝，根本不经过 pipe。两者一个都替不了另一个，所以这条 ⏳ 原样留着。兜底纪律见 02 §6.2。
+>
+> 上面那个数的实测口径（可复跑）：`grep -rnE "new (BadRequest|NotFound|Conflict|Forbidden|Unauthorized|Gone|UnprocessableEntity|InternalServerError|ServiceUnavailable|PayloadTooLarge)Exception\(" --include="*.ts" apps/api/src packages/modules/*/src`，减去两处**已经**产出信封的 pipe 绑定（`bootstrap/validation.pipe.ts`、`credential/.../zod-body.pipe.ts`）。
+
+### 4.2 DTO 校验失败也产出信封：`VALIDATION_FAILED`（2026-08 新增）
+
+§4.1 修的是「门口拒绝」这**六条**，而它们的成因——**body 不是信封，前端就整体丢弃**——在另一条路上还原封不动地存在：**每个端点的每一次 DTO 校验失败**。
+
+`nestjs-zod` 的 `ZodValidationPipe` 出线的是 `{ statusCode: 400, message: 'Validation failed', errors: [...] }`——**没有 `code`、没有 `retryable`**，于是 `toApiError` 判定「不是信封」，用户看到的永远是那句「请求失败（HTTP 400）」。刚给 `initialPrompt` 加的 `max(8000)` 就是活例：超长时用户**看不到**「指令超长」，只看到「请求失败」——一个一句话就能说清、改一下就好的问题，被压成了一句没有信息量的话。
+
+**本轮改法：换掉管道，不加全局 filter。**`createZodValidationPipe({ createValidationException })` 直接把信封塞进 400；filter 是事后补救，管道是就地产出，后者少一层且不会被别的异常路径误伤。
+
+| 项 | 取值 | 理由 |
+|---|---|---|
+| `code` | **`VALIDATION_FAILED`** | 与既有码同构词法（`<环节>_FAILED`：`INSTALL_FAILED` / `CLONE_FAILED_*`），说的是「schema 校验这一关没过」；`BAD_REQUEST` 只是把状态码重写一遍 |
+| REST | **400** | |
+| `retryable` | ❌ | 原样再发必然被同一条规则拒掉——同 §4.1「每按必败的 [重试] 比没有按钮更糟」 |
+| `sideEffectFree` | ✅ | **构造上**成立：pipe 跑在 controller **之前**，没进 application service、没落库、没进调度、没碰 `provider.create`。与 `atDoor` 同一套「位置换取标记」的道理（§4.1），不是逐条判断 |
+| `message` | 人话，指名字段与规则 | 如「请求参数 initialPrompt 长度超过上限 8000 字符」。前端在创建语境下会把它嵌进「无法用当前配置创建：{message}。请调整配置后再试」 |
+| `details[]` | `{ path, code, message }` | 逐项错误，路径用点号（`require.snapshot` / `env[3].key`，10 §6.8） |
+
+> **⚠️ `details` 里刻意不放用户提交的值。**诱惑写法是把 `error.issues` 原样透出（zod 的 issue 刚好塞得进 `z.array(z.record(...))`），而 zod 的 issue **本身带 `received`**：`invalid_enum_value` 带原始值**且默认 message 里就嵌着它**、`invalid_literal` 带原始值、`invalid_union` 的 `unionErrors` 是整棵子树同样带。偏偏校验失败的字段最可能是不该回显的东西——`initialPrompt` 是指令正文，`InlineGitTestSchema.secret` 是明文凭证，`type` 填错时 `received` 装的就是隔壁字段的值。信封会进前端渲染、进服务端日志、进用户发过来的截图。所以实现是**逐个 issue code 白名单取字段**（路径 + 规则 + schema 侧的期望），而不是「透出后删几个」。`invalid_type` 的 `expected`/`received` 例外——那是**类型名**（`string`/`number`/`undefined`）不是值，且正是用户改请求需要的。
+>
+> **落地形态：一处构造，17 处接线全部收敛**。这只管道此前在仓里被 `new` 了 17 次（`main.ts` 1 次 + 16 个 e2e 各自建 app）。只改 `main.ts` 会让**生产用信封管道、e2e 用裸管道**——测的不是线上跑的那只，变异防线整个失效。现在唯一构造在 `apps/api/src/bootstrap/validation.pipe.ts#platformValidationPipe()`，17 处全用它；`apps/api/test/e2e/suite-hygiene.e2e-spec.ts` 有一条机械守卫钉住「e2e 不许再 `new ZodValidationPipe`」。判别联合体（`POST /api/credentials/git/test`）接不住 `createZodDto`，只能在参数上挂 schema，它用 `credential/.../zod-body.pipe.ts` 的第二处绑定——**形状仍单点**：信封由 `@platform/contracts` 的 `validationFailureEnvelope` 生成，两处绑定各只有一行。
+>
+> 用例：`packages/contracts/test/unit/validation-envelope.spec.ts`（信封形状 + 泄漏防线，哨兵串搜整份 JSON）与 `apps/api/test/e2e/validation-envelope.e2e-spec.ts`（HTTP 上真的出来的是它；并用 `GET /api/sandboxes` 为空证明 `sideEffectFree` 不是空话）。
 
 ## 5. Capabilities 协商与降级规则
 
