@@ -2,8 +2,9 @@
 #
 # 这道门跑在**文档主仓**：
 #   A 类检查只读 docs/**，永远能跑；
-#   B 类检查（10 §6 ⊇ openapi.json paths）要读 api submodule 里的 openapi.json。
-# submodule 拉不到时脚本会「大声 skip」B1 并以 0 退出 —— 不让 A 类跟着瘫痪，
+#   B 类检查要读 submodule：B1/B2 读 api（openapi.json + MCP tool 注册），
+#   B3/B4 读 api 与 web 两侧（openapi 跨仓逐字节、WS_PROTOCOL_CANONICAL 跨仓对账）。
+# submodule 拉不到时脚本会「大声 skip」对应的 B 项并以 0 退出 —— 不让 A 类跟着瘫痪，
 # 但会在 job summary 里留一条 warning，避免被静默吞掉。
 #
 # 零依赖：scripts/docs-check.mjs 只用 Node 内置模块，**不需要 install**。
@@ -37,8 +38,9 @@ jobs:
       # .gitmodules 里 api/web 是 SSH remote 且指向另外两个仓库，默认 GITHUB_TOKEN
       # 读不到；配了 SUBMODULE_TOKEN（有 repo 读权限的 PAT）才拉得动私有子仓。
       # **拉不到不阻断**：下面的 docs:check 会把 B 类判成 skip。
-      # 只拉 api —— checker 只需要 api/openapi.json，web 用不上。
-      - name: 拉取 api submodule（可失败 → B 类走 skip）
+      # ⚠️ 两个都要拉：B3/B4 是【跨仓】门禁（openapi 逐字节、WS canonical 对账），
+      # 只拉 api 会让它们静默 skip —— 而「没人把关」正是这两条门禁要防的那件事。
+      - name: 拉取 api / web submodule（可失败 → B 类走 skip）
         id: submodule
         continue-on-error: true
         env:
@@ -51,7 +53,7 @@ jobs:
           else
             git config --global url."https://github.com/".insteadOf "git@github.com:"
           fi
-          git submodule update --init --depth 1 api
+          git submodule update --init --depth 1 api web
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -64,4 +66,4 @@ jobs:
 
       - name: 提示 B 类被跳过
         if: ${{ steps.submodule.outcome != 'success' }}
-        run: echo "::warning title=B 类检查本轮未执行::api submodule 没拉到（未配 SUBMODULE_TOKEN？），'10 §6 ⊇ openapi.json paths' 这条本轮无人把关。"
+        run: echo "::warning title=B 类检查本轮未执行::api/web submodule 没拉到（未配 SUBMODULE_TOKEN？），端点覆盖、MCP 对账、以及 openapi 与 WS 协议的【跨仓一致】本轮全部无人把关。"
