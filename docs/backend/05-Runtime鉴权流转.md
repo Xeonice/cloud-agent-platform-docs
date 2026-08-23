@@ -44,7 +44,7 @@
 >
 > **P0-3 的安全裁决本身不变**：真 refresh_token 永不进沙箱——沙箱内 `cat ~/.codex/auth.json` 拿到的 `refresh_token` 是占位串，拿不到那个"可脱离平台无限续期、平台无法上游吊销"的凭据。**变的只是实现形态**（从"stdin 只喂 access token"变成"注入一份 refresh_token 被占位替换的 auth.json"），不是安全目标的让步。
 >
-> **凭证物化路径走运行时 `$HOME`，不硬编码**：⚠️ 本行原写"实测 aio 的 `$HOME=/root`（uid=0），boxlite 的 `$HOME=/home/gem`（uid=1000）——硬编码 `/root` 在 boxlite 上必错"，**证据已更正**（04 §2.1★）：那批数据量自 `docker run --entrypoint bash` 通道，而平台走的是 in-sandbox agent 的 HTTP exec 端点（当时是 `POST /v1/shell/exec`，现为 `/v1/bash/exec`，见 04 §2.3★）、该 agent 以 `gem` 用户运行。**真实通道下两侧 `$HOME` 同为 `/home/gem`，硬编码 `/root` 在两侧都必错**。结论不变。`credentialFiles[].containerPath` 里的 `~/.codex/auth.json` / `~/.claude/.credentials.json` 必须在注入时用**沙箱内实际的 `$HOME`** 展开：04 §7 的镜像约定只承诺"HOME 可写"，从未承诺 HOME 是哪个路径。provider 身份与能力差异全表见 04 §2.1★。
+> **凭证物化路径走运行时 `$HOME`，不硬编码**：⚠️ 本行原写"实测 aio 的 `$HOME=/root`（uid=0），boxlite 的 `$HOME=/home/gem`（uid=1000）——硬编码 `/root` 在 boxlite 上必错"，**证据已更正**（04 §2.1★）：那批数据量自 `docker run --entrypoint bash` 通道，而平台走的是 in-sandbox API 的 HTTP exec 端点（当时是 `POST /v1/shell/exec`，现为 `/v1/bash/exec`，见 04 §2.3★）、该 agent 以 `gem` 用户运行。**真实通道下两侧 `$HOME` 同为 `/home/gem`，硬编码 `/root` 在两侧都必错**。结论不变。`credentialFiles[].containerPath` 里的 `~/.codex/auth.json` / `~/.claude/.credentials.json` 必须在注入时用**沙箱内实际的 `$HOME`** 展开：04 §7 的镜像约定只承诺"HOME 可写"，从未承诺 HOME 是哪个路径。provider 身份与能力差异全表见 04 §2.1★。
 
 > **setup-token 路径 MVP 即做，不推迟**（审计 P2-13 重新评估）：原建议基于 MVP 瘦身，而瘦身已被全部否决。现状是这条路径的契约与实现面**已经完整**——04 §3 的 `getAuthMethods/beginAuth/completeAuth` 覆盖 `paste-prompt` 形态、05 §3 有完整时序、25 §4.2 有 golden fixture 用例、P20 §5 的产品链路把「帐号授权」定为三分支之一。推迟它反而要**回头砍产品定稿的入口**（Claude Code 只剩 API key，用户的 Claude 订阅额度用不上），代价高于实现成本。
 

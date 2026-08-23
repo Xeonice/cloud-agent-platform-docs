@@ -51,7 +51,7 @@ packages/contracts/                 # 现名 @platform/contracts（private）；
 >
 > ⚠️ **本节此前那张差异表（`aio` = `uid=0` root / `CapEff=a80425fb` / `$HOME=/root` / npm prefix `/opt/nodejs/22`，`boxlite` = `uid=1000` gem / `/home/gem`）以及由它推出的"两 provider 身份/能力不同"这个前提，已被推翻并删除，不要再引用。**
 >
-> **错在哪：验证走错了通道。**那批数据是用 `docker run --entrypoint bash` 直接进容器量的——那条路径进去确实是 `root`、`HOME=/root`；但**平台从不走那条路**：平台的 `spawn` 走 **in-sandbox agent 的 HTTP exec 端点**（当时是 `/v1/shell/exec`，现已切到 `/v1/bash/exec`——见 §2.3★；身份结论不受端点切换影响）（§2.2 映射表、[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)），而**该 agent 以非 root 用户 `gem` 运行**。代码侧其实早有旁证：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 的类注释写着 *"the in-sandbox AIO agent runs as the NON-root user `gem`"*，工作区 0755 会 `Permission denied`、只能放到 0777。
+> **错在哪：验证走错了通道。**那批数据是用 `docker run --entrypoint bash` 直接进容器量的——那条路径进去确实是 `root`、`HOME=/root`；但**平台从不走那条路**：平台的 `spawn` 走 **in-sandbox API 的 HTTP exec 端点**（当时是 `/v1/shell/exec`，现已切到 `/v1/bash/exec`——见 §2.3★；身份结论不受端点切换影响）（§2.2 映射表、[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)），而**该 agent 以非 root 用户 `gem` 运行**。代码侧其实早有旁证：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 的类注释写着 *"the in-sandbox agent runs as the NON-root user `gem`"*（⚠️ 这是**代码原文的逐字引用**，其中的 `agent` 指沙箱内 API——00 §0 的改名不适用于引文，改了引文就等于把一句代码里不存在的话归给代码），工作区 0755 会 `Permission denied`、只能放到 0777。
 >
 > **用平台真实通道重测（真 `AioSandboxProvider.spawn`，同一镜像 `agent-infra/sandbox:latest`，只换 provider）——两侧一致，不存在"身份不同"**：
 >
@@ -63,7 +63,7 @@ packages/contracts/                 # 现名 @platform/contracts（private）；
 > | `PATH` | 两侧**相同**，且含用户级 prefix：`/opt/gem/bin:/home/gem/.fnm_shell/bin:/opt/nodejs/22/bin:…:/home/gem/.npm-global/bin:/home/gem/.local/bin:…` | 同左 |
 > | `command -v codex` | `/home/gem/.fnm_shell/bin/codex`（**fnm shim**，不是 `/opt/nodejs/22/bin/codex`） | 同左 |
 >
-> **⛔ 方法论教训（本次纠错真正的产出，比表格本身更值钱）：平台行为必须用平台自己的执行路径验证。**`docker run` / `docker exec` 进容器测出来的身份、HOME、PATH，**不代表平台看到的身份**——同一个容器，宿主直连是一条路径，in-sandbox agent 是另一条，用户与环境都不同。凡是要写进契约条款的"运行时事实"，必须经 `provider.spawn()` 取得；用别的通道量出来的数字一律不作数、不写进文档。
+> **⛔ 方法论教训（本次纠错真正的产出，比表格本身更值钱）：平台行为必须用平台自己的执行路径验证。**`docker run` / `docker exec` 进容器测出来的身份、HOME、PATH，**不代表平台看到的身份**——同一个容器，宿主直连是一条路径，in-sandbox API 是另一条，用户与环境都不同。凡是要写进契约条款的"运行时事实"，必须经 `provider.spawn()` 取得；用别的通道量出来的数字一律不作数、不写进文档。
 >
 > **仍然成立的三条条款（结论不变，理由已按新事实改写）**：
 >
@@ -90,6 +90,10 @@ interface SandboxProvider {
   // 可选：capabilities 对应位为 true 时才必须实现（§5 列出平台如何降级）
   updateResources?(handle: SandboxHandle, quota: ResourceQuota): Promise<void>;
   watchEvents?(): AsyncIterable<ProviderEvent>;                  // §6
+
+  // 可选「面」（成组，§2.6）：一位 headlessTask 同时管住两者，由 §10 CAP-02 双向钉死
+  readonly jobs?: SandboxJobs;      // 作业面：无头 Task 的执行与流式读回
+  readonly files?: SandboxFiles;    // 文件面：产物回传与文件写入
 }
 ```
 
@@ -108,11 +112,19 @@ interface SandboxProvider {
 |---|---|---|
 | create / start / stop / destroy | OCI 容器 create/start/stop/rm（经 socket proxy，文档 11 §1） | BoxLite 库调用创建/启动/停止/销毁 Box |
 | inspect | 容器 inspect + 健康探针 | Box 状态查询 |
-| spawn(tty=false) | 经 in-sandbox agent `POST /v1/bash/exec`（收集输出到 EOF）——**选它而不是 `/v1/shell/exec`，是因为后者不支持 `env`/stdin/signal**（§2.3★） | 同左（Box 内 `:8080`，端口转发） |
-| spawn(tty=true) | 经 in-sandbox agent `ws /v1/shell/ws`，翻译成 `ProcessStream` | 同左（Box 内 `:8080`，端口转发） |
+| spawn(tty=false) | 经 in-sandbox API `POST /v1/bash/exec`（收集输出到 EOF）——**选它而不是 `/v1/shell/exec`，是因为后者不支持 `env`/stdin/signal**（§2.3★） | 同左（Box 内 `:8080`，端口转发） |
+| spawn(tty=true) | 经 in-sandbox API `ws /v1/shell/ws`，翻译成 `ProcessStream` | 同左（Box 内 `:8080`，端口转发） |
 | watchEvents | ✅ 原生事件流 | ✅ 库回调包装成同一 `AsyncIterable` |
+| `jobs`（§2.6） | ✅ 已实现（S6）：`POST /v1/bash/sessions/create` → `POST /v1/bash/exec async_mode` → `POST /v1/bash/output`（游标读 + 长轮询）；`ws /v1/bash/ws` 只做**唤醒**、不取字节（理由见 §2.6 ★★ 下的实现注记） | 同左（共用同一个 data-plane 客户端） |
+| `files`（§2.6） | ✅ 已实现（S6）：`GET /v1/file/download`·`POST /v1/file/write`·`POST /v1/file/list` | 同左 |
 
-> **数据面 = 沙箱内 agent（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/bash/exec` 一次性命令；**命令面选 `/v1/bash/exec` 而非 `/v1/shell/exec`，因为后者不支持 `env`/stdin/signal**，实测能力面见 §2.3★）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**⚠️ 实现上 publish 到宿主 loopback（`127.0.0.1` + 临时端口）**（原文"仅内网可达、不外泄"与实现不符，已按实现更正）+ 就绪探测；宿主本地任意进程可直连该无鉴权 shell，⏳ 待 Step 4 加固——登记见该 ADR「安全姿态」。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
+> **boxlite 那两个"同左"的依据**：boxlite 跑的是**同一张镜像** `agent-infra/sandbox:latest`，复用**同一个** `AioSandboxAgentClient`，只是 guest `:8080` 转发到宿主 loopback 端口 ⇒ 端点集合相同是结构性成立。**文件面已在真 micro-VM 上单独实测（2026-08）**：文本往返 ✅；二进制 260B **逐字节一致**、`application/octet-stream` ✅；`list` 返回结构与 aio 一致（`modified_time` 同样是字符串装的 epoch 秒）✅；**8MB 下载 12ms**（aio 是 36ms）✅；**宿主写入到 guest 可见 3ms** ✅；缺文件的两套错误约定与 aio **完全一致**（download 回 404、read 回 `success:false` + `error_type:"not_found"`）✅。⇒ 跨 virtio-fs 没有观察到额外的传播代价。
+
+> **数据面 = 沙箱内 API（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/bash/exec` 一次性命令；**命令面选 `/v1/bash/exec` 而非 `/v1/shell/exec`，因为后者不支持 `env`/stdin/signal**，实测能力面见 §2.3★）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**⚠️ 实现上 publish 到宿主 loopback（`127.0.0.1` + 临时端口）**（原文"仅内网可达、不外泄"与实现不符，已按实现更正）+ 就绪探测；宿主本地任意进程可直连该无鉴权 shell，⏳ 待 Step 4 加固——登记见该 ADR「安全姿态」。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
+>
+> **术语**：本节的 "沙箱内 API" 指镜像自带的那个 HTTP 服务（①），**不是** `codex`/`claude` 那个 agent（②）——两者的区分与判据见 [00 §0](../00-总体架构概览.md)。
+>
+> **⚠️ 别把镜像认错（2026-08 实测）**：平台默认的 AIO 镜像是 `agent-infra/sandbox:latest`，拉 `GET /v1/openapi.json` 得 **123 个端点**；而 `cap-aio-sandbox:v0.37.1` 只有 **34 个、且完全没有 `/v1/bash` 家族**。拿后者去量能力面会得出"agent 不支持异步执行"的错误结论——这与 §2.1★（拿 `docker run` 量身份）、§2.3★（拿 `/v1/shell/exec` 量能力上限）是**同一类错的第三次**，纪律见 §2.3★ 的方法论教训。
 
 ### 2.3 为什么把 `exec` / `attachPty` / `healthCheck` 从必须方法里删掉
 
@@ -128,15 +140,15 @@ interface SandboxProvider {
 
 > **★ S5 技术验证 · 二次纠错（2026-08）：`ProcessSpec` 的能力已基本兑现——此前判定"agent 做不到"，错在【我们一直在调一个能力最弱的端点】**
 >
-> **头条不是"补齐了实现"，而是"我们一直在敲错门"。**本节上一版写的是：`stdin` / `env` / `cwd` / `timeoutMs` / `kill()` **五项全被静默丢弃**、`⏳ S5 待补齐`，并把原因归给"agent 侧没有对应能力"。**这个前提是错的。**起真镜像（`localhost:5001/agent-infra/sandbox:latest`）拉 `GET /v1/openapi.json`（⚠️ **只有这一个路径拿得到**——`/openapi.json` 与 `/docs` 都 404）后发现：agent 暴露的是 **~120 个端点**，而我们从头到尾只用了其中**能力最弱的那一个**——`POST /v1/shell/exec`。换一个端点，五项里四项是**原生透传**，剩下一项（stdin）用一次文件重定向合成即可。
+> **头条不是"补齐了实现"，而是"我们一直在敲错门"。**本节上一版写的是：`stdin` / `env` / `cwd` / `timeoutMs` / `kill()` **五项全被静默丢弃**、`⏳ S5 待补齐`，并把原因归给"沙箱内 API 侧没有对应能力"。**这个前提是错的。**起真镜像（`localhost:5001/agent-infra/sandbox:latest`）拉 `GET /v1/openapi.json`（⚠️ **只有这一个路径拿得到**——`/openapi.json` 与 `/docs` 都 404）后发现：agent 暴露的是 **~120 个端点**，而我们从头到尾只用了其中**能力最弱的那一个**——`POST /v1/shell/exec`。换一个端点，五项里四项是**原生透传**，剩下一项（stdin）用一次文件重定向合成即可。
 >
 > **⛔ 方法论教训（本次真正的产出；与 §2.1★ 的"验证走错通道"是同一类错，这已经是第二次）：把一条限制写进设计之前，先探明依赖方 API 的真实能力面。**两次踩的是同一个坑——**用错入口，然后把这个入口的边界当成对方的能力上限**：§2.1★ 是"拿 `docker run` 量出来的身份当成平台看到的身份"，本节是"拿 `/v1/shell/exec` 量出来的能力当成 agent 的能力上限"。落成纪律：**写"依赖方做不到 XX"之前，必须先把对方的端点/参数清单拉全**（openapi / `--help` / 源码，任选但要拉全），并在文档里注明**探过哪些入口**；只试过一条路就下的否定结论，不许写进契约。
 >
-> **agent 端点能力面（实测真镜像，2026-08）**：
+> **沙箱内 API 端点能力面（实测真镜像，2026-08）**：
 >
 > | 端点 | body 实际支持的字段 | 实测结论 |
 > |---|---|---|
-> | `POST /v1/shell/exec`（**旧；平台已不再使用**，agent 侧仍在） | 仅 `command` / `exec_dir` / `timeout` / `hard_timeout` | **没有 `env`**（传了被静默吞：`{command:'echo E=$PROBE', env:{PROBE:'x'}}` ⇒ `E=`）、没有 stdin、没有 signal ⇒ 上一版"五项全 ✗"量的其实是**这一个端点**的边界 |
+> | `POST /v1/shell/exec`（**旧；平台已不再使用**，沙箱内 API 侧仍在） | 仅 `command` / `exec_dir` / `timeout` / `hard_timeout` | **没有 `env`**（传了被静默吞：`{command:'echo E=$PROBE', env:{PROBE:'x'}}` ⇒ `E=`）、没有 stdin、没有 signal ⇒ 上一版"五项全 ✗"量的其实是**这一个端点**的边界 |
 > | `POST /v1/bash/exec`（**现用**） | `session_id` / `command` / `exec_dir` / **`env`** / `async_mode` / `timeout` / **`hard_timeout`** / `max_output_length` | 全部**原生生效**；返回 **stdout / stderr 分离 + `exit_code` + `command_id`** |
 > | `POST /v1/bash/kill` | `session_id` + `signal`（`SIGTERM`/`SIGKILL`/`SIGINT`，只此三种） | **真实信号投递**：`sleep 60` 被杀回 `exit_code:-15`，且**在飞的同步 exec 请求立刻解阻塞** |
 > | `POST /v1/file/write` | `file` / `content` / `encoding` / `append` | 内容走 **HTTP body**——不经过命令行 |
@@ -151,8 +163,8 @@ interface SandboxProvider {
 > | `cwd` | ✓ | **原生透传** → `exec_dir` |
 > | `env` | ✓ | **原生透传** → `env`，**逐字、客户端零转义**（agent 自己物化，注入面见下） |
 > | `timeoutMs` | ✓ | **原生透传** → `hard_timeout`（秒）——**agent 在沙箱内真杀**；客户端另有 `timeoutMs + 5s` 的 `AbortController`，**仅作传输层兜底**。超时统一上报 **`exit=124`**（对齐 03 §8.3 既有的 codex 口径，而不是 agent 内部的 `-1`） |
-> | `stdin`（`tty:false`） | ✓ | **唯一需要合成的一项**：`mkdir -m 700 -- /tmp/.platform-stdin-<128bit hex>`（**不带 `-p`**——原子、路径已存在即失败，防抢占）→ `POST /v1/file/write` 把明文放进 **HTTP body** → 命令包成 `__platform_rc=0; <argv> < '<file>' \|\| __platform_rc=$?; rm -rf -- '<dir>'; ( exit $__platform_rc )`。⇒ **命令行里只有路径、没有内容**，且**保留原始退出码**；`finally` 再补一次**不带 abort** 的 `rm -rf`（kill 路径下 in-command 的 `rm` 根本没机会跑）并 close agent session（否则 session 在 agent 侧累积） |
-> | `kill()`（`tty:false`） | ✓ **真杀** | `session_id` 改为**客户端生成、请求发出前就持有**（它就是 kill 句柄，否则命令跑完之前无处可杀）→ `POST /v1/bash/kill`。默认两阶段：`SIGTERM` → **5s 宽限** → `SIGKILL`；显式传 signal 则按传的投递（非三种之一降级为 `SIGTERM`）。**只有 agent 不可达时**才退回 abort fetch（03 §8.3） |
+> | `stdin`（`tty:false`） | ✓ | **唯一需要合成的一项**：`mkdir -m 700 -- /tmp/.platform-stdin-<128bit hex>`（**不带 `-p`**——原子、路径已存在即失败，防抢占）→ `POST /v1/file/write` 把明文放进 **HTTP body** → 命令包成 `__platform_rc=0; <argv> < '<file>' \|\| __platform_rc=$?; rm -rf -- '<dir>'; ( exit $__platform_rc )`。⇒ **命令行里只有路径、没有内容**，且**保留原始退出码**；`finally` 再补一次**不带 abort** 的 `rm -rf`（kill 路径下 in-command 的 `rm` 根本没机会跑）并关掉沙箱内 API 的那个 session（否则 session 会在沙箱内 API 侧累积） |
+> | `kill()`（`tty:false`） | ✓ **真杀** | `session_id` 改为**客户端生成、请求发出前就持有**（它就是 kill 句柄，否则命令跑完之前无处可杀）→ `POST /v1/bash/kill`。默认两阶段：`SIGTERM` → **5s 宽限** → `SIGKILL`；显式传 signal 则按传的投递（非三种之一降级为 `SIGTERM`）。**只有 沙箱内 API 不可达时**才退回 abort fetch（03 §8.3） |
 > | `kill()`（`tty:true`） | ⚠️ 真 SIGINT + **尽力而为** | 见下"仍然存在的限制" |
 > | `user` | ✗ **显式抛错** | agent 无任何用户切换参数 ⇒ 抛 `UNSUPPORTED_CAPABILITY`（§4），**不再静默丢弃** |
 > | `command -v` / PATH 查找 | ✓ | §2.1★ 条款 2 的正面证据 |
@@ -160,7 +172,7 @@ interface SandboxProvider {
 > **三条决定了实现形态的关键实测**：
 >
 > 1. **`hard_timeout` 是真杀，不是 HTTP 超时**：`sleep 30` + `hard_timeout:2` ⇒ **2.0s** 返回 `status:timed_out`，且沙箱内 `pgrep` **查不到残留**。这是"平台侧到点强制 kill"（§3 ★3、03 §8.3）今天真正的底座。
-> 2. **`env` 会进 argv ⇒ 它不是密钥通道**：agent 把 `env` 物化成 `export K=V` 拼进 `bash -c '<script>'`。注入测试（值传 `'; touch /tmp/PWNED; echo '`）**没有逃逸**（agent 侧引用正确），但沙箱内 `ps -eo args` **能看到 env 的值**。同理 **`command` 本身在 `ps` / `/proc/<pid>/cmdline` 里全文可见** ⇒ **"用 heredoc 把密钥塞进命令串"的方案已否决**（会直接违反 05 §7 #3 / RA-14）。密钥只能走 HTTP body（`/v1/file/write`）或沙箱创建时的 `SandboxProviderContext.env`。
+> 2. **`env` 会进 argv ⇒ 它不是密钥通道**：agent 把 `env` 物化成 `export K=V` 拼进 `bash -c '<script>'`。注入测试（值传 `'; touch /tmp/PWNED; echo '`）**没有逃逸**（沙箱内 API 侧引用正确），但沙箱内 `ps -eo args` **能看到 env 的值**。同理 **`command` 本身在 `ps` / `/proc/<pid>/cmdline` 里全文可见** ⇒ **"用 heredoc 把密钥塞进命令串"的方案已否决**（会直接违反 05 §7 #3 / RA-14）。密钥只能走 HTTP body（`/v1/file/write`）或沙箱创建时的 `SandboxProviderContext.env`。
 > 3. **ws PTY 没有进程管理**：ws 的 `session_id` 与 `/v1/shell/sessions` 是**两套命名空间**——`POST /v1/shell/kill`、`DELETE /v1/shell/sessions/{id}` 对 ws 的 session_id 一律回 `Session not found`；而且**单纯关 ws 不杀任何东西**（前台 `sleep 444` 与 `/bin/bash -i` 在关闭 8s 后仍在 ⇒ **每断一次终端就泄漏一个 shell**）。但**写 ETX（0x03）真的经 tty 行规程给前台进程组投递了 SIGINT**，再写 `exit\n` 能让 `bash -i` 退出。
 >
 > **仍然存在的限制（据实登记，不要读成"全好了"）**：
@@ -262,7 +274,7 @@ interface VolumeMount {
 
 ### 2.5 Capabilities（准入规则：一个能力位必须对应一条平台分支）
 
-**加位规则**：只有当"平台存在一条明确的分支逻辑，会因为它 true/false 而走不同的路"时，才配拥有一个能力位。否则不加——想加时按 minor 版本追加即可（§9），漏加的代价远小于一堆没人读的布尔。据此把上一版的 10 位裁到 6 位。
+**加位规则**：只有当"平台存在一条明确的分支逻辑，会因为它 true/false 而走不同的路"时，才配拥有一个能力位。否则不加——想加时按 minor 版本追加即可（§9），漏加的代价远小于一堆没人读的布尔。据此把上一版的 10 位裁到 6 位；S6 因无头 Task 增一位，现为 **7 位**（加位仍走同一条准入规则，见下）。
 
 ```typescript
 interface SandboxProviderCapabilities {
@@ -272,6 +284,7 @@ interface SandboxProviderCapabilities {
   pauseResume: boolean;      // 是否支持暂停/恢复
   snapshot: boolean;         // 是否支持 checkpoint
   watchEvents: boolean;      // 是否支持事件订阅
+  headlessTask: boolean;     // 是否同时具备作业面 jobs 与文件面 files（§2.6）
 }
 ```
 
@@ -283,12 +296,188 @@ interface SandboxProviderCapabilities {
 | `pauseResume` | false → 前端不显示"暂停"按钮（经 `GET /providers` 下发） | ✅ | 视版本 | ✅ 已实现（后端半场：`GET /api/providers` 逐 provider 下发 6 位；前端据此显隐按钮） |
 | `snapshot` | false → 显式要求 `requireSnapshot` 的创建请求直接拒绝，不进调度队列 | ❌ | ❌ | ✅ 已实现（`CreateSandbox.require.snapshot` → `assertCapabilities` 拒绝，不进调度、不落库、不调 `provider.create`） |
 | `watchEvents` | false → `SandboxStatusObserver` 退化为轮询 `inspect()` | ✅ | ✅ | ⏳ 分支随 **SandboxStatusObserver 切片**落地（当前平台没有该组件：状态由 application 主动转移，无 push/poll 二选一的位置）；能力位已下发 |
+| `headlessTask` | false → **无头 Task 发起即拒**（`UNSUPPORTED_CAPABILITY` → 409）。交互式 Task 完全不受影响——它走 `spawn`，不走作业面 | ✅ | ✅ | ✅ 已实现（S6）：准入分支落在 `assertCapabilities`，与两个面同切片（见下方排期约束）；两个内建 provider 均声明 `true` |
 
 > **落地状态列的读法**：本节的准入规则是"一个能力位必须对应一条平台分支"。三条标 ⏳ 的分支所依赖的平台组件（idle 回收调度器 / 扩缩容端点 / StatusObserver）**今天不存在**，因此不为它们伪造分支——那只会把死契约换一种形式。它们保留能力位的理由是：位本身已通过 `GET /api/providers` 下发给调用方，且创建请求可用 `require.*` 对其做静态校验（§5 第一行），即"位有真实读者，只是降级分支等组件到位再接"。组件落地时，本列改为 ✅ 并补 testkit 用例。
+>
+> **`headlessTask` 与另外三条 ⏳ 的差别，要说清楚。** `volumeMount` / `updateResources` / `watchEvents` 保留能力位的理由里有一条是「可被创建请求的 `require.*` 静态校验」——**`headlessTask` 没有这一条，是刻意的**：它不进 `RequiredCapabilities`，理由与 `watchEvents` 不可请求同源——`headless: true` 已经**蕴含**了这一位，平台自己推导出该要求即可，不该让每个调用方再复述一遍。所以它今天的读者只有 `GET /api/providers` 的下发（前端据此判断"这个档位能不能跑无头任务"）。这比另外三位弱一档，如实记在这里。
+>
+> **为什么是一位而不是两位（作业面 / 文件面各一）。** 它们服务的是**同一条分支**：无头 Task 发起即拒。拆成两位就等于承认"能跑任务但取不回产物"是一种合法形态——那不是可交付的一半。而一个背后没有独立分支的位，正是本节准入规则要挡住的东西（删掉 `networkPolicy` / `gpuAllocation` 用的就是这条）。第三方 provider 只实现其一的假想场景，不足以支撑提前占坑。
+>
+> **⚠️ 一条排期约束（已按它执行，留档）**：S6 之前 `headless: true` 的沙箱**能创建成功**——provision 走到 `starting` 段第 ⑤ 步遇 `headless` 直接返回（03 §4.3 ⑤），于是沙箱起好、CLI 装好、凭证注好，只是没有 agent 会话。一旦按上表加了「`headlessTask=false` → 拒绝」的准入分支，而两个内建 provider 的两个面尚未实现，**现有的 headless 建沙箱路径会立刻变成 409**。因此准入分支与两个面**落在了同一个切片（S6）**，没有分两次。
 
 **已删除的 4 位及理由**：`exec` / `attachPty` → 合并为必须方法 `spawn` 与 `spawnTty` 一位；`metricsStream` → 直接体现为 `inspect().resourceUsage` 有没有值，不需要单独声明；`networkPolicy` / `gpuAllocation` → 平台当前没有任何一条分支读它们，属于"提前占坑"。
 
-**能力位不是自我描述而是承诺**：声明 `true` 就必须通过 testkit 里对应的用例（§10 的 CAP-01 条款），声明与实际不符视为不合格实现。
+**能力位不是自我描述而是承诺**：声明 `true` 就必须通过 testkit 里对应的用例（§10 的 CAP-01 条款），声明与实际不符视为不合格实现。对有面挂靠的 `headlessTask`，**位与面必须双向一致**（§10 的 **CAP-02** 条款）——声明 `true` 却没有面，应用层会调到 `undefined`；有面却声明 `false`，`GET /api/providers` 瞒报，而前端正是按这些位显隐控件的。两个方向都是真故障，不是洁癖。
+
+### 2.6 作业面与文件面（无头 Task 的两个可选面）
+
+#### ★ 为什么不是"再开一条流"
+
+`spawn` / `ProcessStream` 是**连接**抽象：短命、活在平台进程的内存里、调用方必须一直等着。装 CLI、探 tmux、注凭证都是这个形状，对它们这是**对的**，不要动。
+
+无头 Task 不是这个形状：
+
+| 它需要什么 | 依据 |
+|---|---|
+| 一条命令跑几十分钟 | 硬超时档位 30min / 1h / 2h / 4h（P20 §0） |
+| 平台重启不打断它 | 与 tmux 从 SHOULD 抬成 MUST 同源的理由（§7 ★） |
+| 刷新 / 断线要能续上 | 前端恢复链路 |
+| stdout 是必须与 stderr 分开的纯 JSONL | 2026-08 实测，见下 |
+| 退出码就是任务落地态 | 2026-08 实测 `exit_code` |
+
+这些都不是"再开一条流"能满足的——它要的是**作业**抽象：长命、有 ID、可事后重新查询。
+
+**这个区分平台已经在交互侧解过一次**：tmux 抬成 MUST 的理由正是「会话由沙箱**自己的** tmux server 持有，所以重启后端不打断 agent」（§7 ★）。作业面是同一个道理的无头侧实例——持有者从 tmux server 换成沙箱内 API **自己的** command session。
+
+#### ★★ 为什么不用 `spawn` 实现它、也不用它实现 `spawn`
+
+两者职责**不重叠**：
+
+```
+spawn    = 我要一条「连接」，现在就要字节，我会一直等着
+startJob = 我要一个「作业」，我这就走开，之后凭 ID 回来
+```
+
+把 `spawn({tty:false})` 改写成 start+poll，会给装 CLI 探测、tmux 自检这类**短命令**平白加两次 HTTP 往返，而同步端点本来就适合它们；反过来用 `spawn` 硬撑长任务，就要一直挂着 HTTP 连接，且拿不到可持久化的 ID。**加的是能力，不是第二条路。**
+
+> 附带一个好处：`toExecFn` 那句「要分离 stdout/stderr 就自己在命令里重定向」的坑，**对无头 Task 自动失效**——它全走作业面，`toExecFn` 只剩短命令用，而短命令不在乎合流。这个坑本身仍在（以后谁写个需要分离的短命令还会踩），但不阻塞本切片，单独记账。
+
+#### 契约
+
+```typescript
+interface JobSpec {
+  cmd: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  timeoutMs?: number;   // 第一道，沙箱侧真 kill；平台侧强制 kill 仍是兜底（★3、03 §8.3）
+  stdin?: string;       // 同 ProcessSpec.stdin：走 body，绝不进 argv（05 §7 #3）
+}
+
+interface JobHandle { readonly provider: string; readonly jobId: string; }
+type JobCursor = string;                    // 不透明：只存只比，永不解析
+type JobStatus = 'running' | 'exited';
+
+interface JobChunk {
+  stdout: string;            // 与 stderr 分离，理由见下表第 3 条
+  stderr: string;
+  cursor: JobCursor;
+  status: JobStatus;
+  exitCode?: number;         // 仅 exited 时有意义，且【可能缺席】（被信号杀掉没有退出码）
+}
+
+interface SandboxJobs {
+  startJob(handle: SandboxHandle, spec: JobSpec): Promise<JobHandle>;
+  readJob(handle: SandboxHandle, job: JobHandle,
+          cursor?: JobCursor, opts?: { waitMs?: number }): Promise<JobChunk>;
+  killJob(handle: SandboxHandle, job: JobHandle, signal?: NodeJS.Signals): Promise<void>;
+  // ⚠️ 释放必须显式、且不能提前调：关掉沙箱侧 session 会【连输出一起销毁】（实测，见下）。
+  //    killJob 刻意【不】释放——杀完之后要看的正是退出码和输出末尾。
+  releaseJob(handle: SandboxHandle, job: JobHandle): Promise<void>;
+}
+
+// size 对目录【缺席】（agent 回 null）；modifiedAt 对外是 ISO，agent 给的是字符串装的 epoch 秒，由 provider 转换
+interface FileEntry { path: string; kind: 'file' | 'dir'; size?: number; modifiedAt: string; }
+
+interface SandboxFiles {
+  readFile(handle: SandboxHandle, path: string): Promise<Buffer | null>;   // 缺文件回 null，不抛
+  openFileStream(handle: SandboxHandle, path: string): Promise<NodeJS.ReadableStream | null>;
+  writeFile(handle: SandboxHandle, path: string, content: string | Buffer): Promise<void>;
+  listFiles(handle: SandboxHandle, path: string,
+            opts?: { recursive?: boolean; maxEntries?: number }): Promise<FileEntry[]>;
+}
+```
+
+#### 五条设计裁决
+
+| # | 裁决 | 理由 |
+|---|---|---|
+| 1 | `JobHandle` 是**纯数据**，不是活对象 | 它必须能整个落库——"平台重启不丢正在跑的 Task"全押在这上面。与 `SandboxHandle` 同纪律：只存只比，永不解析 |
+| 2 | `JobCursor` **不透明** | 字节偏移只是**某一个** provider 对"读到哪了"的编码，别的可能按行 / 按帧。露成数字就会有人在上面做算术，换 provider 即崩。调用方判断"有没有新数据"看 `stdout` / `stderr` 是否为空即可，根本不需要看游标本身 |
+| 3 | stdout / stderr **分成两个字段** | **实测**：`codex exec --json` 的 stdout 是 **100% 纯净 JSONL（14/14 行可解析）**，全部 tracing 噪声走 stderr；两者一合流，同一次运行就变成 **14 可解析 + 8 行垃圾**，`parseOutput` 从"逐行 `JSON.parse`"退化成"写正则猜格式"——正是 §10 RA-04 列为脆弱性风险的那件事。`claude --output-format stream-json` 同样 **3/3 纯净** |
+| 4 | `readJob` 带 `waitMs` **长轮询** | **实测**：沙箱内 API 侧原生支持等待语义。没有它只能忙轮询——一个跑 40 分钟、几秒才吐一个事件的任务，按 1s 轮询是约 2400 次空转 |
+| 5 | 两个面**成组**，而不是平铺 7 个可选方法 | 让"三个方法要么全有要么全无"变成**结构性**约束：写不出"有 `startJob` 没 `readJob`"的 provider。与把 `InjectableRuntimeCredential` / `RefreshableRuntimeCredential` 拆开是同一条思路（05 §4） |
+
+#### 沙箱内 API 侧的支撑（`agent-infra/sandbox:latest`，2026-08 实测）
+
+| 契约方法 | 沙箱内 API 端点 | 实测结论 |
+|---|---|---|
+| `startJob` | `POST /v1/bash/exec` + `async_mode:true` | 命令跑 6 秒，**exec 39ms 返回**，回 `command_id` |
+| `readJob` | `POST /v1/bash/output`（`session_id`·`command_id`·`offset`·`stderr_offset`·`wait`·`wait_timeout`） | 每轮精确返回增量；游标 `10→20→30` / `8→16→24` 单调推进；**stdout / stderr 真分离且各自独立游标** |
+| — 终态 | 同上，嵌在 `data.command` 里 | 运行中 `status:"running"` · `exit_code:null`；结束 `status:"completed"` · `exit_code:7` |
+| — 回放 | 同上，`offset=0` | 命令**结束后**仍可全量回放并拿到 `exit_code` ⇒ 刷新恢复 / 断线重连天然成立 |
+| `killJob` | `POST /v1/bash/kill` | 平台已在用（§2.3★）。**async 作业上实测有效**：`SIGTERM` ⇒ `status:"completed"`·`exit_code:-15` |
+| `releaseJob` | `POST /v1/bash/sessions/{id}/close` | ⚠️ **关 session 会连输出一起销毁**（实测：关后再读回 `Session <id> not found`，不是空 chunk）⇒ 释放必须在平台持久化完之后 |
+| `readFile` / `openFileStream` | **`GET /v1/file/download?path=`**（`application/octet-stream`） | ⚠️ **不能挂 `POST /v1/file/read`**——那是纯文本端点，读二进制直接抛 `'utf-8' codec can't decode byte 0xa3`。download 通道 264 字节**逐字节一致**、8 MB **36ms** 取回。⚠️ 两端点**错误约定不同**：read 回 `HTTP 200 + success:false + error_type:"not_found"`，download 回 **404** —— provider 把两者都归一成 `null` |
+| `writeFile` | `POST /v1/file/write` | 平台已在用（凭证注入，05 §4）。实测：**父目录不存在会自动创建**、`encoding:"base64"` 二进制原样落盘 ⇒ 这是 `mkdir` 不进文件面的实证依据，不只是偏好 |
+| `listFiles` | `POST /v1/file/list`（`recursive`·`max_depth`·`include_size`…） | 实测返回 `{name,path,is_directory,size,modified_time,permissions,extension}`，可填满 `FileEntry`；但 **`size` 对目录是 `null`**、**`modified_time` 是字符串装的 epoch 秒**（不是 ISO）⇒ 两处都由 provider 归一 |
+
+> **★★ 流式通道:走 `ws /v1/bash/ws`,不用轮询(专项 spike 已验完,2026-08)**
+>
+> **这个端点不在 openapi 里** —— FastAPI 不把 WebSocket 路由写进 OpenAPI，只有读镜像源码（`app/api/v1/bash.py:278` 的 `@router.websocket('/ws')`）才看得到。**这已经是同一类错的第四次**（§2.1★ 拿 `docker run` 量身份、§2.3★ 拿 `/v1/shell/exec` 量能力、§2.2 拿错镜像量端点数，本条拿 openapi 量传输面）。纪律照旧：**下否定结论前把对方的入口拉全**，openapi 不等于全部入口。
+>
+> 协议：上行 `{"type":"exec"|"input","data":…}`；下行 `{"type":"session_id"}` · `{"type":"output"}` · `{"type":"command_done",{command_id,exit_code}}`。
+>
+> **⚠️⚠️ 最大的坑:WS 绝不能自己建 session。** 源码 `finally` 里写着 `if created_by_ws: await manager.close_session(session.id)` —— **WS 断开会把它自己创建的 session 关掉**，而关 session **销毁输出并杀掉作业**。照直觉写"连上 WS 就 exec"，平台一重启作业就死，且要到第一次重启才暴露。
+>
+> **⇒ 正确的三步序列（已端到端验证）**：
+>
+> ```
+> ① POST /v1/bash/sessions/create        先建 session ⇒ created_by_ws=false
+> ② POST /v1/bash/exec  async_mode:true  起作业 → command_id
+> ③ ws  /v1/bash/ws?session_id=<同一个>   只做【附着】，断开不影响 session
+> ```
+>
+> **spike 结果全表**：
+>
+> | 场景 | 结果 |
+> |---|---|
+> | 长跑 **33 分钟**、**100 秒静默 × 20 轮** | **断开 0 次**，每个标记准点到达零漂移，`command_done` 带 `exit_code=0` —— nginx idle timeout 不是问题（`python-server` 起了 `--ws-ping-interval 30`） |
+> | 客户端 **SIGKILL**（模拟平台崩溃）× 3 轮 | 服务端 CPU 从 2.4% **降到** 0.5%，不空转；REST 照常；**session 与作业存活** |
+> | 并发 3 个 session | 各自输出、**无串扰**，`exit_code` 各自正确 |
+> | 断连重连 | **不回放历史**（连上时 `offset` = 当前流末尾）；重新附着后新输出继续到达 |
+> | 补洞 | `POST /v1/bash/output` 游标读能拿回断连期间的全部行 |
+>
+> **⇒ 两处必须补洞，用同一条代码路径**：① **首段** —— ②③ 之间有间隙，附着前的输出收不到；② **断连期间**。都用**一次**带游标的 `readJob` 补齐后切回 WS。**一次补读不是轮询。**
+>
+> **⚠️ stderr 不走 WS**：`send_output` 只转发 `result.stdout`，从不发 stderr。而失败路径上 **codex 写零字节 stdout、信息全在 stderr**。⇒ 起作业时把 stderr 重定向进沙箱内文件，退出时用文件面 `readFile` 读一次；stdout 保持纯净 JSONL 走 WS。
+>
+> **⚠️ 一条更正**：本文档曾据早期观察推断"`/v1/bash/output` 必须带 `command_id` 才有数据"——**错的**。那次读到空是因为 session 已被 WS 断开时关掉。实测不带 `command_id` 同样读得到。
+>
+> **⚠️ 一次未能复现的异常**：spike 期间观察到一次 `python-server` 卡在 **73.8% CPU** 空转、API 从容器内部也不可达。但受控实验（干净关闭 ×3、强杀 ×3、并发、33 分钟长跑）**全部健康**，真因是探针侧留了孤儿进程长期挂连接。**记为"观察到一次、未能复现、原因未明"**，不作为 WS 的结论；实现期若再现，从这里查起。
+
+> **⚠️ `offset` 是字节游标**（实测：首行 `{"type":"item.completed","n":1}\n` 恰为 32 字节，回的就是 32）。所以平台侧**必须缓冲半行**，不能假设每轮都拿到完整行。
+>
+> **★★★ 会话生存期：默认配置下会把跑超过 1 小时的作业连根回收——这条会打破产品，必须在实现前处理。**
+>
+> 读 agent 源码（`app/services/bash.py`）+ 压缩 TTL 实测，三条事实：
+>
+> 1. **闲置 TTL = `BASH_SESSION_TIMEOUT`，默认 `3600` 秒**；后台清理任务每 `60` 秒扫一次。
+> 2. **回收判定不看命令是否还在跑**：条件只有 `now - last_used_at > session_timeout` 或会话已关闭。
+> 3. **轮询输出不刷新 `last_used_at`**：全文只有三处写它——建会话、`send_command`、`write_stdin`；`wait_for_output` **不碰**。
+>
+> **实测坐实**（把 `BASH_SESSION_TIMEOUT` 压到 5 秒）：一条要跑 300 秒的命令，在 t=10/30/55 三次轮询里都健在并持续产出（`TICK11 → TICK31 → TICK57`），**t=70 时整个会话 404 消失**，输出与退出码一起丢。
+>
+> **⇒ 直接后果**：硬超时档位 **30min / 1h / 2h / 4h**（P20 §0）里，**2h 与 4h 两档在 agent 默认配置下根本活不到结束**，1h 档正好压线。而且"平台勤快轮询就能保活"是**错的**——轮询不刷新时钟。
+>
+> **⇒ 还有一条**：**会话数上限 `MAX_BASH_SESSIONS` 默认 50，超了按 `last_used_at` 淘汰最老的**。一个连跑很多 Task 的沙箱会**静默丢掉**早先作业的输出。
+>
+> **⇒ 处理办法（成本很低）**：两个都是 `get_env_int` 读的环境变量 ⇒ **建沙箱时经 `SandboxProviderContext.env` 设大即可**，与 `JWT_PUBLIC_KEY` 走同一条通道。这条已固化成契约义务写进 `SandboxJobs` 的注释（"生存义务"）：声明 `headlessTask` 的 provider 必须保证作业在 `JobSpec.timeoutMs` 期间可读可杀，做不到就在发起时拒绝，而不是接下来再让它中途消失。
+>
+> **保留期与截断：已验（2026-08）。**
+>
+> - **`max_output_length` 不截断游标通道**：设 `max_output_length:100` 跑一个产出 1492 字节的命令，`/v1/bash/output` 从 `offset=0` 读回的仍是**完整 1492 字节**，一字不少。它的作用是触发把全量**溢出到文件**并回报路径（`stdout_full_output_file_path`，形如 `/tmp/aio-sandbox-truncated-output/bash/<uuid>.stdout.log`；未超限时该字段为 `null`）。
+> - **保留期不是时间，是 session 生命周期**：输出随 session 存活，**关掉 session 即销毁**（见上表 `releaseJob` 行）。所以"重启可续 / 刷新可续"成立的前提是**平台在持久化完成前不释放**——这条已固化进 `SandboxJobs.releaseJob` 的契约注释。
+>
+> **原先挂在这里的两条已验完（2026-08，真凭证 + 隔离 HOME）**：① `resumeFrom` 的真实接续 ⇒ §3 ★4（两边都真接上，并顺带推翻了 encoded-cwd 那条约束、揪出 resume 选项集不同）；② 成功路径的 `item.type` 取值 ⇒ §3 ★4 末段的事件面表，`'tool-call'` 映射已可定死。
+
+#### 刻意**不**进文件面的
+
+`mkdir` / `rename` / `remove` / `exists` / `watch`。
+
+- 前三个不携带秘密（路径不是凭证），用 `exec` 做没有 05 §7 #3 的泄密风险，不值得让每个 provider 各实现一遍；
+- `exists` 就是 `readFile` 回 `null`；
+- `watch` 在 沙箱内 API 侧确实有整套（`/v1/file/watch/*`，6 个端点，带游标轮询），但**今天没有用户**——Task 的产物在任务结束时读一次就够。现在加，等于用猜测而不是真实需求把它的形状钉死。
 
 ## 3. RuntimeAdapter contract（完整定义）
 
@@ -336,9 +525,9 @@ interface RuntimeAdapter {
 | `completeAuth` | 把用户贴回来的 code 写进 pty stdin（或持续读输出等登录完成），产出可入库的凭证 | `POST .../auth/complete` | 返回的 `credentialFiles.content` 是明文，**只在内存流转**，落库前必经 Vault 加密 |
 | `createCredentialFromSecret`（可选） | 把用户直接提交的 API key / access token 构造成可入库凭证（注入形态由 adapter 决定：env 变量或 config 文件） | `POST /api/runtimes/:rt/credentials/secret`（05 §3.1） | **不需要 sandbox 宿主**；可含轻量格式校验；同样只在内存流转、Vault 加密落库 |
 | `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | **provision workflow `starting` 段的第 ④ 步**（03 §4.3）——**必须排在 `provider.start()` 之后**：`exec` 由 `spawn({tty:false})` 派生（§2.3），实例没跑起来根本没有 `exec`（此前 24 §1 / 26 §1 的顺序是错的，S5 已更正） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态见 05 §4 / §1★★——本表刻意不复述优先级**（此处原先那份"access-token-only（stdin）> `0600` 文件 >（禁用）整份 env"**已被 05 §1★★ 的 S5 实测推翻**：stdin 档版本敏感、已降为可选，且在当前 exec 通道上还会被静默丢弃（§2.3★）。优先级只在 05 §4 存一份，本处只留指针——同一条规则两处各存一份正是这次自相矛盾的成因）。不变的硬红线：**绝不 `CODEX_AUTH_JSON` env 注入整份含真 refresh_token 的 auth.json**（P0-3，05 §4/§7 #3，adapter 契约固化） |
-| `buildStartCommand` | **两种用法共用一个方法**：① **交互式**（`headless:false`，S5 主路径）——provision 的 `bootstrapAgentSession` 用它把 `initialPrompt` 拼成"带指令启动 CLI"（03 §4.3 ⑤）；② **无头**（`headless:true`，MCP `run_agent_task`，02 §5）——**产品化不进 S5**（TASK-LAUNCH-DECISIONS T-4） | ① provision `starting` 段第 ⑤ 步；② 后续切片 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
+| `buildStartCommand` | **两种用法共用一个方法**：① **交互式**（`headless:false`，S5 主路径）——provision 的 `bootstrapAgentSession` 用它把 `initialPrompt` 拼成"带指令启动 CLI"（03 §4.3 ⑤）；② **无头**（`headless:true`，MCP `run_agent_task`，02 §5）——**产品化不进 S5**（TASK-LAUNCH-DECISIONS T-4），执行通道见 §2.6 作业面 | ① provision `starting` 段第 ⑤ 步；② 后续切片 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
 | `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
-| `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时 | 不实现则平台只透传原始字节 |
+| `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时（喂给它的是 §2.6 `JobChunk.stdout`，**绝不喂 stderr**） | 不实现则平台只透传原始字节。**实测后已不再需要正则**——见 ★4 末段 |
 
 > **★1 install 策略：优先"镜像预装"，install-on-start 是兜底（S5 技术验证，2026-08 实测）**
 >
@@ -372,6 +561,8 @@ interface RuntimeAdapter {
 
 > **★3 无头任务必须有超时 + 强制 kill 兜底，不能指望 CLI 自己收敛（S5 技术验证，2026-08 实测）**
 >
+> **⚠️ 与 §2.6 ★★★ 一起读**：本条讲的是"到点要杀得掉"；§2.6 ★★★ 讲的是"到点之前不能被沙箱自己弄没"。后者在 agent 默认配置下**不成立**（2h/4h 两档会被闲置 TTL 中途回收），处理办法见该节。两条缺一不可。
+>
 > **落点（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-4）：本条结论已定、不需要重验，但落点在 S5 之后的切片**——无头 Task 整块不进 S5（缺 command handler、缺输出传输定案、日志存储只有 automation 口径）。**S5 的 live 技术验证跑的正是无头路径（`codex exec`），它证明的是机制成立，不等于产品化的无头 Task 已经就绪。** S5 内的交互式 Task 不依赖本条：它的兜底是 idle 回收 + 硬超时 24h（P20 §0）。
 >
 > 同一场景（**无凭证**起无头任务）两个 CLI 的表现完全不同：**codex 不会干净退出**——反复重试 `401 Unauthorized`（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** 并打印 "Not logged in"。
@@ -379,6 +570,46 @@ interface RuntimeAdapter {
 > 实测的触发条件（无凭证）本身会被 03 §8.2 决策表第 2 条挡在前面，但它暴露的是**通用性质**：codex 遇到持续性 API 错误会一直重连而不退出——**凭证运行中失效、网络中断、上游持续 5xx 都会走到同一条不退出的重连循环**。⇒ 平台的硬超时不是"以防万一"，而是**已知有 runtime 会挂在那里**：无头任务执行必须有超时 + 到点强制 kill（落点见 03 §8.3）。`buildStartCommand` 可以带上 CLI 自己的超时旗标作为第一道，但**平台侧的 kill 才是唯一可靠的那道**。
 
 > **实现补充（S4 后）**：adapter 另有一个**只读声明**字段 `credentialTtlMs?: Partial<Record<RuntimeAuthMethod, number>>`——"用某 method 拿到的凭证能活多久"。这是**厂商事实**（codex 的 access token ~1h、claude 的 setup-token ~1yr），必须由 adapter 声明：原先它以常量形式待在 application 层并按 **method** 分支，导致任何用 `oauth-device` 的第三方 runtime 都被安上 Codex 的 1 小时过期（真 bug）。未声明该 method ⇒ `expiresAt = null`（平台侧不设过期）。
+
+> **★4 上下文管理整块落在 adapter，沙箱层零改动（2026-08 实测 + 检索；resume 已用真凭证端到端跑通）**
+>
+> 两个 CLI 的会话续接机制**都是现成的**，而且**上下文状态都落在沙箱自己的文件系统里**：
+>
+> | | 续接命令 | 状态落点 |
+> |---|---|---|
+> | codex | `codex exec resume <SESSION_ID> [PROMPT]`（另有 `--last`） | `$CODEX_HOME`（**默认持久化**；`--ephemeral` 才关掉） |
+> | claude | `claude -p --resume <id>`（另有 `-c/--continue`、`--fork-session`、`--session-id <uuid>` 预先指定） | `$CLAUDE_CONFIG_DIR/projects/<encoded-cwd>/<session_id>.jsonl` |
+>
+> 于是**同一沙箱内多轮接续不需要任何新机制**——上下文文件本来就在那儿，只有"引用"需要旅行。这是主路径，也是当前唯一一条。
+>
+> **形态完全不同，所以只能留在 adapter**：codex 是**子命令**、claude 是**旗标**。没有任何通用包装能同时容纳两者——与 ★2「关掉各 CLI 内层沙箱」是同一条理由。
+>
+> **会话 id 从哪来：走事件，不另开门。** 实测两个 CLI **都在第一个输出事件里**就吐出了自己的会话 id——codex 是 `thread.started.thread_id`，claude 是 `system/init.session_id`。它天生就是个事件，那就走 `parseOutput` 这一个既有出口，因此新增 `RuntimeEventType` 成员 `'session-started'`，而不是给 adapter 单开一个 `sessionRefOf()` 方法。
+>
+> **两条已用真凭证端到端跑通（2026-08，全程隔离 HOME）**：codex 与 claude 的 resume **都真的接上了上下文**（第 1 轮"记住 4271"，第 2 轮 resume 追问，两边都答 4271），且**都把同一个 id 回显在第一个事件里** ⇒ 平台可据此**确认"真的续上了"**，而不是假定。
+>
+> **⚠️ 我上一版写错、已被实测推翻的一条**：原文说"claude 的 transcript 按 encoded-cwd 分桶，换 `workdir` 再 resume 会找不到历史，平台必须保证 workdir 稳定"。**实测:换 cwd 照样接上**（codex、claude 都是）。transcript 路径确实按 encoded-cwd 分桶，但**按 id 的 `--resume` 不受 cwd 约束**；受约束的是 `-c/--continue`（其 help 原文即"当前目录下最近一条会话"）。我们用显式 id，所以不受影响——**这条约束不存在，别照旧文实现**。
+>
+> **⚠️ resume 的调用不是"起任务的调用加个旗标"**：实测 `codex exec resume` 的**选项集与 `codex exec` 不同**——**既没有 `-s/--sandbox` 也没有 `-C/--cd`**。而 `-s danger-full-access` 正是 ★2 用来关掉 codex 内层沙箱的旗标 ⇒ **把 resume 拼成"起任务 argv + resume"会直接死在 `unexpected argument '-s' found`**，等价能力要改走 `-c sandbox_mode="danger-full-access"`。两个子命令之间什么都别假设会继承。
+>
+> **引用不存在时两边都响亮失败，不会静默新开**：codex 退出码 1、stderr `no rollout found for thread id …`、**stdout 零字节**；claude 退出码 1、stdout 出 `result/error_during_execution` 且 `is_error: true`、stderr `No conversation found with session ID: …`。
+>
+> **⏳ 明确划到本切片之外**：跨沙箱 / 沙箱销毁后的续接。那需要把 context 目录导出导入（用 §2.6 文件面搬）或用 provider 快照——而两个内建 provider 今天都声明 `snapshot: false`（§2.5），这条路根本走不通。别顺手做。
+>
+> **附带把 RA-04 的风险评估更新掉：`parseOutput` 不需要正则。** §10 RA-04 把"CLI 升级改了输出格式"列为脆弱性风险，其隐含前提是要从 stdout 文本里正则抠信息。实测推翻了这个前提：两个 CLI 在结构化模式下 stdout 都是**纯净 JSONL**（codex 14/14、claude 3/3，均 0 行污染），噪声全在 stderr。只要 §2.6 作业面保证两条流不合流，`parseOutput` 就是**逐行 `JSON.parse` + 一张事件名映射表**，脆弱性大幅下降。**成功路径的完整事件面已实测（2026-08 真凭证，用一个必然触发工具调用的任务：读文件 → 写文件 → 跑 `wc`）**，两边都是 **0 行污染、stderr 全空**：
+>
+> | | 顶层 type | 载荷 |
+> |---|---|---|
+> | codex | `thread.started` · `turn.started` · `item.started` · `item.completed` · `turn.completed`（失败路径另有 `turn.failed` · `error`） | `item.type`：`agent_message{id,type,text}`、`command_execution{id,type,command,aggregated_output,exit_code,status}`、`file_change{id,type,changes:[{path,kind}],status}` |
+> | claude | `system/init` · `system/thinking_tokens` · `assistant` · `user` · `result/success` | `message.content[]`：`text`、`thinking{thinking,signature}`、`tool_use{id,name,input,caller}`、`tool_result{tool_use_id,content}`（**在后续的 `user` 消息里**） |
+>
+> ⇒ **`'tool-call'` 的映射现在可以定死**：codex 取 `command_execution` / `file_change` 两种 item（`item.started` → `status:'started'`，`item.completed` → `'completed'` 并带 `exitCode`/`output`），claude 取 `tool_use` 块（`status:'started'`）+ 后续 `user` 消息里的 `tool_result`（`status:'completed'`，靠 `tool_use_id` 关联）。⚠️ **两者不同构**——codex 一个 item 自带输出，claude 把「调用」与「结果」拆在两条消息 ⇒ **写不出跨两家的通用解析器**，各 adapter 各映各的。**`name` 只在 `started` 半边**：claude 的 `tool_result` 只带 `tool_use_id`，而解析器刻意逐行无状态（有状态的 id→name 表会让「实时解析」与「回放解析」产出不同载荷，正是平台 `seq` 回放绝不能出现的事）⇒ 与其发一个空串，不如让该字段在 completed 半边**根本不存在**，消费方按 `id` 关联。⚠️ 由此产生一条对 codex 的**依赖**：`name`/`input` 只在 `item.started` 上，所以某个 item 类型若只发 `item.completed` 就会丢掉它们；依据是实测那次成功跑（读文件→写文件→跑 `wc`）的**逐类型计数**：`item.started` 3 条（`command_execution` 2 / `file_change` 1），`item.completed` 5 条（`command_execution` 2 / `file_change` 1 / `agent_message` 2）——顶层 3:5 的差额**全部来自 `agent_message`**（它本就不是工具 item），两种工具 item **严格成对**（2:2、1:1）。真出现不成对的类型，改 codex mapper 一行（从它的 completed 同时发两半），**不要**改成有状态查表。⚠️ claude 的 `tool_result.is_error` 走**独立的 `isError`**，**不折成 `exitCode: 1`**：`exitCode` 里 codex 放的是实测退出码，合成一个 1 进去，两者就长得一模一样而消费方分不出来。（这与「沙箱侧硬超时归一成 124」不是一回事——124 是真实进程的真实退出码，不是布尔装出来的。）消费方判失败：`isError === true || (exitCode !== undefined && exitCode !== 0)`。
+>
+> ~~⚠️ **一个已知缺口**：codex 的 `agent_message` 与 claude 的 `text` 块没有忠实对应~~ → **S6 已补**：真消费者出现了（前端要把 agent 正文与工具调用分开呈现），于是新增成员 `'agent-message'`，`'stdout-chunk'` 回归它的字面意思——留给没有结构化输出模式的 runtime 的原始字节。这正是当初「先不猜着加、等有消费者再补」想要的结局。
+>
+> **⚠️ 两个陷阱**：① codex 的 `-o/--output-last-message <FILE>` 在任务**失败时根本不生成**——"文件不存在"是正常路径，这正是 §2.6 `readFile` 回 `null` 而不抛的原因；② claude 的 `result` 行会出现 `subtype:"success"` 与 `is_error:true` **并存**，判定成败**只能看 `is_error`，不能看 `subtype`**。
+>
+> **⚠️ 成功路径尚未实测**：上述事件名取自零凭证探针（鉴权失败路径）与官方文档。`item.completed` 在成功路径上的 `item.type` 取值（工具调用 / 消息 / 命令执行等）**没有真机验证过**，`'tool-call'` 的映射表要等成功路径实测后才能定死。
 
 **支撑类型**：
 
@@ -429,12 +660,38 @@ interface RuntimeTaskSpec {
   outputFormat?: 'text' | 'json-stream';
   extraArgs?: string[];
   workdir?: string;
+  // ★4：上一轮的会话引用。给了 = 接着上次聊，不给 = 全新会话。
+  //   由 buildStartCommand 自己翻译成各 CLI 的形态（codex 是子命令、claude 是旗标）。
+  resumeFrom?: string;
 }
 
 interface SandboxCommand { cmd: string[]; env?: Record<string, string>; cwd?: string; }
 
-type RuntimeEventType = 'stdout-chunk' | 'tool-call' | 'task-complete' | 'error' | 'auth-required';
-interface RuntimeEvent { type: RuntimeEventType; timestamp: string; data: unknown; }
+// 'session-started' 携带 { ref: string }：CLI 自己的会话 id，存下来下一轮填回 resumeFrom（★4）
+// ★ S6 修订：载荷按成员钉死，且新增 'agent-message'。
+//   原形态是 { type; timestamp; data: unknown }——消费方只能【猜字段名】，而改名不会
+//   触发任何编译期或 schema 报错，失败形态是「输出渲染不出来」这种最难归因的静默。
+type RuntimeEvent =
+  | { type: 'session-started'; timestamp: string; data: { ref: string } }
+  | { type: 'agent-message';   timestamp: string; data: { text: string } }  // agent 正文（★4 的已知缺口到此补上）
+  | { type: 'stdout-chunk';    timestamp: string; data: { text: string } }  // 留给无结构化模式的原始字节
+  // ⚠️ 载荷按 status 再判别一次：`name` 只出现在 started 半边（且必填）。
+  //   曾经把 name 放在两边，逼得 claude 的 completed 半边发空串——而"必填但有时是假的"
+  //   恰恰是这个联合被钉死时要消灭的那种静默。消费方按 id 配对。
+  | { type: 'tool-call';       timestamp: string; data:
+        | { status: 'started';   id: string; name: string; input?: unknown }
+        // ⚠️ exitCode 只放【真实退出码】，isError 放【工具自己说它失败了】。
+        //   codex 有前者、claude 有后者；把 claude 的布尔折成 exitCode:1，会让
+        //   一个实测的 1 和一个合成的 1 落进同一个字段、消费方分不出来——正是这个
+        //   联合被钉死时要消灭的那类静默，只是换了个地方。两者不冗余。
+        | { status: 'completed'; id: string; exitCode?: number; isError?: boolean; output?: string } }
+  // ⚠️ 载荷【空】：实测两个 CLI 的完成事件都不带退出码——那是【作业】的事实，
+  //   走 `/tasks` 的 `exit` 帧。留一个没有生产者的可选字段只会让后人白找一遍。
+  | { type: 'task-complete';   timestamp: string; data: Record<string, never> }
+  | { type: 'error';           timestamp: string; data: { message: string } }
+  | { type: 'auth-required';   timestamp: string; data: { method?: string } };
+// timestamp 产出时【可以为空串】：parseOutput 在 infrastructure，没有 Clock（01 §3），
+// 两个 CLI 的事件本身也不带时间——由 application 层盖章。
 
 /**
  * 一次性命令执行。**不是 SandboxProvider 的方法**——由平台的 toExecFn(provider, handle)
@@ -715,6 +972,8 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | SP-11 | MUST | `inspect()` 返回结构满足 `SandboxRuntimeStatus`，`health` 若存在则字段齐全 | schema 校验（zod）而非 `typeof` 抽查 |
 | SP-12 | SHOULD | `stop()` 在 `timeoutSec` 内返回；超时转强制终止 | 起一个忽略 SIGTERM 的进程，断言仍能在 timeout+buffer 内停掉 |
 | **CAP-01** | MUST | **声明的每个能力位都必须与实际行为一致** | 对每个声明 `true` 的位跑其挂靠条款；对声明 `false` 的位，断言调用对应可选方法抛 `UNSUPPORTED_CAPABILITY` |
+| **SP-J1** | MUST（`headlessTask`） | **作业生存义务**：`startJob` 与 `releaseJob` 之间，作业必须在其 `JobSpec.timeoutMs` 期间保持可读可杀，且**读取不得成为保活手段** | 起一个时长接近 `timeoutMs` 的作业，全程**不**轮询，到期后再读——必须仍能拿到输出与退出码。⚠️ 这条专治一类默认就违反它的实现：内建 agent 的会话有闲置 TTL（默认 1 小时），而**读输出不刷新它的时钟**、回收也**不检查命令是否在跑**（§2.6 ★★★）。✅ 已落地为 live e2e（`apps/api/test/e2e/agent-task-job-plane.e2e-spec.ts`，aio 与 boxlite 各一遍），并**同时断言沙箱确实是带着放大后的 TTL / 会话上限启动的**——只断言「到期后读得到」会让一个从没放大过 TTL 的实现也蒙混过关。仍未进 testkit（它需要真 host） |
+| **CAP-02** | MUST | **有面挂靠的能力位与该面的存在性双向一致**：`headlessTask` ⟺ `provider.jobs` 与 `provider.files` 同时存在（§2.6） | 断言 `(provider.jobs !== undefined) === capabilities.headlessTask`，`files` 同理。**两个方向都判**：声明 `true` 而无面 ⇒ 应用层调到 `undefined`；有面而声明 `false` ⇒ `GET /api/providers` 瞒报，前端据此显隐控件会漏掉可用能力 |
 | SP-T1 | MUST（`spawnTty`） | `spawn({tty:true})` 能双向收发，`resize()` 生效 | 写入 `stty size` 并 resize，断言输出的行列数随之变化 |
 | SP-T2 | **SHOULD**（`spawnTty`） | `ProcessStream.ref` 稳定可复用：用它作 `reuse` 重连回同一会话 | 建会话 → 写入标记 → 断开 → `spawn({reuse: ref})` → 断言能看到先前会话的现场。**维持 SHOULD，但理由已更换（2026-08）**：原理由是「保活依赖 tmux 而 §7 只把 tmux 定为 SHOULD，一个 MUST 一个 SHOULD 自相矛盾」（审计 P1-10）——tmux 升 MUST 后该矛盾不复存在，原理由作废。**现在的理由更硬**：现场保活由**沙箱内的 tmux server**提供，与 provider 支不支持 `ref` 复用正交——网关重连时再跑一次 `tmux attach` 同样回到现场，并不要求 provider 复用同一个 `ProcessStream.ref`。因此 ref 复用是**省一次 spawn 的优化**，不是保活的前提，不该定成准入线。⚠️ 原文那句「不具备会话保活的实现必须降级为网关侧 ring buffer」**已随 B 档一起作废**（§7 ★ / 06 §6），不要再照它实现 |
 | SP-V1 | MUST（`volumeMount`） | `stop()` → `start()` 后工作区数据仍在 | 停机前写文件，重启后读出同一内容 |
@@ -722,7 +981,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | SP-U1 | MUST（`updateResources`） | 改配额后 `inspect().resourceUsage` 或实体限额随之变化，且**不重建**（句柄不变） | 断言前后 `providerSandboxId` 相同 |
 | SP-P1 | MUST（`pauseResume`） | pause 后 `inspect()` 为 `instance_paused`，resume 后回到 `instance_running` | 状态往返断言 |
 
-> **已落地的条款**：**SP-00**、**CAP-01 的结构半场**（六位能力位齐全且都是 boolean，另可用 `opts.expectedCapabilities` 逐位钉死）——这两条无宿主需求，`aio`/`boxlite`/fake 一律无条件跑；**SP-01** 为 live 条款，只在传入 `opts.context` 时打开。其余 SP-02 ~ SP-12 / SP-T\* / SP-V1 / SP-W1 / SP-U1 / SP-P1 与 CAP-01 的**行为半场**（声明 false 的位调用即抛 `UNSUPPORTED_CAPABILITY`）**尚未进 testkit**——它们都要真宿主，属 live 条款，随 sandbox-run 切片补齐；其中 create→exec→destroy、stop→start 数据留存、重启重连等路径今天由 `docker-backend.e2e` / `boxlite-provider.e2e` / `boxlite-microvm.e2e` 单独覆盖（不是 testkit 形态，所以第三方实现复用不到）。
+> **已落地的条款**：**SP-00**、**CAP-01 的结构半场**（七位能力位齐全且都是 boolean，另可用 `opts.expectedCapabilities` 逐位钉死）、**CAP-02**（静态条款，无宿主需求；已做**反例验证**——把 `aio` 的 `headlessTask` 篡改成 `true` 而不挂面，CAP-01 与 CAP-02 双双变红并给出准确消息，还原后恢复绿，不是空转用例）——这两条无宿主需求，`aio`/`boxlite`/fake 一律无条件跑；**SP-01** 为 live 条款，只在传入 `opts.context` 时打开。其余 SP-02 ~ SP-12 / SP-T\* / SP-V1 / SP-W1 / SP-U1 / SP-P1 与 CAP-01 的**行为半场**（声明 false 的位调用即抛 `UNSUPPORTED_CAPABILITY`）**尚未进 testkit**——它们都要真宿主，属 live 条款，随 sandbox-run 切片补齐；其中 create→exec→destroy、stop→start 数据留存、重启重连等路径今天由 `docker-backend.e2e` / `boxlite-provider.e2e` / `boxlite-microvm.e2e` 单独覆盖（不是 testkit 形态，所以第三方实现复用不到）。
 
 ### 10.3 RuntimeAdapter 条款
 

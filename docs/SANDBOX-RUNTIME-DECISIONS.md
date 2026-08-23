@@ -3,19 +3,19 @@
 > 状态：✅ 已决策，待据此更新 04/06/03/13/P19 并实施 refactor。
 > 背景：S1 三方审查 + 主流调研发现 S1 的 provider 是 **docker exec 薄封装**（隔离最弱档），且宿主 `docker exec` 与 microVM 不兼容。为"第一级骨架定对、早期少欠债"，定下两个互相耦合的决策。
 
-## 决策 A：执行/终端走**沙箱内 agent 数据面**（控制面 / 数据面分离）
+## 决策 A：执行/终端走**沙箱内 API 数据面**（控制面 / 数据面分离）
 
-主流架构（E2B envd / AIO Sandbox / Daytona）= 控制面管生命周期、数据面经**沙箱内 agent** 暴露 fs/process/pty。我们采用同构模型：
+主流架构（E2B envd / AIO Sandbox / Daytona）= 控制面管生命周期、数据面经**沙箱内 API** 暴露 fs/process/pty。我们采用同构模型：
 
 - **控制面**（NestJS backend + dockerode / containerd）：沙箱生命周期 `create/start/stop/destroy/inspect`。provider 特定。
-- **数据面**：`exec / pty / fs` 走**沙箱内 agent**。aio/boxlite = **AIO Sandbox 自带 API**（`http://<container>:8080`，agent-infra/sandbox）：
+- **数据面**：`exec / pty / fs` 走**沙箱内 API**。aio/boxlite = **AIO Sandbox 自带 API**（`http://<container>:8080`，agent-infra/sandbox）：
   - 交互终端：`ws /v1/shell/ws`
   - 命令执行：**`POST /v1/bash/exec`**（有状态会话，原生带 `env`/`exec_dir`/`hard_timeout`，stdout/stderr 分离 + `exit_code`）+ 同族的 `/v1/bash/kill`（真实信号）。⚠️ **不是 `/v1/shell/exec`**——那个端点只收 `command`/`exec_dir`/`timeout`，**没有 `env`/stdin/signal**（实测，04 §2.3★）
   - 文件（后续切片）：其 File API
-- **裸镜像 fallback**：`DockerExecAgentClient`（宿主 `docker exec`），仅用于**无内置 agent 的镜像**（如 S1 alpine e2e）。是 fallback，不是主路。
+- **裸镜像 fallback**：`DockerExecAgentClient`（宿主 `docker exec`），仅用于**无内置沙箱内 API 的镜像**（如 S1 alpine e2e）。是 fallback，不是主路。
 - **未来 microVM**（Kata/Firecracker）：**同一数据面契约**，agent 经 vsock/网络；**终端/exec 契约零改动**。
 
-> 关键收益：终端/exec 契约焊在"沙箱内 agent"而非 docker exec —— provider（容器/gVisor/microVM）可换，契约不变。
+> 关键收益：终端/exec 契约焊在"沙箱内 API"而非 docker exec —— provider（容器/gVisor/microVM）可换，契约不变。
 
 ## 决策 B：boxlite = **BoxLite micro-VM**（Mac 原生独立内核隔离）
 
@@ -35,7 +35,7 @@
 
 **① 前端 ⇄ 网关**：**我们的 socket.io `/terminal`**（shared/10 §7.4，**不变**）。网关只做「我们的帧 ↔ 中立 `ProcessStream`」，与 06 现状**完全一致**：`input`→`stream.write`、`resize`→`stream.resize`、`stream.onData`→`data` 帧、`stream.onExit`→`exit` 帧；`socketSessionKey` 由网关**服务端生成、128-bit、不落盘**。
 
-**② 网关持有的 `ProcessStream` ⇄ 实际 PTY 源**：由 **provider 的 `spawn` 实现**提供，网关不感知底层。aio/boxlite 的 `spawn({tty:true})` = `AioSandboxAgentClient` 连 in-sandbox agent `ws /v1/shell/ws`，把 AIO 协议翻译成中立 `ProcessStream`——**翻译在此，不在网关**：
+**② 网关持有的 `ProcessStream` ⇄ 实际 PTY 源**：由 **provider 的 `spawn` 实现**提供，网关不感知底层。aio/boxlite 的 `spawn({tty:true})` = `AioSandboxAgentClient` 连 in-sandbox API `ws /v1/shell/ws`，把 AIO 协议翻译成中立 `ProcessStream`——**翻译在此，不在网关**：
 
 | 中立 `ProcessStream` | AIO Sandbox `/v1/shell/ws`（provider 内翻译） |
 |---|---|
@@ -52,7 +52,7 @@
 ## SPI 与实现（文档 04）
 
 - **契约面不变**：04 的 `SandboxProvider.spawn({tty}) → ProcessStream` 已是实现无关的正确抽象（04 §2.2/§2.4）。**本决策不改 04 契约**，只钉死 aio/boxlite 的**实现形态**：
-  - `spawn` 由 **in-sandbox agent 数据面**支撑，**不是宿主 docker exec**：
+  - `spawn` 由 **in-sandbox API 数据面**支撑，**不是宿主 docker exec**：
     - `tty:true` → 连 AIO `ws /v1/shell/ws`，包装成 `ProcessStream`（翻译见上表）。
     - `tty:false` → 走 AIO **`POST /v1/bash/exec`**（收集输出到 EOF；即 04 §2.3 的 `toExecFn` 语义）。**选它而不是 `/v1/shell/exec`：后者不支持 `env`/stdin/signal**，`/v1/bash/exec` 原生带 `env`/`exec_dir`/`hard_timeout`，配套 `/v1/bash/kill` 投递真实信号（能力面与实测见 04 §2.3★）。
   - 裸镜像 fallback：`DockerExecAgentClient`（docker exec 包装成同一 `ProcessStream`）。
@@ -77,7 +77,7 @@
 
 ## 影响面
 
-- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox agent，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox agent；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露 agent 端口——**实现为宿主 loopback publish**，见上「安全姿态」+ 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（agent 端点：`aio` 运行时解析不落库，`boxlite` 的转发端口与**两侧的 agent bearer token** 必须落库——⚠️ 原写"一律不落库"，已按实现更正，见 13 §2.1.1）· P19（boxlite 措辞已正确，无需改）。
+- **文档**：本 ADR（新增，权威）· 04（钉 aio/boxlite 的 `spawn` 实现=in-sandbox API，指针引用本 ADR）· 06（`ProcessStream` 源=in-sandbox API；**网关设计不变**，AIO↔ProcessStream 翻译在 provider）· 03（容器/Box 暴露 agent 端口——**实现为宿主 loopback publish**，见上「安全姿态」+ 就绪探测；boxlite 控制面=BoxLite SDK；镜像经本地 registry 预置）· 13（沙箱内 API 端点：`aio` 运行时解析不落库，`boxlite` 的转发端口与**两侧的 agent bearer token** 必须落库——⚠️ 原写"一律不落库"，已按实现更正，见 13 §2.1.1）· P19（boxlite 措辞已正确，无需改）。
 - **代码 refactor（S1 之上）**：
   - 后端：**provider 的 `spawn` 实现**从 docker exec 换成 `AioSandboxAgentClient(ws /v1/shell/ws)`（`tty:false` 走 exec 端点——当时是 `/v1/shell/exec`，**现为 `/v1/bash/exec`**，见 04 §2.3★），**网关保持不变**；`DockerExecAgentClient` 降为 fallback；boxlite 控制面接 BoxLite SDK；容器/Box 创建暴露 agent 端口（**实现为宿主 loopback publish**）+ 就绪探测；provision 失败销毁容器/Box（修审查 P1-2）；WS 握手口令校验（修 P1-1）。
   - 前端：**契约不变**，仅并入 S1 审查的 P0（连接抖动）+ P1（onInvalidFrame 接线）修复。
@@ -93,7 +93,7 @@
 
 ## 减债原则落地
 
-1. 终端/exec 契约 = 沙箱内 agent 数据面 → microVM 化零改动。
+1. 终端/exec 契约 = 沙箱内 API 数据面 → microVM 化零改动。
 2. 前端 socket.io 协议是**稳定边界**，后端翻译层吸收 provider 差异。
 3. BoxLite 可插拔 hypervisor 覆盖 macOS/Linux/Windows，boxlite 档跨平台单机可跑（Mac 原生，无需 Linux/KVM）；aio 走 Docker。
 4. docker exec 保留为 fallback（裸镜像/无 agent），不删，但非主路。
