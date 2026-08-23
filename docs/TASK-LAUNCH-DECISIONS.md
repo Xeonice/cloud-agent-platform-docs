@@ -18,7 +18,7 @@
 
 **三条贯穿全文的共性**（先说，免得后面重复）：
 
-1. **凡是需要 `exec` 的步骤，都必须排在 `provider.start()` + 沙箱内 agent 就绪探测之后**——`exec` 由 `spawn({tty:false})` 派生（04 §2.3），实例没跑起来就没有 `exec`。T-2/T-3/T-5/T-6 全落在 `starting` 段，顺序被这条钉死（顺带修掉 24 §1 / 26 §1 里"先注入凭证再 `provider.start`"的既有错序）。
+1. **凡是需要 `exec` 的步骤，都必须排在 `provider.start()` + 沙箱内 API 就绪探测之后**——`exec` 由 `spawn({tty:false})` 派生（04 §2.3），实例没跑起来就没有 `exec`。T-2/T-3/T-5/T-6 全落在 `starting` 段，顺序被这条钉死（顺带修掉 24 §1 / 26 §1 里"先注入凭证再 `provider.start`"的既有错序）。
 2. **凡是"沙箱内的运行时事实"（`$HOME`、CLI 在不在、tmux 有没有），一律经 `provider.spawn()` 实测，不由镜像声明或硬编码推断**——这是 04 §2.1★ 已经确立的方法论，T-2/T-3/T-6 只是把它用到三个新地方。**2026-08 补一句**：实测的结论用来**判定成败**，不再用来**选降级档位**——tmux 实测不过是失败（T-2 修订），与 `injectCredential` 探不到 `$HOME`、`isInstalled` 装不上 CLI 一样响亮。
 3. **凡是跨 T1 → provision 边界的用户输入，都必须有存储**——provision workflow 只拿得到 `sandboxId`（26 §1），别的什么都没有。T-1 是这条的直接推论。
 
@@ -60,7 +60,7 @@
 **在 provision workflow 的 `starting` 段内新增一步 `bootstrapAgentSession`**（不新增状态机状态）：
 
 ```
-starting:  provider.start()  →  沙箱内 agent 就绪探测（03 §4）
+starting:  provider.start()  →  沙箱内 API 就绪探测（03 §4）
         →  ensureRuntimeInstalled（T-3）
         →  prepareRuntimeCredential → injectCredential → recordRuntimeInjection（T-5/T-6）
         →  bootstrapAgentSession       ← 本条新增
@@ -145,7 +145,7 @@ ring buffer 判定为 **B 档的产物、无独立用途**，随 B 档一起退�
 
 ### 结论
 
-1. **`ensureRuntimeInstalled` 三步（`getInstallPlan` → `isInstalled` → 必要时 `install`）落在 provision workflow 的 `starting` 段**，排在 `provider.start()` + agent 就绪探测之后、凭证注入之前。
+1. **`ensureRuntimeInstalled` 三步（`getInstallPlan` → `isInstalled` → 必要时 `install`）落在 provision workflow 的 `starting` 段**，排在 `provider.start()` + 沙箱内 API 就绪探测之后、凭证注入之前。
 2. **`runtime_installations` 的初值写入在 T1 之外**，由 provision workflow 用自己的短事务写。
 3. **sandbox 状态机不加细分态**；安装进度改投影为 WS 事件 **`runtime.install_progress`**（源事件 `RuntimeInstallationStateChanged`，本就 ✅ Outbox）。
 4. **install 失败 ⇒ `starting → failed` + `failure_reason`**；错误码 `INSTALL_FAILED` 补进 04 §4 映射表、02 §6.1 与 P22 §1。
@@ -172,6 +172,17 @@ ring buffer 判定为 **B 档的产物、无独立用途**，随 B 档一起退�
 ---
 
 ## T-4 无头 Task 不进 S5（范围裁决）
+
+> **✅ 本裁决已在 S6 结清（2026-08）。** 下面整节保留为**当时的裁决与理由**，不要读成现状。四条缺口的现在状态：
+>
+> | 当时的缺口 | S6 的落点 |
+> |---|---|
+> | 无 handler | `RunAgentTaskWorkflow`（`packages/modules/sandbox/src/application/workflows/`）|
+> | 输出传输未定案 | **第三个 WS 命名空间 `/tasks`**（10 §6.7 / §7.4）。既不是第 2 个 SSE 也不是第八条 `/events` 事件：任务输出是高频字节派生流，压进走 Outbox 的投影通道纯属写放大，还会淹掉整个 UI 依赖的通道 |
+> | 日志存储只有 automation 口径 | 上提为 Task 口径：新表 `agent_tasks`（13 §2.1.4）+ `data/logs/agent-tasks/<taskId>/`（03 §8.6）|
+> | MCP 未注册 | `run_agent_task` 与 `cancel_agent_task` 均已注册（02 §5.2，共 10 个）|
+>
+> **另外补了一件当时没列进缺口、但同样必需的事**：**终止入口**。契约里一直有 `killJob`，却没有任何对外通路能触发它——一个 4 小时档位的任务发出去就只能干等硬超时。所以 `POST …/tasks/:taskId/cancel` 与 `cancel_agent_task` 与发起同切片落地。
 
 ### 结论
 

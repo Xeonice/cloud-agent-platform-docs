@@ -97,8 +97,8 @@ stopped/failed → destroying → destroyed（终态）
 
 - 领域层**显式转移表 + guard** 实现（不引入 XState 这类较重依赖，接口设计不排斥未来替换为 XState v5）。
 - **镜像拉取的职责归属（审计 P2-10）**：`creating` 阶段的"拉镜像"由 **`provider.create()` 内部负责**（04 testkit SP-03 要求镜像不存在时抛 `IMAGE_PULL_FAILED`），平台**不单独调用任何拉取接口**；`ImageSpecProvider.resolve()`（IS-01）只做**元数据解析与 digest 获取**，不拉层数据。两者职责不重叠：一个负责"这个 ref 长什么样、合不合规"，一个负责"把它变成能跑的实体"。
-- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 agent（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**⚠️ 实现上是 publish 到宿主 loopback（`127.0.0.1` + 临时端口），不是"不 publish"**——原文"仅内网可达、不 publish 到宿主外部"与实现不符，已按实现更正；这是一处安全面（宿主本地任意进程可直连一个无鉴权 shell），⏳ 留待 Step 4 加固，权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
-- **`starting` 段内有五步编排**（`provider.start` → agent 就绪探测 → 装 CLI → 注入凭证 → 起 agent 会话），见 **§4.3**——顺序被「exec 要求实例已在跑」这条物理约束钉死。
+- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 API（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**⚠️ 实现上是 publish 到宿主 loopback（`127.0.0.1` + 临时端口），不是"不 publish"**——原文"仅内网可达、不 publish 到宿主外部"与实现不符，已按实现更正；这是一处安全面（宿主本地任意进程可直连一个无鉴权 shell），⏳ 留待 Step 4 加固，权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
+- **`starting` 段内有五步编排**（`provider.start` → 沙箱内 API 就绪探测 → 装 CLI → 注入凭证 → 起 agent 会话），见 **§4.3**——顺序被「exec 要求实例已在跑」这条物理约束钉死。
 - 每次转移落库并发 `SandboxStateChanged` 领域事件 → WS 事件通道推送前端 + terminal 上下文级联处理。
 - **idle 回收**：可配置 `idleTimeoutSec`，后台 `SandboxReaper` 定时扫描，无活动则 running→idle→stopped，**释放配额但保留数据卷**，可快速重新拉起。判定口径见 §4.2。
 - 非法转移抛领域错误，interface 层翻译为 409。
@@ -165,14 +165,14 @@ creating  ─── ⓪ prepareRuntimeCredential → env 形态并入 SandboxPro
               → provider.create(ctx)                          ← 见下方「凭证的两个注入时机」
 
 starting ─┬─ ① provider.start(handle)
-          ├─ ② 沙箱内 agent（:8080）就绪探测                  ← §4 既有条款
+          ├─ ② 沙箱内 API（:8080）就绪探测                  ← §4 既有条款
           ├─ ③ ensureRuntimeInstalled(runtimeId, exec)        ← 装 CLI（T-3）
           ├─ ④ injectCredential → recordRuntimeInjection      ← 文件/stdin 形态注入（05 §4.3）
           ├─ ⑤ bootstrapAgentSession(sandboxId, initialTask)  ← 起 agent 会话（T-2）
           └─ running
 ```
 
-**⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且沙箱内 agent 已就绪。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
+**⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且沙箱内 API 已就绪。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
 
 #### ⚠️ 凭证的两个注入时机：**env 形态在 `create` 前，文件/stdin 形态在 `start` 后**（S5 实现修正，2026-08）
 
@@ -397,14 +397,14 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 
 - **✅ 工作区权限（Step 4 已加固）：工作区目录 0777 保留，可达面收在父目录 `workspaces/` 的 0700 上**
   - **实现事实**：`api/packages/modules/sandbox/src/infrastructure/workspace/workspace-preparer.ts` 的 `prepare()` 先 `mkdir` 并把 `${DATA_ROOT}/workspaces` `chmod 0o700`（**每次 prepare 都做**，把加固前遗留、或被部署脚本重建成 0755 的父目录一并收紧），再在末尾对工作区目录 `chmod(hostPath, 0o777)`。
-  - **为什么工作区目录仍是 0777**：bind mount 进沙箱后属主显示为 **root**（docker 与 BoxLite 都**不重映射宿主属主**），而 in-sandbox agent 以非 root 用户 **`gem`** 跑，**实测 0755 ⇒ `Permission denied`，0777 ⇒ 可读写**。
+  - **为什么工作区目录仍是 0777**：bind mount 进沙箱后属主显示为 **root**（docker 与 BoxLite 都**不重映射宿主属主**），而 in-sandbox API 以非 root 用户 **`gem`** 跑，**实测 0755 ⇒ `Permission denied`，0777 ⇒ 可读写**。
   - **为什么不 `chown`（两条硬约束，都成立）**：① 宿主侧 `chown` 到别的 uid 需要 root/CAP_CHOWN，平台进程通常没有；② **更关键**——本阶段**根本拿不到那个 uid**：流水线顺序是 `preparing-workspace` **先于** `creating`，chmod 发生时实例还不存在，没有对象可探测，而本节自己禁止硬编码 1000。所以“运行时探测 uid 后 chown”在这个插入点不可实现，除非额外起一个探测容器。
   - **为什么 0700 父目录就够**：0777 的目录**够不到就不是可达面**。POSIX 目录的 `x` 位控制 traverse——父目录 0700 且属平台用户时，宿主上**其他本地用户**对 `workspaces/<id>/…` 的读与写（含 `unlink`/`create`，即投喂 `AGENTS.md` / `.mcp.json` 的路径）**一律 EACCES**。**实测**（Linux 同内核对照）：父 0700 ⇒ 另一 uid 读失败、在 0777 子目录内建文件也失败；父改 0755 ⇒ 两者立刻成功。bind mount 不受影响——挂载源由**宿主的容器运行时（root）**解析，不走调用方的 traverse 权限；实测 0700 父目录下的 0777 子目录挂进沙箱后 `gem` 照常读写。
   - **残留风险（如实说明，别当已解决）**：这挡住的是**其他本地用户**，**挡不住以平台用户身份运行的其他进程**（同一 uid 天然可 traverse）。同 uid 进程本来就能读 `platform.db` 与 `.master.key`，所以不是新增暴露面，但也意味着本条**不是**“同用户隔离”。真正消除它需要独立 uid / user namespace remap / rootless 形态——属部署形态问题，不在本层解决。
   - **回归**：`workspace-permissions.spec.ts`（父 0700 + 子 0777 + 旧 0755 父目录被收紧）；两条真实例 e2e（`terminal-container` / `boxlite-microvm`）在断言“沙箱内能读写 `/workspace`、宿主与沙箱双向可见”的同时断言这两个 mode。
 - **`starting` 阶段的凭证注入步（S5 provision 接线点，05 §7.1 第 2 条留的那个）**：`prepare → inject → record` 三步——`CREDENTIAL_FACADE.prepareRuntimeCredential` → `adapter.injectCredential(cred, exec)` 一次性 exec → 写 `credential_sandbox_bindings` 台账（吊销联动依赖它，05 §4 吊销行）。两条实现纪律来自 **S5 技术验证（2026-08 真容器实测）**：
   - **注入形态按 05 §4 的最小暴露优先级，且已按实测修订**：codex 落 `0600` 的 `auth.json` 且 **`refresh_token` 值替换为占位串**（字段必须保留——直接删会 `missing field 'refresh_token'`；真值绝不进沙箱，05 §1★★）；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env。
-  - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——⚠️ 原写"实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000）"，**已更正**：那是 `docker run` 通道的观察，平台走的是 in-sandbox agent（以 `gem` 用户跑），**真实通道下两侧 `$HOME` 同为 `/home/gem`**——所以硬编码 `/root` 在**两侧都必错**（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
+  - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——⚠️ 原写"实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000）"，**已更正**：那是 `docker run` 通道的观察，平台走的是 in-sandbox API（以 `gem` 用户跑），**真实通道下两侧 `$HOME` 同为 `/home/gem`**——所以硬编码 `/root` 在**两侧都必错**（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
 - **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
 - **取消的清理**：用户在进度卡取消或进程重启后发现残留 → 扫 `workspaces/` 下标记文件为 `preparing` 的目录，一律 `rm -rf`（启动对账，13 §4）。半成品目录没有任何保留价值。
 - **`ready` 孤儿目录清理**（交叉评审 P2-8）：销毁 keepVolume 流程中"`provider.destroy` 后、打 `kept` 标记/登记 `RetainedVolume` 前"崩溃，会留下标记仍为 `ready` 且 DB 无 `retained_volumes` 记录的孤儿目录。启动对账补一条判据：**sandbox 已 destroyed/failed 但目录标记仍 `ready` 且无 retained 记录 → `rm -rf`**（有 retained 记录的 `kept` 目录才保留）。
@@ -449,14 +449,18 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 
 ### 8.3 无头 Task 硬超时
 
-> **落点提示（[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-4）：本节的结论已定、但落点在 S5 之后的切片。** 无头 Task（`run_agent_task` / 自动化触发）整块不进 S5——它缺 command handler、缺输出传输定案、且日志存储只有 automation 口径（§8.6）。本节的两阶段 kill 与 `timeoutMs → hard_timeout` 映射都是 S5 live 技术验证跑出来的**已验证机制**，不需要重验，但**实现落在后续切片**。**交互式 Task 不受影响**：它的兜底是 idle 回收（30min）+ 硬超时 24h（P20 §0），不依赖本节。
+> **✅ 已落地（S6，[T-4](../TASK-LAUNCH-DECISIONS.md) 的 ⏳ 到此结清）。** 无头 Task 现在有 `RunAgentTaskWorkflow` 这个 handler、输出走 WS `/tasks`、日志按 Task 口径落盘（§8.6）。本节的两阶段 kill 与 `timeoutMs → hard_timeout` 映射按原结论实现，未做改动。**交互式 Task 仍不受影响**：它的兜底是 idle 回收（30min）+ 硬超时 24h（P20 §0）。
+>
+> **实现落点与两条补充**：
+> - **两道防线都在，谁都不替代谁**：`JobSpec.timeoutMs → hard_timeout` 由**沙箱侧**真杀（平台进程死了也照杀，超时统一上报 `exit=124`）；**平台侧**另有一条以 `Clock` 计时的兜底，覆盖「沙箱 agent 不再应答」这类第一道够不着的情形，SIGTERM 一次、下一轮才 SIGKILL，绝不连发信号。
+> - **用户可以主动停**：`POST /api/sandboxes/:id/tasks/:taskId/cancel`（27 §2）。终态记 `killed` 而不是 `failed`——被信号杀掉的进程没有退出码，没有这条记录在案的意图，「有人按了停止」和「它崩了」就再也分不开。**取消不立即 `releaseJob`**：退出码和输出末尾正是取消之后要看的东西（04 §2.6）。
 
 - **默认 2h**，规则可配 30min / 1h / 2h / 4h（`automations.timeout_minutes`，13 §2；P20 §0 决策 5 与 P21-7 §3.2 同源）。
 - 计时起点是 Task 转 `running` 的时刻（不含排队与拉镜像——否则慢网络会吃掉用户的执行预算）。
 - 超时动作：kill 进程 → sandbox 转 `failed`（`failure_reason='automation timeout'`）→ run 记 `status='timeout'`，**并计入 `consecutive_failures`**（P20 §9.9 明确要求）。
 - **kill 必须是强制的，不能等 CLI 自己退（S5 技术验证，2026-08 实测）**：CLI **不一定会收敛**。同一场景（无凭证起无头任务）两个 runtime 表现相反——**codex 反复重试 `401 Unauthorized`**（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** + "Not logged in"。实测的触发条件（无凭证）会被 §8.2 决策表第 2 条挡在前面，但暴露的是**通用性质**：持续性 API 错误（凭证运行中失效、网络中断、上游持续 5xx）都会让 codex 走进同一条不退出的重连循环。⇒ 到点先 `SIGTERM` 给一个清理窗口、**超时未退即 `SIGKILL` 强杀**，并连带 destroy 实例（进程死了但容器还在同样是资源泄漏）；adapter 可在 `buildStartCommand` 里带上 CLI 自己的超时旗标作为第一道，但**平台侧这一刀才是唯一可靠的兜底**（04 §3 ★3）。
 - **这一刀落在哪（2026-08 补，与实现对表）**：两阶段 kill 由**数据面**真正投递，不是纸面承诺——
-  - **无头 Task / 一次性 exec（`tty:false`）**：`ProcessStream.kill()` → 沙箱内 agent 的 `POST /v1/bash/kill`，**真实信号**（agent 只接受 `SIGTERM`/`SIGKILL`/`SIGINT`，其余降级为 `SIGTERM`）。默认走两阶段：`SIGTERM` → **5s 宽限** → 仍未退则 `SIGKILL`；显式传 `SIGKILL` 则不再降格。实测：被 `SIGTERM` 杀掉的命令回 `exit_code=-15`，且在飞的 exec 请求立刻解阻塞。
+  - **无头 Task / 一次性 exec（`tty:false`）**：`ProcessStream.kill()` → 沙箱内 API 的 `POST /v1/bash/kill`，**真实信号**（agent 只接受 `SIGTERM`/`SIGKILL`/`SIGINT`，其余降级为 `SIGTERM`）。默认走两阶段：`SIGTERM` → **5s 宽限** → 仍未退则 `SIGKILL`；显式传 `SIGKILL` 则不再降格。实测：被 `SIGTERM` 杀掉的命令回 `exit_code=-15`，且在飞的 exec 请求立刻解阻塞。
   - **硬超时本身**：`ProcessSpec.timeoutMs` 直接映射到 agent 的 `hard_timeout`（秒），由 agent **在沙箱内强杀**远端进程，平台侧统一上报 `exit=124`（与本节 codex 实测的 `exit=124` 同义）。客户端另有一个 `timeoutMs + 5s` 的 abort，仅作传输兜底。
   - **交互式终端（`tty:true`）**：agent **没有**给 ws PTY 会话提供任何进程管理接口（实测：`POST /v1/shell/kill` 与 `DELETE /v1/shell/sessions/{id}` 对 ws 的 session_id 一律回 `Session not found`；单纯关 ws **不会**杀掉 shell 及其前台作业）。所以 `kill()` 走 tty 自己的信号通道：先送 `ETX`（0x03，由行规程给前台进程组发 `SIGINT`），再送 `exit` 结束交互 shell（否则每断一次终端就泄漏一个 `bash -i`），最后关 socket。**忽略 SIGINT 的进程仍可能存活** —— 这条路是尽力而为。
   - **唯一保证的兜底仍是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以本节"连带 destroy 实例"不是可选项。
@@ -488,7 +492,11 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 
 ### 8.6 无头 Task 的 stdout/stderr 完整捕获（P21-7 §9 缺口②）
 
-> **落点提示（TASK-LAUNCH-DECISIONS T-4）：结论已定、落点在后续切片。** 并且要注意本节写的是 **automation 口径**——日志路径挂在 `automation_runs.log_path` 上（13 §2.7.2）。**非自动化的无头 Task（MCP `run_agent_task`）没有 run 记录**，因而没有 `logPath`、没有查询端点、没有 exit 落点。把它做对 = 把日志存储从 automation 口径**上提为 Task 口径**（新表 / 新端点），这正是无头 Task 不进 S5 的主要理由之一。
+> **✅ 已上提为 Task 口径（S6）。** 上一版这里写的「非自动化的无头 Task 没有 run 记录、没有 `logPath`、没有查询端点、没有 exit 落点」已全部解决：新表 `agent_tasks`（13 §2.1.4）承载记录与 exit 落点，日志落 `data/logs/agent-tasks/<taskId>/{stdout,stderr}.jsonl`，查询端点见 27 §2。**automation 口径（`automation_runs.log_path`）保留不动**——v1.1 的自动化 run 仍是它自己的记录。
+>
+> **两条实现纪律**：
+> - **stdout 与 stderr 分成两个文件，绝不合流**。实测：`codex exec --json` 的 stdout 是 14/14 行纯净 JSONL，一合流就变成「14 行可解析 + 8 行垃圾」，`parseOutput` 随之从「逐行 `JSON.parse`」退化成「写正则猜格式」。
+> - **正文只写一份**。库里只存指针（`agent_tasks.log_path`）与摘要；**不另存一份解析后的事件流**——`parseOutput` 是纯函数且逐行独立，把原始行重放一遍就能得到完全相同的事件与序号，回放因此不需要第二份日志。
 
 `RuntimeAdapter.parseOutput` 产出的是**结构化 `RuntimeEvent`**（04 §3），用于进度展示；原始字节另需一条独立链路：
 

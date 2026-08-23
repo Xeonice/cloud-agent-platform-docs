@@ -100,7 +100,7 @@ docs/
 | 27 | [接口暴露设计（DDD → API/MCP）](./backend/27-接口暴露设计（DDD到API与MCP）.md) | **前端主用**：7 个上下文 + 平台面的对外能力目录（端点 × tool × 应用服务 × 不变量 × 错误码 × WS 事件）、按页面反查的消费速查、REST/MCP 差异清单与一致性保证 | ✅ 可评审 |
 | 28 | [类型与领域类型详细设计（后端）](./backend/28-类型与领域类型详细设计.md) | 后端实际 TS 类型声明：branded ID / 聚合类型 / DB row，以及 wire↔domain↔row 三层映射 | ✅ 可评审 |
 | 28 | [前端类型详细设计](./frontend/28-前端类型详细设计.md) | 生成类型（`openapi.d.ts`）怎么消费 + store / query key / props / 纯函数的类型契约 | ✅ 可评审 |
-| ADR | [沙箱运行时架构决策](./SANDBOX-RUNTIME-DECISIONS.md) | S1 定基线：控制面 / 数据面分离（沙箱内 agent 暴露 fs/process/pty）与 provider 选型，据此回改 04/06/03/13/P19 | ✅ 已决策 |
+| ADR | [沙箱运行时架构决策](./SANDBOX-RUNTIME-DECISIONS.md) | S1 定基线：控制面 / 数据面分离（沙箱内 API 暴露 fs/process/pty）与 provider 选型，据此回改 04/06/03/13/P19 | ✅ 已决策 |
 | ADR | [Task 发起链路决策存档](./TASK-LAUNCH-DECISIONS.md) | S5 开工前 6 条：`initialPrompt` 落库 / 「启动即执行」由 provision 触发 / install 编排与事务归属 / 无头 Task 出 S5 / 占位版 auth.json 的类型分家 / `$HOME` 展开点，据此回改 13/23/24/26/03/04/05/02/27/10/25/P20/P22 | ✅ 已决策 |
 
 **前端 `pages/` 逐页设计**（与产品页同号同名，F21-x，共 8 篇）：入口见 [前端页面设计总纲](./frontend/pages/README.md)。

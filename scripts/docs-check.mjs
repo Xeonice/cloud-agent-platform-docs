@@ -17,6 +17,7 @@
 //
 // 退出码：有问题 1，全过 0。
 //
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +33,10 @@ const DOC_27 = 'docs/backend/27-接口暴露设计（DDD到API与MCP）.md';
 
 // B2 扫描 MCP tool 注册用的代码根目录（api submodule 内的源码，非生成物）
 const API_ROOT = path.join(ROOT, 'api');
+const WEB_ROOT = path.join(ROOT, 'web');
+const WEB_OPENAPI = path.join(WEB_ROOT, 'openapi.json');
+const API_WS_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'ws-protocol.ts');
+const WEB_WS_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'ws-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -785,6 +790,84 @@ checkReadmeInventory();
 checkCapabilityCatalog();
 checkOpenapiCoverage();
 checkMcpToolParity();
+checkOpenapiCrossRepo();
+checkWsProtocolCrossRepo();
+
+// ---------------------------------------------------------------------------
+// B3 openapi 跨仓一致：api/openapi.json 与 web/openapi.json 必须逐字节相同
+//
+// 为什么需要它：两个仓各自都有「漂移门禁」，但各自只跟【自己那份】比 —— web CI 跑
+// `generate:api && git diff src/types/generated/`（拿 web 自己的 openapi 重生成），
+// api CI 只在 api 内部 emit 后比。**跨仓那一跳靠人手动拷贝**，谁都发现不了
+// 「后端改了契约、没人把 openapi.json 同步过来」。S6 集成审查实测确认了这个空档。
+// 主仓同时持有两个 submodule，所以这条检查在这里零成本。
+// ---------------------------------------------------------------------------
+function checkOpenapiCrossRepo() {
+  const missing = [OPENAPI, WEB_OPENAPI].filter((f) => !fs.existsSync(f));
+  if (missing.length > 0) {
+    record('B', 'B3', 'openapi 跨仓一致', 'skip',
+      `SKIP —— 找不到 ${missing.map(rel).join('、')}`,
+      ['submodule 未 checkout ⇒ 本轮没有人在把关「后端改了契约但没同步到 web」这条漂移',
+       '  本地：git submodule update --init api web']);
+    return;
+  }
+  const a = fs.readFileSync(OPENAPI);
+  const b = fs.readFileSync(WEB_OPENAPI);
+  const sha = (buf) => crypto.createHash('sha256').update(buf).digest('hex').slice(0, 12);
+  if (a.equals(b)) {
+    record('B', 'B3', 'openapi 跨仓一致', 'ok', `两份 openapi.json 逐字节相同（sha256 ${sha(a)}…）`);
+    return;
+  }
+  record('B', 'B3', 'openapi 跨仓一致', 'fail',
+    `两份 openapi.json 不一致（api ${sha(a)}… / web ${sha(b)}…，${a.length} vs ${b.length} 字节）`,
+    ['前端的生成类型是从 web/openapi.json 出的 ⇒ 不同步意味着前端在照一份【过期契约】编译，而且两边 CI 都是绿的。',
+     '  修复：cd api && pnpm openapi:emit && cp openapi.json ../web/openapi.json && cd ../web && pnpm generate:api']);
+}
+
+// ---------------------------------------------------------------------------
+// B4 WS 协议跨仓对账：两仓的 WS_PROTOCOL_CANONICAL 字面量必须相同
+//
+// 为什么需要它：REST 面有 openapi codegen 兜着，**WS 面是三份手抄**
+// （10 §7.4 ↔ api contracts ↔ web types），零 codegen、零门禁。S6 增量的主体恰恰
+// 是 WS，而原有六项检查一条都碰不到它。这条不比较结构（那会脆），只比较两仓各自
+// 声明的 canonical 字面量 —— 改帧形状就必须两边同时改，与 WS_SCHEMA_HASH 的
+// 「钉死字面量」纪律同款。
+// ---------------------------------------------------------------------------
+function checkWsProtocolCrossRepo() {
+  const missing = [API_WS_PROTOCOL, WEB_WS_PROTOCOL].filter((f) => !fs.existsSync(f));
+  if (missing.length > 0) {
+    record('B', 'B4', 'WS 协议跨仓对账', 'skip',
+      `SKIP —— 找不到 ${missing.map(rel).join('、')}`,
+      ['submodule 未 checkout ⇒ 本轮没有人在把关 WS 帧形状的跨仓漂移']);
+    return;
+  }
+  const pick = (f) => {
+    const src = fs.readFileSync(f, 'utf8');
+    const m = /WS_PROTOCOL_CANONICAL\s*[:=][^'"`]*((?:'[^']*'|`[^`]*`)(?:\s*\+\s*(?:'[^']*'|`[^`]*`))*)/.exec(src);
+    if (!m) return null;
+    return [...m[1].matchAll(/'([^']*)'|`([^`]*)`/g)].map((x) => x[1] ?? x[2]).join('');
+  };
+  const a = pick(API_WS_PROTOCOL);
+  const b = pick(WEB_WS_PROTOCOL);
+  if (a === null || b === null) {
+    const who = [a === null && rel(API_WS_PROTOCOL), b === null && rel(WEB_WS_PROTOCOL)].filter(Boolean);
+    record('B', 'B4', 'WS 协议跨仓对账', 'fail',
+      `${who.join('、')} 里没有 WS_PROTOCOL_CANONICAL`,
+      ['两仓都必须导出同一个 canonical 字面量，否则 WS 帧形状没有任何跨仓约束（S6 集成审查发现）。']);
+    return;
+  }
+  if (a === b) {
+    record('B', 'B4', 'WS 协议跨仓对账', 'ok', `两仓 canonical 一致（${a.length} 字符）`);
+    return;
+  }
+  const at = a.split('|');
+  const bt = b.split('|');
+  const only = (xs, ys) => xs.filter((x) => !ys.includes(x));
+  record('B', 'B4', 'WS 协议跨仓对账', 'fail', 'WS 帧形状在两仓之间漂移了',
+    [...only(at, bt).map((x) => `仅 api 有：${x}`),
+     ...only(bt, at).map((x) => `仅 web 有：${x}`),
+     '改帧形状必须两仓同时改（10 §7.4 是权威定义）。这条漂移编译期发现不了，只会在运行时表现为「某种帧收不到」。']);
+}
 
 const ICON = { ok: '✔', fail: '✗', skip: '⚠' };
 

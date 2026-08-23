@@ -37,10 +37,10 @@
 
 | 实现 | spawn(tty=true) 的内部形态 | 实现内部注意 |
 |---|---|---|
-| `aio` | 经 in-sandbox agent `ws /v1/shell/ws` → 中立 `ProcessStream`（AIO 协议翻译在 provider 内，**非宿主 docker exec**） | tty 单一输出流、无需 demux；AIO ws 帧 ↔ ProcessStream 映射见 ADR |
+| `aio` | 经 in-sandbox API `ws /v1/shell/ws` → 中立 `ProcessStream`（AIO 协议翻译在 provider 内，**非宿主 docker exec**） | tty 单一输出流、无需 demux；AIO ws 帧 ↔ ProcessStream 映射见 ADR |
 | `boxlite` | 同上（同一 AIO 镜像跑进 BoxLite Box，经端口转发到 Box 内 `:8080`） | BoxLite 库进程内嵌，无 daemon |
 
-> **网关设计不因此改变**：网关始终只跟中立 `ProcessStream` 打交道——`spawn` 内部走 in-sandbox agent（`/v1/shell/ws`）还是 fallback `docker exec`，对网关透明。数据面选型（沙箱内 agent，docker exec 仅 fallback）与 AIO↔ProcessStream 翻译的权威定义见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)。
+> **网关设计不因此改变**：网关始终只跟中立 `ProcessStream` 打交道——`spawn` 内部走 in-sandbox API（`/v1/shell/ws`）还是 fallback `docker exec`，对网关透明。数据面选型（沙箱内 API，docker exec 仅 fallback）与 AIO↔ProcessStream 翻译的权威定义见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)。
 
 node-pty 仅在未来"本地进程 provider"场景才需要（node-gyp 原生编译坑随之而来）；当前两个内建实现都不依赖它。
 
