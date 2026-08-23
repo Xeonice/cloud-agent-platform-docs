@@ -262,7 +262,22 @@ interface ProcessStream {
   resize(cols: number, rows: number): void;         // tty=false 时为 no-op
   onExit(cb: (code: number | null) => void): void;  // null = 被信号终止 / 会话 detach
   kill(signal?: NodeJS.Signals): Promise<void>;
+  detach(): void;   // ★ 松手但**不触碰对面进程**：关传输、放回调，一个字节都不写
 }
+```
+
+> **★ 为什么 `detach()` 不能用 `kill()` 顶替。** 对 PTY 来说 kill 的信号通道**就是
+> pty 本身** —— 它往终端里写 ETX + `exit\n`。那两下直接落进 tmux 面板里的 shell：
+> 先 SIGINT 掉用户正在跑的 agent，再试图结束它的 shell。而网关在 WS 断开时需要的
+> 恰恰是相反的动作（06 §6.2「WS 断开 = detach」，tmux 之所以是硬性镜像要求全部理由
+> 就是会话要活过前端断连）。只有 `kill()` 可用时，实现只能在"泄漏一条 WS"和"打断
+> 用户进程"之间二选一。
+>
+> ⚠️ 实现纪律：**先置内部的"已退出"标志再关传输**。多数实现把传输的 close/end 事件
+> 接到了"合成退出"上，只是"detach 方法体里不调它"挡不住——回调会经事件间接跑一遍，
+> 上层照样收到一次"进程已退出"。
+
+```ts
 
 interface VolumeMount {
   source: string;                // 由平台决定的来源标识；host-path 时是宿主绝对路径（03 §7.1）
@@ -491,6 +506,10 @@ interface RuntimeAdapter {
   getInstallPlan(imageSpec: ResolvedImageSpec): RuntimeInstallPlan;
   isInstalled(exec: SandboxExecFn): Promise<boolean>;
   install(exec: SandboxExecFn): Promise<void>;
+
+  // 启动前落盘（可选）：与凭证**无关**的一步 —— 注入只在有凭证时跑，而它要拆的
+  // 闸门（CLI 首次运行的交互提示）在没有凭证时照样拦。绝大多数 runtime 不需要。
+  seedStartupFiles?(spec: RuntimeStartupSpec, exec: SandboxExecFn): Promise<void>;
 
   // 鉴权（流转见文档 05）。注意收的是 ProcessStream 而非 SandboxExecFn：
   // 交互式登录命令永远不会退出，一次性 exec 既拿不到增量输出也写不了 stdin。
