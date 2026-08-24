@@ -282,7 +282,7 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 |---|---|
 | 入口 | `POST /api/projects` **立即返回 202** + project 记录（`clone_status='cloning'`），不阻塞请求 |
 | 执行 | 后台 job（与 SchedulerQueue 分离的独立队列——clone 不占 CPU/内存配额，只占磁盘与带宽；同一时刻并发 clone 数上限 `project.maxConcurrentClones`，默认 2）。**平台进程内直接跑 `simple-git`**，落点 `DATA_ROOT/baselines/<projectId>`——不再需要任何容器参与 |
-| 进度 | `git clone --progress` stderr 解析（`Receiving objects: NN% (x/y), N.NN MiB`）→ 节流 1s → WS `project.clone_progress { projectId, phase, receivedBytes?, totalBytes?, percent? }`（10 §3） |
+| 进度 | `git clone --progress` stderr 解析**全部六个阶段** → 节流 1s → WS `project.clone_progress { projectId, phase, stage?, percent?, objectsDone?, objectsTotal?, receivedBytes?, bytesPerSecond? }`（10 §3）。★ 见下方 |
 | 慢仓库提示 | 超过 **10min** 仍未完成：推一条 `phase:'slow'` 事件，前端出"⚠️ 仓库较大或网络缓慢 [继续等待]/[取消]"（P21-6 §6），**不终止** |
 | 硬超时 | **30min** 强制终止子进程 → `clone_status='failed'` + `error_code='TIMEOUT'`；半成品目录 `rm -rf` |
 | 重试 | `POST /api/projects/:id/retry-clone`（仅 `failed` 态，02 §5.1）→ 显式重置 `clone_status='cloning'` 重新入队；**不允许隐式回退**（23 I-PRJ-6） |
@@ -308,6 +308,25 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 
 自动同步策略（定时 / 建 Task 时自动 fetch）**不在本轮** —— 那是运维策略，与
 "missed 不补跑"同一哲学：不擅自替用户跑他看不见的长操作（见本表「幂等」一行）。
+
+
+★ **两处实现时才浮出来的约束**：
+
+- **判据是 `ready` ∧ `git`，只判状态不够**——**空项目也是 `ready`**。只按状态放行会让
+  `git fetch` 跑进一个根本不是仓库的目录，然后回一个 502「网络错误」去解释一个
+  「压根没有远端」的项目。fetch 前与写入前两处都拒。
+- **超时 5 分钟**（`SYNC_TIMEOUT_MS`）。clone 有 10min/30min 而 sync 此前没有，
+  但它是**同步返回 `ProjectDto`** 的——没有上限等于把一个可能挂死的请求交给前端。
+
+★ **`git branch -r` 的输出不能直接用**（列分支端点的两个坑）：
+
+1. 原始输出带 `origin/HEAD -> origin/main` 这条**符号引用**——照搬会让选择器里多出一个
+   叫 `HEAD -> origin/main` 的"分支"；
+2. 得**剥 `origin/` 前缀**，否则 `git checkout origin/x` 进的是 detached HEAD，
+   工作区看起来对、`rev-parse --abbrev-ref HEAD` 却是 `HEAD`。
+
+实现用 simple-git 的 `branch(['-r'])`（它已过滤 ①）+ 按**实际 remote 名**剥前缀
+（不硬编码 `origin`）。
 
 #### ★ 建 Task 时选分支：纯本地操作
 
@@ -344,6 +363,41 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 
 ⚠️ 磁盘是本平台**已在册的瓶颈**（§1）。完整克隆放大它，所以配套加了下面的预检。
 
+#### ★ 进度明细：git 说的比我们用的多得多
+
+改完整克隆之后克隆变慢，"到底进行到哪了"才成了问题。**实测一个真仓库**
+（flask，26348 对象）拆解各阶段耗时：
+
+| 阶段 | 占用 | 占比 |
+|---|---|---|
+| Enumerating / Counting / Compressing | 0.06s | 0.1% |
+| **Receiving objects** | **53.05s** | **93.7%** |
+| Resolving deltas | 0.15s | 0.3% |
+
+先说一个**被实测推翻的猜测**：原以为完整克隆会让「解析增量」变成大头、把进度条卡在
+尾巴上——不是，receiving 仍然是绝对主阶段。所以原先"只跟踪 Receiving"抓的阶段没错，
+错的是**从那一行里只取了一半信息**：
+
+```
+Receiving objects:   2% (527/26348), 380.00 KiB | 189.00 KiB/s
+                     ~~  ~~~~~~~~~~  ~~~~~~~~~~   ~~~~~~~~~~~~
+                   已取①   已取/总②     已收③        速率④
+```
+
+②在正则里是**非捕获组**（匹配了就扔），④**根本没匹配**。现在四项全取。
+
+**为什么速率排第一优先级**：卡住时它先归零，而百分比要等很久才看得出"不再动了"。
+
+**`totalBytes` 是幽灵字段，本轮删除。** `git clone` 不报总字节数（包在传输中边算边发，
+它自己也不知道），所以后端从来没有一处给它赋过值；而前端 `buildDetailLabel` 的第一条
+分支正是 `if (receivedBytes && totalBytes)` —— 一条**生产永远走不到**的格式化路径，
+配着一条手工构造 state 才能变绿的测试。**需要分母就用 `objectsTotal`**：
+`Enumerating objects: 26348` 在开头就报出来，是 git 唯一事前就知道的总量。
+
+**六个阶段全解析，是为了填住 receiving 之前那段空窗**：实测 3.4s（慢远端上长得多），
+期间旧解析器一律返回 `null`，UI 只有一条脉冲条、一个数都没有——正是"搞不清克隆到哪了"
+最刺眼的那一段。实测新实现的第一帧就是 `stage:'counting'`。
+
 #### ★ 磁盘预检：从"写爆之后认出来"改成"写之前拦住"
 
 `DISK_INSUFFICIENT` 此前**只在 stderr 里事后分类**（`/enospc|no space left/`，
@@ -352,6 +406,14 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 
 clone 前检查 `DATA_ROOT` 分区可用空间，不足即直接拒绝。**事后分类那条保留**：
 预检只能防住"一开始就不够"，防不住"克隆途中别的进程把盘吃满"。
+
+★ **判据是「可配置下限」，不是「剩余空间 < 需求」。** 需求 = 仓库体积，而它在 clone 前
+**不可知**——要知道就得问远端（各家 forge 各一套 API，还要凭证），那正好把 §7.2★ 刚
+去掉的网络依赖原样加回来。落地为 `CLONE_MIN_FREE_BYTES`（默认 1 GiB），实现取
+`statfs` 的 `bavail`（非 root 可用块），且**向上找最深的已存在祖先**——预检必须跑在
+`mkdir` 之前，目标目录此刻还不存在。
+
+（写"剩余空间 < 需求"是本节初稿的说法，实现时发现它不可算，改为下限。）
 
 ### 7.3 Git 凭证的使用链路（凭证 kind='git'，见 05 §3.2 / 23 §8）
 

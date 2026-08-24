@@ -5,6 +5,7 @@
 > 架构审计的裁决存档见 [AUDIT-DECISIONS.md](./AUDIT-DECISIONS.md)——**它与技术文档冲突时以它为准**；
 > 沙箱运行时的架构决策见 [SANDBOX-RUNTIME-DECISIONS.md](./SANDBOX-RUNTIME-DECISIONS.md)（S1 定基线的 ADR）；
 > Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5 开工前的 ADR，同样**与技术文档冲突时以它为准**）。
+> 本轮**跑起来才发现**的 9 件事见 [LIVE-RUN-FINDINGS.md](./LIVE-RUN-FINDINGS.md)（与上面三份的分工：那三份记开工前的裁决，这份记做完之后跑起来才知道错了的部分）。
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
 > 目录已按归属切分，对应未来拆仓去向：`backend/` 整体归后端仓库，`frontend/` 整体归前端仓库，`shared/` 与 `00` 双仓各持一份（或放独立契约仓）。
 
@@ -16,6 +17,7 @@ docs/
 ├── AUDIT-DECISIONS.md       # 架构审计裁决存档（P0/P1/P2 处置，权威）
 ├── SANDBOX-RUNTIME-DECISIONS.md  # 沙箱运行时架构决策（S1 定基线 ADR：控制面/数据面分离 + provider 选型）
 ├── TASK-LAUNCH-DECISIONS.md # Task 发起链路裁决存档（S5 开工前 6 条：initialPrompt 落库 / 启动即执行 / install 编排 / 无头范围 / 占位 auth.json / $HOME 展开）
+├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
