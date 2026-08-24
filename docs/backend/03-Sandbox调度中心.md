@@ -282,14 +282,138 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 |---|---|
 | 入口 | `POST /api/projects` **立即返回 202** + project 记录（`clone_status='cloning'`），不阻塞请求 |
 | 执行 | 后台 job（与 SchedulerQueue 分离的独立队列——clone 不占 CPU/内存配额，只占磁盘与带宽；同一时刻并发 clone 数上限 `project.maxConcurrentClones`，默认 2）。**平台进程内直接跑 `simple-git`**，落点 `DATA_ROOT/baselines/<projectId>`——不再需要任何容器参与 |
-| 进度 | `git clone --progress` stderr 解析（`Receiving objects: NN% (x/y), N.NN MiB`）→ 节流 1s → WS `project.clone_progress { projectId, phase, receivedBytes?, totalBytes?, percent? }`（10 §3） |
+| 进度 | `git clone --progress` stderr 解析**全部六个阶段** → 节流 1s → WS `project.clone_progress { projectId, phase, stage?, percent?, objectsDone?, objectsTotal?, receivedBytes?, bytesPerSecond? }`（10 §3）。★ 见下方 |
 | 慢仓库提示 | 超过 **10min** 仍未完成：推一条 `phase:'slow'` 事件，前端出"⚠️ 仓库较大或网络缓慢 [继续等待]/[取消]"（P21-6 §6），**不终止** |
 | 硬超时 | **30min** 强制终止子进程 → `clone_status='failed'` + `error_code='TIMEOUT'`；半成品目录 `rm -rf` |
 | 重试 | `POST /api/projects/:id/retry-clone`（仅 `failed` 态，02 §5.1）→ 显式重置 `clone_status='cloning'` 重新入队；**不允许隐式回退**（23 I-PRJ-6） |
 | **改为空项目** | `POST /api/projects/:id/convert-to-empty`（仅 `failed` 态）→ 放弃克隆转空项目：`source_type='empty'` + `repo_url/baseline_path/baseline_size_bytes` 全部置 null + **`rm -rf` 半成品基线目录**（复用本表「取消」的清理路径）+ `clone_status='ready'`；**项目 id / 名称 / 已关联 Task 保持不变**。产品语义见 P21-6 §5/§9 |
 | 取消 | `DELETE /api/projects/:id`（cloning 态）或前端 [取消] → SIGTERM 子进程 → `rm -rf` 半成品目录 → 删项目记录 |
 | 幂等 | 进程重启后扫描 `clone_status='cloning'` 的项目：无对应子进程即判定中断 → 置 `failed`（`error_code='INTERRUPTED'`）+ `rm -rf` 目录，让用户显式重试（与自动化的 "missed 不补跑" 同一哲学：不擅自续跑用户看不见的长操作） |
-| 深度 | MVP 用 `--depth=1`（后续 Task 只需工作副本，不需要历史）；`git push` 汇回（v1.5）落地前再评估是否改全量克隆 |
+| 深度 | **完整克隆**（不带 `--depth=1`，也不带 `--single-branch`）。★ 见下方「为什么从浅克隆改回完整克隆」 |
+| 磁盘预检 | clone 前检查 `DATA_ROOT` 所在分区可用空间，不足即**直接拒绝**并给 `DISK_INSUFFICIENT`，不落半成品目录。★ 见下方 |
+
+#### ★ 基线同步（`POST /api/projects/:id/sync`）
+
+基线在建项目时克隆一次之后**此前是冻住的** —— 一周前建的项目永远是一周前的代码，
+而端点里只有 retry / convert-to-empty / cancel / delete，没有任何"重新同步"。
+
+本轮补最小的一档：`git fetch --all` 更新基线的远端引用，刷新
+`baseline_size_bytes` 与 `updated_at`。**已有 Task 的工作区一律不动** —— 它们是当时
+的写时复制副本，重写它们等于在用户背后改掉正在跑的代码。
+
+⚠️ **由此产生的一个语义，本轮刻意不做呈现**：同一个项目下的两个 Task 可能跑在
+不同代码上（一个建于同步前、一个建于同步后），而界面上看不出来。做这个呈现属于
+"完整"那一档（要处理"基线更新了但有 N 个任务跑在旧副本上"）。这轮只在项目只读条上
+显示**基线的最后同步时间**，至少让"我的基线是什么时候的"可见。
+
+自动同步策略（定时 / 建 Task 时自动 fetch）**不在本轮** —— 那是运维策略，与
+"missed 不补跑"同一哲学：不擅自替用户跑他看不见的长操作（见本表「幂等」一行）。
+
+
+★ **两处实现时才浮出来的约束**：
+
+- **判据是 `ready` ∧ `git`，只判状态不够**——**空项目也是 `ready`**。只按状态放行会让
+  `git fetch` 跑进一个根本不是仓库的目录，然后回一个 502「网络错误」去解释一个
+  「压根没有远端」的项目。fetch 前与写入前两处都拒。
+- **超时 5 分钟**（`SYNC_TIMEOUT_MS`）。clone 有 10min/30min 而 sync 此前没有，
+  但它是**同步返回 `ProjectDto`** 的——没有上限等于把一个可能挂死的请求交给前端。
+
+★ **`git branch -r` 的输出不能直接用**（列分支端点的两个坑）：
+
+1. 原始输出带 `origin/HEAD -> origin/main` 这条**符号引用**——照搬会让选择器里多出一个
+   叫 `HEAD -> origin/main` 的"分支"；
+2. 得**剥 `origin/` 前缀**，否则 `git checkout origin/x` 进的是 detached HEAD，
+   工作区看起来对、`rev-parse --abbrev-ref HEAD` 却是 `HEAD`。
+
+实现用 simple-git 的 `branch(['-r'])`（它已过滤 ①）+ 按**实际 remote 名**剥前缀
+（不硬编码 `origin`）。
+
+#### ★ 建 Task 时选分支：纯本地操作
+
+完整克隆之后，列分支与切分支都**不碰网络、不需要凭证**：
+
+- `GET /api/projects/:id/branches` 读**本地**引用（`git branch -r`），不是
+  `git ls-remote`；
+- `CreateSandbox.branch`（可选，缺省 = 基线当前分支）在**工作区准备阶段**做一次本地
+  `git checkout` —— 排在 `cp --reflink` 之后、instance 创建之前（§7.1 的顺序不变，
+  只是多一步）。
+
+这是选完整克隆的直接红利：这条路上**一条网络失败路径都没有**，而浅克隆方案里它
+必然带一条。分支不存在时在**门口**拒绝（零副作用，04 §5），不是等工作区准备到
+一半才失败。
+
+#### ★ 为什么从浅克隆改回完整克隆（前提变了，不是决策反复）
+
+原文写的是：*"MVP 用 `--depth=1`（**后续 Task 只需工作副本，不需要历史**）"*。
+括号里那句是整条决策的前提，而它已经被推翻：**产品要求建 Task 时能选分支**
+（P20 §3.2 / P21-2），而选分支就需要历史 —— 浅克隆之后本地只有一个分支引用，
+`git checkout <其它分支>` 直接 `pathspec did not match`（实测）。
+
+三条路走过一遍，选了完整克隆：
+
+| 方案 | 代价 |
+|---|---|
+| 建 Task 时按所选分支**重新浅克隆**一份 | 每次建 Task 一次网络 clone（大仓几十秒），且 `--reflink` 的写时复制优势没了——那正是"每 Task 独立副本磁盘成本接近 1×"的来源（§7.1） |
+| **基线完整克隆**，建 Task 时**本地** checkout ✅ | 基线体积变大（大仓的完整历史可能十倍级）。换来的是：选分支是纯本地操作、秒级，reflink 优势保留，且**列分支不需要网络也不需要凭证** |
+| 基线保持浅克隆，建 Task 时在工作区 `fetch --depth=1 <branch>` | 磁盘代价最小，但把"准备工作区"从纯本地变成带网络的一步 —— 那一步从此可能因网络失败，多一整条失败路径 |
+
+**没有保留"浅克隆"选项**：两种模式意味着"能不能选分支"取决于项目当初怎么建的，
+而建项目时用户还不知道自己以后要不要切分支。代价用可见性抵消——基线体积进
+`ProjectDto` 并显示在项目只读条上（P21-6），让磁盘占用看得见。
+
+⚠️ 磁盘是本平台**已在册的瓶颈**（§1）。完整克隆放大它，所以配套加了下面的预检。
+
+#### ★ 进度明细：git 说的比我们用的多得多
+
+改完整克隆之后克隆变慢，"到底进行到哪了"才成了问题。**实测一个真仓库**
+（flask，26348 对象）拆解各阶段耗时：
+
+| 阶段 | 占用 | 占比 |
+|---|---|---|
+| Enumerating / Counting / Compressing | 0.06s | 0.1% |
+| **Receiving objects** | **53.05s** | **93.7%** |
+| Resolving deltas | 0.15s | 0.3% |
+
+先说一个**被实测推翻的猜测**：原以为完整克隆会让「解析增量」变成大头、把进度条卡在
+尾巴上——不是，receiving 仍然是绝对主阶段。所以原先"只跟踪 Receiving"抓的阶段没错，
+错的是**从那一行里只取了一半信息**：
+
+```
+Receiving objects:   2% (527/26348), 380.00 KiB | 189.00 KiB/s
+                     ~~  ~~~~~~~~~~  ~~~~~~~~~~   ~~~~~~~~~~~~
+                   已取①   已取/总②     已收③        速率④
+```
+
+②在正则里是**非捕获组**（匹配了就扔），④**根本没匹配**。现在四项全取。
+
+**为什么速率排第一优先级**：卡住时它先归零，而百分比要等很久才看得出"不再动了"。
+
+**`totalBytes` 是幽灵字段，本轮删除。** `git clone` 不报总字节数（包在传输中边算边发，
+它自己也不知道），所以后端从来没有一处给它赋过值；而前端 `buildDetailLabel` 的第一条
+分支正是 `if (receivedBytes && totalBytes)` —— 一条**生产永远走不到**的格式化路径，
+配着一条手工构造 state 才能变绿的测试。**需要分母就用 `objectsTotal`**：
+`Enumerating objects: 26348` 在开头就报出来，是 git 唯一事前就知道的总量。
+
+**六个阶段全解析，是为了填住 receiving 之前那段空窗**：实测 3.4s（慢远端上长得多），
+期间旧解析器一律返回 `null`，UI 只有一条脉冲条、一个数都没有——正是"搞不清克隆到哪了"
+最刺眼的那一段。实测新实现的第一帧就是 `stage:'counting'`。
+
+#### ★ 磁盘预检：从"写爆之后认出来"改成"写之前拦住"
+
+`DISK_INSUFFICIENT` 此前**只在 stderr 里事后分类**（`/enospc|no space left/`，
+见 `error.classifier.ts`）——磁盘满了才知道，而此时半成品目录已经写了一半，还要
+再 `rm -rf` 一次。浅克隆时这是边缘情况；完整克隆之后会变常见。
+
+clone 前检查 `DATA_ROOT` 分区可用空间，不足即直接拒绝。**事后分类那条保留**：
+预检只能防住"一开始就不够"，防不住"克隆途中别的进程把盘吃满"。
+
+★ **判据是「可配置下限」，不是「剩余空间 < 需求」。** 需求 = 仓库体积，而它在 clone 前
+**不可知**——要知道就得问远端（各家 forge 各一套 API，还要凭证），那正好把 §7.2★ 刚
+去掉的网络依赖原样加回来。落地为 `CLONE_MIN_FREE_BYTES`（默认 1 GiB），实现取
+`statfs` 的 `bavail`（非 root 可用块），且**向上找最深的已存在祖先**——预检必须跑在
+`mkdir` 之前，目标目录此刻还不存在。
+
+（写"剩余空间 < 需求"是本节初稿的说法，实现时发现它不可算，改为下限。）
 
 ### 7.3 Git 凭证的使用链路（凭证 kind='git'，见 05 §3.2 / 23 §8）
 
