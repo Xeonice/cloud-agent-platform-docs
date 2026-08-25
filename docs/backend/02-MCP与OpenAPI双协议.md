@@ -231,6 +231,15 @@ data: {"okCount":5,"failCount":1,"totalMs":7310}
 
 ### 6.1 新增错误码映射（对齐 P22 §1）
 
+> ⚠️ **「REST」这一列对异步码是「若出现在同步端点上则如此映射」，不是「创建请求会这样返回」**
+> （2026-08 补注）。`POST /api/sandboxes` 返回 **202**，`WORKSPACE_PREPARE_FAILED` /
+> `INSTALL_FAILED` / `IMAGE_CONTRACT_VIOLATION` / `DISK_INSUFFICIENT`（工作区那半）都产生在
+> 202 **之后**的后台流水线里，实际投递路径是 WS `sandbox.status_changed.errorCode` 与
+> `SandboxResponseDto.failureCode`。把这一列读成"创建接口会返回 500"会让人去写一个永远走不到
+> 的 REST 错误分支。
+>
+> 全量码表与各码的实际传输面见 **10 §6.8**（那里同一批码的 HTTP 列标 `—`，并由 A5 门禁与源码对账）。
+
 | 错误码 | 产生处 | REST | MCP | retryable | 用户语义（P22 §1，前端文案权威） |
 |---|---|---|---|---|---|
 | `CLONE_FAILED_NETWORK` | 项目 clone（03 §7.5） | **502** | tool 错误 + code | ✅ | "仓库不可访问：检查 URL 或网络" |
