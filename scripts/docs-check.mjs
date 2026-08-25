@@ -456,10 +456,24 @@ const ERROR_CODE_SOURCES = [
  */
 const ERROR_CODE_CONTEXT = /(?:code|errorCode|ErrorCode|Code)\b/;
 
+/** errno 的形状：`ENOSPC` / `EACCES` / `EDQUOT`。平台错误码一律带下划线分词。 */
+const ERRNO_SHAPE = /^E[A-Z]{2,}$/;
+
 function collectErrorCodesFromSource() {
   const found = new Map(); // code -> Set(相对路径)
   const add = (code, file) => {
     if (!ERROR_CODE_RE.test(code)) return;
+    // ⚠️ errno 不是平台错误码，这条界线本身就是 2026-08 那个 bug 的核心。
+    //
+    // `classifyWorkspacePrepareError` 里有一行 `errno === 'ENOSPC' || errno === 'EDQUOT'
+    // ? DISK_INSUFFICIENT : …` —— 同一行上既有 errno 字面量、又有 `code` 这个词，扫描器
+    // 无从分辨，于是 A5 要求给 `ENOSPC` 在码表里补一行。**那正是这次修复要根除的东西**：
+    // errno 之所以要归一成闭集码，就是因为它不属于这套面向用户的词汇表。
+    //
+    // 排除的是 errno 的**形状**（`^E` + 全大写无下划线），不是某几个名字 —— 后者又会是一份
+    // 会过期的清单（见 GIT_TRACE 那一课）。反向由 `checkErrorCodeCatalog` 兜住：码表里若
+    // 出现 errno 形状的行，门禁直接报错，而不是悄悄放行一个永远对不上的码。
+    if (ERRNO_SHAPE.test(code)) return;
     if (!found.has(code)) found.set(code, new Set());
     found.get(code).add(file);
   };
@@ -532,13 +546,23 @@ function docErrorCodes() {
 function checkErrorCodeCatalog() {
   const doc = docErrorCodes();
   if (doc === null) {
-    record('A', 'A5', '错误码对账', 'fail', `${DOC_10} 里找不到「★ 错误码全量表」小节`, [
+    record('B', 'A5', '错误码对账', 'fail', `${DOC_10} 里找不到「★ 错误码全量表」小节`, [
       '→ 该表是 A5 的对账基准，缺了这道门禁就形同虚设',
     ]);
     return;
   }
   if (!fs.existsSync(API_ROOT) || !fs.existsSync(path.join(API_ROOT, 'packages'))) {
-    record('A', 'A5', '错误码对账', 'skip', 'api submodule 未检出，跳过源码侧扫描');
+    record('B', 'A5', '错误码对账', 'skip', 'api submodule 未检出，跳过源码侧扫描');
+    return;
+  }
+  // 反向自防：扫描侧按形状排除 errno，那么码表里就不能出现 errno 形状的行 ——
+  // 否则它永远进不了源码集合，会以「文档表有、源码无」的面目每次都报，
+  // 而真正的问题是它压根不该是一个平台错误码。
+  const errnoRows = [...doc].filter((c) => ERRNO_SHAPE.test(c)).sort();
+  if (errnoRows.length > 0) {
+    record('B', 'A5', '错误码对账', 'fail', `码表里有 errno 形状的行：${errnoRows.join('、')}`, [
+      '→ errno 不是面向用户的错误码，应在抛出处归一成闭集码（见 classifyWorkspacePrepareError）',
+    ]);
     return;
   }
   const src = collectErrorCodesFromSource();
@@ -551,7 +575,7 @@ function checkErrorCodeCatalog() {
   }
   const summary = `源码 ${src.size} 个码，10 §6.8 表 ${doc.size} 行`;
   if (onlyInDoc.length === 0 && onlyInSrc.length === 0) {
-    record('A', 'A5', '错误码对账', 'ok', `${summary}，集合相等`);
+    record('B', 'A5', '错误码对账', 'ok', `${summary}，集合相等`);
     return;
   }
   const details = [
@@ -564,7 +588,7 @@ function checkErrorCodeCatalog() {
         `文档表有、源码无：${c}\n        → 要么它已废弃（删表行），要么尚未实现（标 ⏳ 并说明）——别让表里躺着一个不存在的码`,
     ),
   ];
-  record('A', 'A5', '错误码对账', 'fail', `${summary}，差集 ${details.length} 条`, details);
+  record('B', 'A5', '错误码对账', 'fail', `${summary}，差集 ${details.length} 条`, details);
 }
 
 // ---------------------------------------------------------------------------
@@ -1033,6 +1057,9 @@ const padName = (s) => s + ' '.repeat(Math.max(0, NAME_COL - width(s)));
 const GROUPS = [
   ['A', 'A. 文档内部检查（不依赖 submodule，始终跑）'],
   ['B', 'B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）'],
+  // ⚠️ A5 的编号是 A，分组却在 B —— 编号按「加进来的顺序」，分组按「依赖什么」。
+  //    它的对账基准（10 §6.8 码表）确实只读 docs，但另一半要扫 api 源码，
+  //    submodule 缺席时只能 skip。挂在「始终跑」那组下会让读输出的人以为它把过关了。
 ];
 
 for (const [cls, title] of GROUPS) {

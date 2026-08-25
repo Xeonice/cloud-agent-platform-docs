@@ -17,7 +17,7 @@
 | **L-6** | 终端里一大片空白、内容在最底下 | **两个 xterm 实例上下叠着**（attach 竞态） | 08 §7.4 |
 | **L-7** | agent 欢迎横幅按 80 列画 | detached tmux 会话默认 80x24 | 03 §4.3 |
 | **L-8** | 底部「无头任务」看不懂 | 界面上两个东西都叫"任务"；面板没按 `headless` 门控 | P21-2 §N.3 |
-| **L-9** | 存量项目点[重新同步]仍只有一个分支 | `git fetch --all` 在浅仓上不转完整 | ⏳ 未解决，见 L-9 |
+| **L-9** | 存量项目点[重新同步]仍只有一个分支 | `--depth=1` 同时关上了**深度**和**分支**两扇门 | ✅ 已解决（2026-08）：sync 探测浅仓 → 复原 refspec + `--unshallow` |
 
 **三条贯穿全文的共性**（先说，免得后面重复）：
 
@@ -84,8 +84,16 @@ Receiving objects:   2% (527/26348), 380.00 KiB | 189.00 KiB/s
 **`totalBytes` 是幽灵字段。** `git clone` 不报总字节数（包在传输中边算边发，它自己也不
 知道），所以后端从来没有一处给它赋过值；而前端 `buildDetailLabel` 的第一条分支正是
 `if (receivedBytes && totalBytes)` —— **生产永远走不到**，配着一条手工构造 state 才能变绿
-的测试。分母改用 `objectsTotal`（`Enumerating objects: 26348` 开头就报，是 git 唯一
-事前就知道的总量）。
+的测试。分母改用 `objectsTotal`。
+
+> ⚠️ **本条括号里原有一句「`Enumerating objects: 26348` 开头就报，是 git 唯一事前就知道
+> 的总量」，2026-08 订正删除——它是错的。** `objectsTotal` 是**本阶段的**分母：
+> `Compressing` 只算需压缩的对象、`Resolving deltas` 的分母是 delta 数、`Updating files`
+> 的分母是文件数。跨阶段当同一分母用会跳变。详见 03 §7.2★ 与
+> `git-cloner.port.ts` 上 `CloneProgress` 的长注释。
+>
+> 这条本身也是共性 2 的一例：**修 bug 时顺手写下的解释没有被任何东西检验过**，
+> 于是一句错话跟着一个正确的修复一起传播到了三个文件。
 
 ### 落点
 `03 §7.2★` · `10 §7.4`。六个阶段全解析，为的是填住 receiving 之前那段空窗
@@ -265,7 +273,7 @@ resize **救不回第一屏**。
 
 ---
 
-## L-9 ⏳ 存量浅克隆基线的迁移（未解决）
+## L-9 ✅ 存量浅克隆基线的迁移（2026-08 解决）
 
 ### 现象
 改造前建的项目，点[重新同步]之后**仍然只有一个分支**，界面上没有任何东西解释。
@@ -274,10 +282,52 @@ resize **救不回第一屏**。
 `sync` 走 `git fetch --all`，**在浅仓上不会转成完整克隆**（要 `--unshallow`）。
 实测确认存量基线 `.git/shallow` 存在、只有 1 个提交。
 
-### 为什么留着
-`--unshallow` 在**非浅仓上会报错**，不能无条件加；要么检测 `.git/shallow` 再决定，
-要么显式记为已知限制。本轮时间用在了 L-1..L-8 上，这条**明确留作待办**而不是假装不存在。
+### 曾经为什么留着
+`--unshallow` 在**非浅仓上会报错**（`fatal: --unshallow on a complete repository does not
+make sense`，实测确认），不能无条件加；要么检测再决定，要么显式记为已知限制。本轮时间用在了
+L-1..L-8 上，这条**明确留作待办**而不是假装不存在。
 
-### 建议做法
-`sync` 前探测 `.git/shallow`：存在则 `git fetch --unshallow`，否则 `git fetch --all`。
-配一条用例：浅仓基线 sync 后 `git rev-list --count HEAD` 应大于 1。
+### ⚠️ 当时写下的「建议做法」是错的，而且它配的验收会在错修法上变绿
+
+原文是：
+
+> `sync` 前探测 `.git/shallow`：存在则 `git fetch --unshallow`，否则 `git fetch --all`。
+> 配一条用例：浅仓基线 sync 后 `git rev-list --count HEAD` 应大于 1。
+
+实测（本地双分支仓，`file://` 远端）：
+
+```
+git clone --depth=1 file://…    → 提交 1，分支 [origin/main]
+git fetch --unshallow           → 提交 3，分支 [origin/main]   ← 分支数没变！
+```
+
+**提交数确实从 1 变成 3，那条验收会绿——而用户抱怨的那件事一点没修。**
+
+根因比原先记的深一层：`--depth` 会**隐含 `--single-branch`**，于是 remote 的 refspec 被钉成
+`+refs/heads/main:refs/remotes/origin/main`。`--unshallow` 严格按 refspec 加深，别的分支
+它根本不会去看。**`--depth=1` 关上的是两扇门——深度和分支——只开一扇，症状原样还在。**
+
+### 实际做法
+
+```
+git rev-parse --is-shallow-repository        # 探测（不是 existsSync('.git/shallow')：
+                                             #  worktree/submodule 里 .git 是文件）
+git remote set-branches origin '*'           # 先复原 refspec ← 原建议缺的就是这一行
+git fetch --unshallow                        # 此时才会把所有分支都取回来
+```
+
+实测结果：提交 3，分支 `[origin/main, origin/feature/x]`，`.git/shallow` 消失。
+顺序不能反；`set-branches '*'` 在已通配的仓上重复执行无害（实测幂等）。
+
+落点 `infrastructure/git/baseline-git.ts`，验收
+`test/integration/shallow-baseline-migration.spec.ts`（真 git，5 条）。
+**每一条都断言分支，不只断言提交数**——提交数是那个错修法也能满足的指标。
+变异验证：去掉 `set-branches` 那一行 ⇒ 分支断言红、提交数断言绿，正好复现"错修法配错验收"。
+
+> ⚠️ 远端必须用 `file://` URL 而不是裸路径：git 对**本地路径**克隆会忽略 `--depth`
+> （`warning: --depth is ignored in local clones`），用裸路径根本造不出浅仓，
+> 整个用例会变成一个测不到东西的空壳——又一个"绿灯不等于覆盖"。
+
+### 这条本身给共性 2 添了一笔
+「修 bug 时顺手写下的**下一步建议**」和「顺手写下的**解释**」（见 L-2 里的 objectsTotal 订正）
+一样，从来没有被任何东西检验过，却会被下一个人当成结论照做。

@@ -283,7 +283,7 @@ DATA_ROOT/                              ← compose 用同一绝对路径挂进 
 | 入口 | `POST /api/projects` **立即返回 202** + project 记录（`clone_status='cloning'`），不阻塞请求 |
 | 执行 | 后台 job（与 SchedulerQueue 分离的独立队列——clone 不占 CPU/内存配额，只占磁盘与带宽；同一时刻并发 clone 数上限 `project.maxConcurrentClones`，默认 2）。**平台进程内直接跑 `simple-git`**，落点 `DATA_ROOT/baselines/<projectId>`——不再需要任何容器参与 |
 | 进度 | `git clone --progress` stderr 解析**全部六个阶段** → 节流 1s → WS `project.clone_progress { projectId, phase, stage?, percent?, objectsDone?, objectsTotal?, receivedBytes?, bytesPerSecond? }`（10 §3）。★ 见下方 |
-| 慢仓库提示 | 超过 **10min** 仍未完成：推一条 `phase:'slow'` 事件，前端出"⚠️ 仓库较大或网络缓慢 [继续等待]/[取消]"（P21-6 §6），**不终止** |
+| 慢仓库提示 | 超过 **10min** 仍未完成：推一条 `phase:'slow'` 事件，前端出"⚠️ 仓库较大或网络缓慢 [继续等待]/[取消]"（P21-6 §6），**不终止**。★ 2026-08 才补上产出方，见下方「幽灵态」块 |
 | 硬超时 | **30min** 强制终止子进程 → `clone_status='failed'` + `error_code='TIMEOUT'`；半成品目录 `rm -rf` |
 | 重试 | `POST /api/projects/:id/retry-clone`（仅 `failed` 态，02 §5.1）→ 显式重置 `clone_status='cloning'` 重新入队；**不允许隐式回退**（23 I-PRJ-6） |
 | **改为空项目** | `POST /api/projects/:id/convert-to-empty`（仅 `failed` 态）→ 放弃克隆转空项目：`source_type='empty'` + `repo_url/baseline_path/baseline_size_bytes` 全部置 null + **`rm -rf` 半成品基线目录**（复用本表「取消」的清理路径）+ `clone_status='ready'`；**项目 id / 名称 / 已关联 Task 保持不变**。产品语义见 P21-6 §5/§9 |
@@ -391,8 +391,24 @@ Receiving objects:   2% (527/26348), 380.00 KiB | 189.00 KiB/s
 **`totalBytes` 是幽灵字段，本轮删除。** `git clone` 不报总字节数（包在传输中边算边发，
 它自己也不知道），所以后端从来没有一处给它赋过值；而前端 `buildDetailLabel` 的第一条
 分支正是 `if (receivedBytes && totalBytes)` —— 一条**生产永远走不到**的格式化路径，
-配着一条手工构造 state 才能变绿的测试。**需要分母就用 `objectsTotal`**：
-`Enumerating objects: 26348` 在开头就报出来，是 git 唯一事前就知道的总量。
+配着一条手工构造 state 才能变绿的测试。
+
+> ⚠️ **当时顺手补的那句「需要分母就用 `objectsTotal`，它是 git 唯一事前就知道的总量」
+> 不准确（2026-08 订正）。** `Enumerating objects: 26348` 确实在开头报出远端对象总数，
+> 但**后面每个阶段都用同一个字段报自己的分母，而那些分母是不同的量**：
+> `Compressing objects` 的 total 只算需压缩的对象，`Resolving deltas` 的 total 是
+> **delta 数**，`Updating files` 的 total 是**文件数**——连量纲都不一样。把它当成跨阶段
+> 稳定的分母，数字会在阶段切换时跳变（26348 → 12000 → 3000）。
+>
+> 现有消费方没出错，但是**碰巧**没出错：`cloneProgressPercent` 优先吃 git 给的 per-stage
+> `percent`，`buildDetailLabel` 把这对数与**阶段名**并排渲染，阶段名恰好限定了它们的含义。
+> 照这句话去做"整体进度"的人不会这么幸运。
+>
+> **随之而来的真实观感（已知，未修）**：进度条走的是每个阶段自己的百分比，所以一次 clone
+> 里它会 0→100 好几遍。实测占比（flask，26348 对象）enumerate/count/compress 0.1%、
+> receiving 93.7%、resolving 0.3%，绝大多数时间是 receiving 那一遍，其余一闪而过。
+> **没有按这组占比加权**——它们来自一个仓库的一次实测，写成常量就是拿一次采样冒充普遍
+> 规律（大仓的 `Resolving deltas` 能跑几十秒）。要修得先有多仓数据，或者改成分段显示。
 
 **六个阶段全解析，是为了填住 receiving 之前那段空窗**：实测 3.4s（慢远端上长得多），
 期间旧解析器一律返回 `null`，UI 只有一条脉冲条、一个数都没有——正是"搞不清克隆到哪了"
@@ -464,7 +480,17 @@ interface CloneRequest {
 
 **日志脱敏（G 裁决）**：
 
-- **`GIT_TRACE` / `GIT_TRACE_CURL` / `GIT_CURL_VERBOSE` / `GIT_TRACE_PACKET` 整族加入 `GUARDED_ENV`**——否则宿主设了这些，clone 的 curl trace 会把 `Authorization: Basic base64(x-access-token:PAT)` 打进 stderr → `stderrTail`。
+- **`GIT_TRACE*` 按前缀整族剥离，`GIT_CURL_VERBOSE` 单列**——否则宿主设了这些，clone 的 curl trace 会把 `Authorization: Basic base64(x-access-token:PAT)` 打进 stderr → `stderrTail`。
+
+  > ⚠️ **本条曾经写成四个名字，那是个洞（2026-08 修）。** 原文列 `GIT_TRACE` / `GIT_TRACE_CURL` / `GIT_CURL_VERBOSE` / `GIT_TRACE_PACKET` 并称之为"整族"，代码也照抄成四个字面量。git 还有**第二代** trace 变量，一个都没在里面，而漏掉的那半恰恰更狠：
+  >
+  > - **`GIT_TRACE2_ENV_VARS`** —— 把你点名的环境变量的**值**打进 trace。指向 `GIT_TOKEN`，PAT 原文直接落进 `stderrTail`，且不经任何脱敏（是 git 被要求照打的）。
+  > - **`GIT_TRACE2_REDACT=0`**（及 `GIT_TRACE_REDACT=0`）—— **关掉 git 自己对 `Authorization:` 头的脱敏**。那层脱敏正是本条其余部分所依赖的最后一道，被一个清单没听说过的变量掀掉。
+  > - 另有 `GIT_TRACE2` / `_EVENT` / `_PERF`、`GIT_TRACE_SETUP` / `_PERFORMANCE` / `_PACK_ACCESS` / `_SHALLOW` / `_REFS`。
+  >
+  > **枚举本身就是病因**：字面量清单是某人某天记得的快照，而 git 还在往里加成员——清单会静默过期，注释却一直在承诺"整族"。所以规则改成前缀 `/^GIT_TRACE/`，让代码兑现注释早就说过的话，并覆盖 git 尚未发布的成员。代价照直说：宿主再也不能靠 `export GIT_TRACE=1` 调试平台的 git 子进程——这是"子进程无法被诱导打印自己的凭证"的价钱。
+  >
+  > **两处清单、一条规则**：`project/…/git-env.ts` 与 `credential/…/git-spawn.ts` 各有一份且不能互相 import，两边分头"完整"是这类洞的常态。变异用例分居两个 spec，改一处不改另一处时由对侧那条报警。
 - `sanitizeCloneMessage` 现只匹配 `ghp_`/`github_pat_`/URL userinfo/query → **补 `Authorization:` 行整体打码**；过滤 URL 中的 userinfo 与任何 `password=` 片段（与 05 §4 同一纪律）。
 - **加断言**：拼出的 git 参数数组**不含 token 明文**，`GIT_TOKEN` **只出现在 env**。
 
@@ -503,18 +529,81 @@ GitTestRequest =
 | 目标卷所在盘剩余空间 < 需求（clone 前预检 + 写失败时 `ENOSPC`） | `DISK_INSUFFICIENT` | ❌（要用户清理） |
 | 30min 硬超时 | `TIMEOUT` | ✅ |
 
+> ★ **`phase:'slow'` 曾是个幽灵态（2026-08 补上产出方）。**
+>
+> 它出现在 `ws-protocol.ts` 的联合类型、web 的 zod 枚举、`ProjectCloneState`、
+> `useProjectClone.isSlow`、`CloneProgress.view` 的黄字分支、以及**两个 Storybook story**
+> 里（story 的数据是手写的，当然显示得出来）。后端 `clone-project.workflow.ts` 只发过
+> `cloning` / `done` / `failed` 三种——**它在生产里一次都不会出现**。
+>
+> 这类幽灵态比"缺失"更难发现：缺失会在某处报错，幽灵态哪里都不报，类型检查通过、story 截得出图。
+>
+> 补产出方时有两个实现细节是**从前端的形状倒推出来的**，不是可选的润色：
+>
+> - **粘性**：store（`createProjectCloneSlice`）每来一个事件就**整体替换** clone 状态。若
+>   `slow` 之后的进度帧仍报 `cloning`，警告最多 1 秒后就被抹掉——用户在第 10 分钟看到黄字
+>   闪一下，然后再也不见。所以一旦 slow，后续帧一路报 slow 直到 done/failed。
+> - **`slow` 帧自带最后一次进度**：同理，裸 `{phase:'slow'}` 会把 stage/percent/速率清空，
+>   进度条掉回不确定态的脉冲——我们告诉用户「还在跑」的那一刻，正好是界面不再显示跑到哪儿
+>   的那一刻。
+> - 这一帧**绕过 1s 节流直接发**：慢是因为**卡住**时，根本不会再有进度行到来，而那正是最需要
+>   告诉用户点什么的时候。等下一帧等于永远不发。
+
 **权限类与网络类必须区分**（P22 §2 的前端分支引导依赖它）：判定顺序是先匹配权限类关键字，再匹配网络类，都不匹配则归 `CLONE_FAILED_NETWORK`（更保守——引导用户重试比引导去配凭证的代价小）。`Repository not found` 在 GitHub 上对私有仓也是这个文案（防信息泄露），因此**已配置凭证时**把它归为 `CLONE_FAILED_PERMISSION`。
 
 ### 7.6 Task 级工作区准备（`preparing-workspace` 阶段）
 
+> ★ **2026-08 补两件事：这一段的磁盘预检，以及 `WORKSPACE_PREPARE_FAILED` 的产出方。**
+>
+> **① 复制侧此前没有任何磁盘预检。** clone 那条路 03 §7.2★ 早就有了；这条路搬的是**同样多的
+> 字节**（整个仓库），频率却高得多——clone 每个项目一次，工作区复制**每个 Task 一次**。
+> 而且 `cp -a --reflink=auto` 在 **ext4 上没有 reflink**，会静默退化成整字节复制（本节
+> §274 ② 早就写过这条），于是"每建一个 Task 就再复制一整个仓库"在单机私有化部署里是常态。
+>
+> 用**地板值**而不是「基线体积」，理由与 clone 侧相反但结论相同：clone 侧是需求不可知
+> （没问过远端多大）；这里是需求**在两个极端之间**不可知——btrfs/XFS 上 reflink 让复制花掉
+> ≈0 字节，ext4 上花掉≈基线体积，而 `--reflink=auto` 不会提前告诉你走哪条。要求「基线体积」
+> 的空闲会把 CoW 文件系统上本可免费完成的 Task 拒掉。**旋钮 `WORKSPACE_MIN_FREE_BYTES` 与
+> clone 侧的 `CLONE_MIN_FREE_BYTES` 分开**：两个检查守着两个目录，真实部署里常在不同挂载点。
+>
+> **② `WORKSPACE_PREPARE_FAILED` 此前有五处文档承诺、零个产出方。** 02 §6.1 的错误码表、
+> 23 §5.6 的领域事件、25 的 E2E-1-wsFail、27 §2、以及本节 §114 都写着它，
+> `provision-sandbox.workflow.ts` 里甚至有一行注释说「a failure here … lands as
+> WORKSPACE_PREPARE_FAILED」——**而它不会**。
+>
+> 真实发生的是：`prepare()` 抛 Node 的 fs 错误，`failureOf` 读 `error.code` 拿到 **`ENOSPC` /
+> `ENOENT` / `EACCES`**，把 errno 当平台错误码存进 `failureCode` 并广播。前端按码查 P22 §1
+> 文案表，查不到 `ENOSPC`，落到通用兜底——**于是全部失败里用户处置最明确的一件（"去清磁盘"），
+> 得到的是最含糊的那句话**。02 §6.2 那条「失败必须带码」防的是"没有码"，没防住"有一个不属于
+> 这套词汇表的码"。
+>
+> 修法是**两层**：
+>
+> - **抛出处命名**：`FsWorkspacePreparer.prepare()` 整个方法包一层，errno → 闭集
+>   （`ENOSPC`/`EDQUOT` → `DISK_INSUFFICIENT`，其余 → `WORKSPACE_PREPARE_FAILED`）。
+>   包在**方法边界**而不是逐个 await：五个 await 各能抛 errno，逐个 try/catch 是五次可以忘的
+>   机会，还包括下一个人新加的那行。原始 errno 不丢，进 `cause` 与 `message` 供 traceId 排查。
+> - **出口校验**：`splitFailure` 拿 `SANDBOX_FAILURE_CODES` 过一遍，兜住所有没做上一层的路径。
+>   被拒的码打 `error` 日志而**不是**静默换成 `INTERNAL`——静默降级与"没这个 bug"从外面看
+>   一模一样。
+>
+> ⚠️ **只改后端是白改的**：码准了而前端 `sandboxErrorCopy` 的表里没有对应句子，用户看到的
+> 还是同一段兜底话。两条文案已同时补上（`DISK_INSUFFICIENT` 刻意**不给裸 [重试]**，只给
+> 「清理磁盘后重试」——把前置条件写进 label，而不是配一个会骗人的按钮）。这是
+> `BRANCH_NOT_FOUND` 那次「两侧各自完整、合起来漏一条」的同一种形状。
+
+
 ```
 scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 TOCTOU）
    → preparing-workspace
-       1. mkdir DATA_ROOT/workspaces/<sandboxId> + 写标记文件 .platform-workspace-state=preparing
-       2. cp -a --reflink=auto  baselines/<projectId>/.  →  workspaces/<sandboxId>/
+       1. mkdir DATA_ROOT/workspaces/<sandboxId>
+       1b. ★ 磁盘预检（2026-08 补）：剩余空间 < WORKSPACE_MIN_FREE_BYTES（默认 1 GiB）
+           ⇒ 直接 DISK_INSUFFICIENT，一个字节都不复制。见下方块
+       2. 写标记文件 .platform-workspace-state=preparing
+       3. cp -a --reflink=auto  baselines/<projectId>/.  →  workspaces/<sandboxId>/
           （空项目：跳过复制，留空目录）
-       3. 父目录 workspaces/ chmod 0700 + 工作区目录 chmod 0777（⚠️ 原文写 "chown 到容器内运行用户"，与实现不符——按实现更正，理由见下方块）
-       4. 标记文件改为 ready
+       4. 父目录 workspaces/ chmod 0700 + 工作区目录 chmod 0777（⚠️ 原文写 "chown 到容器内运行用户"，与实现不符——按实现更正，理由见下方块）
+       5. 标记文件改为 ready
    → creating（provider.create 时把该目录作为 host-path 挂载，源已存在）
    → starting（凭证 materialize + injectCredential，05 §4；注入形态与落点见下）
 ```
