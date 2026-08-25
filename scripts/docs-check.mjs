@@ -415,6 +415,159 @@ function checkCapabilityCatalog() {
 }
 
 // ---------------------------------------------------------------------------
+// A5 错误码对账：api 源码里产出的错误码集合 == 10 §6.8「错误码全量表」
+//
+// 为什么需要它：`BRANCH_NOT_FOUND` 就是漏在这里的 —— 它进了门口拒绝表，却没进前端
+// 的文案表，**两侧各自"完整"，29 条测试全绿**，而漏掉的那条掉进带 [重试] 的 fallback，
+// 对一个零副作用的拒绝说了最不该说的那句话。
+//
+// 错误码天生跨仓、跨层（后端产出 / 本表 / 前端文案），靠人记得同步三处是靠不住的 ——
+// 这与 A4（端点对账）、B2（MCP tool 对账）是同一手法：**把"记得同步"变成"不同步就红"**。
+//
+// ⚠️ 扫描要覆盖**四种产出形态**，只 grep 一种必然漏：
+//   ① `code: 'XXX'` 对象字面量
+//   ② `doorRejection(status, XXX_CODE, msg)` —— 码在常量里，要先解常量
+//   ③ `return 'XXX'` —— ErrorEnvelopeFilter 的 codeForStatus
+//   ④ 闭集联合类型 —— CloneErrorCode 这类 `'A' | 'B'`
+// ---------------------------------------------------------------------------
+const ERROR_CODE_RE = /^[A-Z][A-Z0-9_]{2,}$/;
+
+/** 只在**产出错误的文件**里扫，避免把无关的大写常量（枚举、事件名）当成错误码。 */
+const ERROR_CODE_SOURCES = [
+  'apps/api/src/bootstrap/error-envelope.filter.ts',
+  'apps/api/src/platform/access-passcode',
+  // ⚠️ **整个 contracts**：错误码的闭集类型大多住在这儿（`sandbox-provider.contract.ts`
+  // 的 provider 错误、`project-facade.port.ts` 的 BRANCH_NOT_FOUND、
+  // `credential-facade.port.ts` 的 NO_CREDENTIAL）。第一版只列了 errors.ts，
+  // 结果 10 个码全部报"文档有、源码无" —— 扫描范围写窄了，门禁就会指着正确的表说它错。
+  'packages/contracts/src',
+  'packages/modules/sandbox/src/application',
+  'packages/modules/sandbox/src/interface/gateway',
+  'packages/modules/runtime/src/application',
+  'packages/modules/project/src/infrastructure/git/error.classifier.ts',
+  'packages/modules/project/src/domain/entities/project.entity.ts',
+  'packages/contracts/src/schemas/task.schema.ts',
+];
+
+/**
+ * contracts 里有大量与错误无关的大写字面量（事件名、状态、能力位）。
+ * 只有出现在**这些上下文**里的才算错误码 —— 否则 A5 会把 `SANDBOX_CREATED` 这类
+ * 当成错误码，然后要求文档表给它写一行。
+ */
+const ERROR_CODE_CONTEXT = /(?:code|errorCode|ErrorCode|Code)\b/;
+
+function collectErrorCodesFromSource() {
+  const found = new Map(); // code -> Set(相对路径)
+  const add = (code, file) => {
+    if (!ERROR_CODE_RE.test(code)) return;
+    if (!found.has(code)) found.set(code, new Set());
+    found.get(code).add(file);
+  };
+  const files = [];
+  for (const rel of ERROR_CODE_SOURCES) {
+    const abs = path.join(API_ROOT, rel);
+    if (!fs.existsSync(abs)) continue;
+    if (fs.statSync(abs).isDirectory()) {
+      const walk = (d) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+          const q = path.join(d, e.name);
+          if (e.isDirectory()) walk(q);
+          else if (q.endsWith('.ts') && !q.endsWith('.d.ts')) files.push(q);
+        }
+      };
+      walk(abs);
+    } else files.push(abs);
+  }
+  for (const f of files) {
+    const rel = path.relative(API_ROOT, f);
+    const src = fs.readFileSync(f, 'utf8');
+    // ① code: 'XXX'
+    for (const m of src.matchAll(/\bcode:\s*'([A-Z][A-Z0-9_]{2,})'/g)) add(m[1], rel);
+    // ② XXX_CODE = 'YYY'（doorRejection 的码走常量）
+    for (const m of src.matchAll(/[A-Z_]*CODE\s*=\s*'([A-Z][A-Z0-9_]{2,})'/g)) add(m[1], rel);
+    // ③ return 'XXX'（filter 的 codeForStatus）
+    for (const m of src.matchAll(/return\s+'([A-Z][A-Z0-9_]{2,})'/g)) add(m[1], rel);
+    // ③b enum 成员：`IMAGE_PULL_FAILED = 'IMAGE_PULL_FAILED',`
+    for (const m of src.matchAll(/^\s*([A-Z][A-Z0-9_]{2,})\s*=\s*'\1'\s*,/gm)) add(m[1], rel);
+    // ③c 导出常量：`export const UNKNOWN_RUNTIME = 'UNKNOWN_RUNTIME';`
+    for (const m of src.matchAll(/export const\s+[A-Z][A-Z0-9_]*\s*=\s*'([A-Z][A-Z0-9_]{2,})'/g)) {
+      add(m[1], rel);
+    }
+    // ③e `z.enum([...])` 里的码 —— TaskErrorCodeSchema 就是这个形态。
+    for (const m of src.matchAll(/(?:ErrorCode|Code)[A-Za-z]*\s*=\s*z\.enum\(\[([^\]]*)\]/gs)) {
+      for (const u of m[1].matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)) add(u[1], rel);
+    }
+    // ③d switch case：`case 'AUTH_REJECTED':` —— 消费侧也算产出面的一部分，
+    //     因为它证明这个码会出现在响应里（不然没人 case 它）。
+    for (const m of src.matchAll(/case\s+'([A-Z][A-Z0-9_]{2,})'\s*:/g)) add(m[1], rel);
+    // ④ 闭集联合：`type XxxCode = 'A' | 'B'`。**必须带 Code 上下文** ——
+    //    contracts 里还有事件名/状态/能力位的联合，无差别收会把它们也当错误码。
+    for (const line of src.split('\n')) {
+      if (!ERROR_CODE_CONTEXT.test(line)) continue;
+      if (!/'[A-Z][A-Z0-9_]{2,}'\s*\|/.test(line) && !/\|\s*'[A-Z][A-Z0-9_]{2,}'/.test(line)) continue;
+      for (const u of line.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)) add(u[1], rel);
+    }
+    // ④b 跨行闭集：`= \n  | 'A'\n  | 'B'` —— 类型名在上一行，联合项各占一行。
+    for (const m of src.matchAll(/(?:type|Code)\s*[:=][^;]{0,400}?;/gs)) {
+      if (!ERROR_CODE_CONTEXT.test(m[0])) continue;
+      const items = [...m[0].matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)];
+      if (items.length >= 2) for (const u of items) add(u[1], rel);
+    }
+  }
+  return found;
+}
+
+/** 10 §6.8「错误码全量表」的第一列。 */
+function docErrorCodes() {
+  const md = fs.readFileSync(path.join(ROOT, DOC_10), 'utf8');
+  const start = md.indexOf('#### ★ 错误码全量表');
+  if (start < 0) return null;
+  const end = md.indexOf('####', start + 10);
+  const body = md.slice(start, end < 0 ? undefined : end);
+  const codes = new Set();
+  for (const m of body.matchAll(/^\|\s*`([A-Z][A-Z0-9_]{2,})`\s*\|/gm)) codes.add(m[1]);
+  return codes;
+}
+
+function checkErrorCodeCatalog() {
+  const doc = docErrorCodes();
+  if (doc === null) {
+    record('A', 'A5', '错误码对账', 'fail', `${DOC_10} 里找不到「★ 错误码全量表」小节`, [
+      '→ 该表是 A5 的对账基准，缺了这道门禁就形同虚设',
+    ]);
+    return;
+  }
+  if (!fs.existsSync(API_ROOT) || !fs.existsSync(path.join(API_ROOT, 'packages'))) {
+    record('A', 'A5', '错误码对账', 'skip', 'api submodule 未检出，跳过源码侧扫描');
+    return;
+  }
+  const src = collectErrorCodesFromSource();
+  // `UNKNOWN` 是**前端**的降级值，后端永不产出（表里写明了）——扫不到是正确的。
+  const onlyInDoc = [...doc].filter((c) => !src.has(c) && c !== 'UNKNOWN').sort();
+  const onlyInSrc = [...src.keys()].filter((c) => !doc.has(c)).sort();
+
+  if (VERBOSE) {
+    console.log(`  [verbose] 源码扫出 ${src.size} 个码，文档表 ${doc.size} 行`);
+  }
+  const summary = `源码 ${src.size} 个码，10 §6.8 表 ${doc.size} 行`;
+  if (onlyInDoc.length === 0 && onlyInSrc.length === 0) {
+    record('A', 'A5', '错误码对账', 'ok', `${summary}，集合相等`);
+    return;
+  }
+  const details = [
+    ...onlyInSrc.map(
+      (c) =>
+        `源码有、文档表无：${c}（${[...src.get(c)].join(', ')}）\n        → 到 ${DOC_10} 的「★ 错误码全量表」补一行（码 / 类 / HTTP / retryable / sideEffectFree / 何时出现）`,
+    ),
+    ...onlyInDoc.map(
+      (c) =>
+        `文档表有、源码无：${c}\n        → 要么它已废弃（删表行），要么尚未实现（标 ⏳ 并说明）——别让表里躺着一个不存在的码`,
+    ),
+  ];
+  record('A', 'A5', '错误码对账', 'fail', `${summary}，差集 ${details.length} 条`, details);
+}
+
+// ---------------------------------------------------------------------------
 // B1 端点集合覆盖：10 §6 的路径集合 ⊇ openapi.json 的 paths（审计 P1-6）
 // ---------------------------------------------------------------------------
 function checkOpenapiCoverage() {
@@ -788,6 +941,7 @@ checkLinks();
 checkSectionRefs();
 checkReadmeInventory();
 checkCapabilityCatalog();
+checkErrorCodeCatalog();
 checkOpenapiCoverage();
 checkMcpToolParity();
 checkOpenapiCrossRepo();
