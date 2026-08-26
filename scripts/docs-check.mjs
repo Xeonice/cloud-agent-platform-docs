@@ -432,32 +432,64 @@ function checkCapabilityCatalog() {
 // ---------------------------------------------------------------------------
 const ERROR_CODE_RE = /^[A-Z][A-Z0-9_]{2,}$/;
 
-/** 只在**产出错误的文件**里扫，避免把无关的大写常量（枚举、事件名）当成错误码。 */
-const ERROR_CODE_SOURCES = [
-  'apps/api/src/bootstrap/error-envelope.filter.ts',
-  'apps/api/src/platform/access-passcode',
-  // ⚠️ **整个 contracts**：错误码的闭集类型大多住在这儿（`sandbox-provider.contract.ts`
-  // 的 provider 错误、`project-facade.port.ts` 的 BRANCH_NOT_FOUND、
-  // `credential-facade.port.ts` 的 NO_CREDENTIAL）。第一版只列了 errors.ts，
-  // 结果 10 个码全部报"文档有、源码无" —— 扫描范围写窄了，门禁就会指着正确的表说它错。
-  'packages/contracts/src',
-  'packages/modules/sandbox/src/application',
-  'packages/modules/sandbox/src/interface/gateway',
-  'packages/modules/runtime/src/application',
-  'packages/modules/project/src/infrastructure/git/error.classifier.ts',
-  'packages/modules/project/src/domain/entities/project.entity.ts',
-  'packages/contracts/src/schemas/task.schema.ts',
-];
+/**
+ * 扫**全部** `src` 目录，不再维护一份手写路径清单。
+ *
+ * ⚠️ **这里曾经是一份枚举，而它漏了码（2026-08 订正）。** 上一版列了 9 条路径，配着一句
+ * 「扫描范围写窄了，门禁就会指着正确的表说它错」的注释 —— 那句话说的是**响亮**的失效
+ * （误报）。真正发生的是**静默**的那种：
+ *
+ *   · `packages/modules/runtime/src/domain/errors/adapter-auth.error.ts` 不在清单里
+ *     （只列了 `runtime/src/application`）⇒ `BINARY_NOT_FOUND` / `PARSE_ERROR` 从未被看见。
+ *     而 `AdapterAuthErrorCode` 是个 **6 成员的闭集**，另外 4 个从别的产出点被扫到了 ——
+ *     **一个闭集被扫了三分之二，门禁报「集合相等」**。
+ *   · `packages/modules/terminal/src/interface/gateway` 同理不在清单里。
+ *
+ * 「某人某天记得的快照」这个病因，与 `GIT_TRACE` 那份四字面量清单一模一样
+ * （03 §7.3 G）—— 而那一课就写在本文件上一轮的提交里。**枚举本身就是病因**：
+ * 少一条路径不会有任何东西变红，门禁只是安静地少看一个目录。
+ *
+ * 代价是要靠 `ERROR_CODE_CONTEXT` 把无关大写常量挡在外面；那是**响亮**的失效
+ * （多收一个 ⇒ 门禁红 ⇒ 有人来看），比静默漏一个好。
+ */
+function errorCodeSourceRoots() {
+  const roots = [];
+  const push = (rel) => {
+    const abs = path.join(API_ROOT, rel);
+    if (fs.existsSync(abs)) roots.push(abs);
+  };
+  push('apps/api/src');
+  const pkgs = path.join(API_ROOT, 'packages');
+  if (!fs.existsSync(pkgs)) return roots;
+  for (const pkg of fs.readdirSync(pkgs)) {
+    push(path.join('packages', pkg, 'src'));
+    const mods = path.join(pkgs, pkg);
+    if (pkg !== 'modules' || !fs.existsSync(mods)) continue;
+    for (const m of fs.readdirSync(mods)) push(path.join('packages', 'modules', m, 'src'));
+  }
+  return roots;
+}
 
 /**
  * contracts 里有大量与错误无关的大写字面量（事件名、状态、能力位）。
  * 只有出现在**这些上下文**里的才算错误码 —— 否则 A5 会把 `SANDBOX_CREATED` 这类
  * 当成错误码，然后要求文档表给它写一行。
  */
-const ERROR_CODE_CONTEXT = /(?:code|errorCode|ErrorCode|Code)\b/;
+const ERROR_CODE_CONTEXT = /(?:code|Code|Rejection|Failure|Reason|Error)\b/;
+// ⚠️ `Rejection` / `Failure` / `Reason` 不是凑数：`WsHandshakeRejection` 是个正经的错误码
+// 闭集（`'UNAUTHORIZED' | 'SCHEMA_MISMATCH' | 'SANDBOX_REQUIRED'`，两个网关真的在发它），
+// 而它的名字里没有 `Code` —— 上一版的上下文卡死在「名字里得有 Code」，于是**静默放行**。
+// 分类法不一定叫 Code，而门禁不该要求作者按它的口味命名类型。
 
 /** errno 的形状：`ENOSPC` / `EACCES` / `EDQUOT`。平台错误码一律带下划线分词。 */
 const ERRNO_SHAPE = /^E[A-Z]{2,}$/;
+
+/**
+ * POSIX 信号：`SIGTERM` / `SIGKILL` / `SIGINT`。与 errno 同理 —— 它们是**操作系统的词汇**，
+ * 不是这套面向用户的错误码词汇表的成员（03 §8.3 的两段式 kill 会把它们写成字面量）。
+ * 同样按**形状**排除而不是列名字。
+ */
+const SIGNAL_SHAPE = /^SIG[A-Z]+$/;
 
 function collectErrorCodesFromSource() {
   const found = new Map(); // code -> Set(相对路径)
@@ -474,24 +506,21 @@ function collectErrorCodesFromSource() {
     // 会过期的清单（见 GIT_TRACE 那一课）。反向由 `checkErrorCodeCatalog` 兜住：码表里若
     // 出现 errno 形状的行，门禁直接报错，而不是悄悄放行一个永远对不上的码。
     if (ERRNO_SHAPE.test(code)) return;
+    if (SIGNAL_SHAPE.test(code)) return;
     if (!found.has(code)) found.set(code, new Set());
     found.get(code).add(file);
   };
   const files = [];
-  for (const rel of ERROR_CODE_SOURCES) {
-    const abs = path.join(API_ROOT, rel);
-    if (!fs.existsSync(abs)) continue;
-    if (fs.statSync(abs).isDirectory()) {
-      const walk = (d) => {
-        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-          const q = path.join(d, e.name);
-          if (e.isDirectory()) walk(q);
-          else if (q.endsWith('.ts') && !q.endsWith('.d.ts')) files.push(q);
-        }
-      };
-      walk(abs);
-    } else files.push(abs);
-  }
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const q = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'node_modules' || e.name === 'dist') continue;
+        walk(q);
+      } else if (q.endsWith('.ts') && !q.endsWith('.d.ts')) files.push(q);
+    }
+  };
+  for (const root of errorCodeSourceRoots()) walk(root);
   for (const f of files) {
     const rel = path.relative(API_ROOT, f);
     const src = fs.readFileSync(f, 'utf8');
@@ -504,7 +533,13 @@ function collectErrorCodesFromSource() {
     // ③b enum 成员：`IMAGE_PULL_FAILED = 'IMAGE_PULL_FAILED',`
     for (const m of src.matchAll(/^\s*([A-Z][A-Z0-9_]{2,})\s*=\s*'\1'\s*,/gm)) add(m[1], rel);
     // ③c 导出常量：`export const UNKNOWN_RUNTIME = 'UNKNOWN_RUNTIME';`
-    for (const m of src.matchAll(/export const\s+[A-Z][A-Z0-9_]*\s*=\s*'([A-Z][A-Z0-9_]{2,})'/g)) {
+    //
+    // ⚠️ **名必须等于值**（`\1` 反向引用），这一位是有讲究的。放开之后
+    // `export const AGENT_JWT_PUBLIC_KEY_ENV = 'JWT_PUBLIC_KEY'` 这类**别名常量**会被
+    // 当成错误码收进来（agent-auth.ts 里有三个环境变量名是这个形态）。
+    // 错误码常量一律自指——名与值同字；名≠值说明它是**别的东西的别名**，不是码的声明。
+    // 这样不需要维护一份"这些大写常量不是错误码"的黑名单（黑名单会过期，形状不会）。
+    for (const m of src.matchAll(/export const\s+([A-Z][A-Z0-9_]{2,})\s*=\s*'\1'/g)) {
       add(m[1], rel);
     }
     // ③e `z.enum([...])` 里的码 —— TaskErrorCodeSchema 就是这个形态。
@@ -536,8 +571,13 @@ function docErrorCodes() {
   const md = fs.readFileSync(path.join(ROOT, DOC_10), 'utf8');
   const start = md.indexOf('#### ★ 错误码全量表');
   if (start < 0) return null;
-  const end = md.indexOf('####', start + 10);
-  const body = md.slice(start, end < 0 ? undefined : end);
+  // ⚠️ **锚行首**（`^####`），不是裸子串查找。本节之后那张「⏳ 已定案、但今天没有产出方」
+  // 的说明里就有一句反引号包着的 `#### ★ 错误码全量表` —— 裸 `indexOf('####')` 会撞上
+  // 正文里提到的标题，把表**静默截短**，然后报一堆「源码有、文档表无」，
+  // 即"指着正确的表说它错"。这个坑不是想象的：写本条时的测量脚本先踩了一次。
+  const rest = md.slice(start + '#### ★ 错误码全量表'.length);
+  const m = /^####\s/m.exec(rest);
+  const body = m === null ? md.slice(start) : md.slice(start, start + '#### ★ 错误码全量表'.length + m.index);
   const codes = new Set();
   for (const m of body.matchAll(/^\|\s*`([A-Z][A-Z0-9_]{2,})`\s*\|/gm)) codes.add(m[1]);
   return codes;

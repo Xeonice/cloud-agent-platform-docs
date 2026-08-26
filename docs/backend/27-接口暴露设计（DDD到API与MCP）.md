@@ -193,19 +193,47 @@
 
 > 领域模型 23 §9 · 时序 24 §7 · 校验规则权威 05 §4.1。
 
+> **✅ 落地状态：本节八个能力全部已实现**（2026-08 镜像管理切片；本块此前写的是「一个都没实现」「按此接线会全部 404」，那句话现在是反的）
+>
+> | 核对项 | 结果 |
+> |---|---|
+> | `api/openapi.json` 里的 `/api/images*` 路径 | **6 条 path / 8 个 operation**：`/api/images`(get,post)、`/api/images/validate`(post)、`/api/images/{id}`(patch,delete)、`/api/images/{id}/validate`(post)、`/api/images/{id}/activate`(post)、`/api/images/{id}/check-update`(post) |
+> | `packages/modules/` 下的 image 模块 | ✅ `packages/modules/image/`（credential / **image** / project / runtime / sandbox / terminal 六个） |
+> | `images` / `image_manifests` 表 | ✅ `drizzle/0010_cuddly_screwball.sql`（13 §2.4） |
+> | `ImageSpecProvider` / `IMAGE_SPEC_REGISTRY` | ✅ `OciImageSpecProvider`；registry 有实现、有 DI 绑定、有第三方注入点（04 §8） |
+> | 本表「可能错误码」列里的镜像码 | ✅ **全部有产出方**，且已搬进 10 §6.8 主表参与 A5 对账（现为 60 = 60） |
+> | **MCP 面** | 仍是 8 个 **REST-ONLY**（本表 MCP 列一律「—」），controller 顶部的注释把这一条写死了 |
+>
+> **两条强制不变量现在都成立**：**I-IMG-3**（禁用的不出现在可选列表）与 **I-IMG-2**（`invalid` 不可被新 sandbox 引用）
+> 由 `ImageFacadeAdapter.assertSelectable()` 在**建 Task 门口逐行判**——**不是只靠列表查询过滤**，
+> 否则记住了旧 id 的 API 调用方会径直绕过去。
+>
+> ⚠️ **本切片有破坏性的一半，写在这里**：门口现在**只接受已注册的镜像**，
+> 未注册的坐标会被拒（`INVALID_IMAGE_REFERENCE`，400）。而**平台没有任何内置镜像的种子数据**
+> （13 §2.4），所以**全新部署在有人 `POST /api/images` 之前建不出 Task**。
+
 | 能力 | REST | MCP | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|---|
-| `listImages` | `GET /api/images` | — | 向导下拉用 `?runtimeId=` 过滤可选项 | `ImageManifestDto[]` | `list-images` / `list-selectable-images` | I-IMG-3（禁用的不出现在可选列表） | — | — |
-| `registerImage` | `POST /api/images` | — | `{ ref }` | `ImageManifestDto` + `ValidationOutcome` | `register-image` command | I-IMG-6（digest 非空） | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422) | — |
+| `listImages` | `GET /api/images` | — | 向导下拉带 `?runtimeId=` 拿**可选集**（`isActive ∧ 非 invalid`）；管理页不带该参数、**含历史版本**。⚠️ **`runtimeId` 自 2026-08 起只是「要不要只看可选集」的开关，不再按 runtime 筛**（04 §7 ★血统 ⑤）：镜像不会因为「没预装某个 runtime」而从下拉里消失——血统保证了它装得上，而藏起来会让那张 ⚠️ 卡永远选不到（前端按 `imageId` 聚合成卡，只把当前活行显示在卡面，其余收进历史，P21-4 §3） | `ImageManifestDto[]`——**每项必须带 `digest` / `resolvedAt` / `imageId` / `imageName` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`**。⚠️ 缺 `digest` + `resolvedAt` 则卡片退回「最后验证 N 小时前」那种没有下文的时效暗示，`🔄 上游有新版本`、对比弹层、`以 digest 注册` 三档全部渲染不出来（P21-4 §3/§5） | `list-images` / `list-selectable-images` | I-IMG-3（禁用的不出现在可选列表） | — | — |
+| `registerImage` | `POST /api/images` | — | `{ ref }`。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `ImageManifestDto` + `ValidationOutcome` | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
 | `validateImage`（**预检**） | `POST /api/images/validate` | — | `{ ref }`；**不落库、不产生 manifest** | `ValidationOutcome{ status:'valid'\|'warning'\|'invalid', errors[], warnings[] }` | `validate-image` command | — | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502) | — |
-| `revalidateImage` | `POST /api/images/:id/validate` | — | 已注册镜像重验证，写回 `validationStatus` | 同上 | `validate-image` command | — | `NOT_FOUND` | — |
-| `patchImage` | `PATCH /api/images/:id` | — | `{ isActive?, imageConfig? }`——**改 manifest 可变字段的唯一入口** | `ImageManifestDto` | `patch-image` command | I-IMG-1（EnvVarSet 构造即校验）、I-IMG-4/5 | **400 + `details[].path`**：`ENV_NAME_INVALID` / `ENV_NAME_RESERVED` / `ENV_LIMIT_EXCEEDED` / `ENV_DUPLICATE_KEY` | — |
+| `revalidateImage` | `POST /api/images/:id/validate` | — | 已注册镜像重验证；**digest 没变才写回 `validationStatus`**，变了只报告不写回（新 digest 描述的是另一份 bits，替本行盖章会悄悄让一个好版本退役） | `ValidationOutcome` **+ `currentDigest` / `upstreamDigest` / `digestChanged`**（`RevalidateOutcomeSchema`；本格原写「同上」，实现比它宽） | `validate-image` command | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502) | — |
+| `patchImage` | `PATCH /api/images/:id` | — | `{ isActive?, imageConfig? }`——**改 manifest 可变字段的唯一入口**。⚠️ **`isActive` 只收 `false`**（禁用是单行操作）；`true` → **400**，`message` 指向 `POST /api/images/:id/activate`——启用必然要停掉同 tag 的现任，是「换」不是「加」（10 §6 ★）。⚠️ **这两个字段恰好就是 I-IMG-7 允许改的全部**（23 §9.2）：`digest` / `version` / `baseImage` 一旦落库永不 UPDATE，升级镜像是 INSERT 新行 + 旧行下线（13 §2.4.2 ★）。**所以这个入参形状不是省事，是不变量的落点**——往里加一个 `digest?` 就等于把 I-IMG-7 拆了 | `ImageManifestDto` | `patch-image` command | I-IMG-1（EnvVarSet 构造即校验）、I-IMG-4/5 | **顶层 `VALIDATION_FAILED` / 400**，四个 `ENV_*` 码在 `details[].code`（`ENV_NAME_INVALID` / `ENV_NAME_RESERVED` / `ENV_LIMIT_EXCEEDED` / `ENV_DUPLICATE_KEY`）+ 逐项 `path`。⚠️ 顶层码此前四份文档都没写过，而前端文案表是按顶层码查的——定案与理由见 10 §6.8 | — |
+| `activateImage` | `POST /api/images/:id/activate` | — | 把这一行设为该 tag 的**当前版本**。**同时承担 [更新到新版本] 与 [回滚到旧版本]**——实现上是同一件事（换当前指针），只是方向不同 | `ImageManifestDto` | `activate-image` command | I-IMG-7（不改行，只换 `isActive`）；`unique(image_id, version) WHERE is_active` 由同一事务保证 | `NOT_FOUND`；**`INVALID_STATE`(409)** —— `validationStatus='invalid'` 的版本不许激活（I-IMG-2） | — |
+| `checkImageUpdate` | `POST /api/images/:id/check-update` | — | 重解该行的 `version`(tag) → 比对 digest，**不落库、不产生 manifest** | `{ current:{digest,resolvedAt}, upstream:{digest,validation}\|null, changed:boolean }` | `check-image-update` query | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502)；**`INVALID_STATE`(409)** —— ref 是 digest 形态时无 tag 可解，天然不漂移（P21-4 §5 ★） | — |
 | `deleteImage` | `DELETE /api/images/:id` | — | 硬删除 | 204 | `delete-image` command | I-IMG-4（预置镜像不可删） | `409`（有 sandbox 引用或预置镜像） | — |
+
+**digest 在这两个端点上冻结，别处不再解析**（04 §7「`resolve` 到底在哪一步被调用」的定案，本节只引不重述）：
+
+- **`POST /api/images`（时刻①）是整条链路上唯一一次「tag → digest」解析**。digest 在此冻结进 `image_manifests.digest`（CHECK 非空 = I-IMG-6）；此后建 Task 只读这一列，**不再出网**。
+- **`POST /api/images/:id/validate`（时刻②）是 tag 被重推唯一会被发现的时刻**。重解出的 digest 与库里不同 = **坐标迁移**，响应必须把「旧 → 新」说出来，不能当成一次「刷新成功」悄悄写回——用户有权知道自己的镜像换了 bits。
+- **建 Task 的门口（`admit()`）只查库、不出网**，理由是 `REGISTRY_UNREACHABLE` 是 `retryable:true`，放进创建门会破掉「门口拒绝一律 `retryable:false`」这条结构性结论（10 §6.8）。
+- `IMAGE_BASE_REQUIRED` / `IMAGE_TMUX_MISSING` 都是 `MANIFEST_INVALID` 的 `details[].code`，**不是顶层码**；`IMAGE_TMUX_MISSING` 自 2026-08 起**只由根镜像注册产出**（04 §7 ★血统 ③），它与运行期的 `IMAGE_CONTRACT_VIOLATION` 是两个时刻的两个码，不能相互替代（10 §6.8）。
 
 **前端要知道的三件事**：
 
 1. **两个 validate 端点用途不同**：注册前预检用 **`POST /api/images/validate`**（不落库，就是「提交 URI → 分级反馈」那一步）；已注册镜像的重新验证才用 `/:id/validate`。
-2. **三级反馈，`warning` 仍可选**：向导下拉的过滤规则是 `isActive && (valid || warning) && supportedRuntimes 含所选 runtime`；warning 项要在选项旁就地显示后果说明（P21-4 §9）。
+2. **三级反馈，`warning` 仍可选**：向导下拉的过滤规则是 `isActive && (valid || warning)`——**就这两条**；warning 项要在选项旁就地显示后果说明（P21-4 §9）。⚠️ **原文还有第三条 `&& supportedRuntimes 含所选 runtime`，2026-08 整条删除**（04 §7 ★血统 ⑤）：那一条会把「未预装、需现装约 12.5 分钟」这张 warning 卡本身从下拉里抹掉——用户选不到它，那句后果说明就永远显示不出来。实测：诚实标注后 `?runtimeId=claude-code` 返回 0 张。
 3. **secret 类 env 的编辑语义**：回传空串 = **保持不变**（不是清空）；原值永不出现在响应里，也不要写进 DOM（I-IMG-5）。
 
 ---
@@ -264,7 +292,7 @@
 | `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：逐项 `event: check` + 末尾 `event: done` | — | 单项超时 5s，一项卡住不阻塞整轮；检查项含 **`DATA_ROOT` 文件系统类型与 reflink 支持** |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
-| `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 + 最近 testkit 结果 | — | 统一名（P1-6）。**⏳ 尚未落地**。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页 |
+| `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 + 最近 testkit 结果 | — | 统一名（P1-6）。**⏳ 尚未落地**。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页。**✅ `imageSpec` 那一档的注册表已经有了**（本句此前写的是「裸 Symbol、连注册表都不存在」，现在是反的）：`IMAGE_SPEC_REGISTRY` 有接口、有实现、有 DI 绑定、有第三方注入点（04 §8），`list()` 就是本端点要列的那一档。「provider / runtime / 镜像三层可注册」（19 §1 原则 5）**三层都是活的**；⏳ 未落地的只剩本端点自己 |
 | `unlock`（访问口令提交） | `POST /api/access/unlock` | `{ passcode }` | `{ unlocked: true }` + `Set-Cookie: ap_session`（签名 `HttpOnly`，7 天） | `PASSCODE_INVALID`(401)、`PASSCODE_LOCKED`(429，含 `retryAfterSec`) | **MVP**（审计 P0-3）。**不进 MCP**（§1.2 判据②：凭证提交面）。未启用口令时直接回 `{ unlocked:true }`；连续 5 次错锁 5 分钟，**与 Guard 共用同一把锁**（11 §3.1） |
 | `health` | `GET /api/health` | | `{ ok: true }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |
@@ -335,12 +363,19 @@ Step2 确认：
 
 ### 10.5 镜像管理（P21-4）
 
+> **✅ 下面这段现在是可调用的接口**（本块此前写的是「前端按本段接线会全部 404」，那句话现在是反的）：
+> 八个 operation 都在 `api/openapi.json` 里，后端有 image 模块与两张表（§6 落地状态逐条列了核对结果）。
+>
+> ✅ 那处错位也已收口：`MANIFEST_INVALID` 从「前端 `COPY_TABLE` 里有、后端没有产出方」
+> 变成两侧都有，并已进 10 §6.8 主表参与 A5 对账。
+
 ```
 列表：GET /api/images
 注册：POST /api/images/validate { ref }   ← **预检，不落库**，拿三级反馈
      → 用户确认后 POST /api/images { ref }
 启用/禁用 + 运行参数：PATCH /api/images/:id { isActive?, imageConfig? }
-     → 400 时读 details[].path 逐项标红（ENV_NAME_RESERVED 等四个码）
+     → 400 时顶层 code 是 VALIDATION_FAILED，四个 ENV_* 码在 details[].code，
+       按 details[].path 逐项标红（定案见 10 §6.8）
 删除：DELETE /api/images/:id（409 = 有引用或预置镜像，前端应提前置灰）
 ```
 
