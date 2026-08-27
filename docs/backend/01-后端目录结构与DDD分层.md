@@ -41,10 +41,10 @@ agent-platform-api/
 │   ├── contracts/src/                       # 框架无关公共契约（未来可独立发包）
 │   │   ├── sandbox-provider.contract.ts
 │   │   ├── runtime-adapter.contract.ts
-│   │   ├── image-spec.contract.ts           # ⏳ 未实现，随镜像管理切片落地（04 §7）
+│   │   ├── image-spec.contract.ts           # ✅ 已实现（04 §7）；另有 image-facade.port.ts 跨上下文门面
 │   │   ├── errors.ts                        # 统一错误模型（04 §4）
 │   │   ├── credential-facade.port.ts        # CREDENTIAL_FACADE token + GitAuthContext（跨上下文门面，与 SANDBOX/PROJECT_FACADE 同构，A2）
-│   │   ├── registry.tokens.ts               # 三个 DI token；IMAGE_SPEC_REGISTRY 目前仅占位（04 §8）
+│   │   ├── registry.tokens.ts               # 三个 DI token，均已绑定实现（04 §8）
 │   │   └── testkit/                         # golden 契约测试套件（04 §10）
 │   ├── shared-kernel/src/
 │   │   ├── domain/{aggregate-root,entity,value-object,domain-event}.ts
@@ -210,7 +210,7 @@ agent-platform-api/
 2. **`application/workflows/*.workflow.ts` 是独立一类**——响应返回后的多步编排（provision / clone / scan-due / finalize-run）既不是命令处理器也不是基础设施，它是 application 层的编排单元。
 3. **`env-merge` 在 `image/domain/services/` 而非 application**——它是零 IO 纯函数（23 §9.5），放 domain 才能零 mock 穷举测试（25 T-IMG-11..14）。
 4. **两个 registry 不在 `platform/`，而在各自限界上下文的 infrastructure 下**——`SandboxProviderRegistry` 在 `sandbox/infrastructure/registry/provider-registry.ts`、`DefaultRuntimeAdapterRegistry` 在 `runtime/infrastructure/registry/runtime-adapter.registry.ts`；跨上下文的那一层——DI token（`packages/contracts/src/registry.tokens.ts`）与 `ProviderRegistry` / `RuntimeAdapterRegistry` 接口（各自的 `*.contract.ts`）——留在 `contracts`。**registry 归拥有该扩展点的上下文，token/接口留在 contracts 才是跨上下文的扩展缝**：第三方模块注入 token 即可注册（04 §8 方式一），`platform/` 无须知道 provider/adapter 的存在，也就没有一个"什么都放"的中心 registry 目录。
-   - 已实现的只有上面两个。`image-spec.registry.ts` **不存在**（`IMAGE_SPEC_REGISTRY` token 已预留，registry 与实现随镜像管理切片落地）；`dynamic-module-registry.ts` / `plugin-loader.ts` 也**不存在**（插件目录扫描标为后续，理由见 04 §8 方式二）。
+   - ✅ **三个都实现了**（本条此前写的是「已实现的只有上面两个，`image-spec.registry.ts` 不存在」，那句话现在是反的）：第三个是 `image/infrastructure/registry/image-spec.registry.ts`（`DefaultImageSpecRegistry`，2026-08 镜像切片），与前两个同构——内建 provider 走同一个公开 `register()`、重名 fail-fast。⏳ `dynamic-module-registry.ts` / `plugin-loader.ts` 仍**不存在**（插件目录扫描标为后续，理由见 04 §8 方式二）。
 
 ## 3. 分层依赖规则（eslint-plugin-boundaries 强制）
 

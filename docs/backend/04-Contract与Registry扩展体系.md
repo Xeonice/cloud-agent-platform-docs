@@ -18,7 +18,7 @@ packages/contracts/                 # 现名 @platform/contracts（private）；
 ├── src/
 │   ├── sandbox-provider.contract.ts
 │   ├── runtime-adapter.contract.ts
-│   ├── image-spec.contract.ts     # ⏳ 未实现，随镜像管理切片落地
+│   ├── image-spec.contract.ts     # ✅ 已落地（§7 / §8 / §10.4）
 │   ├── errors.ts                  # 统一错误模型（§4）
 │   ├── registry.tokens.ts
 │   └── testkit/                   # 契约一致性套件（§10），子路径导出 /testkit
@@ -112,11 +112,24 @@ interface SandboxProvider {
 |---|---|---|
 | create / start / stop / destroy | OCI 容器 create/start/stop/rm（经 socket proxy，文档 11 §1） | BoxLite 库调用创建/启动/停止/销毁 Box |
 | inspect | 容器 inspect + 健康探针 | Box 状态查询 |
-| spawn(tty=false) | 经 in-sandbox API `POST /v1/bash/exec`（收集输出到 EOF）——**选它而不是 `/v1/shell/exec`，是因为后者不支持 `env`/stdin/signal**（§2.3★） | 同左（Box 内 `:8080`，端口转发） |
-| spawn(tty=true) | 经 in-sandbox API `ws /v1/shell/ws`，翻译成 `ProcessStream` | 同左（Box 内 `:8080`，端口转发） |
+| spawn(tty=false) | 经 in-sandbox API `POST /v1/bash/exec`（收集输出到 EOF）——**选它而不是 `/v1/shell/exec`，是因为后者不支持 `env`/stdin/signal**（§2.3★） | **BoxLite native `Box.exec(tty=false)`**，`wait()` 取 `exitCode` |
+| spawn(tty=true) | 经 in-sandbox API `ws /v1/shell/ws`，翻译成 `ProcessStream` | **BoxLite native `Box.exec(tty=true)`** + `stdin()` / `resizeTty()` |
 | watchEvents | ✅ 原生事件流 | ✅ 库回调包装成同一 `AsyncIterable` |
 | `jobs`（§2.6） | ✅ 已实现（S6）：`POST /v1/bash/sessions/create` → `POST /v1/bash/exec async_mode` → `POST /v1/bash/output`（游标读 + 长轮询）；`ws /v1/bash/ws` 只做**唤醒**、不取字节（理由见 §2.6 ★★ 下的实现注记） | 同左（共用同一个 data-plane 客户端） |
 | `files`（§2.6） | ✅ 已实现（S6）：`GET /v1/file/download`·`POST /v1/file/write`·`POST /v1/file/list` | 同左 |
+
+> ⚠️ **这两行 2026-08-26 之前都写着「同左」**——boxlite 复用 aio 的 `AioSandboxAgentClient`，
+> 理由是"两个 provider 跑同一个镜像、所以是同一个 agent"。那是**当前配置的巧合，不是契约
+> 保证的性质**，而代价是 boxlite 的可用性挂在第三方镜像里的一个 python 服务上：实测同一个
+> box、同一条 `codex --version`，native `exit=0` 拿到输出，沙箱内 API 侧 500 且 agent 此后
+> **永久挂死**。完整证据与被否掉的假设见
+> [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md) 决策 A 修订。
+>
+> ⚠️ **契约没变，变的只是实现**：`ProcessSpec` 的 `env` / `cwd` / `user` / `timeoutMs` /
+> `stdin` / `cols,rows` 在 native 侧**全是原生参数**（逐字段核对过），不需要翻译损耗；
+> `kill()` 还从"往 PTY 里写 `ETX + exit\n`"换成了真信号 `signal(n)`。
+> 两档的一致性**由契约测试 `runSandboxProviderContractTests` 保证，不再由共享实现保证**——
+> 共享实现保证的是"两边一样"，而它一旦对某个 provider 不适用，"一样"就变成一起错。
 
 > **boxlite 那两个"同左"的依据**：boxlite 跑的是**同一张镜像** `agent-infra/sandbox:latest`，复用**同一个** `AioSandboxAgentClient`，只是 guest `:8080` 转发到宿主 loopback 端口 ⇒ 端点集合相同是结构性成立。**文件面已在真 micro-VM 上单独实测（2026-08）**：文本往返 ✅；二进制 260B **逐字节一致**、`application/octet-stream` ✅；`list` 返回结构与 aio 一致（`modified_time` 同样是字符串装的 epoch 秒）✅；**8MB 下载 12ms**（aio 是 36ms）✅；**宿主写入到 guest 可见 3ms** ✅；缺文件的两套错误约定与 aio **完全一致**（download 回 404、read 回 `success:false` + `error_type:"not_found"`）✅。⇒ 跨 virtio-fs 没有观察到额外的传播代价。
 
@@ -862,6 +875,55 @@ interface ProviderEvent {
 
 ## 7. ImageSpec contract 与镜像约定
 
+> **落地状态（✅ 已落地——2026-08 镜像管理切片；本块此前写的是「整节不存在」，那句话现在是反的）**
+>
+> | 本节写的东西 | 今天 | 证据 |
+> |---|---|---|
+> | `ResolvedImageSpec` | ✅ **在用**，仍是三字段；注册期的两个字段落在**继承它**的 `ResolvedImage` 上（见「★ 两个形状」） | `packages/contracts/src/sandbox-provider.contract.ts`；`provider.create()`、`getInstallPlan()`、`ensureRuntimeInstalled()` 三处都在读它 |
+> | `ImageSpecProvider` / `ImageSpecManifest` / `ValidationResult` | ✅ **已定义** | `packages/contracts/src/image-spec.contract.ts`（连同 `ResolvedImage` / `ImageSpecRegistry` / 六个错误码 / `pinnedImageRef` / `parseImageRef`） |
+> | `resolve()` / `validate()` | ✅ **有实现**：`resolve` 走 OCI Distribution API 解出真 digest **并带回 `rootfs.diff_ids`**（同一份 config blob，零额外请求），`validate` 判入口约定 + 预装 warning、零 IO（**不判 tmux、不判血统**，见 ★血统） | `packages/modules/image/src/infrastructure/spec/oci-image-spec.provider.ts` + `oci-registry.client.ts` |
+> | `IMAGE_SPEC_REGISTRY` | ✅ **有实现、有 DI 绑定、有第三方注入点**（§8） | `packages/modules/image/src/infrastructure/registry/image-spec.registry.ts`；`image.module.ts` 里 `provide`+`exports` |
+> | 四个时刻 ①②③④ | ✅ **全部接线**：①② 是 `M/image` 的两个端点；③ 在 `admit()` 的 `resolveImage()`（改成查库换 `manifestId`）；④ 在 `imageSpecOf()`（按 manifest id 读回 `ref`+`digest`），两个内建 provider 都过 `pinnedImageRef()` | `image.controller.ts` / `sandbox-application.service.ts#resolveImage` / `provision-sandbox.workflow.ts#imageSpecOf` / `docker-container-backend.ts:124`、`boxlite-sandbox.provider.ts:91` |
+> | 镜像约定（bash / tmux / HOME 可写） | ⚠️ **由「标签声明」改为「血统验证」（2026-08，见下方 ★血统）**：注册期验证 `rootfs.diff_ids` 是某张平台预制镜像的前缀扩展（不满足 ⇒ `IMAGE_BASE_REQUIRED`）；bash / tmux / node 由**平台自己构建预制镜像**来保证，不再逐条判定声明 | `image-application.service.ts#assertAdmissible`；`api/images/platform-base/Dockerfile`；testkit IS-05 |
+>
+> **仍然只有一半，而这一半是设计要的**：注册期验证的是**血统**（可验证的事实），运行期查的是镜像**实际是什么**（`command -v tmux` ⇒ `IMAGE_CONTRACT_VIOLATION`）。两层各管一半、谁也替不了谁，见下方 ★血统。**bash 与 HOME 可写这两条约定仍然没有独立的判定方**——它们现在挂在「平台自己构建的预制镜像里有」这个前提上，而这个前提由血统前缀承接；写在这里，免得下一个人以为有人在逐条检查它们。
+
+#### ★ 两个形状：`ResolvedImageSpec` 在文档与代码里不是同一个类型
+
+切片落地后，这两个形状**没有合并成一个，而是拆成了继承关系**：`ResolvedImageSpec` 原样保留三字段（运行期消费者只读这三个），注册期多出来的两个字段落在 `ResolvedImage extends ResolvedImageSpec` 上。下面的对照表因此从「两个阶段」变成「两个读者」——保留它，是因为**「文档画一个类型、代码是两个」这件事本身仍然是一处需要说清的落差**。
+
+**今天的形态（✅ 在用，`packages/contracts/src/sandbox-provider.contract.ts` 原文）**：
+
+```typescript
+/** Already resolved + validated image (04 §7); providers do not re-validate. */
+export interface ResolvedImageSpec {
+  ref: string;
+  digest: string;
+  entrypoint?: string[];
+}
+```
+
+| 字段 | 本节原文（订正前） | 今天的代码 | 落在哪个类型上 | 差在哪、为什么 |
+|---|---|---|---|---|
+| `ref` | `string` | `string` | `ResolvedImageSpec` | 字段一致，**但两处的 `ref` 指的不是同一个东西**——见下方 ⚠️ |
+| `digest` | `string?`（**可选**） | `string`（**必填**） | `ResolvedImageSpec` | **代码比文档严，而且严得对**：可选的 digest 等于允许「没钉住坐标」，与下方方法表里 `resolve` 那一行明说的要求直接冲突。**按代码改文档，不是反过来** |
+| `manifest` | `ImageSpecManifest` | ✅ `ImageSpecManifest` | **`ResolvedImage`** | 已存在，但**没有挂到 `ResolvedImageSpec` 上**：`provider.create()` 与 `getInstallPlan()` 从来不读 manifest，挂上去等于逼每个不读它的调用点（adapter 的 `ANY_IMAGE` 中性 spec、所有手搓 context 的 provider e2e）造填充物——正是 §8「两处设计取舍」①反对的死契约 |
+| `resolvedAt` | `string` | ✅ `string` | **`ResolvedImage`** | 同上。它的读者是镜像聚合与 P21-4 §5 卡片的「上次解析时间」，不是 provider |
+| `entrypoint` | **不存在** | `string[]?` | `ResolvedImageSpec` | 它是 `manifest.entrypointContract.entrypoint` 的运行期投影。**今天仍然零 provider 消费方**（两个内建 provider 都只读 `ctx.image.ref`；docker 后端刻意**不**覆盖 agent 镜像自带的 entrypoint，那个 entrypoint 要负责起 `:8080` 的 agent）——`resolve()` 会填它，但没人读 |
+
+**这两个类型结构上是可赋值的**：`ResolvedImage` 处处能当 `ResolvedImageSpec` 用，所以本节画的「一个类型五个字段」在使用上没有落空。拆的理由写在 `image-spec.contract.ts` 那个类型的注释里，与上表第三行同源。
+
+**为什么运行期那个类型仍然只有三个字段**：它不是纸面类型，它是被 `SandboxProviderContext.image` 带进 `provider.create()` 的入参，也是 `getInstallPlan(imageSpec)` 的唯一入参。**类型的宽度跟着读者走**——剩下两个字段的读者在注册期，就落在注册期那个类型上。
+
+⚠️ **`ref` 这个词在本仓有两个所指，这是本节最容易出事的一处**（与 L-4 / L-8 同病：同一个词在两处指不同东西，就一定会出事）：
+
+- **`ResolvedImageSpec.ref` = 仓库坐标**（`agent-infra/sandbox:latest`），它直接进 `docker createContainer({ Image })` 与 boxlite `create({ image })`；
+- **`sandboxes.image_ref`** 按 13 §2.4 的设计 **= `image_manifests.id`**（一个 uuid v7）。
+
+**这两个值现在已经分叉了**（切片前它们碰巧是同一个字符串，因为中间那层不存在）：`resolveImage()` 拿用户给的选择器去查 `image_manifests`，落进 `sandboxes.image_ref` 的是 **manifest id**；`imageSpecOf()` 再按这个 id 读回行，把行上的**仓库坐标**交给 provider 当 `ResolvedImageSpec.ref`。数据库侧由 `sandboxes.image_ref → image_manifests(id)` 的外键（`drizzle/0010`，ON DELETE RESTRICT）钉住这个语义。**切片之前写的、把两者当同一个东西读的代码今天会错**——但它不会报任何错，所以这条 ⚠️ 保留。
+
+#### 契约形态（✅ 已落地：`packages/contracts/src/image-spec.contract.ts`）
+
 ```typescript
 interface ImageSpecManifest {
   name: string;
@@ -871,19 +933,28 @@ interface ImageSpecManifest {
   supportedRuntimes: string[];
   resourceDefaults: ResourceQuota;
   labelsRequired?: string[];
+  diffIds: string[];           // rootfs.diff_ids —— 血统锚点（★血统）；与 Labels 同在一份 config blob 里，零额外成本
 }
 
 interface ImageSpecProvider {
   readonly name: string;
-  resolve(ref: string): Promise<ResolvedImageSpec>;
+  resolve(ref: string): Promise<ResolvedImage>;
   validate(manifest: ImageSpecManifest): ValidationResult;
 }
 
+// 运行期形态（sandbox-provider.contract.ts）——宽度只跟着 provider.create() 的读者走
 interface ResolvedImageSpec {
-  ref: string;
+  ref: string;                 // 仓库坐标，不是 image_manifests.id —— 见上方 ⚠️
+  digest: string;              // ⚠️ 原写 `digest?`（可选），已按代码与本节 resolve 的要求改为必填：
+                               //    可选的 digest 等于允许「没钉住坐标」，那正是本节要禁的事
+  entrypoint?: string[];       // manifest.entrypointContract.entrypoint 的运行期投影
+  supportedRuntimes?: string[];// 2026-08 新增：manifest 上冻结的预装声明，唯一读者是 getInstallPlan（见 ★ 第 3 条）
+}
+
+// 注册期形态：resolve() 的返回值，多出来的两个字段读者在镜像聚合，不在 provider
+interface ResolvedImage extends ResolvedImageSpec {
   manifest: ImageSpecManifest;
-  digest?: string;
-  resolvedAt: string;
+  resolvedAt: string;          // 本次解析的 ISO 时刻 —— P21-4 §5 卡片的「新鲜度」那一半
 }
 
 interface ValidationResult {
@@ -895,12 +966,350 @@ interface ValidationResult {
 
 | 方法 | 平台拿它干什么 | 谁在什么时候调 | 要点 |
 |---|---|---|---|
-| `resolve` | 把用户写的 ref（tag / digest / 内部别名）钉成一个**不可变**的镜像坐标 + manifest | 创建 sandbox 的校验阶段，早于进调度队列 | 必须解出 `digest`，否则同一 tag 前后两次创建可能不是同一镜像 |
-| `validate` | 判断这个镜像能不能被平台正常驱动（入口约定、支持的 runtime、资源默认值） | 镜像注册时；`resolve` 之后再校一次 | 只做**判断**不做修复；结果落 `image_manifests.validation_status`（13 §2） |
+| `resolve` | 把用户写的 ref（tag / digest / 内部别名）钉成一个**不可变**的镜像坐标 + manifest | **注册期与重验证期各一次（走网络）；建 sandbox 的校验阶段只读库、不走网络** —— 四个时刻的完整定案见下方「`resolve` 到底在哪一步被调用」。⚠️ 本格原写「创建 sandbox 的校验阶段，早于进调度队列」，那句话没说清**要不要在门口发一次网络请求**，而那恰好是全条最关键、也最容易写反的一步 | 必须解出 `digest`，否则同一 tag 前后两次创建可能不是同一镜像。**⚠️ 今天的代码明确违反这一条**，见下方 ★ |
+| `validate` | 判断这个**镜像规格**本身能不能被平台驱动（入口约定 ⇒ error；预装了哪些 runtime ⇒ warning） | 镜像注册时；`resolve` 之后再校一次 | 只做**判断**不做修复；结果落 `image_manifests.validation_status`（13 §2）。⚠️ **它不判血统、也不判 tmux**——那两条一个需要库状态、一个需要沙箱实测，都不是「对着一个 manifest 的纯判断」（IS-04）。落点见 ★血统 |
+
+#### ★ `digest` 曾经是一句谎话（✅ 2026-08 已修；这一条留着是因为它的教训比它的结论值钱）
+
+上面方法表的 `resolve` 那一行写着「**必须解出 `digest`，否则同一 tag 前后两次创建可能不是同一镜像**」。
+**在镜像切片之前**，代码里对应位置的全部实现是这样：
+
+```ts
+// 存档：镜像切片之前的 M/sandbox/.../provision-sandbox.workflow.ts#imageSpecOf
+private imageSpecOf(sandbox: Sandbox): ResolvedImageSpec {
+  return { ref: sandbox.imageRef, digest: 'sha256:unresolved' };
+}
+```
+
+**当时这不是「还没做」，是「文档陈述了一条要求、代码明确地违反它，而在此之前没有任何地方记着这个差距」** ——
+与 `WORKSPACE_PREPARE_FAILED`（五处后端文档承诺、零个产出方，10 §6.8）是同一个形状的缺陷：
+两侧各自看起来都完整，合起来漏一条，而没有任何门禁会红。
+
+**今天的形态**：`imageSpecOf()` 按 `sandboxes.image_ref`（= manifest id）查回那一行，
+交给 provider 的是行上冻结的 `{ ref, digest }`，再经 `pinnedImageRef()` 拼成 `ref@digest`。
+`'sha256:unresolved'` 这个字符串在生产路径上**已经没有产出方**——它只剩两个读者，
+都是**防它回来**的：`pinnedImageRef()` 对非法 digest 降级回 tag（而不是拼出一个拉不动的坐标），
+以及 testkit **IS-01 断言 `sha256:` + 64 位十六进制而不是「非空」**（§10.4）。
+
+**下面三条后果按 2026-08 复核标注**——**第 3 条至今仍然成立**：
+
+1. ✅ **已解决——`:latest` 漂移时平台完全无感。** 门口不再原样放行任意字符串：`resolveImage()` 只接受**已注册**的坐标或 manifest id，取出的是注册期冻结的 digest；tag 被重推只能由显式的[检查更新] / [重新验证]发现（时刻②），那正是本节想要的「可见的坐标迁移」。
+2. ✅ **已解决——事后可判定「这次任务当时跑的是哪个镜像」。** `sandboxes.image_ref` 现在外键指向 `image_manifests(id)`（`drizzle/0010`，ON DELETE **RESTRICT**），而 manifest 行不可变（23 I-IMG-7），所以历史 Task 的 digest 仍然可精确复原。**⚠️ 一个例外要记明**：切片前就存在的 sandbox 行被迁移置 NULL，它们的 digest **不可复原**，重启时按平台默认镜像 + 空 digest 降级（`pinnedImageRef` 退回 tag）并打 WARN——这是刻意的，凭空编一个 digest 就是把占位符换个地方放（13 §2.1）。
+3. ✅ **已解决（2026-08 ★血统 一并收掉）——`getInstallPlan` 的预装判定曾经是对 tag 而不是对 bits 做的。** 存档原实现：`imagePreinstalls()` 拿 `imageSpec.ref` 去匹配 `/agent-infra\/sandbox/i`、`/cap-boxlite-sandbox/i` 这类正则（`runtime/infrastructure/adapters/install-plan.util.ts`）。**拿名字回答关于 bits 的问题必然错**：对平台自己的镜像站 `localhost:5001/platform/sandbox:v1` 判「没预装」，tag 重推之后判定还是老答案，对用户注册的镜像则一无所知。**它当年没酿成事故，只是因为 `ensureRuntimeInstalled` 每次都跑一次真的 `isInstalled` 探测**，把一个错误的判定降级成一次多余的安装（§3 的「preinstalled 声明被探测证伪就响亮失败」）——⚠️ **那是「被别的机制兜住」的错，不是「没错」**，兜底哪天被当成冗余优化掉它当场变成事故。**修法**：`ResolvedImageSpec` 加 `supportedRuntimes?: string[]`（此前 §8 取舍① 反对的是「加一个**没有读者**的必填字段」，现在它有读者了，而且是可选的，这是正当的加法），由 `imageSpecOf()` 从 manifest 行带下来，`getInstallPlan(imageSpec)` 读镜像**自己的声明**而不是它的名字。未声明 ⇒ 退化成现装，与旧表对「没听说过的镜像」给的是同一个答案，方向也安全。
+
+#### `resolve` 到底在哪一步被调用（镜像切片的定案）
+
+**四个时刻，其中只有两个走网络，而它们都不在建 Task 的门口**：
+
+| # | 时刻 | 做什么 | 走网络 | 产物落在哪 |
+|---|---|---|---|---|
+| ① | **注册** `POST /api/images` | `resolve(ref)` 解出 manifest + digest，`validate(manifest)` 判三级 | ✅ | `image_manifests.digest`（CHECK 非空 = 23 I-IMG-6）+ `validation_status` / `validation_errors` |
+| ② | **重验证** `POST /api/images/:id/validate` | 再 `resolve` 一次。**digest 变了 = 这个 tag 被重推过** | ✅ | 写回同两列；**digest 的变化必须在响应里说出来（旧 → 新）**——它是一次坐标迁移，不是一次「刷新成功」 |
+| ③ | **建 Task 门口** `admit()` | 按用户选的镜像查 `image_manifests`：`is_active`（I-IMG-3）+ `validation_status != 'invalid'`（I-IMG-2），**取出①已冻结的 digest** | ❌ | `sandboxes` 行上的镜像坐标（含 digest） |
+| ④ | **provision** `imageSpecOf()` | 从 sandbox 行读回 `{ ref, digest }` 交给 `provider.create()`；provider 按 **`ref@digest`** 拉取 | ❌ | —— |
+
+> **⚠️ 为什么③不在门口走网络（这是全条最容易写反的一步）**
+>
+> 门口拒绝的性质是「原样再发一次必然同样被拒」，10 §6.8 才敢把**门口拒绝一律 `retryable:false`** 写成
+> **门的性质而非逐条判断**。而在门口发一次 registry 请求，就会引入 `REGISTRY_UNREACHABLE`(502) ——
+> **零副作用、但 `retryable:true`**。它会成为创建门里第一条「再试一次说不定就好了」的拒绝，
+> 把那条结构性结论降级回逐条判断，而门口拒绝的清单是会长的（`BRANCH_NOT_FOUND` 就是后加的第七条）。
+>
+> 把网络留在①②、门口只读库，门就还是那扇门。代价是「tag 被重推」只能靠②被显式发现——
+> **而这恰好是我们要的**：坐标迁移应当是一次用户可见的动作，不是一次没人知道的漂移。
+> 这与 §2.1★「注册期判定不免除运行期实测」不冲突：运行期实测（`command -v tmux`、`isInstalled`）
+> 探的是**这个沙箱里的事实**，不需要出网；而 digest 解析必须问 registry。
+
+> **⚠️ 为什么只有①还不够，③④一个都不能省**
+>
+> ①冻结的是「注册那一刻的镜像」，而 Task 是后来才建的。
+> **没有③**：`is_active=false` 的镜像照样能被新 Task 选中，I-IMG-3 直接失效（今天就是这个状态）。
+> **没有④**：钉住的 digest 只是库里一个没人读的字段——provider 仍然按 tag 拉，前面三步白做。
+> **「不可变坐标」这件事，只在最后交给 provider 的那个字符串是 digest 时才成立。**
+
+> **✅ ③的前提已经就位（本块此前写的是「表还不存在」，那句话现在是反的）**
+>
+> `sandboxes.image_ref` 已改为**外键指向 `image_manifests(id)`**（`drizzle/0010`，ON DELETE RESTRICT），
+> 存的是 manifest id 而不是 `alpine:3.20` 这样的仓库坐标；仓库坐标由 manifest 行提供。
+> 存量行在迁移中被置 NULL（不编造 digest），因此④对 NULL 做**降级而非崩**——
+> 迁移口径与那条取舍见 13 §2.1 / §2.4。
 
 > 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
 
 镜像约定（写入用户文档）：**必须含 bash 与 tmux**——tmux 于 2026-08 由用户裁决**从「建议」升为「必须」**（轨迹见下方 ★ 与 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）：缺 tmux 时 `validate()` 产出 **error（`IMAGE_TMUX_MISSING`）、`valid:false`、镜像不合格**，既不能注册也不能被 Task 选用（不再是 warning，无 tmux 镜像**不能**用）；**runtime CLI 强烈建议预装**，install plan 现装只作兜底；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
+
+#### ★血统 `validate()` 从「标签声明制」改为「血统验证制」（2026-08 定案，取代同位置的「标签声明」条）
+
+> **原条款（存档，勿当现状读）**：本小节此前叫「`validate()` 靠**标签声明**判定，不靠探测文件系统」，
+> 结论是「缺 `platform.tmux=true` ⇒ `valid:false` + `IMAGE_TMUX_MISSING`，镜像不入库」，并明说
+> 「代价必须写在明处：第三方镜像不打标签就注册不了」。**那个代价当场把平台自己撞死了**，见下方 ①。
+> 存档它是因为它的推理链前半段仍然成立（`resolve()` 看不见文件系统、拉层与起容器两条路都走不通），
+> 被推翻的只是结论那一步：**它选了「声明」，而同一份 config blob 里其实就躺着一个可验证的事实**。
+
+**`resolve()` 能拿到的仍然只有 manifest 与 config blob**（`Env` / `Entrypoint` / `Cmd` / `Labels` /
+`User` / `WorkingDir` / **`rootfs`**）——**看不见文件系统里有没有 `/usr/bin/tmux`**。要看见只有两条路，
+都走不通：拉层下来翻文件违反 §3「`resolve()` 只做元数据解析，不拉层数据」；拉下来起容器跑
+`command -v tmux`，AIO 镜像 3.3GB 而 [验证] 的超时是 **60s**（P21-4 §6）。
+
+**推翻「标签声明制」的两件事**：
+
+1. **平台连自己依赖的镜像都注册不了。** `ghcr.io/agent-infra/sandbox` 是第三方镜像，不会打我们发明的
+   `platform.*` 标签，于是被判 `MANIFEST_INVALID` ——本地起服务时当场撞上。
+   ⚠️ 一度想把「缺标签」降成 warning：那是**测试红了就放宽断言**，被否。
+2. **用户加了一条新约束：自定义镜像必须基于平台预制镜像。** 这条约束让「验证」取代「声明」**成为可能**
+   ——有了公认的起点，就有了可比对的锚。
+
+**实测事实（真 HTTP 打真 registry，`localhost:5001`）**：
+
+| 事实 | 实测 |
+|---|---|
+| 派生关系可以只用 config blob 验证 | 派生镜像的 `rootfs.diff_ids` 是基础镜像 `diff_ids` 的**前缀 + 新层**：预制 77 层 / 自定义 78 层，前 77 层逐位相同 |
+| 零额外成本 | `resolve()` 为读 `Labels` 本来就取那份 config blob，`diff_ids` 在同一份里，**不需要拉任何层** |
+| `LABEL` 不产生新层 | 只加标签的派生镜像，`diff_ids` 与基础**完全相同** ⇒ **相等也必须算派生** |
+| 标签会被继承 | `demo/custom` 一个 `platform.*` 都没写，却继承了基础的全部三个 ⇒ ⚠️ **标签在派生场景里不但不能证明什么，还会主动说谎**（`RUN rm /usr/bin/tmux` 之后仍继承 `platform.tmux=true`） |
+| 锚点必须用 `diff_ids` 而不是 manifest digest | `diff_ids` 是**解压后**内容的哈希，manifest digest 是**压缩后** blob 的哈希；把 base mirror 到内网 registry 重新压一遍，digest 变而 `diff_ids` 不变 |
+
+##### ① 三层判定，各管一段，谁也不假装知道自己不知道的事
+
+| 事实 | 怎么知道 | 谁来判 |
+|---|---|---|
+| 是否基于平台预制镜像 | `rootfs.diff_ids` 前缀 | **注册期，可验证** ⇒ `IMAGE_BASE_REQUIRED` |
+| 预制镜像有 tmux / bash / node | 平台自己构建的（`api/images/platform-base`） | 平台自己保证 |
+| 派生镜像没删掉 tmux | 元数据看不出来 | **运行期实测** `command -v tmux` ⇒ `IMAGE_CONTRACT_VIOLATION`（已存在，未改） |
+| 预装了哪些 runtime CLI | 标签（可继承、可能过期） | 只驱动 **warning**（`RUNTIME_NOT_PREINSTALLED`），**不阻断、也不影响可选性** |
+
+**「注册期拦住的是不声明，运行期拦住的是谎报」这句话仍然成立，只是前半句换了内容**：注册期现在拦的是
+**「不是从平台预制镜像长出来的」**，那是一个可验证的事实，而不是一句自述。
+
+##### ② 血统校验放在 **application 层**，不放进 `ImageSpecProvider.validate()`
+
+两条理由，都写进了代码注释（`image-application.service.ts#assertAdmissible`）：
+
+- **`validate(manifest)` 必须保持纯判断**（testkit IS-04：不修改入参、不产生副作用，因而可脱离事务重跑）。
+  血统校验需要知道「平台注册过哪些 base」——那是**库里的状态**，塞进去就破了 IS-04。
+- **血统是平台策略，不是镜像规格。** `ImageSpecProvider` 是可被第三方替换的 SPI（`registry-extension.e2e`
+  就换过一个）；把平台自己的准入策略塞进 SPI，等于要求每个第三方实现执行我们的策略。
+
+##### ③ 两个入口，两套规则
+
+`registerImage` 已有 `opts: { builtin?: boolean }`（只有 `ImageSeeder` 传 `true`）：
+
+- **根镜像**（`builtin: true`，运维方在 `SANDBOX_DEFAULT_IMAGE` 里指定的那张）：**豁免血统校验**——
+  它就是锚点，没有更早的祖先。改为校验它**声明**了 `platform.tmux`（缺 ⇒ `IMAGE_TMUX_MISSING`）。
+  ⚠️ 这是**运维方对自己指定的镜像做的一次声明**，作用是**开机抓住「指错了镜像」**，**不是防谎报**——
+  防谎报靠运行期实测。
+- **派生镜像**（REST 注册）：校验 `diff_ids` 是**某个已注册 builtin manifest 的 `diff_ids` 的前缀扩展**
+  （**含相等**）。不满足 ⇒ `IMAGE_BASE_REQUIRED`（`details[].code`，顶层仍是 `MANIFEST_INVALID` 422），
+  message 说清出路是「改成 `FROM <平台预制镜像>` 重新构建」并**点名那张镜像**。
+- ⚠️ **鸡生蛋**：库里一个 builtin 都没有时（播种失败，比如离线部署），派生注册无从校验。此时**拒绝**并
+  说清原因（「平台还没有可用的预制镜像作为基准」），**不要静默放行**——放行等于这条约束根本不存在。
+  ⚠️ 但**不用 `IMAGE_BASE_REQUIRED`**：那句话在说「你的镜像不对」，而事实是**平台没准备好**；把用户
+  支去改 Dockerfile 是让他修一个没坏的东西。走 `INVALID_STATE`(409)，即 10 §6.8 的 **C 类**
+  「请求没错但此刻不行」，并按 C 类要求多说一句「什么时候可以」。
+- ⚠️ **幂等命中不复判**：`(image_id, digest)` 已在目录里时直接返回，不再跑准入。它进目录那一刻已经过了
+  这道门；再判一次只会让平台侧的变动（换了预制镜像、种子被清）把一次**已完成**的注册变成失败。
+- ⚠️ **预检同口径**：`POST /api/images/validate`（向导的「提交 URI → 三级反馈」）**也跑血统**。预检说 ✅、
+  保存说 422 会让两个端点各自内部正确、合起来是一句谎——本仓反复付账的正是这种形态。
+
+##### ④ `diff_ids` 落库（不是每次去问 registry）
+
+`ImageSpecManifest.diffIds` ⇒ `image_manifests.diff_ids`（json，`drizzle/0011`）。**必须落库**：锚点要跨重启
+存活；每次注册都去 registry 取所有 base 的 `diff_ids`，会把 `REGISTRY_UNREACHABLE`（本组唯一 retryable 码）
+拖进一件纯本地的比对里，并让离线部署彻底注册不了镜像。
+
+⚠️ **存量行 `diff_ids` 置空数组，语义是「未知」而不是「没有层」**：切片前的行无法回填，凭空编一个就是
+`'sha256:unresolved'` 换个马甲。`isDerivedFrom` **拒绝把空数组当锚点**（`[]` 是任何数组的前缀，认它等于
+让规则对所有镜像放行），所以这类行既不能给新镜像背书、也无法被证明是派生 —— fail-closed。
+
+⚠️ **迁移是 `ALTER TABLE ... ADD COLUMN`，刻意没有照 0010 的「建新表-搬数据-改名」12 步走**：0010 之所以
+非重建不可，是因为它要**加外键**而 SQLite 没有 `ADD CONSTRAINT`；加一个普通列没有这个限制。反过来说，
+重建 `image_manifests` 更危险——`sandboxes.image_ref` 有一条 RESTRICT 外键指着它。「照先例做」不等于
+「照先例的**动作**做」，先例真正的内容是它的**理由**。FK 纪律不变（`runMigrations` 在调用外关/开
+`foreign_keys` + 事后 `PRAGMA foreign_key_check`）。
+
+##### ⑤ `supportedRuntimes` 不再参与可选性
+
+`listSelectable(runtimeId)` 里那条 `supportedRuntimes.includes(runtimeId)` **整条删除**，签名随之收窄为
+`listSelectable()`；`GET /api/images?runtimeId=` 里的 `runtimeId` 从**筛选条件**降为**「要不要只看可选集」的开关**。
+
+理由：**血统已经保证了 node 在 ⇒ 任何合规镜像一定装得上任何 runtime**。再用「预装了没有」去否决可选性，
+等于**否认一个已经被保证的能力**，而且会让 ⚠️ 档那句「未预装、需现装 12.5 分钟」永远显示不出来——用户
+选不到那张卡。可选性只看 `isActive && validationStatus ∈ {valid, warning}`。
+
+**实测证据**：打诚实标签（只写 `codex`）之后 `GET /api/images?runtimeId=claude-code` 返回 **0 张**，
+而那是平台唯一的镜像。
+
+##### ⑥ 两张平台预制镜像（血统的起点）
+
+| 路径 | 内容 | 为什么 |
+|---|---|---|
+| `api/images/platform-base/Dockerfile` | `FROM` 上游 + 三个 `platform.*` 标签 | **零字节新层**（`LABEL` 不产生层），它就是血统锚点 |
+| `api/images/platform-sandbox/Dockerfile` | `FROM base` + 预装 claude-code | 把 §3 ★1 实测的 **753 秒**从**每个 Task**挪到**发布一次** |
+
+⚠️ **现装兜底保留**：自定义镜像可以只 `FROM base` 而不预装任何 runtime，那时 install plan 现装仍是唯一的路，
+而血统保证了 node 在 ⇒ 它一定装得上。预装是**快路径**，不是唯一路径。
+
+> 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
+
+#### ★★ 镜像要带什么 —— 按 provider 分，不是一条平台级约定
+
+⚠️ **本节 2026-08-26 重写过一次，因为上一版把「aio 的约定」写成了「平台的约定」。**
+上一版的标题是「镜像必须自带 agent HTTP API —— 血统真正担保的是这个」，结论是
+*平台的 exec / 终端 / 文件**全部**经过镜像自带的 agent HTTP API*。
+那句话对 `aio` 成立，对 `boxlite` **不成立**（决策 A 修订，见
+[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）。
+
+上一版还写了一句**事实错误**，而当初"boxlite 只能用 agent"的论证有一半就架在它上面：
+
+> ~~boxlite 更没有那条路——微 VM 里没有 `docker exec` 这种带外通道。~~
+
+⚠️ **微 VM 有带外通道**：BoxLite SDK 的 `JsBox.exec(cmd, args, env, tty, user,
+timeoutSecs, workingDir)` 就是，且带 `stdin()/stdout()/stderr()/wait()/kill()/
+signal()/resizeTty()` 全套。它一直都在（0.9.7 的 `native-contracts.d.ts` 里写着），
+只是没人去读依赖方的能力面就下了否定结论——**与 §2.1★「拿 `docker run` 量身份」、
+§2.3★「拿 `/v1/shell/exec` 量能力上限」是同一类错的第三次**，纪律见 §2.3★。
+
+**`aio` 这一档**的 exec / 终端 / 文件确实全部经过镜像自带的 agent HTTP API：
+
+```
+镜像内 :8080（实测：预制镜像里 nginx 监听 0.0.0.0:8080，背后 8091/8092/8100 几个服务）
+  ws  /v1/shell/ws          交互终端
+  POST /v1/bash/exec        一次性命令（选它而非 /v1/shell/exec：后者无 env/stdin/signal，§2.3★）
+  POST /v1/bash/sessions/create · /v1/bash/kill · /v1/bash/output · /v1/bash/write
+  POST /v1/file/list · /v1/file/write
+读 JWT_PUBLIC_KEY 做鉴权；读 BASH_SESSION_TIMEOUT / MAX_BASH_SESSIONS（§2.6 ★★★ 生存义务）
+```
+
+`AioSandboxProvider` 写死 `agentPort: 8080` 且**不设** `keepAliveCmd`（"AIO 镜像自带
+entrypoint 会起 agent，不能覆盖"），所以那条 `DockerExecAgentClient` 裸镜像 fallback
+**当前配置下走不到**。
+
+**`boxlite` 这一档不经过它**：数据面走 BoxLite native exec / PTY，沙箱里跑不跑
+HTTP agent 与平台无关。推翻上一版结论的实测（同一个 box、同一条命令：native
+`exit=0` 拿到输出，沙箱内 API 侧 500 且 agent 此后永久挂死）见 ADR 决策 A 修订。
+
+⚠️ **所以「血统担保什么」要按档说，上一版那句一刀切的话是错的：**
+
+| | 血统 + 运行期探测担保的 | 缺了会怎样 |
+| --- | --- | --- |
+| 两档共同 | **tmux**（agent 会话由沙箱内 tmux server 持有，平台重启后会话还在） | 会话起不来 ⇒ `IMAGE_CONTRACT_VIOLATION` |
+| 两档共同 | 平台预制的 runtime CLI（`platform.supportedRuntimes` 声明的那些） | 声明被探测证伪 ⇒ `INSTALL_FAILED`（§3） |
+| **仅 aio** | **镜像自带的 agent HTTP API** | 平台连一条命令都发不出去 |
+
+注册期只能查血统而查不出这些，理由不变：**要验的不是文件，是"这张镜像启动之后会不会
+给我一个能干活的通道"**——任何静态元数据都验不出来，只能靠运行期探测（下面那张表）。
+
+**运行期实测（2026-08 新增，`terminal-session.service.ts#assertImageContract`）**：
+`bootstrapAgentSession` 起会话前那次 `command -v tmux` 探测**本身就要经过 agent**，
+所以它同时是 agent 的探针——不需要再发一个请求，需要的是把两种失败**分开命名**：
+
+| 失败 | 判据 | 抛什么 |
+|---|---|---|
+| agent 不可达 | `exec` **抛出**（传输层：connection refused / 超时） | `IMAGE_CONTRACT_VIOLATION`，message 说明是 agent 并带上原始错误 |
+| tmux 缺失 | `exec` 返回、退出码非零 | `IMAGE_CONTRACT_VIOLATION`，message 说明是 tmux |
+
+⚠️ 在此之前第一种会沿着 `failureOf` 落成 `INTERNAL`，用户看到「服务内部错误，请稍后重试」
+——而真相是这张镜像不满足约定，重试一万次也不会变。**失败发生在正确的位置，却被叫了一个
+让用户走错方向的名字**，与 `ENOSPC` 曾被当成平台错误码是同一种病（10 §6.8）。
+
+#### ★★★ 怎么定制基础镜像（写给私有化部署的运维方）
+
+私有化场景有一个平台**无法预先设计**的真实需求：客户要给 codex / claude-code 提供内部
+CLI —— `lark-cli`、`gcode` 这类。平台不需要认识它们，做法是**派生**：
+
+```dockerfile
+FROM <平台预制镜像>            # 例：ghcr.io/<org>/platform-sandbox:v2
+RUN install-lark-cli && install-gcode
+```
+
+注册它就能用 —— 血统校验按 `rootfs.diff_ids` 前缀通过（客户的层是平台层的扩展）。
+私有化场景天然适合这条路：内部 CLI 通常来自内网 registry、要内网凭证，
+**在客户自己网内构建**是最顺的，平台不必参与。
+
+**三条硬规则，违反的后果各不相同 —— 后两条尤其要注意，它们注册期查不出来：**
+
+| 规则 | 违反后 | 什么时候暴露 |
+|---|---|---|
+| 必须 `FROM` 平台预制镜像 | `IMAGE_BASE_REQUIRED` | **注册期**，说得清 |
+| **不许覆盖 `ENTRYPOINT`** | agent 起不来 ⇒ `IMAGE_CONTRACT_VIOLATION` | ⚠️ **运行期** |
+| 不许删掉 tmux / bash | 同上 | ⚠️ **运行期** |
+
+⚠️ **第二条最容易踩，而且注册期一定放行。** 预制镜像的 `ENTRYPOINT` 是 `/opt/gem/run.sh`
+—— **它负责起 `:8080` 的 agent**（§2.4，docker 后端刻意不覆盖它）。而 `validate()`
+只检查 entrypoint **非空**（`IMAGE_ENTRYPOINT_INVALID` 只在两者皆无时报），
+所以一张写了自己 `ENTRYPOINT` 的派生镜像**注册完全通过**，直到起 Task 时 agent 不可达。
+
+> 要在容器启动时跑自己的东西，**追加而不是替换**：把它写进 `/opt/gem/run.sh` 认识的钩子，
+> 或者让 agent 起来之后由 Task 自己执行。`ENTRYPOINT` 是平台的，不是镜像作者的。
+
+**`platform.supportedRuntimes` 标签会被继承**（实测：一张什么标签都没写的派生镜像继承了
+基础镜像的全部三个）。只装内部 CLI、不动 runtime 的话，继承是对的；**额外预装了某个
+runtime CLI 就要自己改写这个标签**，否则平台会以为它没预装、在选择时给出一句
+「需现装约 12.5 分钟」的假警告。
+
+**装什么该走哪条路 —— 三种机制不是竞争关系：**
+
+| | 适合 | 代价 |
+|---|---|---|
+| **派生镜像**（本节） | 有依赖树的东西（apt/npm 装出来的） | 要 build + registry；**平台升级要重打** |
+| **只读工具卷**（`VolumeMount{mode:'ro'}`，契约已有，⏳ 未接线） | **静态链接的单文件 CLI** | 二进制必须是 **guest 架构**（macOS 宿主上要另备 Linux 版）；**没有依赖解析**，apt 装的东西带一串 `.so`，手工拷会漏 |
+| 声明式 recipe（devcontainer features 那套） | 让平台能自动 rebase | 要造构建流水线，⏳ 未做 |
+
+**代价必须写在明处：rebase 是客户的。** 平台发新预制镜像（CLI 升级、安全补丁）之后，
+客户那张 `FROM ...:v2` 的派生镜像**不会自动跟上**，需要重新构建并注册。
+
+⇒ 平台在注册时记下 `image_manifests.derived_from_digest`（**匹配到的最长前缀锚点**，
+即最近的祖先），所以它至少**知道谁基于谁**，能在预制镜像换代时指出哪些自定义镜像已过期。
+⏳ **自动 rebase 未做**：那需要平台存的是**配方**而不是**结果** —— 存一个 digest 重不出镜像，
+存「装哪些工具、什么版本」才能在新 base 上重跑一遍。业界（devcontainer features、
+ACR Tasks 的 base image update）走的正是配方那条路。
+
+#### ⏳ 调研存档：把 agent 放进镜像，不是业界做法（2026-08）
+
+上面这条约定的代价是**用户不能用任何普通 OCI 镜像**。联网调研了主流方案，结论是
+**agent 属于运行时，不属于用户镜像**：
+
+- **Kata Containers**：agent 预置在 **Kata guest 镜像**（VM 的 rootfs，经 DAX/pmem 挂载）里，
+  随 VM 启动；用户的 OCI bundle 经 virtio-fs **另外**挂进 VM 成为容器 rootfs。
+  ⇒ **未经修改的 OCI 镜像可直接运行**。
+- **firecracker-containerd**：一个 rootfs builder 产出含 `runc` + agent 的 **VM rootfs**，
+  agent 在 VM 内调 runc 起标准 Linux 容器。⇒ **标准 OCI 镜像兼容**。
+
+⚠️ **而 BoxLite 0.9.7（本仓已装的版本）原生就有这套能力，我们没用**：
+
+```ts
+JsBox.exec(cmd, args?, env?, tty?, user?, timeoutSecs?, workingDir?) → JsExecution
+JsExecution { stdin() · stdout().next() · stderr().next() · wait() · kill()
+              resizeTty(rows, cols) · signal(n) }
+```
+
+流式 stdout/stderr、PTY resize、真实信号、退出码——**正好是中立契约 `ProcessStream`
+需要的全部**。平台用的是受限的 `SimpleBox` 包装（只有一次性 `exec`），于是绕回了镜像内 agent。
+
+**决策 A 的目标是对的，实现窄了一格。** 它要的是「契约焊在沙箱内 API 而非 docker exec，
+provider 可换、契约不变」——结果 provider 可换 ✅，**镜像不可换** ❌：契约被焊在了**一个
+特定镜像的 API** 上。而中立抽象 `ProcessStream` **本来就在正确的位置**（§2.3「AIO 协议 ↔
+中立 ProcessStream 的翻译在 provider 内完成」），只是两个 provider 恰好都用同一条翻译。
+
+**出路（未决策，登记备议）**：让每个 provider 用**自己原生的** exec/PTY 去满足
+`ProcessStream`——`boxlite` 用 `JsBox.exec(tty:true)`，`aio` 用已存在但被关掉的
+`DockerExecAgentClient`。前端与网关**零改动**（它们只认 `ProcessStream`）。
+代价要一并算清：AIO agent 还提供文件 API 与浏览器/CDP，前者两边都有替代
+（BoxLite `copyIn/copyOut`、docker archive API），后者是**镜像的功能**而非平台的要求。
+
+镜像约定（写入用户文档）：**必须基于平台预制镜像构建**（`FROM` 平台预制镜像或其派生），由此**必然含 agent HTTP API（见上方 ★★，这是最要紧的一条）、bash 与 tmux**
+——注册期按 `rootfs.diff_ids` 前缀验证血统，不满足 ⇒ `IMAGE_BASE_REQUIRED`、镜像不合格，既不能注册也不能被 Task 选用；
+tmux 于 2026-08 由用户裁决**从「建议」升为「必须」**（轨迹见下方 ★ 与 [TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2），
+运行期仍有一次 `command -v tmux` 实测兜底（⇒ `IMAGE_CONTRACT_VIOLATION`）；**runtime CLI 强烈建议预装**，
+install plan 现装只作兜底（**未预装不影响可选性**，见 ⑤）；**HOME 可写（凭证物化需要）——但平台不假设 HOME 是哪个路径**。
+
+**标签约定**（沿用容器标签的 `platform.*` 命名，§2.1 / 13 §4）——⚠️ **它们现在只驱动两件事，都不是合规判定**：
+
+| 标签 | 必须 | 语义 |
+|---|:--:|---|
+| `platform.tmux` | 仅**根镜像** | `"true"`。**只在 `builtin: true` 注册时校验**（缺 ⇒ `IMAGE_TMUX_MISSING`），作用是开机抓住「指错了镜像」。**派生镜像不校验它**——标签会被继承，问派生镜像等于问它祖宗 |
+| `platform.supportedRuntimes` | — | 逗号分隔，如 `"codex,claude-code"`。声明**已预装**的 runtime CLI；未声明的 runtime 选它时走 install plan 现装（§3）并出 warning。**不影响可选性**（⑤） |
+| `platform.resourceDefaults` | — | JSON，`{cores,ramMb,diskMb}`。缺省时调度用平台默认值（03 §1） |
 
 > **★ S5 技术验证对镜像约定的加严（2026-08 实测，数据见 §3 ★1）**
 >
@@ -908,7 +1317,8 @@ interface ValidationResult {
 > - **tmux 从「建议」升为「必须」（用户裁决 2026-08；取代 S5 裁决 D-15 原文的「强烈建议 + 两档降级」口径，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**：agent 会话由 provision workflow 在 `starting` 段起（03 §4.3 ⑤），**先于任何 WS 连接存在**，因此「谁持有这个会话」是镜像属性。
 >   - **升 MUST 之前的口径（存档，勿当现状读）**：tmux 曾是 SHOULD，缺失时 `validate()` 出 warning 并在 `ResolvedImageSpec` 上标 `supportsTmux:false`，`bootstrapAgentSession` 据此分两档——**A 档**会话由沙箱内 tmux server 持有；**B 档**（无 tmux）由终端网关持有 `ProcessStream` + ring buffer（06 §6），代价是 ① 首次 attach 前的输出受 ring buffer 上限截断、② **平台进程重启 ⇒ pty 归属者消失 ⇒ agent 会话中断**。**B 档已整体取消。**
 >   - **取代理由**：代价②对一个把 Task 当第一概念的产品不可接受——「重启一次平台就打断用户正在跑的 agent」不是可以写进镜像约定让作者自担的代价；而两个内建镜像本来就自带 tmux，为一条没人走的降级路在平台侧长期养一个分支不划算。单档之后代价①也一并消失：scrollback 的权威是 tmux 的 `history-limit`，不再有网关缓冲的截断上限。
->   - **现在的口径**：`validate()` 缺 tmux ⇒ `valid:false` + `errors[]` 含 `IMAGE_TMUX_MISSING`（testkit **IS-05 已随之从 SHOULD 升 MUST**，§10.4），镜像不能注册、不能被 Task 选用；`bootstrapAgentSession` 只有一档。
+>   - **2026-08 上半场的口径（存档，勿当现状读）**：`validate()` 缺 tmux ⇒ `valid:false` + `errors[]` 含 `IMAGE_TMUX_MISSING`（testkit IS-05 随之从 SHOULD 升 MUST），镜像不能注册、不能被 Task 选用。**这一版已被 ★血统 取代**——它把「镜像有没有 tmux」交给一句可继承、可过期的自述去回答，结果既拦不住谎报（派生镜像继承 `platform.tmux=true`），又拦住了平台自己依赖的第三方镜像。
+>   - **现在的口径（★血统）**：`validate()` **不再判 tmux**；tmux 由三层承接——预制镜像由平台自己构建保证有、派生镜像由 `rootfs.diff_ids` 前缀保证是从它长出来的、运行期由 `command -v tmux` 实测兜底。`IMAGE_TMUX_MISSING` 只剩一个产出方：**根镜像注册**（`builtin: true`）时校验运维方指定的那张镜像**声明**了 `platform.tmux`——抓的是「指错了镜像」。`bootstrapAgentSession` 仍然只有一档。testkit **IS-05 已整条改写**（§10.4，原条款同格存档）。
 >   - **注册期判定不免除运行期实测，且实测失败必须响亮**（方法论同 §2.1★）：`validate()` 是注册期静态判定，镜像换 tag、上游换 base image 都可能让它过期，所以 `bootstrapAgentSession` 起会话前仍跑一次 `command -v tmux`。**未命中不得静默降级**——实例转 `failed` + `failure_reason`，错误码 **`IMAGE_CONTRACT_VIOLATION`**（§4 / 02 §6.1 / P22 §1）。这与「agent 鉴权自检失败即 `start()` 响亮失败」（[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」）是同一条纪律：**自检不过就失败，不要安静地退化成一个和用户预期不同的东西**。
 >   - **`supportsTmux` 字段就此删除，不要再补**（本次裁决顺带结掉的契约缺口）：它此前只活在本节散文里，`ResolvedImageSpec` 的类型声明中从来没有（TASK-LAUNCH-DECISIONS §1 第 2 条登记在案）。它的两个用途现在都不存在——注册期 warning 变成了 `errors[]` 里的一条 error，运行期分支随 B 档一起取消。**合格镜像一律有 tmux，没有需要这个字段回答的问题**；运行期唯一的真相来源是那次 `command -v tmux` 实测。
 > - **HOME 路径不属于约定的一部分**：⚠️ 原写"实测 `aio` 的 `$HOME=/root`（uid 0）、`boxlite` 的 `$HOME=/home/gem`（uid 1000）"，**已更正**——那是 `docker run` 通道的观察；经平台真实 exec 通道实测，**两侧 `$HOME` 同为 `/home/gem`**（§2.1★）。这不改变本条的效力：约定只要求 **HOME 可写**，而且**恰恰因为"两侧碰巧一样"更容易诱人去硬编码，本条更要坚持**；凭证物化落点（05 §4）与 CLI 安装位置（§3 `isInstalled`）一律按**运行时 `$HOME` / PATH** 解析，镜像不需要为此对齐路径，平台也不许硬编码（§2.1★）。**S5 裁决 D-19 把这条落到了具体位置**：`RuntimeCredential.credentialFiles[].containerPath` 改为 `~/` 相对形态，`$HOME` 的展开**只发生在 `injectCredential(cred, exec)` 内部**（那里才有 `exec` 可探测）——`prepareRuntimeCredential(runtimeId)` 的签名里根本没有 sandbox，构造凭证时无从知道 `$HOME`（TASK-LAUNCH-DECISIONS T-6）。
@@ -921,7 +1331,7 @@ interface ValidationResult {
 // packages/contracts/src/registry.tokens.ts
 export const SANDBOX_PROVIDER_REGISTRY = Symbol('SandboxProviderRegistry');
 export const RUNTIME_ADAPTER_REGISTRY  = Symbol('RuntimeAdapterRegistry');
-export const IMAGE_SPEC_REGISTRY       = Symbol('ImageSpecRegistry');   // ⏳ 仅占位，见下
+export const IMAGE_SPEC_REGISTRY       = Symbol('ImageSpecRegistry');   // ✅ 已绑定实现，见下
 
 // packages/contracts/src/sandbox-provider.contract.ts
 export interface ProviderRegistry {
@@ -947,7 +1357,10 @@ export interface RuntimeAdapterRegistry {
 > 两处**设计取舍**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填），加一个没有读者的选项正是本文档反对的死契约；② 注册期只校验唯一性，**capabilities 完整性由类型系统保证**（`SandboxProviderCapabilities` 6 位全必填，少一位编译不过，另有 wire schema 的编译期对齐守卫），无需运行时再查一遍。
 > 验收：e2e `apps/api/test/e2e/registry-extension.e2e-spec.ts` 以一个"第三方 npm 包"形态的 `@Module` 注入两个 token 并在 `onModuleInit` 注册——**不改任何内建模块的 providers 数组、不改 registry 构造器**——随后 `GET /api/providers` 列出它、`POST /api/sandboxes` 经它 provision、`GET /api/runtimes` + `POST .../credentials/secret` 走它的 adapter。
 >
-> **`IMAGE_SPEC_REGISTRY`（⏳ 未实现）**：token 已在 `registry.tokens.ts` 预留，但它今天是一个**裸 Symbol**——没有接口、没有实现、没有 DI 绑定、没有任何注入点。image-spec registry 与其实现**随镜像管理切片落地**（届时 §7 的 ImageSpec contract 与 §10.4 的 IS-xx 条款一并生效）。在那之前，"provider / runtime / 镜像三层可注册"（产品 19 §1 原则 5）实际只有前两层是活的。
+> **`IMAGE_SPEC_REGISTRY`（✅ 已实现——2026-08 镜像管理切片；本块此前写的是「裸 Symbol」，那句话现在是反的）**：接口在 `contracts/src/image-spec.contract.ts`（`ImageSpecRegistry`），实现是 `M/image` 的 `DefaultImageSpecRegistry`，DI 绑定与 `exports` 在 `image.module.ts`。内建 `oci` provider 经**构造器注入 → `this.register(oci, {default:true})`**，与第三方在自己 `onModuleInit` 里调的是**同一个** `register()`——一条注册路径、一次唯一性校验、重名 fail-fast（抛 `ALREADY_EXISTS`），与上面两个 registry 同构。至此"provider / runtime / 镜像三层可注册"（产品 19 §1 原则 5）**三层都是活的**。
+> 验收：同一份 `registry-extension.e2e-spec.ts` 里，第三方模块用 `register(acmeImageSpec, { default: true })` 把平台的解析器**移到自己身上**，随后注册镜像解出来的 digest 是第三方那个常量——内建 `oci` 一旦悄悄顶上，这条断言当场红。**registry 是承重的，不是摆设。** ⚠️ 一处口径要说准：该用例调的是 `ImageApplicationService.registerImage()`，**不是 HTTP `POST /api/images`**；controller→application 那一跳由 `images.e2e-spec.ts` 覆盖。另外**没有 per-request 的 provider 选择器**——四处 `resolve` 一律取 `defaultProvider`，换 provider 的唯一方式就是 `register(..., {default:true})`。
+>
+> **落地的确不止是"补一个 registry"，四个时刻都接上了**：`resolve` 的四个调用时刻（§7）**跨两个模块**——注册与重验证在新建的 `M/image`，时刻③④在 **`M/sandbox` 的 `admit()` 与 `imageSpecOf()` 里**（26 §7 标了具体函数），两处都已改（§7 落地状态表末两行）。八个镜像错误码也已进 10 §6.8 主表，`docs-check` 的 A5 扫描范围随之扩到 `M/image` 与 `contracts/src/image-spec.contract.ts`——**这一步不能省，否则 A5 对它们会一直是绿的，而绿的原因是它没在看**。
 
 ### 方式二（补充）：插件目录扫描 — ⏳ **后续，当前不做**
 
@@ -1098,13 +1511,18 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 
 | id | 级别 | 要求 | 怎么判定 |
 |---|:--:|---|---|
-| IS-01 | MUST | 合法 ref → 完整 manifest 且 `digest` 非空 | 断言 digest 存在——没有它就谈不上"不可变坐标" |
+| IS-01 | MUST | 合法 ref → 完整 manifest 且 `digest` **是一个格式合法的摘要**；`diffIds` **非空** | ⚠️ **不要只断言"非空"**（指 digest）：`'sha256:unresolved'` 非空，而那正是切片之前 `imageSpecOf()` 里那个硬编码值（§7 ★）——只断言非空，**错的实现原样就能让这一条变绿**（同 L-9「在错修法上会变绿的验收标准」那一课）。断言应当是 `sha256:` + 64 位十六进制（`OCI_DIGEST_RE`），并与 registry 本次返回的值一致。⚠️ `diffIds` 要断言**非空**而不是「是数组」：`[]` 是任何数组的前缀，一个交出空 `diff_ids` 的 provider 会让血统规则**看起来还在、却永远不再拒绝任何东西**（§7 ★血统 ④） |
 | IS-02 | MUST | 不存在的 ref → 抛 `REF_NOT_FOUND` | 断言 code |
 | IS-03 | MUST | `validate()` 违反入口约定 → `valid:false` 且 `errors` 非空并带可定位的 `path` | 断言 errors 结构，不接受只给 `valid:false` |
 | IS-04 | MUST | `validate()` 是纯判断，不修改入参、不产生副作用 | 深冻结入参后调用，断言不抛 |
-| IS-05 | **MUST**（2026-08 由 SHOULD 升级，随「tmux 升 MUST」） | **缺 tmux ⇒ `valid:false` 且 `errors[]` 含 `IMAGE_TMUX_MISSING`**（§7）；真正的非致命项（如 `supportedRuntimes` 声明的 CLI 未预装）才走 `warnings` | 两个断言都要：① 无 tmux 的镜像 → `valid:false` 且 errors 命中 `IMAGE_TMUX_MISSING`；② 有 tmux 但未预装 CLI 的镜像 → `valid:true` 且 warnings 命中对应 code。**原条款（存档）**：本条曾是 SHOULD、要求「缺 tmux 走 warnings 而非 errors、该镜像 `valid:true`」——与 §7 当时把 tmux 定为 SHOULD 配套；tmux 升 MUST 后该断言会**反向**判定，必须整条改写而不是删掉 |
+| IS-05 | **MUST**（2026-08 **第二次整条改写**，随「标签声明制 → 血统验证制」，§7 ★血统） | `validate()` **只管两件事**：入口约定（error）与 runtime 预装（warning）。一张**一个 `platform.*` 标签都没有**、但入口合法的镜像 ⇒ `valid:true`，且 `errors`/`warnings` 里**都不得出现** `IMAGE_TMUX_MISSING`；也不得出现 `IMAGE_BASE_REQUIRED` | 三个断言：① 无标签镜像 → `valid:true`；② 该结论里**按 code 断言 `IMAGE_TMUX_MISSING` 不存在**——只断 `valid:true` 会放过「降级成 warning」那种改法，而那等于把一句可继承、会说谎的自述继续摆在 UI 上；③ 有 tmux 但未预装 CLI 的镜像 → `valid:true` 且 warnings 命中 `RUNTIME_NOT_PREINSTALLED`。**血统不在这里判**：它要读库里注册过哪些 base，塞进 `validate()` 就破了 IS-04，而且会要求每个第三方 SPI 执行平台自己的准入策略（§7 ★血统 ②） |
+| ↑ IS-05 **原条款（两版，均存档，勿当现状读）** | — | **v2（2026-08 上半场，MUST）**：「缺 tmux ⇒ `valid:false` 且 `errors[]` 含 `IMAGE_TMUX_MISSING`」，与当时 §7 的「标签声明制」配套。**v1（更早，SHOULD）**：「缺 tmux 走 `warnings` 而非 `errors`、该镜像 `valid:true`」，与 tmux 还是 SHOULD 时配套 | **两次都是整条改写而不是删掉，理由同一条**：删掉会让「缺 tmux 该怎么判」变成没人守的空白；照抄旧断言则会**反向**判定——v2 的断言在今天的正确实现上会**变红**。v2 被推翻的原因写在 §7 ★血统：① 平台连自己依赖的 `ghcr.io/agent-infra/sandbox` 都注册不了（第三方镜像不会打我们发明的标签）；② 标签被派生镜像**继承**，`RUN rm /usr/bin/tmux` 之后仍自称 `platform.tmux=true` ——它在派生场景里不但证明不了什么，还会主动说谎。取代它的是**注册期血统前缀**（可验证）+ **运行期 `command -v tmux`**（实测） |
 
-> **落地状态（⏳ 全部未实现）**：ImageSpec contract 本身还没有（`packages/contracts` 里没有 `image-spec.contract.ts`），`IMAGE_SPEC_REGISTRY` 只是一个占位 token（§8），所以本表五条一条都跑不了。整块随**镜像管理切片**落地。
+> **落地状态（✅ 全部已实现——本块此前写的是「一条都跑不了」，那句话现在是反的）**：套件在 `packages/contracts/src/testkit/image-spec.testkit.ts`（`runImageSpecContractTests`），内建 `oci` provider 的运行入口是 `packages/modules/image/test/contract/oci-image-spec.contract.spec.ts`——registry 用 fixture 顶替，**IS-01..IS-05 零网络**。IS-05 ② 在调用方不提供 `runtimeNotPreinstalledManifest` 时走 `describe.skip` 并把跳过理由写进用例名，不静默变绿。
+>
+> ⚠️ **`ImageSpecTestCase.tmuxlessManifest` 已更名为 `unlabelledManifest`，字段语义反了过来**：同一份夹具（一个 `platform.*` 都不带的 manifest），期望从 `valid:false` 变成 `valid:true`。保留旧名会让下一个人按名字猜期望——而这条恰恰是**猜反了也能编译**的那种。
+>
+> ⚠️ **血统本身的验收不在 testkit 里，因为它不是 SPI 的义务**：`isDerivedFrom` 的五条性质在 `packages/contracts/test/unit/image-ref.spec.ts` 直测（含「空 base 永远不是锚点」——删掉那道守卫只跑应用层用例是**全绿**的，另一道守卫替它挡住了），准入编排在 `packages/modules/image/test/application/image-admission.spec.ts`，端到端在 `apps/api/test/e2e/images.e2e-spec.ts`。
 
 ## 11. 风险与备选
 

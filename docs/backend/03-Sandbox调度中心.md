@@ -97,8 +97,10 @@ stopped/failed → destroying → destroyed（终态）
 
 - 领域层**显式转移表 + guard** 实现（不引入 XState 这类较重依赖，接口设计不排斥未来替换为 XState v5）。
 - **镜像拉取的职责归属（审计 P2-10）**：`creating` 阶段的"拉镜像"由 **`provider.create()` 内部负责**（04 testkit SP-03 要求镜像不存在时抛 `IMAGE_PULL_FAILED`），平台**不单独调用任何拉取接口**；`ImageSpecProvider.resolve()`（IS-01）只做**元数据解析与 digest 获取**，不拉层数据。两者职责不重叠：一个负责"这个 ref 长什么样、合不合规"，一个负责"把它变成能跑的实体"。
-- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测沙箱内 API（`:8080`）就绪**——终端/exec 数据面依赖它，agent 未就绪即转 `running` 会让首个终端连接失败；agent 端口**⚠️ 实现上是 publish 到宿主 loopback（`127.0.0.1` + 临时端口），不是"不 publish"**——原文"仅内网可达、不 publish 到宿主外部"与实现不符，已按实现更正；这是一处安全面（宿主本地任意进程可直连一个无鉴权 shell），⏳ 留待 Step 4 加固，权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
-- **`starting` 段内有五步编排**（`provider.start` → 沙箱内 API 就绪探测 → 装 CLI → 注入凭证 → 起 agent 会话），见 **§4.3**——顺序被「exec 要求实例已在跑」这条物理约束钉死。
+- **provider 拉镜像的两档差异 + agent 就绪门（权威见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio 走 Docker（socket-proxy）；**boxlite 走 BoxLite 自己的 OCI store（独立于 Docker、层下载不断点续传），落地须经本地 registry（`localhost:5001`）预置目标镜像**——自定义 `imageRegistries` 会替换默认表，必须显式保留 `docker.io`。此外，`starting → running` 前须**探测数据面就绪**——终端/exec 依赖它，未就绪即转 `running` 会让首个终端连接失败。⚠️ **探什么按档分**（决策 A 修订）：`aio` 探沙箱内 API（`:8080`）；`boxlite` 走 BoxLite native 通道，**不需要沙箱内 API、也不转发端口**。
+
+  ⚠️ **那条 ⏳ 安全账因此只剩 aio 一档**：agent 端口 publish 到宿主 loopback（`127.0.0.1` + 临时端口），**宿主本地任意进程可直连一个无鉴权 shell**——`aio` 靠每沙箱一枚 RS256 JWT 兜住，仍 ⏳ 留待 Step 4 加固；`boxlite` ⚠️ **不是「消失」而是「换了把锁」**：BoxLite 把镜像 `EXPOSE` 的 8080 **自动发布到宿主通配地址且关不掉**（实测 IPv6 `*:8080`，局域网可达），所以它注入 `JWT_PUBLIC_KEY` **只上锁不留钥匙**——私钥当场丢弃、不签 token、不落库，平台自己也进不去（数据面全在 native 那侧）。⏳ 仍是残留风险：那扇门对外可达，只是回 401。详见 ADR 决策 A 修订。权威登记见 [SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)「安全姿态」。
+- **`starting` 段内有五步编排**（`provider.start` → **数据面就绪探测**（aio=沙箱内 API / boxlite=native 通道）→ 装 CLI → 注入凭证 → 起 agent 会话），见 **§4.3**——顺序被「exec 要求实例已在跑」这条物理约束钉死。
 - 每次转移落库并发 `SandboxStateChanged` 领域事件 → WS 事件通道推送前端 + terminal 上下文级联处理。
 - **idle 回收**：可配置 `idleTimeoutSec`，后台 `SandboxReaper` 定时扫描，无活动则 running→idle→stopped，**释放配额但保留数据卷**，可快速重新拉起。判定口径见 §4.2。
 - 非法转移抛领域错误，interface 层翻译为 409。
@@ -165,14 +167,14 @@ creating  ─── ⓪ prepareRuntimeCredential → env 形态并入 SandboxPro
               → provider.create(ctx)                          ← 见下方「凭证的两个注入时机」
 
 starting ─┬─ ① provider.start(handle)
-          ├─ ② 沙箱内 API（:8080）就绪探测                  ← §4 既有条款
+          ├─ ② 数据面就绪探测（aio=:8080 / boxlite=native）  ← §4 既有条款
           ├─ ③ ensureRuntimeInstalled(runtimeId, exec)        ← 装 CLI（T-3）
           ├─ ④ injectCredential → recordRuntimeInjection      ← 文件/stdin 形态注入（05 §4.3）
           ├─ ⑤ bootstrapAgentSession(sandboxId, initialTask)  ← 起 agent 会话（T-2）
           └─ running
 ```
 
-**⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且沙箱内 API 已就绪。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
+**⚠️ 顺序是被物理约束钉死的，不是风格选择**：③④⑤ 都需要 `SandboxExecFn`，而 `exec` 由 `spawn({tty:false})` 派生（04 §2.3），要求实例**已经在跑**且数据面已就绪（aio=沙箱内 API，boxlite=native 通道）。因此 `provider.start()` 必须排在最前。**这同时更正了 24 §1 / 26 §1 里「先 `injectCredential` 再 `provider.start`」的既有错序**（05 §7.1 #2 的实现侧注记「provision 起容器后 prepare → inject → record 三步接入」本来就是对的，是两张图没跟上）。
 
 #### ⚠️ 凭证的两个注入时机：**env 形态在 `create` 前，文件/stdin 形态在 `start` 后**（S5 实现修正，2026-08）
 
@@ -673,7 +675,7 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 - 超时动作：kill 进程 → sandbox 转 `failed`（`failure_reason='automation timeout'`）→ run 记 `status='timeout'`，**并计入 `consecutive_failures`**（P20 §9.9 明确要求）。
 - **kill 必须是强制的，不能等 CLI 自己退（S5 技术验证，2026-08 实测）**：CLI **不一定会收敛**。同一场景（无凭证起无头任务）两个 runtime 表现相反——**codex 反复重试 `401 Unauthorized`**（`wss://api.openai.com/v1/responses`，`Reconnecting... 1/5..5/5`）直到被 timeout 杀掉（`exit=124`）；**claude 干净 `exit=1`** + "Not logged in"。实测的触发条件（无凭证）会被 §8.2 决策表第 2 条挡在前面，但暴露的是**通用性质**：持续性 API 错误（凭证运行中失效、网络中断、上游持续 5xx）都会让 codex 走进同一条不退出的重连循环。⇒ 到点先 `SIGTERM` 给一个清理窗口、**超时未退即 `SIGKILL` 强杀**，并连带 destroy 实例（进程死了但容器还在同样是资源泄漏）；adapter 可在 `buildStartCommand` 里带上 CLI 自己的超时旗标作为第一道，但**平台侧这一刀才是唯一可靠的兜底**（04 §3 ★3）。
 - **这一刀落在哪（2026-08 补，与实现对表）**：两阶段 kill 由**数据面**真正投递，不是纸面承诺——
-  - **无头 Task / 一次性 exec（`tty:false`）**：`ProcessStream.kill()` → 沙箱内 API 的 `POST /v1/bash/kill`，**真实信号**（agent 只接受 `SIGTERM`/`SIGKILL`/`SIGINT`，其余降级为 `SIGTERM`）。默认走两阶段：`SIGTERM` → **5s 宽限** → 仍未退则 `SIGKILL`；显式传 `SIGKILL` 则不再降格。实测：被 `SIGTERM` 杀掉的命令回 `exit_code=-15`，且在飞的 exec 请求立刻解阻塞。
+  - **无头 Task / 一次性 exec（`tty:false`）**：`ProcessStream.kill()` → **真实信号**。`aio` 经沙箱内 API 的 `POST /v1/bash/kill`（agent 只接受 `SIGTERM`/`SIGKILL`/`SIGINT`，其余降级为 `SIGTERM`）；`boxlite` 用 BoxLite native `JsExecution.signal(n)`。默认走两阶段：`SIGTERM` → **5s 宽限** → 仍未退则 `SIGKILL`；显式传 `SIGKILL` 则不再降格。实测：被 `SIGTERM` 杀掉的命令回 `exit_code=-15`，且在飞的 exec 请求立刻解阻塞。
   - **硬超时本身**：`ProcessSpec.timeoutMs` 直接映射到 agent 的 `hard_timeout`（秒），由 agent **在沙箱内强杀**远端进程，平台侧统一上报 `exit=124`（与本节 codex 实测的 `exit=124` 同义）。客户端另有一个 `timeoutMs + 5s` 的 abort，仅作传输兜底。
   - **交互式终端（`tty:true`）**：agent **没有**给 ws PTY 会话提供任何进程管理接口（实测：`POST /v1/shell/kill` 与 `DELETE /v1/shell/sessions/{id}` 对 ws 的 session_id 一律回 `Session not found`；单纯关 ws **不会**杀掉 shell 及其前台作业）。所以 `kill()` 走 tty 自己的信号通道：先送 `ETX`（0x03，由行规程给前台进程组发 `SIGINT`），再送 `exit` 结束交互 shell（否则每断一次终端就泄漏一个 `bash -i`），最后关 socket。**忽略 SIGINT 的进程仍可能存活** —— 这条路是尽力而为。
   - **唯一保证的兜底仍是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以本节"连带 destroy 实例"不是可选项。

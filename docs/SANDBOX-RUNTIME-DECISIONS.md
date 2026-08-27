@@ -17,13 +17,107 @@
 
 > 关键收益：终端/exec 契约焊在"沙箱内 API"而非 docker exec —— provider（容器/gVisor/microVM）可换，契约不变。
 
+### ⚠️ 决策 A 修订（2026-08-26）：契约统一 ≠ **实现**统一
+
+**上面这条被实测推翻了一半。** 保留的一半是对的：数据面**契约**（`ProcessStream` /
+`SandboxJobs` / `SandboxFiles`）确实与 provider 无关，换 provider 不用改契约。
+推翻的一半是：**「数据面 = 沙箱内 API」被当成了架构约束**，于是 boxlite 复用了 aio 的
+`AioSandboxAgentClient`——理由写在 `agent-data-plane.ts` 的注释里，很诚实：
+
+> `aio` 和 `boxlite` 运行**同一个镜像**，因此是同一个 agent。
+
+⚠️ **「两个 provider 跑同一个镜像」是当前配置的巧合，不是契约保证的性质。** 把它当成
+共用的地基，等于让 boxlite 的可用性挂在一个第三方镜像里的 python 服务上。
+
+#### 推翻它的实测（2026-08-26，本机 M9 / boxlite 0.9.7 / arm64）
+
+| 同一个 box，同一条命令 | 沙箱内 API（`POST /v1/bash/exec`） | BoxLite native `Box.exec` |
+| --- | --- | --- |
+| `echo hi` | 200 | `exit=0`，103ms |
+| **`codex --version`** | **70ms → HTTP 500，agent 此后永久挂死** | **`exit=0`，18.6s，拿到 `codex-cli 0.139.0`** |
+| 挂掉之后再来一条 `echo` | 500（整个沙箱废掉） | `exit=0`，82ms |
+
+第三行最说明问题：**那个 box 的 agent 早已挂死，native exec 照常干活**。
+排查过程中被自己的实验否掉的假设，一并记下来免得重走：**不是内存**（docker 限 2GB 跑同一条
+命令 200/44ms，占用仅 440MB，微 VM console 无 OOM）、**不是 PATH**（绝对路径同样挂）、
+**不是镜像**（`platform/base:v1` 与上游 `agent-infra/sandbox:latest` 的 `diff_ids`
+**逐层完全相同**，只差三个 LABEL）、**不是 rootfs 缺失**（whiteout 的 `cp -a` 失败在两个
+BOXLITE_HOME 里都发生过，而其中一个跑 `boxlite-microvm.e2e` 是**通过**的）。
+
+⚠️ 顺带量到一个必须写进预算的数字：**codex 在微 VM 里启动 18.6 秒，docker 里 44ms——420 倍**。
+那是 COW qcow2 + virtiofs 的代价，与 agent 无关；**所有按容器定的超时都要按它重算**。
+
+#### 官方立场
+
+BoxLite 文档对「在 box 里跑 agent CLI」的推荐是**直接用 native `Box.exec` 驱动**，
+明确不建议在 box 内再套一层 HTTP agent server：*avoids unnecessary HTTP abstraction
+layers in favor of direct process I/O, keeping the agent boundary minimal:
+stdin/stdout and forwarded ports*。我们的做法与它正好相反。
+
+#### 修订后的分工
+
+- **契约不变**：`ProcessStream` / `SandboxJobs` / `SandboxFiles` 仍是 provider 无关的抽象。
+  已逐字段核对：`env` / `cwd` / `user` / `timeoutMs` / `stdin` / `cols,rows` 在 native 侧
+  **全是原生参数**，不需要翻译损耗。
+- **实现各自选通道**：`aio`（容器）走沙箱内 API——那是 AIO 镜像自带的能力，合理；
+  `boxlite`（微 VM）走 **BoxLite native exec / PTY**。
+- **一致性靠契约测试，不靠共享实现**（`runSandboxProviderContractTests`）。
+  ⚠️ 这是本次最要紧的一条：共享实现保证的是「两边一样」，可一旦那份实现对某个 provider
+  不适用，"一样"就变成**一起错**——这次就是。像 `startJob` 的 ordering 那种
+  **只写在共用实现注释里**的规则，要提升成 testkit 里的断言。
+
+#### 这一刀顺带砍掉三笔账
+
+1. **本文档「安全姿态」里那条 ⏳** —— ⚠️ **这一条我先写错了，实测更正如下。**
+   写修订时我判断「boxlite 不再需要转发端口 ⇒ 该攻击面在这一档直接消失，连 RS256 JWT
+   注入都不需要了」。**错的。** BoxLite 会把镜像 `EXPOSE` 的端口**自动发布到宿主，且是
+   通配地址**，我们要不要都一样：
+
+   | `JsBoxOptions.ports` | 宿主上新增的监听 |
+   | --- | --- |
+   | 不传 / `[]` | `*:8080` |
+   | `[{guestPort: 1}]` | `*:8080` **和** `*:1`（给别的端口加映射只是**追加**） |
+   | `[{hostPort: 45999, guestPort: 8080, hostIp: '127.0.0.1'}]` | `*:45999`（只改宿主那侧的号；**`hostIp` 被忽略**，根本不是 loopback） |
+
+   ⚠️ 而且**不是 loopback，是局域网可达**：实测那条监听是 **IPv6 通配** `*:8080`。
+   不注入 `JWT_PUBLIC_KEY` 时 `POST http://[::1]:8080/v1/bash/exec {"command":"id"}`
+   回 **HTTP 200 + `uid=1000(gem)`**——一个局域网内任意机器都能打的免鉴权 shell；
+   注入后同一请求 **401**（`/v1/ping` 仍 200，白名单）。
+
+   ⛔ **我自己的复验一度否掉了这个发现，方法有 bug**：拿 `lsof` 的 NAME 列做差集，
+   而宿主上 Docker 已占着 IPv4 `*:8080`，boxlite 新增的 IPv6 `*:8080` **被当成同一条
+   抵消掉了**。差集为空 ≠ 没有新增监听。**取证要带协议栈和 pid，不能只看端口字符串。**
+
+   ⇒ 结论改成：**关不掉，所以必须上锁。** boxlite 仍注入 `JWT_PUBLIC_KEY`，但**只上锁
+   不留钥匙**（私钥当场丢弃、一枚 token 都不签、不落库、`providerState` 依旧为空）——
+   平台自己也进不去那扇门，因为数据面全在 native 那侧。**「删掉 boxlite 对 agent 的依赖」
+   指的是数据面依赖，不是那个 HTTP 服务不存在了。**
+   另外仍须给 guest 8080 指一个**空闲宿主端口**：不是为了连它，而是把这个无法关闭的发布
+   从「固定端口」挪到「唯一端口」，否则第二个 box 起不来
+   （`gvproxy_create failed: 0.0.0.0:8080 already in use`，本仓 e2e 真红过）。
+   ⏳ 真正的收口要么 BoxLite 提供抑制自动发布的开关、要么给微 VM 加网络策略，当前 SDK 都没有。
+2. **jobs 的「生存义务」**（04 §2.6 ★★★）：agent 的 streaming socket 断开会销毁它创建的
+   session、连输出带命令一起杀掉，现在靠"先建 session 再 attach"的顺序硬绕，还要在
+   create 时提前拉高 `BASH_SESSION_TIMEOUT`/`MAX_BASH_SESSIONS`。native 下改成
+   **输出落 box 内文件 + 游标 seek**：进程与读取者解耦，平台重启后照样续读。
+3. **`kill` 语义**：aio 的 PTY 没有信号通道，`kill()` 只能往终端里写 `ETX + exit\n`
+   ——按 `ProcessStream.detach` 的注释，那会 SIGINT 掉用户正在跑的 agent。
+   native 有 `signal(n)`，是真信号。
+
+#### native 能力已逐项实测（不是从文档推断）
+
+并发（3×sleep2 墙钟 2252ms，串行会是 6000ms）、长跑进程 193ms 立刻返回、
+**进程独立于 execution 存活**（3.5s 后日志 4 行）、**真 PTY**（`TTY=/dev/pts/2`，
+`resizeTty(30,100)` 后 `tput cols`=100，stdin 交互与退出码正常）。
+
+
 ## 决策 B：boxlite = **BoxLite micro-VM**（Mac 原生独立内核隔离）
 
 - **aio** = runc 容器（AIO Sandbox 镜像，经 Docker），container 级隔离，默认档。
 - **boxlite** = 同一 OCI 镜像跑进 **BoxLite Box**（每个 Box = 独立 Linux kernel 的 micro-VM），强隔离档，**非仅标签**。
 - **BoxLite**（github.com/boxlite-ai/boxlite）= Rust micro-VM 运行时，**可插拔 hypervisor：macOS→Apple Hypervisor.framework、Linux→KVM、Windows→WSL2**。sub-50ms、daemonless、无 root、OCI 兼容；有 Node/TS SDK（`@boxlite-ai/boxlite`）+ Python/Rust/C + BoxRun CLI/REST。
 - **为什么是它、不是 gVisor/Kata/Firecracker**：本平台单机私有化、**部署目标含 macOS**，gVisor 是 Linux-only、Firecracker/Kata 需 KVM/Linux，**都上不了 Mac 原生**。BoxLite 是当前唯一能在 Mac（Apple Silicon / Hypervisor.framework）原生跑"独立内核 microVM"的选型——boxlite 这一档从设计之初就是为此而生（P19"独立内核微虚拟机"措辞正确，无需修订）。
-- **控制面差异**：aio 生命周期用 dockerode（docker daemon）；boxlite 生命周期用 **BoxLite SDK/API**（非 docker）。数据面（沙箱内 `:8080` agent）两档统一。
+- **控制面差异**：aio 生命周期用 dockerode（docker daemon）；boxlite 生命周期用 **BoxLite SDK/API**（非 docker）。~~数据面（沙箱内 `:8080` agent）两档统一。~~ ⚠️ **数据面已不统一**（决策 A 修订）：aio 走沙箱内 API，boxlite 走 BoxLite native exec/PTY；统一的是**契约**不是实现。
 - **落地门槛：已实测通过 ✅**（本机 macOS 15.5 / Apple Silicon）：
   - **aio(Docker)**：`/v1/shell/exec`（S1 当时的验证端点；**数据面现已切到 `/v1/bash/exec`**，见 04 §2.3★）+ `ws /v1/shell/ws` 终端 ✅；Chromium 经 CDP 真导航 example.com 拿到标题 ✅（在 AIO 镜像 amd64/QEMU 副本上实测；arm64 原生功能等价、未复测）。
   - **boxlite(BoxLite microVM)**：microVM 起 ✅（aarch64, kernel 6.12, Hypervisor.framework, ~6s）；exec/并发 ✅；**Chromium 148 在 microVM 内起动 + 本地渲染 + 联网导航 ✅**（唯一告警 headless 无 dbus，无害，exit 0）。
