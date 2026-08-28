@@ -199,6 +199,23 @@ starting ─┬─ ① provider.start(handle)
 
 > **无凭证不算 provision 失败**（S5 实现裁定）：`prepareRuntimeCredential` 抛 `NO_CREDENTIAL` 时只记一条 WARN、照常继续起沙箱——用户完全可能先建任务再去授权，agent 自己会说「未登录」，这是可恢复状态，不该阻断创建。无头 Task 的「无凭证不触发」另由 §8.2 决策表第 2 条管。
 
+#### ① `provider.start()`：整段 provision 里**最长、且曾经零反馈**的一步
+
+> 2026-08-28 实测（本机 boxlite）：一个 Task 停在前端的「启动实例」格 **3 分 10 秒**，用户判它卡死；去排查的人第一次采样看到 CPU 0%、到 registry 零连接，**也判成了卡死**。审计流事后才说清楚：`sandbox.provision.stage`「starting」**190529ms**，而同一秒内的 `sandbox.probe` / `runtime_install` / `credential.injected` / `agent_session` 加起来不到 **0.4 秒**。⇒ 那 190 秒**全在这一步**：13GB 的 `platform/sandbox:v2` 本机首次使用，要现拉 + 铺 rootfs（微 VM 是**懒**的：`runtime.create()` 只要 ~4ms，第一次 exec 才真起）。
+
+这一步**没有中间进度可读**——`provider.start()` 就是一个 `await`，只有「开始」和「结束」。所以平台**不编百分比**（本仓已经因为同一条理由删过 `project.clone_progress.totalBytes` 这个幽灵字段），推的是**两个边界**加**一个事实**：
+
+| 推什么 | 事件 | 谁知道 |
+|---|---|---|
+| 这一步**开始了** / **结束了** | WS `sandbox.instance_progress{phase:'starting'\|'ready'}`（10 §7.4） | 只有平台 |
+| **本机有没有这份镜像的位** | 同一帧的 `imageStaged?`，来自可选方法 `SandboxProvider.imageStaged(image)`（04 §11「minor = 新增可选方法」） | 只有 provider |
+| 已经等了多久 | **不推**——前端从自己收到 `starting` 的那一刻数（10 §7.4 明写这条取舍） | 浏览器自己就知道 |
+
+- **`imageStaged` 缺席 ≠ `false`**：缺席是「provider 说不出」（没实现这个可选方法，或这次问不出来），`false` 是「本机确实没有」。只有后者能拿去当「你要等几分钟」的理由，前者只能退回中性文案。
+- **它是提示，不是闸门**：没有任何逻辑因这个布尔而拒绝、延迟或重排 provision；问不出来只记 WARN，**绝不让 provision 失败**——一句文案的输入把整个 Task 判死，是拿装饰品当承重墙。
+- **不进 Outbox**（与 `runtime.install_progress` 相反）：丢一帧 `starting` 只让这一次等待退回中性文案，丢一帧 `ready` 会被随后必到的 `status_changed` 盖掉；而 install 进度后面没有别的东西跟上，丢了就永远钉在陈旧文案上。
+- boxlite 侧的实现读的是 BoxLite 自己的 image store 索引（`image_index.reference`），**不是平台的任何一张表**——「这个镜像以前有沙箱跑成功过」是个会说谎的代理量（store 可能被清、上次也可能是拉了一半就失败的）。⚠️ 它有一个排除不掉的**假阳性**：`image_index.complete`（半截的 pull 是 0）没有透出到 SDK 的 `images.list()`，所以拉到一半的镜像也会被数成「有」。这正是前端 `true` 那一支只写「镜像已在本机」、**不承诺任何时间**的原因。
+
 #### ③ `ensureRuntimeInstalled`：装 CLI
 
 | 子步 | 做什么 | 落点 |
@@ -634,6 +651,109 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 - 保留记录落 `retained_volumes` 表（13 §2）供「已保留卷」列表查询——**目录是事实，表是索引与保留期账本**；两者不一致时以目录为准（对账时补记或标记 `deleted_at`）。
 - 保留目录占用的磁盘**不回资源池**（§1）——它已脱离 sandbox 生命周期，改为治理视角展示（P21-5 水位 + 保留卷占用横幅）。
 - sandbox 记录仍按终态保留（审计），目录与记录的生命周期解耦。
+
+## 7.8 运行期健康检查（v1.1）—— `running` 不许再撒谎
+
+### 背景：这块是被一次真实故障逼出来的
+
+2026-08 排障：一个沙箱 DB 里写着 `running`、微 VM 也确实在跑，但**沙箱内的数据面已经挂了**——用户点开终端才发现 agent 起不来。平台一路都说正常。
+
+⚠️ 病根是**状态字段记录的是「当时成功过」，被当成了「现在还成立」**。provision 结束那一刻它确实 running，此后平台再也不看它一眼。同一个病在本仓出现过至少三次（另两处：`cloneStatus=ready` 但 baseline 目录已被清理；`destroy` 对已消失的容器不幂等）。
+
+### 探测的第一个问题不是「怎么探」，是「探测的代价」
+
+⛔ **只读探测也可能是致命的。** 同一轮排障里，`probeOnPath` 那条 `codex --version` **把整个沙箱的 agent 打挂了**——一次意在"检查"的调用，摧毁了被检查的对象。任何周期性健康检查，先回答代价。
+
+实测三层信号（2026-08-27，boxlite 0.9.7 / arm64）：
+
+| 信号 | 耗时 | 是否进沙箱 | 能回答 |
+|---|---|:--:|---|
+| `box.info()` | **0ms**（本地状态） | 否 | VM 在不在跑 |
+| `box.metrics()` | **0.1ms**（×10 均值） | 否 | CPU / 内存 / `commandsExecutedTotal` / **`execErrorsTotal`** |
+| native `exec` | **85–592ms**（均 ~160ms） | **是** | 数据面真的能用 |
+
+⚠️ **`metrics().execErrorsTotal` 是一个零成本的异常指示器**：不进沙箱就能知道「最近有没有 exec 出错」。这是分层方案能成立的关键。
+
+`aio` 侧有一个**看起来白送、实测不能直接当判据**的信号。AIO 镜像自带 `HEALTHCHECK`（实测 2026-08-27，`platform/sandbox:v2`）：
+
+```
+nc -z localhost ${SANDBOX_SRV_PORT} && ([ "$DISABLE_BROWSER" = "true" ] || nc -z localhost ${BROWSER_REMOTE_DEBUGGING_PORT}) || exit 1
+Interval 10s / Timeout 5s / Retries 8
+```
+
+`docker inspect` 的 `State.Health` 确实**可读**，且带 `Log`（最近 5 条，含 exitCode）与 `FailingStreak`。
+
+⛔ **但照抄它会把好沙箱判死。** 默认参数拉起该镜像，60s 后 `State.Health = unhealthy`（`FailingStreak = 10`），而同一时刻沙箱**完全可用**：
+
+| 端口 | 谁在看它 | 实测 |
+|---|---|---|
+| `8091` `SANDBOX_SRV_PORT` | 镜像 HEALTHCHECK | 在听 ✅ |
+| `9222` 浏览器调试口 | 镜像 HEALTHCHECK | **没起** ❌ ← unhealthy 的唯一原因 |
+| `8080` `PUBLIC_PORT` | **平台自己**（`agentPort: 8080`） | HTTP 200，`shell/exec` 回 `exit_code: 0` ✅ |
+
+三条结论：
+
+1. **它探的口 ≠ 平台用的口**（8091 + 9222 vs 8080）。
+2. 它比平台的关心面**更严格**，多押一个浏览器；而 `docker-container-backend.ts` 创建容器时**不设** `DISABLE_BROWSER`——所以浏览器没起就 unhealthy，**这是默认路径下的常态，不是边缘情况**。
+3. 语义因此是单向的：`healthy` ⇒ agent 可用（充分条件），`unhealthy` ⇏ agent 不可用。
+
+⚠️ 还有一条时间上的硬伤：`Retries 8 × Interval 10s` ⇒ Docker 自己认定 unhealthy **最长要 80 秒**，比 30s 采样周期还慢，不能承担抗抖动。
+
+⇒ **aio 的零成本层：`State.Health` 只作辅助信号与诊断详情，判据仍是平台自己关心的 8080。** 好处依然在——读它不进沙箱，避开了打挂 agent 的那条路。
+
+### 分层探测
+
+```
+常态（每 30s）    ── 零成本层 ──  aio: 8080 探活(+State.Health 辅助)  boxlite: info() + metrics()
+                                  ↓ 出现异常迹象
+异常确认（按需）  ── 数据面层 ──  一次最小 exec（boxlite native / aio 谨慎）
+                                  ↓ 连续 N 次失败
+                     status: running → unhealthy + 审计 error + WS 通知
+```
+
+- **异常迹象**：`execErrorsTotal` 相对上次采样增长 ／ `info().state.running == false` ／ aio: `State.Health` **由 healthy 翻转**（只取翻转，不取绝对值——绝对值天然为 unhealthy，见上）
+- **抗抖动**：用契约里**早就定义好**的 `HealthStatus.consecutiveFailures`（04 `SandboxRuntimeStatus.health`）——⚠️ 该字段与 `resourceUsage` 一样，**两个 provider 的 `inspect()` 至今都没填**，本节就是把它填上
+- **单次探测超时**必须远小于采样周期，否则探测自己会堆积
+
+### 实现纪律
+
+1. ⚠️ **`exitCode === undefined` 绝不当成功。** 实测中出现过一批 `undefined`（后续未能复现，疑为调用写法），但健康判定必须显式要求 `=== 0`。
+2. ⚠️ **命令不存在会「抛异常」而非返回非零**（实测：`executable '/nope' not found in $PATH`），探测实现必须 catch，否则一次探测异常会冒泡成 provision 失败。
+3. **探测结果一律进审计**（`sandbox.health`，13 §2.8.2），否则「什么时候开始不健康的」仍然答不出来。
+4. 探测**不得**使用 runtime CLI（`codex --version` 这类）——见开头那条教训；只用 `/bin/true` 级别的最小命令。
+
+### 沙箱审计事件清单（对应 13 §2.8.2 的 `type`）
+
+> ⚠️ **本表只是五档里的一档。** 其余四档（`project` / `credential` / `image` / `system`）的 `type` 清单在 13 §2.8.2「各 `category` 的生产者清单」——那张表是「今天后端到底写不写」的**唯一上游**，前端的 `AUDIT_CATEGORY_EMIT_STATUS` 按它手抄。本表新增/删除一行时，那边也要同步。
+
+| `type` | 何时 | `detail` 关键字段 | 补的是哪个「查不出来」 | 实现 |
+|---|---|---|---|:--:|
+| `sandbox.provision.stage` | 每阶段结束 | 阶段名 / `duration_ms` / outcome；**`starting` 段另带 `imageStaged`** | 启动 237s→4s 无历史可比 | ✅ |
+| `sandbox.probe` | 每次探测 | **argv（不含 env 值）** / exitCode / 输出尾部 | 探测失败只有一行 message | ✅ |
+| `sandbox.workspace.prepared` | 工作区就绪 | 源 baseline **是否存在** / 产出条目数（`entryCount`，**不含**平台自己写的 `.platform-workspace-state`） | workspace 空了无人报错 | ✅ |
+| `sandbox.agent_session` | 会话启动后 | 起没起 / 跑的是什么 | 要进 tmux 才知道 CLI 没起 | ✅ |
+| `sandbox.health` | 状态翻转时（非每次采样） | state / consecutiveFailures / 判据 | running 但 agent 已挂 | ⏳ |
+| `sandbox.state_changed` | 状态流转 | from / to / actor | 已有 transitions，补 actor | ✅ |
+| `sandbox.credential.absent` | 凭证缺席 | 缺哪个 runtime 的凭证 | **凭证缺席不发任何领域事件**，projector 收不到 | ✅ |
+| `sandbox.runtime_install` | 运行时安装状态变化 | runtime / 状态 | — | ✅ |
+
+⚠️ `sandbox.health` **只在状态翻转时记**，不是每 30s 记一条——否则一个长命沙箱一天就是 2880 条噪音，把审计流冲垮。
+
+⏳ **`sandbox.health` 目前无处可挂**：本仓没有任何健康采样或状态翻转设施（本节 §7.8 设计的那套还没实现），所以这一条是**清单里唯一空着的**。它要等本节前半部分的分层探针落地。
+
+##### 落地时补上的三处契约缺口（2026-08-27）
+
+清单里三条事件在实现时发现**源头根本没有那个字段**，不是记录方式的问题：
+
+| 缺口 | 补法 |
+|---|---|
+| `SandboxStateChanged` 事件**没有 actor** | 给事件加 `triggeredBy`（`packages/modules/sandbox/src/domain/events/sandbox-events.ts`）。同一次流转落在 `sandbox_state_transitions` 行里有 actor、事件里没有——**两处记录不该只有一处能回答「谁干的」** |
+| `PreparedWorkspace` 只有 `hostPath`，答不出「baseline 在不在 / 产出几条」 | 给 port 加 `baselineExisted` / `entryCount`（`packages/contracts/src/workspace-preparer.port.ts`），由 adapter 如实报。⚠️ `importBaseline` 的 `catch { return; }` 是条**静默降级路径**，workflow 事后 stat 只能猜。⚠️ **`entryCount` 必须排除 `.platform-workspace-state`**：那是 `prepare()` 自己写进去的，`readdir` 又把点文件算上 ⇒ 含它的计数在真实文件系统上恒 ≥ 1，于是 workflow 里 `entryCount === 0`（「产出为空」那条 warn）**成了死代码**，空工作区反被报成「1 个顶层条目 / info」。真实文件系统上的行为由 `packages/modules/sandbox/test/integration/workspace-entry-count.spec.ts` 钉住——此前关于这两个字段的断言**全部**来自 `_harness.ts` 里硬编码返回的假 preparer，真实计算一次也没跑过 |
+| `sandbox.probe` 若记裸命令串会漏密 | 只记 argv 形状。04 §2.3★：agent 把 `env` 物化成 `export K=V` 拼进命令串，沙箱内 `ps` 全文可见 |
+
+⚠️ **`starting` 段的 `imageStaged` 必须在**进入该段那一刻**取，不能在段末取。** 段末镜像早已铺好、答案恒为 `true`，那等于什么都没说——而这个字段的全部价值是解释**这一段为什么慢**（实测冷 store 190529ms 现拉 13GB 镜像 vs 热 3–4s）。⚠️ 失败路径同样带上它：`provider.start()` 炸在铺镜像的中途，与炸在一个早已 staged 的镜像上，是两个不同的故障，下一步动作也不同。⚠️ 整段 `provision` 的那条**刻意不带**——它横跨多个阶段，把某一段的解释挂在总计上会让读者以为那是整段的成因。⚠️ provider 答不上时**整个字段缺席**，不退化成 `false`：`false` 是「问了，本机没有」，缺席是「没问出来」，退化等于替 provider 编一个它没说过的答案。
+
+⚠️ **`sandbox.probe` 不包 `install()`**：一次冷装 753s、上万行输出，包进去等于把审计流变成安装日志转储。只包探测。
 
 ## 8. 自动化调度器（v1.1）
 

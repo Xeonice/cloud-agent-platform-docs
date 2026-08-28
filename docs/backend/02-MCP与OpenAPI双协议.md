@@ -182,7 +182,7 @@ export class SandboxMcpTools {
 | `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ⏳ | 生命周期；REST 已有，MCP 壳待补 |
 | `get_sandbox` | GET /sandboxes/:id | ⏳ | 详情 + 资源占用 |
 | `exec_in_sandbox` | POST /sandboxes/:id/exec | ⏳ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP） |
-| `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | ✅ | 无头模式跑 codex/claude code 任务，**202 返回 taskId**（一次运行最长 4 小时，把一个 tool 调用阻塞那么久不是选项）。S6 落地，[T-4](../TASK-LAUNCH-DECISIONS.md) 的三条阻塞已解决：handler = `RunAgentTaskWorkflow`；输出走新增的 WS `/tasks` 命名空间（**不是第八条 `/events` 事件**——任务输出是高频字节流，压进走 Outbox 的投影通道只会淹掉整个 UI 依赖的通道）；日志从 automation 口径上提为 Task 口径（`agent_tasks` + `data/logs/agent-tasks/`，13 §2.1.4）。**`extraArgs` 是白名单枚举、不是自由数组**——它会被拼进 CLI 的 argv，放开等于把「在沙箱里执行任意命令」开放给任何能调它的人 |
+| `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | ✅ | 无头模式跑 codex/claude code 任务，**202 返回 taskId**（一次运行最长 4 小时，把一个 tool 调用阻塞那么久不是选项）。S6 落地，[T-4](../TASK-LAUNCH-DECISIONS.md) 的三条阻塞已解决：handler = `RunAgentTaskWorkflow`；输出走新增的 WS `/tasks` 命名空间（**不是再多一条 `/events` 事件**——任务输出是高频字节流，压进走 Outbox 的投影通道只会淹掉整个 UI 依赖的通道）；日志从 automation 口径上提为 Task 口径（`agent_tasks` + `data/logs/agent-tasks/`，13 §2.1.4）。**`extraArgs` 是白名单枚举、不是自由数组**——它会被拼进 CLI 的 argv，放开等于把「在沙箱里执行任意命令」开放给任何能调它的人 |
 | `cancel_agent_task` | POST /sandboxes/:id/tasks/:taskId/cancel | ✅ | 终止一个在跑的无头 Task（SIGTERM → 5s → SIGKILL，03 §8.3）。**与 `run_agent_task` 同切片是刻意的**：只给「发起」不给「终止」，上层 agent 发出一个 4 小时档位的任务后就只能干等硬超时——它连「关掉浏览器标签」这条退路都没有 |
 | **`list_projects`** | GET /projects | ✅ | 上层 agent 先看有哪些工作区（P20 §9.4） |
 | **`create_project`** | POST /projects | ✅ | 异步 clone：tool **立即返回** `{ projectId, cloneStatus:'cloning' }`，调用方轮询 `list_projects` 或 `get_project` 直到 `ready`——MCP 无推送通道，不能让 tool 调用挂 30 分钟 |

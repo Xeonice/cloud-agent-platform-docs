@@ -178,7 +178,7 @@ ring buffer 判定为 **B 档的产物、无独立用途**，随 B 档一起退�
 > | 当时的缺口 | S6 的落点 |
 > |---|---|
 > | 无 handler | `RunAgentTaskWorkflow`（`packages/modules/sandbox/src/application/workflows/`）|
-> | 输出传输未定案 | **第三个 WS 命名空间 `/tasks`**（10 §6.7 / §7.4）。既不是第 2 个 SSE 也不是第八条 `/events` 事件：任务输出是高频字节派生流，压进走 Outbox 的投影通道纯属写放大，还会淹掉整个 UI 依赖的通道 |
+> | 输出传输未定案 | **第三个 WS 命名空间 `/tasks`**（10 §6.7 / §7.4）。既不是第 2 个 SSE 也不是再多一条 `/events` 事件：任务输出是高频字节派生流，压进走 Outbox 的投影通道纯属写放大，还会淹掉整个 UI 依赖的通道 |
 > | 日志存储只有 automation 口径 | 上提为 Task 口径：新表 `agent_tasks`（13 §2.1.4）+ `data/logs/agent-tasks/<taskId>/`（03 §8.6）|
 > | MCP 未注册 | `run_agent_task` 与 `cancel_agent_task` 均已注册（02 §5.2，共 10 个）|
 >
