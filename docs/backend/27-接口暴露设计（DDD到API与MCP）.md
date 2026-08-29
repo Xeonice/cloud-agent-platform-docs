@@ -104,7 +104,7 @@
 >
 > **⚠️ 准入分支与两个面必须同切片**（04 §2.6）：`headless:true` 遇到 provider `headlessTask=false` 返回 409 这条分支，只有在作业面/文件面都实现之后才能加——先加会把今天能成功的 `headless:true` 创建立刻变成 409。
 
-> **`GET /api/providers` 为什么不进 MCP**（判据见 §1.2）：**能力发现是 UI 管道**——它的读者是"要渲染一个 provider 单选框"的前端。agent 调用方拿到这张表**没有可做的决策**：`create_sandbox` 的 `provider` 缺省即用默认档，能力不匹配后端会以 409 明确拒绝（上一条），所以 agent 既不需要先查一遍再挑，也不需要靠它自检。为一个无决策的只读列表多开一个 tool，只是徒增 MCP 面。**注意 §9 平台面另有一个同名能力 `listProviders`（`GET /api/system/providers`，运维看板，尚未落地）——两者不是一回事**，本行是 sandbox 上下文的 `SandboxApplicationService.listProviders()`。
+> **`GET /api/providers` 为什么不进 MCP**（判据见 §1.2）：**能力发现是 UI 管道**——它的读者是"要渲染一个 provider 单选框"的前端。agent 调用方拿到这张表**没有可做的决策**：`create_sandbox` 的 `provider` 缺省即用默认档，能力不匹配后端会以 409 明确拒绝（上一条），所以 agent 既不需要先查一遍再挑，也不需要靠它自检。为一个无决策的只读列表多开一个 tool，只是徒增 MCP 面。**注意 §9 平台面另有一个同名能力 `listProviders`（`GET /api/system/providers`，运维看板，✅ 2026-08-28 落地）——两者不是一回事**，本行是 sandbox 上下文的 `SandboxApplicationService.listProviders()`。
 
 ---
 
@@ -290,11 +290,11 @@
 | `initialize` | `POST /api/system/init` | `{ proxyConfig?, acknowledgeOffline? }` | `{ initialized:true }` | **409（已初始化）** | **一次性操作**，重复调用即冲突（不是幂等）；前端遇 409 直接跳过向导 |
 | `getSettings` / `updateSettings` | `GET / PUT /api/system/settings` | | `SystemSettingsDto` | — | **永不回显口令 hash** |
 | `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
-| `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：逐项 `event: check` + 末尾 `event: done` | — | 单项超时 5s，一项卡住不阻塞整轮；检查项含 **`DATA_ROOT` 文件系统类型与 reflink 支持** |
+| `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：首帧 `event: start`（八项清单，页面据它画 ⏳ 占位）+ 逐项 `event: check` + 末尾 `event: done` | — | 八项**并行**，整轮 ≈ 最慢那项 ≈ 5s（不是累加的 40s）；单项超时 5s，一项卡住不阻塞整轮。含 **`DATA_ROOT` 文件系统与 reflink**（实测一次 FICLONE，不查文件系统名）与 **⑧ 预制镜像五步链**（P21-5 §9A）。帧类型手写于两仓 `sse-protocol.ts`，B5 对账 |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
 | `listAudit` | `GET /api/system/audit` | — | 游标增量（`seq`），可按 category / severity / subjectId 筛 | — | **观察设施非账本**（13 §2.8.2）：写入永不阻断业务，故产品文案不得声称"完整无遗漏"；`subjectId` 支撑沙箱详情时间线 |
 | `exportAudit` | `GET /api/system/audit/export` | — | `tar.gz`：**四份** —— `audit.jsonl` + `runtime.log` + `diagnose.json` + **`export-range.json`**（范围说明单独成份，理由见 P21-5 §10.3；10 §6.6 同） | — | 前**三份**（内容那三份）都在**写入口**已脱敏（05 §4）；第四份 `export-range.json` 是范围元数据，本身不含用户内容。截断时必须在包内注明范围，否则读者会以为日志只有这些 |
-| `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 + 最近 testkit 结果 | — | 统一名（P1-6）。**⏳ 尚未落地**。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页。**✅ `imageSpec` 那一档的注册表已经有了**（本句此前写的是「裸 Symbol、连注册表都不存在」，现在是反的）：`IMAGE_SPEC_REGISTRY` 有接口、有实现、有 DI 绑定、有第三方注入点（04 §8），`list()` 就是本端点要列的那一档。「provider / runtime / 镜像三层可注册」（19 §1 原则 5）**三层都是活的**；⏳ 未落地的只剩本端点自己 |
+| `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 | — | 统一名（P1-6）。**✅ 2026-08-28 落地**；⏳ 「最近 testkit 结果」**没有产出方**（testkit 跑在 CI 里，运行期一份结果都没有 —— 编一个恒 null 的字段只会多一格永远空着的卡）。⚠️ `healthy` 不是「刚探测过它活着」：`SandboxProvider` 契约里没有健康探测方法，这里用的是 `sandboxes` 表里最近 1h 的成败；`sampleSize: 0` 是「这一小时没人用过它」而不是「正常」。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页。**✅ `imageSpec` 那一档的注册表已经有了**（本句此前写的是「裸 Symbol、连注册表都不存在」，现在是反的）：`IMAGE_SPEC_REGISTRY` 有接口、有实现、有 DI 绑定、有第三方注入点（04 §8），`list()` 就是本端点要列的那一档。「provider / runtime / 镜像三层可注册」（19 §1 原则 5）**三层都是活的**；本端点也随本轮落地了 |
 | `unlock`（访问口令提交） | `POST /api/access/unlock` | `{ passcode }` | `{ unlocked: true }` + `Set-Cookie: ap_session`（签名 `HttpOnly`，7 天） | `PASSCODE_INVALID`(401)、`PASSCODE_LOCKED`(429，含 `retryAfterSec`) | **MVP**（审计 P0-3）。**不进 MCP**（§1.2 判据②：凭证提交面）。未启用口令时直接回 `{ unlocked:true }`；连续 5 次错锁 5 分钟，**与 Guard 共用同一把锁**（11 §3.1）。⚠️ **四条路径全部进审计流**（`category: 'system'`，13 §2.8.2 / 11 §3.1）：这是纯安全事件，此前只有一行运行日志。⛔ 口令本身与任何投影（长度/前缀/hash）不进 `summary`/`detail` |
 | `health` | `GET /api/health` | | `{ ok: true }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |

@@ -198,9 +198,38 @@ agent-platform-api/
     ├── ws/events.gateway.ts                                    # /events 通道（10 §3）
     ├── scheduler/{timers,mutex,scheduler-queue,clone-queue}.ts # 定时任务注册处 + 两个队列
     └── system/                                                 # 系统端点：不属任何上下文（23 D-11/D-12）
-        ├── {system.module,system.controller,system-settings.service,initialization.service}.ts
-        ├── diagnostics/{diagnostics.service,sse-writer}.ts + checks/*.check.ts   # SSE 诊断（02 §5.3）
-        │      checks/ 含 data-root-fs.check.ts（DATA_ROOT 文件系统类型与 reflink 支持，审计 P0-1）
+        ├── {system.module,system.controller,health.controller}.ts        # ✅ 六个端点（10 §6.6）
+        ├── {system-settings.service,initialization.service}.ts           # ✅ settings/init-status/init
+        ├── {system-resources.service,system-providers.service}.ts        # ✅ resources/providers
+        ├── memory.probe.ts   # ⛔ 「可用内存」≠ `os.freemem()`（P21-5 §9E）：Linux 读
+        │                     #    /proc/meminfo 的 MemAvailable、darwin 读 vm_stat 的
+        │                     #    free+inactive+speculative（purgeable 是子集，不加）。
+        │                     #    解析全是纯函数 + 固定样本 —— 跨平台读数最容易「本机绿、
+        │                     #    CI 的另一个平台没人验」。测不准 ⇒ level 钉 ok，绝不 critical。
+        ├── system-settings.sqlite.ts                                     # ✅ 单行表（13 §2.8.3，drizzle/0015）
+        ├── proxy-redaction.ts        # ⛔ 代理里的 URL userinfo —— 既有两道防线都不覆盖它，见下
+        ├── diagnostics/{diagnostics.service,sse-writer,connectivity.probe}.ts  # ✅ SSE 诊断（02 §5.3）
+        │      · connectivity.probe.ts —— `/init` 与第 ⑤ 项**共用同一段探测**（不共用就会出现
+        │        「向导说通了、诊断说不通」而用户无从判断信哪个）。坐标拆 host+port；
+        │        **只有 loopback 降级成明文**并改探 registry 的 `/v2/`（200 与 401 都算通）；
+        │        ⛔ 外部 registry 不因带端口就降级 TLS；loopback 不走代理；`noProxy` 生效。
+        │   └── checks/{check.types,container-runtime,dev-kvm,disk-space,port-conflict,
+        │               outbound-network,ws-loopback,data-root-fs,preset-image}.ts   # ✅ 八项
+        │      · data-root-fs.check.ts —— DATA_ROOT 文件系统类型与 reflink（审计 P0-1）。
+        │        ⚠️ 结论是**三态**：支持 ✅ / 不支持 ⚠️ / **无法判定 ℹ️**。探的是**平台真正
+        │        会用的那条路径** —— Linux 上 `cp --reflink=always`（`always` 而非 `auto`：
+        │        `auto` 不支持时静默退化成整份复制并返回成功，正好把「不支持」测成「支持」）；
+        │        **非 Linux 直接 `无法判定`**，因为 `FsWorkspacePreparer` 只在 linux 分支上
+        │        用 reflink（P21-5 §9D）。⛔ 魔数表**只在 Linux 上查**：macOS 的 `statfs.f_type`
+        │        是 vfs 类型序号不是魔数（APFS = 0x1a），查表得到的「未知 magic」是一句
+        │        听起来像故障、实际只说明查错了表的话。名字改由 mountinfo / mount 取。
+        │      · preset-image.check.ts —— 预制镜像五步链（P21-5 §9A：前七项全绿而一个 Task
+        │        都建不出来，就是缺这一项）。前四步复用 image 模块的能力
+        │        （`IMAGE_SPEC_REGISTRY.resolve` / `IMAGE_LABEL_TMUX` 血统判据 /
+        │        `IMAGE_FACADE.findRegisteredByRef`），第五步用 `provider.imageStaged()`。
+        │      · port-conflict.check.ts —— ⚠️ 报**被谁占了**（进程名 + pid + 平台原本要用它
+        │        做什么，P21-5 §9B）；查的是 `PORT` 的**实际取值**不是硬编码 3000；
+        │        占用者是本进程时是 ✅ 不是 ❌。
         └── access-passcode/{passcode.service,passcode.guard,failure-counter}.ts  # **MVP**（11 §3.1，审计 P0-3）
 ```
 

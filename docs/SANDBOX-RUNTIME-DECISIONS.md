@@ -123,6 +123,217 @@ stdin/stdout and forwarded ports*。我们的做法与它正好相反。
   - **boxlite(BoxLite microVM)**：microVM 起 ✅（aarch64, kernel 6.12, Hypervisor.framework, ~6s）；exec/并发 ✅；**Chromium 148 在 microVM 内起动 + 本地渲染 + 联网导航 ✅**（唯一告警 headless 无 dbus，无害，exit 0）。
   - **Box 内 `:8080` 访问机制（此前未知，已确认）**：BoxLite SDK `SimpleBox({ ports:[{hostPort, guestPort}] })` 做端口转发，实测 host→VM HTTP 200。数据面模型在 boxlite 上成立。
 
+## 决策 C（2026-08-29）：**镜像**与**控制面**也拆开 —— 决策 A 修订没做完的那一半
+
+### 病灶：数据面拆了，镜像没拆
+
+决策 A 修订把数据面拆成两套（aio 走沙箱内 API、boxlite 走 native exec/PTY），但**两档仍共用同一个镜像**。于是留下一个谁都没得益的中间态：
+
+> **boxlite 跑着一个 13GB 的 aio 镜像，而那个镜像里的 HTTP 服务在 boxlite 档位下一次都不会被调用。**
+
+boxlite 实际只用到 `tmux` + `node` + CLI。镜像里的 Chrome、VNC、VSCode server、Jupyter、MCP 那一整套，在微 VM 里是纯粹的死重。代价是实测出来的：**冷启动 190 秒**（13GB 现拉 + 铺 rootfs），而这段时间里 `sandbox.status` 恒为 `starting`、CPU 0%、无网络活动 —— 用户判它卡死，**排查的人第一眼也判它卡死**（2026-08-28 实录）。
+
+### 病灶二：为了盖一个章，造出一整条依赖链
+
+`platform/base` 相对上游 aio **只加了三个 LABEL、零实质内容**：
+
+```dockerfile
+FROM ghcr.io/agent-infra/sandbox:latest
+LABEL platform.tmux="true" platform.supportedRuntimes="codex" platform.resourceDefaults="{...}"
+```
+
+而血统检查卡的就是 `platform.tmux`。⚠️ **上游镜像本来就有 tmux**（实机验证：`/usr/bin/tmux` 3.2a，另有 node v22.23.0、codex 0.139.0；只缺 claude-code）。所以那一层加的是**一个它本来就为真的事实的声明**。
+
+代价却是完整的一条链：pull 13GB → 打标签 → push 13GB → **必须自建 registry 存它** → registry 跑在 Docker 里 → **Docker 一停整条链断**。2026-08-28 这条链真的断了：用户一个 Task 都建不出来，而错误出现在**新建任务弹窗**里 —— 整条链路上最晚、最挫败的时机。
+
+⚠️ 代码注释自己把这条规则定位成「**运维方对自己指定的那张镜像做的一次声明**」。问题正在这里：**一个「声明」被要求刻进镜像**，于是运维方为了声明一件事，被迫成为镜像作者。
+
+### 目标形态：统一的是**契约**，镜像 / 数据面 / 控制面三样都不必统一
+
+| | 平台 | 镜像 | 数据面 | 控制面 |
+|---|---|---|---|---|
+| **boxlite** | macOS（Virtualization.framework） | **精简镜像**（tmux + node + CLI，**实测 1.25GB**，见下方订正） | BoxLite native exec/PTY | BoxLite SDK |
+| **aio** | Linux（boxlite 在 Linux 上用不了，这是 aio 存在的全部理由） | 上游 aio + CLI 派生层 | **aio 自己的 HTTP API** | 容器运行时（docker） |
+
+⚠️ **别把两档的定位搞反**（本文档作者犯过）：boxlite 是 **macOS** 档，aio 是 **Linux** 档。
+
+### aio 数据面：**早就是**它自己的 API（本节初稿写错，2026-08-29 订正）
+
+⚠️ **本节初稿断言「数据面全部走 docker exec」，是错的。** 那是从 `AioSandboxProvider extends DockerContainerBackend` 这一行**推断**出来的，而没有去读 `aio-sandbox-agent.client.ts`（1545 行）——它早已在用 `/v1/bash/exec`、`/v1/bash/output`（双游标 + `wait` 长轮询）、`/v1/bash/kill`、`/v1/bash/sessions/{id}/close`、`/v1/file/*`、`ws /v1/shell/ws`。`DockerExecAgentClient` 只在 `agentPort` 未设时作**裸镜像兜底**，而注册的两个方案都设了 `agentPort`，**谁都走不到它**。
+
+⇒ 「数据面对称」这个目标**在决策 A 修订时就已经达成**，本决策真正欠的是**控制面拆分**与**镜像拆分**两项。⚠️ 教训：`extends` 一个 docker 类，不等于数据面走 docker —— 继承关系说明的是控制面从哪来，数据面在另一个协作者里。
+
+下表仍是权威映射（实测形状见后），只是它描述的是**已完成状态**而非待办：
+
+实测到的映射（2026-08-29，`ghcr.io/agent-infra/sandbox:latest`，spec 取自镜像自带的 `/v1/openapi.json`）：
+
+| 契约 | aio 原生 API | 实测形状 |
+|---|---|---|
+| `startJob` | `POST /v1/bash/exec` + **`async_mode:true`** | 返回 `command_id`(UUID) / `status:"running"` / `offset:0` / `stderr_offset:0` |
+| `readJob(cursor)` | `POST /v1/bash/output` + `offset`/`stderr_offset` | 返回 `stdout` / `stderr` / **推进后的 offset** / `command.status` / `exit_code`；另有 `wait`+`wait_timeout` 可长轮询 |
+| `killJob(signal)` | `POST /v1/bash/kill` + `signal` | — |
+| `releaseJob` | `POST /v1/bash/sessions/{id}/close` | — |
+| stdin | `POST /v1/bash/write` + `input` | — |
+| `readFile`/`writeFile`/`listFiles` | `/v1/file/read` `/write` `/list` | — |
+| `openFileStream` | `GET /v1/file/download` | — |
+| TTY | `/v1/shell/ws`（WebSocket） | — |
+| `inspect` | `GET /v1/sandbox` + 容器状态 | 返回发行版/端口占用/已装语言运行时 |
+
+⚠️ **`offset` 是字节游标**（实测 `"A\nB\n"` 之后回 `offset:4`），与 boxlite 那套**自建**的 setsid + 文件 + 游标语义一致 —— 也就是说 boxlite 费力模拟出来的东西，aio 原生就给了。
+
+⚠️ **stdout / stderr 各有独立游标**，契约的 `JobCursor` 要能装下两个偏移（boxlite 侧已经是这个形状，对得上）。
+
+### 认证：用 aio 原生的，别自造
+
+aio 原生支持 `SANDBOX_API_KEY`（`X-AIO-API-Key` / `Authorization: Bearer` / `?api_key=`），**不设则完全开放**（实测属实：不带任何 key 的 GET 返回 200）。平台现有那套自造的 `withAgentAuthEnv` / `agentAuthToken` / `createAgentAuthMaterial` 可以退役。
+
+⚠️ `providerState` 里持久化 token 的理由仍然成立（04 §7：端口可从 `docker inspect` 重新推出，token 不能）—— 迁移时别把它一起丢了。
+
+### 控制面：保留容器运行时，但收窄成端口
+
+aio 官方**只文档化了 `docker run` 与 Kubernetes**，SDK 只覆盖「已运行实例内的操作」，**没有任何实例 provisioning API** —— 所有示例都是 `Sandbox(base_url="http://localhost:8080")` 连一个已经起好的实例。**平台自己就是那个缺失的编排层**，这不是可以外包的部分。
+
+调研过的两个现成方案都不适用（**都要完整 K8s 集群**，与单机私有化定位冲突）：
+
+| | 依赖 | 单机可用 |
+|---|---|:--:|
+| `kubernetes-sigs/agent-sandbox` | K8s + CRD + RuntimeClass（gVisor/Kata） | ❌ |
+| `agent-sandbox/agent-sandbox` | K8s ≥ 1.28 | ❌ |
+
+但 k8s-sigs 那个的 **Sandbox CRD 形状值得抄**：`create / destroy / pause / resume` + 稳定网络身份 + 可选持久存储 + **把底层隔离委托给可替换的 RuntimeClass**。最后一条正是我们要的分层：**控制逻辑（起几个、配额、回收、生命周期）留在平台，「把一个 OCI 镜像变成一个跑起来的进程」交给一个可替换的执行者。**
+
+⇒ 把控制面从 `AioSandboxProvider extends DockerContainerBackend` 里拆出来，做成一个薄端口（`create/start/stop/destroy/inspect`）。docker 是它今天唯一的实现；镜像本身不依赖 Docker 任何特性（不挂 socket、不 DinD、不要 BuildKit，官方自己给 k8s 清单就是证明），所以将来换 podman / containerd 只是换实现。⚠️ 唯一的硬约束是 `--security-opt seccomp=unconfined`（官方标为必需）。
+
+### 隔离粒度：**一个 Task 一个实例**，不用 session 分
+
+⚠️ 曾考虑过「一个项目一个 aio 实例、Task 用 `/v1/bash/sessions` 区分」以省容器数量。**这条路是错的**：aio 的 session 只隔离会话状态（cwd / 环境变量 / 进程上下文），**完全不隔离文件系统** —— 同容器内所有 session 共享 `/home/gem`，而「共享」正是 aio 的卖点（官方原话：browser 下载的文件能立即被 shell 访问），**是设计意图，不是可绕开的限制**。
+
+同项目的 Task 之间会：文件互相可见可覆盖、同一个 `gem` 用户、同一 PID namespace 看得到彼此进程、一个 Task 写满磁盘拖垮全部。而平台跑的是 **LLM 生成的代码** —— 隔离在这里是安全边界，不是资源优化。用子目录分只是弱约定，agent 一句 `cd ..` 就穿过去了。
+
+### 镜像：删掉只打标签的中间层
+
+- **删 `platform/base`**（零实质内容）
+- **boxlite 档**：精简镜像（tmux + node + CLI）。**实测收益（2026-08-29，本机 macOS）**：
+
+  | | 镜像 | 冷启动（空 `BOXLITE_HOME`） | 整套 e2e |
+  |---|---|---|---|
+  | 改动前 | 13GB aio | **190 秒** | 1056s，2 个文件红 |
+  | 改动后 | **1.22GB** 精简 | **24.4 秒** | **380s，全绿** |
+
+  ⚠️ ADR 初稿写的是「冷启动会掉到**秒级**」——量级对了，但实测是 **24.4 秒**，「秒级」会让人以为是个位数。
+  ⚠️ 顺带证伪了一次误判：`workspace-clone` 与 `agent-task-job-plane` 两条 e2e 在 13GB 镜像下红（60 秒预算 / 600 秒 hook 都不够 190 秒的 provision），换镜像后**自己就绿了** —— 差点被当成「测试超时预算写小了」去调数字，那会把真问题掩盖掉。⚠️ 这两条此前一直因为无 Docker 而整体跳过，**是第一次真跑**，红了才被看见
+- **aio 档**：`FROM 上游` + 装 claude-code + **升级 codex**（上游 0.139.0，npm 最新 0.150.1）
+- 血统检查那个「运维方的声明」**移到平台侧配置**。防谎报仍由运行期 `command -v tmux` 兜底 —— 契约注释里明说了本条替代不了它
+
+⚠️⚠️ **「aio 走 docker 时本地 build 的镜像可直接用、不必 push」—— 本节初稿这句话是错的，2026-08-29 在真 Linux 机器上证伪。**
+
+镜像要过**两关**，而它们问的不是同一个东西：
+
+| 关 | 谁在问 | 问谁 |
+|---|---|---|
+| 注册 / 开机播种 | `OciImageSpecProvider` | **registry 的 HTTP API —— 从不问 docker daemon** |
+| 起容器 | 容器运行时 | 本机镜像库 |
+
+`DefaultImageSpecRegistry` 只注册了 `oci` 一个 provider，所以第一关**必须**能从 registry 拉到 manifest。实测：`docker build -t platform/sandbox:dev` 之后注册 ⇒ `registry-1.docker.io answered 401`（它把无 host 的名字当成了 Docker Hub）；push 到自建 registry 后立刻 `seeded … (valid)`。
+
+⇒ **自建 registry 在 aio 这条路上同样不能省。** 两档都要。
+
+⚠️ 更值得记的是**这句错话为什么能活这么久**：唯一走 `registerImage` 的那批 e2e 全部用 `.overrideProvider(IMAGE_SPEC_REGISTRY).useValue(makeFakeImageSpecRegistry())` 换成了不联网替身 —— **真实的镜像播种路径没有任何自动化测试覆盖**。补一个不走替身的 e2e，是防止同类错话再次发生的根因修法。
+
+✅ **已补（2026-08-29）**：`apps/api/test/e2e/image-seeding-registry.e2e-spec.ts`。它**不覆盖** `IMAGE_SPEC_REGISTRY`：真的起一个 `registry:2`、真的 `docker build` + `docker push`、真的让 `ImageSeeder` 在 `app.init()` 里播种。正反两向：
+
+| 方向 | 断言 | 排除的是 |
+|---|---|---|
+| 正 | push 过 ⇒ 播成 `valid`，且 digest **等于 registry 自己回答的那一个** | 「registry 这条路根本不通」/「digest 是编出来的」 |
+| 反 | 同一份 bits、同一个 registry、**只是没 push** ⇒ `REF_NOT_FOUND`（前置先断言 daemon 里确实有它） | **就是上面那句错话本身** |
+
+⚠️ 依赖 docker + 本机有 `registry:2` / `alpine:3.20`，缺前置**大声跳过并说明缺什么**。已在真 docker 下实跑，并用四个变异验证过会红（播种被跳过 / 根镜像 tmux 检查被摘掉 / 404 不再当 `REF_NOT_FOUND` / digest 改成自己合成）。
+
+⚠️⚠️ **CI 里必须让它真的跑起来，否则等于没补。** ubuntu runner 自带 docker 但不带这两张镜像 ⇒ 默认会跳过，而跳过就是「镜像从哪来」这个问题在 CI 里继续没人问 —— 那正是这句错话能活这么久的机制本身。`ci.yml` 因此在 e2e 之前 `docker pull registry:2 alpine:3.20`（两张共 ~50MB）。**13GB 的 AIO 镜像仍然永不自动拉**：放行的判据是体积，不是「反正拉一下」。
+
+⚠️ 顺带在同一轮里抓到一个**同形状**的东西：`terminal-container` / `boxlite-microvm` / `workspace-clone` 三个 e2e 裸赋值 `process.env.SANDBOX_DEFAULT_IMAGE` 且从不还原（e2e 是 `singleFork`，一个进程共享一份 env）。泄漏之后 `registry-extension.e2e` 会因为「播种时已经注册过了」而红。**而 CI 从来没红过 —— 因为 CI 上没有 AIO 镜像，那三个文件全被跳过，泄漏根本不发生。** 一个只在「测试真的跑起来时」才存在的串扰。已改走 `useEnv`，并在 `suite-hygiene.e2e-spec.ts` 加了机械守卫。同一轮还发现 `terminal-container` 把 `registry.defaultProvider` 硬写成 `'aio'`，而它跟宿主平台走（darwin ⇒ boxlite）—— 在 macOS 上一旦真跑起来必红。
+
+⚠️ 另一个隐形约束（同轮撞到）：血统已知表匹配的是 `platform/sandbox`（**斜杠**），而 Dockerfile 目录叫 `platform-sandbox`（**连字符**）。build 成 `…/platform-sandbox:v1` 会被拒（「平台还没有可用的预制镜像作为血统基准」），必须是 `…/platform/sandbox:v1`。
+
+✅ **已让它自己说得出来（2026-08-29）**：这条约束此前**只存在于一张表里**，而失败信息一个字都没提到名字 ⇒ 排查方向必然跑偏。现在三处补齐：
+
+- `builtin-image.ts#explainKnownTmuxRepositories` —— 认出「只差一个分隔符」并给出正确形态（`platform-sandbox` ↔ `platform/sandbox`），否则至少列出内置已知仓库；接在 `IMAGE_TMUX_MISSING` 的 message 后面；
+- ⚠️ **`ImageSeeder` 的日志此前把原因整个丢了**：`ManifestInvalidError.message` 是一句「镜像不满足平台约定，未注册」，真正的 finding 住在 `outcome.errors[]` 里 —— HTTP 出口把它们放进 `details[]` 所以界面上看得见，**只有日志这条出口没有**，而那正是运维方看 `docker compose up` 输出时唯一的信息源。已改成渲染 findings；
+- `api/images/README.md` 与 `.env.example` 显式写明「`-t` 里是斜杠，不是目录名」。
+
+### ⚠️ 落地实测订正（2026-08-29，实机 WSL2 + Docker 28.3.2）
+
+本节记的是**落地时与上面描述对不上的地方**，按发现顺序。
+
+1. **「现在的 `AioSandboxProvider` 数据面全部走 docker exec」——不成立。**
+   代码里数据面**早就是** aio 原生 HTTP/WS（`AioSandboxAgentClient`：`/v1/bash/exec`、
+   `/v1/bash/output`、`/v1/bash/kill`、`/v1/shell/ws`、`/v1/file/*`），`docker exec`
+   （`DockerExecAgentClient`）只在 `agentPort` 未设时作为**裸镜像 fallback**存在，而注册的
+   两个方案都不会走到它。⇒ 决策 C 的「aio 数据面」那一节描述的是**已经完成的状态**；本轮
+   真正未做的是**控制面拆分**与**镜像拆分**。
+
+2. **`platform/boxlite` 实测 1.25GB，不是「百 MB 级」。**
+   其中 **550MB 是两个 CLI 的预编译二进制**（codex 318MB + claude-code 205MB），
+   不可压缩——两个包都只装当前平台那一份。590MB 是 `node:22-bookworm-slim`，106MB 是 apt。
+   结论（13GB → 1.25GB，小一个数量级）仍然成立，**数字别照抄**。
+
+3. **上游镜像里 `npm install -g` 的默认 prefix 是「每个用户一份」的，直接用会装了等于没装。**
+   镜像 ENV `NPM_CONFIG_PREFIX=/root/.npm-global`，而沙箱内命令以 **`gem`** 跑
+   （prefix `/home/gem/.npm-global`）；Dockerfile 的 `RUN` 以 root 跑 ⇒ 装进 root 的目录，
+   `gem` 的 PATH 上没有它，**不报任何错**。
+   `/usr/local` 同样不行：`gem` 的 PATH 里 `/opt/nodejs/22/bin` **排在 `/usr/local/bin` 前面**，
+   而上游 codex 就在那儿——新装的会被旧的遮住，升级看起来成功、实际没生效。
+   ⇒ prefix 必须取 **node 自己的安装前缀**（三个 shim 目录共同指向的那一份）。
+
+4. **不能在跑着的容器里 `npm install` 来验证镜像内容。**
+   实测：`docker exec` 装完后 `docker exec` 看得见，而**沙箱 API 的 bash 会话看不见**
+   （它的 `/opt/nodejs/22/bin` 里没有新文件，mtime 还是构建日期）——沙箱服务跑在自己的
+   mount namespace 里。验证只有一条路：**构建镜像、起新容器、经 `/v1/bash/exec` 问**。
+
+5. **`--security-opt seccomp=unconfined`：官方标为必需，但主路径不需要它。**
+   实测不加它，`bash` / `tmux` / `codex` / `claude` 全部正常。⇒ 它买的是 browser/VNC 那一档
+   的可用性。已加上（官方要求），但**如实登记它放宽了容器隔离**，缓解在别处（一个 Task 一个
+   实例 + loopback + `SANDBOX_API_KEY` + 配额）。
+
+6. **`?api_key=` 实测能把 WS 开到 101，但我们仍走 `POST /tickets`。**
+   query 会进沙箱自己的 nginx access log，而这把钥匙的寿命是**整个沙箱**（ticket 30 秒过期）——
+   等于把长期凭证写进沙箱内进程读得到的日志。
+
+7. **`GET /v1/ping` 是镜像唯一免鉴权的路由**（nginx `map` 里显式列出）。就绪探测该用它，
+   而「匿名必须被拒」那条反向自检**绝不能**用它——用了会在一张完全正确的镜像上判失败。
+
+8. **`DockerExecAgentClient` 已删除** —— 见下方「决策 C-2：docker exec fallback 废止」。
+   它取代了「减债原则落地 4」原先那条「保留为 fallback，不删」。
+
+### 影响面
+
+- `AioSandboxProvider` 重写（数据面走 HTTP API，控制面拆成端口）
+- `DockerContainerBackend` 降级为控制面的一个实现
+- 现有 aio e2e **建立在 docker exec 之上，语义会变**
+- `platform/base` 镜像与其构建脚本删除；`platform/sandbox` 改为直接 `FROM` 上游
+- `.env.example` 的 `SANDBOX_DEFAULT_IMAGE` 与血统检查配置同步（那一行 2026-08-28 已因指向上游镜像而修过一次）
+
+## 决策 C-2（2026-08-29）：**docker exec fallback 废止**
+
+**结论**：删除 `DockerExecAgentClient`，`SandboxProvider.spawn` 不再有 docker exec 这条路。
+本条**取代**「减债原则落地 4」原先写的「保留为 fallback，不删，但非主路」。
+
+### 为什么废止
+
+| 当初留它的理由 | 今天的事实 |
+|---|---|
+| 「给没有内置 agent 的裸镜像兜底」 | 注册的方案只有 **aio**（自带 `:8080` agent）与 **boxlite**（native exec/PTY）。**没有任何一条代码路径走得到它** —— 它是 `DockerContainerBackend` 里 `agentPort === undefined` 才进的分支，而 aio 恒定传 8080 |
+| 「多一条路总没坏处」 | 它是一条**从外面撬进沙箱**的通道，且**比正路弱**：绕开 `/v1/bash/exec` 的 `hard_timeout`（真实远端 kill，不只是 HTTP 超时）、绕开 job 的存活语义（`BASH_SESSION_TIMEOUT` / `MAX_BASH_SESSIONS`）、绕开沙箱自己那道 `SANDBOX_API_KEY` 鉴权门 |
+
+⚠️ **一条没人走、又比正路弱的旁路，留着的唯一效果是「将来有人会走它」** —— 而走它的那个人会以为自己拿到了和主路一样的语义。这正是决策 A 修订立下的那条原则的反面：两档都用**沙箱自己的接口**，不是「一个从里面、一个从外面」。
+
+### 恢复方式（如果将来真的需要裸镜像档）
+
+`packages/modules/sandbox/src/infrastructure/providers/docker/docker-exec-agent.client.ts`，
+git 历史里的一个 **117 行**文件（删除于本轮）。⚠️ 恢复它之前先回答：**这个裸镜像档要怎么兑现 `headlessTask`？**
+`docker exec` 没有 job 存活语义，所以恢复它意味着那一档的 `headlessTask` 必须是 `false`
+—— 而那正是本轮 ④ 修掉的那类「声明了却兑现不了」的能力位。
+
 ## 终端两段映射（前端契约不变；AIO 协议翻译在 provider，不在网关）
 
 分两段边界，各司其职，**网关对 provider 无关**：
@@ -190,4 +401,5 @@ stdin/stdout and forwarded ports*。我们的做法与它正好相反。
 1. 终端/exec 契约 = 沙箱内 API 数据面 → microVM 化零改动。
 2. 前端 socket.io 协议是**稳定边界**，后端翻译层吸收 provider 差异。
 3. BoxLite 可插拔 hypervisor 覆盖 macOS/Linux/Windows，boxlite 档跨平台单机可跑（Mac 原生，无需 Linux/KVM）；aio 走 Docker。
-4. docker exec 保留为 fallback（裸镜像/无 agent），不删，但非主路。
+4. ~~docker exec 保留为 fallback（裸镜像/无 agent），不删，但非主路。~~
+   ⚠️ **本条已被「决策 C-2」废止（2026-08-29）**，`DockerExecAgentClient` 已删除。理由见该节。

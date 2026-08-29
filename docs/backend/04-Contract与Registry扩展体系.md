@@ -133,7 +133,7 @@ interface SandboxProvider {
 
 > **boxlite 那两个"同左"的依据**：boxlite 跑的是**同一张镜像** `agent-infra/sandbox:latest`，复用**同一个** `AioSandboxAgentClient`，只是 guest `:8080` 转发到宿主 loopback 端口 ⇒ 端点集合相同是结构性成立。**文件面已在真 micro-VM 上单独实测（2026-08）**：文本往返 ✅；二进制 260B **逐字节一致**、`application/octet-stream` ✅；`list` 返回结构与 aio 一致（`modified_time` 同样是字符串装的 epoch 秒）✅；**8MB 下载 12ms**（aio 是 36ms）✅；**宿主写入到 guest 可见 3ms** ✅；缺文件的两套错误约定与 aio **完全一致**（download 回 404、read 回 `success:false` + `error_type:"not_found"`）✅。⇒ 跨 virtio-fs 没有观察到额外的传播代价。
 
-> **数据面 = 沙箱内 API（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/bash/exec` 一次性命令；**命令面选 `/v1/bash/exec` 而非 `/v1/shell/exec`，因为后者不支持 `env`/stdin/signal**，实测能力面见 §2.3★）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**⚠️ 实现上 publish 到宿主 loopback（`127.0.0.1` + 临时端口）**（原文"仅内网可达、不外泄"与实现不符，已按实现更正）+ 就绪探测；宿主本地任意进程可直连该无鉴权 shell，⏳ 待 Step 4 加固——登记见该 ADR「安全姿态」。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
+> **数据面 = 沙箱内 API（权威：[SANDBOX-RUNTIME-DECISIONS](../SANDBOX-RUNTIME-DECISIONS.md)）**：aio/boxlite 的 `spawn` 由 **AIO Sandbox 自带的 in-sandbox API**（`:8080`——`/v1/shell/ws` 交互终端、`/v1/bash/exec` 一次性命令；**命令面选 `/v1/bash/exec` 而非 `/v1/shell/exec`，因为后者不支持 `env`/stdin/signal**，实测能力面见 §2.3★）支撑，AIO 协议 ↔ 中立 `ProcessStream` 的翻译在 **provider 内**完成——**不是宿主 `docker exec`**（后者仅作无内置 agent 裸镜像的 `DockerExecAgentClient` fallback）。控制面：aio=dockerode、boxlite=BoxLite SDK。agent 端口**⚠️ 实现上 publish 到宿主 loopback（`127.0.0.1` + 临时端口）**（原文"仅内网可达、不外泄"与实现不符，已按实现更正）+ 就绪探测；宿主本地任意进程可直连该无鉴权 shell，⏳ 待 Step 4 加固——登记见该 ADR「安全姿态」。⚠️ **这描述的是默认档（api 裸跑在宿主）**：配了 `SANDBOX_DOCKER_NETWORK`（api 在容器里那档，[11 §1.4](../shared/11-部署与扩展预留.md)）时 agent 端口**一个都不发布**，平台经 docker 内嵌 DNS 用容器名直连 —— 那一档的暴露面比本句描述的更小。该选型的两档实测验证与工程注记（含 BoxLite 本地 registry 预置镜像）见该 ADR。
 >
 > **术语**：本节的 "沙箱内 API" 指镜像自带的那个 HTTP 服务（①），**不是** `codex`/`claude` 那个 agent（②）——两者的区分与判据见 [00 §0](../00-总体架构概览.md)。
 >
@@ -336,7 +336,15 @@ interface SandboxProviderCapabilities {
 
 **已删除的 4 位及理由**：`exec` / `attachPty` → 合并为必须方法 `spawn` 与 `spawnTty` 一位；`metricsStream` → 直接体现为 `inspect().resourceUsage` 有没有值，不需要单独声明；`networkPolicy` / `gpuAllocation` → 平台当前没有任何一条分支读它们，属于"提前占坑"。
 
-**能力位不是自我描述而是承诺**：声明 `true` 就必须通过 testkit 里对应的用例（§10 的 CAP-01 条款），声明与实际不符视为不合格实现。对有面挂靠的 `headlessTask`，**位与面必须双向一致**（§10 的 **CAP-02** 条款）——声明 `true` 却没有面，应用层会调到 `undefined`；有面却声明 `false`，`GET /api/providers` 瞒报，而前端正是按这些位显隐控件的。两个方向都是真故障，不是洁癖。
+**能力位不是自我描述而是承诺**：声明 `true` 就必须通过 testkit 里对应的用例（§10 的 CAP-01 条款），声明与实际不符视为不合格实现。
+
+> ⚠️ **2026-08-29 事故：这句话曾经只是一句话。** CAP-01 只查「七位齐全且都是 boolean」，CAP-02 只查 `headlessTask`，于是**其余五位声明了什么都没人验**。实测查出四处谎报：`aio` 的 `updateResources` / `pauseResume` / `watchEvents`，以及 `boxlite` 的 `watchEvents`——**连契约包自己那个样板 fake provider 也在谎报 `watchEvents`**。
+>
+> 这些位不是装饰：`sandbox-application.service.ts#assertCapabilities` 照着它们放行 `create({ require: { updateResources: true } })`，`GET /api/providers` 照着它们告诉前端画哪些控件。一位谎报 = 平台替 provider 签了一张兑付不了的支票。
+>
+> ⚠️ **根因不是「有人写错了一位」，是「没有任何东西要求任何一位兑现」。** 所以修法不是把那四处改成 `false` 就完事——那只修了今天，下一位照样漂。真正的修复是 **CAP-03 + 那张穷举判据表**：新增一位就必须回答「平台怎么兑现它」，答不上来就只能声明 `false`。
+>
+> ⚠️ **docker 确实支持 `pause`/`unpause`/`update`，boxlite SDK 确实有完整快照 API。** 但那是「将来可以实现」，不是「现在已实现」——这一位说的是后者。顺序永远是**先加方法，再改这一位**。对有面挂靠的 `headlessTask`，**位与面必须双向一致**（§10 的 **CAP-02** 条款）——声明 `true` 却没有面，应用层会调到 `undefined`；有面却声明 `false`，`GET /api/providers` 瞒报，而前端正是按这些位显隐控件的。两个方向都是真故障，不是洁癖。
 
 ### 2.6 作业面与文件面（无头 Task 的两个可选面）
 
@@ -883,8 +891,8 @@ interface ProviderEvent {
 > | `ImageSpecProvider` / `ImageSpecManifest` / `ValidationResult` | ✅ **已定义** | `packages/contracts/src/image-spec.contract.ts`（连同 `ResolvedImage` / `ImageSpecRegistry` / 六个错误码 / `pinnedImageRef` / `parseImageRef`） |
 > | `resolve()` / `validate()` | ✅ **有实现**：`resolve` 走 OCI Distribution API 解出真 digest **并带回 `rootfs.diff_ids`**（同一份 config blob，零额外请求），`validate` 判入口约定 + 预装 warning、零 IO（**不判 tmux、不判血统**，见 ★血统） | `packages/modules/image/src/infrastructure/spec/oci-image-spec.provider.ts` + `oci-registry.client.ts` |
 > | `IMAGE_SPEC_REGISTRY` | ✅ **有实现、有 DI 绑定、有第三方注入点**（§8） | `packages/modules/image/src/infrastructure/registry/image-spec.registry.ts`；`image.module.ts` 里 `provide`+`exports` |
-> | 四个时刻 ①②③④ | ✅ **全部接线**：①② 是 `M/image` 的两个端点；③ 在 `admit()` 的 `resolveImage()`（改成查库换 `manifestId`）；④ 在 `imageSpecOf()`（按 manifest id 读回 `ref`+`digest`），两个内建 provider 都过 `pinnedImageRef()` | `image.controller.ts` / `sandbox-application.service.ts#resolveImage` / `provision-sandbox.workflow.ts#imageSpecOf` / `docker-container-backend.ts:124`、`boxlite-sandbox.provider.ts:91` |
-> | 镜像约定（bash / tmux / HOME 可写） | ⚠️ **由「标签声明」改为「血统验证」（2026-08，见下方 ★血统）**：注册期验证 `rootfs.diff_ids` 是某张平台预制镜像的前缀扩展（不满足 ⇒ `IMAGE_BASE_REQUIRED`）；bash / tmux / node 由**平台自己构建预制镜像**来保证，不再逐条判定声明 | `image-application.service.ts#assertAdmissible`；`api/images/platform-base/Dockerfile`；testkit IS-05 |
+> | 四个时刻 ①②③④ | ✅ **全部接线**：①② 是 `M/image` 的两个端点；③ 在 `admit()` 的 `resolveImage()`（改成查库换 `manifestId`）；④ 在 `imageSpecOf()`（按 manifest id 读回 `ref`+`digest`），两个内建 provider 都过 `pinnedImageRef()` | `image.controller.ts` / `sandbox-application.service.ts#resolveImage` / `provision-sandbox.workflow.ts#imageSpecOf` / `docker-container-runtime.ts`、`boxlite-sandbox.provider.ts:91`（aio 侧 2026-08-29 起在 `docker-container-runtime.ts`）|
+> | 镜像约定（bash / tmux / HOME 可写） | ⚠️ **由「标签声明」改为「血统验证」（2026-08，见下方 ★血统）**：注册期验证 `rootfs.diff_ids` 是某张平台预制镜像的前缀扩展（不满足 ⇒ `IMAGE_BASE_REQUIRED`）；bash / tmux / node 由**平台自己构建预制镜像**来保证，不再逐条判定声明 | `image-application.service.ts#assertAdmissible`；`api/images/platform-sandbox/Dockerfile`；testkit IS-05 |
 >
 > **仍然只有一半，而这一半是设计要的**：注册期验证的是**血统**（可验证的事实），运行期查的是镜像**实际是什么**（`command -v tmux` ⇒ `IMAGE_CONTRACT_VIOLATION`）。两层各管一半、谁也替不了谁，见下方 ★血统。**bash 与 HOME 可写这两条约定仍然没有独立的判定方**——它们现在挂在「平台自己构建的预制镜像里有」这个前提上，而这个前提由血统前缀承接；写在这里，免得下一个人以为有人在逐条检查它们。
 
@@ -1074,7 +1082,8 @@ private imageSpecOf(sandbox: Sandbox): ResolvedImageSpec {
 | 事实 | 怎么知道 | 谁来判 |
 |---|---|---|
 | 是否基于平台预制镜像 | `rootfs.diff_ids` 前缀 | **注册期，可验证** ⇒ `IMAGE_BASE_REQUIRED` |
-| 预制镜像有 tmux / bash / node | 平台自己构建的（`api/images/platform-base`） | 平台自己保证 |
+| 根镜像**声明**了 tmux | **平台侧配置**（`SANDBOX_DEFAULT_IMAGE_TMUX` + 平台内置已知镜像表） | **注册期，运维方的一句声明** ⇒ `IMAGE_TMUX_MISSING`（2026-08-29 从镜像标签搬来，见 ★★★声明搬家） |
+| 预制镜像有 tmux / bash / node | 平台自己构建的（`api/images/platform-sandbox`、`api/images/platform-boxlite`） | 平台自己保证 |
 | 派生镜像没删掉 tmux | 元数据看不出来 | **运行期实测** `command -v tmux` ⇒ `IMAGE_CONTRACT_VIOLATION`（已存在，未改） |
 | 预装了哪些 runtime CLI | 标签（可继承、可能过期） | 只驱动 **warning**（`RUNTIME_NOT_PREINSTALLED`），**不阻断、也不影响可选性** |
 
@@ -1143,11 +1152,63 @@ private imageSpecOf(sandbox: Sandbox): ResolvedImageSpec {
 
 | 路径 | 内容 | 为什么 |
 |---|---|---|
-| `api/images/platform-base/Dockerfile` | `FROM` 上游 + 三个 `platform.*` 标签 | **零字节新层**（`LABEL` 不产生层），它就是血统锚点 |
-| `api/images/platform-sandbox/Dockerfile` | `FROM base` + 预装 claude-code | 把 §3 ★1 实测的 **753 秒**从**每个 Task**挪到**发布一次** |
+| `api/images/platform-sandbox/Dockerfile` | **aio 档**：`FROM` 上游 aio + 预装 claude-code + 升级 codex（0.139.0 → 0.150.1） | 把 §3 ★1 实测的 **753 秒**从**每个 Task**挪到**发布一次** |
+| `api/images/platform-boxlite/Dockerfile` | **boxlite 档**：`FROM node:22-slim` + tmux/git + 两个 CLI | boxlite 用不到 aio 镜像里那个 HTTP 服务，13GB 里绝大部分是死重（实测冷启动 190 秒）。**13GB → 1.25GB** |
+
+⚠️ **`api/images/platform-base` 已删除（2026-08-29）**。它相对上游只加了三个 `LABEL`、**零实质内容**，
+唯一作用是盖 `platform.tmux` 这个章给注册期看。代价是一条纯属人为的依赖链：
+pull 13GB → 打标签 → push 13GB → **必须自建 registry 存它** → registry 跑在 Docker 里 → Docker 一停整条链断
+（2026-08-28 真断过）。而**上游镜像本来就有 tmux**（实机验证 3.2a）。⇒ 见 ★★★声明搬家。
+
+⚠️ **两张镜像不能互换**：`platform/boxlite` 里没有 `:8080` 的 agent，拿它跑 aio 会在就绪门那步响亮超时。
+##### ⑦ 按档挑镜像 + 「这张镜像能在哪一档跑」（2026-08-29 接线）
+
+| | 怎么配 | 语义 |
+|---|---|---|
+| 兜底 | `SANDBOX_DEFAULT_IMAGE` | 两档共用它 —— **单档部署一样也不用多配** |
+| 按档覆盖 | `SANDBOX_<PROVIDER>_IMAGE`（`SANDBOX_AIO_IMAGE` / `SANDBOX_BOXLITE_IMAGE`） | 那一档用自己的那张 |
+
+⚠️ **「必填两个」是错的选项**：绝大多数部署是单机单档，做成必填会让今天所有正确的配置在升级后变成错误配置，而它们并没有变错 —— 真实结局是有人把两个填成同一个值，于是这层配置除了多一行什么也没带来。
+
+**配到的每一张都是一个血统锚点**（`ImageSeeder` 逐张以 `builtin:true` 播种；单档部署去重后恒为 1 张）。多锚点比对本身早就支持（`lineageVerdict` 取最长前缀）。真正新长出来的概念是：
+
+> **这张用户镜像能在哪一档跑？** —— `ImageFacade.resolveForTask(selector, provider)`，不满足 ⇒ `IMAGE_PROVIDER_MISMATCH`（400）。
+
+⚠️ **判据是血统，不是声明。** 一张用户镜像属于哪一档，由「它派生自哪一张锚点」（`derivedFromDigest`，注册期算好落库）决定；锚点属于哪一档是**平台自己的配置**。选血统而不是让镜像自己声明（比如一个 `platform.providers` 标签），理由与 `platform.tmux` 那次搬家同源：**声明会被派生镜像继承、会过期、防不住谎报**，而血统是注册期验过的可验证事实，且已经算出来存着了 —— 多一份手抄就多一处迟早会不一致的地方。
+
+⚠️ **比的是「同一个仓库」，不是「同一个 digest」。** 预制镜像会升级（`platform/sandbox:v2` 通常就是 `:v1` 再叠一层，两张都是 builtin 锚点）。拿「当前配置那一张的 digest」比对，会在运维方把 `SANDBOX_AIO_IMAGE` 从 v1 换到 v2 的那一刻，**让所有基于 v1 的用户镜像集体变成「跑不了」** —— 而它们什么都没变，也确实还能跑。
+
+⚠️ **拿不准时放行。** 这一档的锚点还没播种成功（离线部署、registry 限流）时无法证明不兼容，于是不拦：少报是降级，多报是撒谎（把一张能跑的镜像拦下来，而用户没有任何办法自证）。
+
+⚠️ **单档部署下这条检查恒为放行** —— 两档指向同一张锚点，任何合规镜像都同时属于两档。也就是说它对今天绝大多数部署**不改变任何行为**。
 
 ⚠️ **现装兜底保留**：自定义镜像可以只 `FROM base` 而不预装任何 runtime，那时 install plan 现装仍是唯一的路，
 而血统保证了 node 在 ⇒ 它一定装得上。预装是**快路径**，不是唯一路径。
+
+##### ★★★ 声明搬家（2026-08-29）：`platform.tmux` 标签 → 平台侧配置
+
+**问的还是同一件事，拦的还是同一个错，留给运行期的还是同一件事** —— 换的只是**取答案的地方**。
+
+| | 搬家前 | 搬家后 |
+|---|---|---|
+| 判据 | `manifest.labelsRequired` 含 `platform.tmux` | `builtinImageDeclaresTmux()` |
+| 来源 | **镜像里的 LABEL** | `SANDBOX_DEFAULT_IMAGE_TMUX`（运维方显式）**或**平台内置已知镜像表 |
+| 代价 | 平台必须维护一层只为盖章的中间镜像 + 自建 registry | 一行配置 |
+| `path` | `labels.platform.tmux` | `env.SANDBOX_DEFAULT_IMAGE_TMUX` |
+
+⚠️ **为什么 `path` 也必须改**：它指的是「现在要改的那个东西」。继续指 `labels.platform.tmux`
+会把用户送去改一张他可能根本没有构建权的镜像 —— 而正确的下一步是改一行配置。
+
+⚠️ **内置已知表匹配落在 `/` 边界上**（`agent-infra/sandbox` / `platform/sandbox` / `platform/boxlite`，
+含内网 mirror）。裸的 `endsWith` 会把 `evil.io/notplatform/sandbox` 也认成自己人 —— 一条静默生效的信任旁路。
+⚠️ **不认识 + 没声明 ⇒ `false`**，不是「宽容地放过」：`true` 兜底会让这条规则变成一句永远不拒绝的注释。
+⚠️ 显式的 `=false` **压得过**内置表：运维方说「我知道这张镜像没 tmux」时，平台不该反过来告诉他有。
+
+⚠️ **防谎报一字未变**：仍然是运行期沙箱内那次 `command -v tmux`（⇒ `IMAGE_CONTRACT_VIOLATION`）。
+一张删掉 tmux 的镜像照样能被声明成 `true` —— 这条规则从来不打算防它。
+
+**同口径的第二个读者**：诊断第 ⑧ 项第 3 步（`preset-image.check.ts`）读的是**同一个函数**。
+两边各自实现会长出「诊断说就绪、注册仍被拒」这种各自正确、合起来撒谎的组合。
 
 > 两个内建方案都以 **OCI 镜像**为交付单元（§2.1），所以下面这套约定在 `aio` 与 `boxlite` 下一字不差地成立——正是 §2.0 第 3 条"双实现验证"要保住的性质。
 
@@ -1427,9 +1488,9 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 >
 > | 跑套件的实现 | 位置 | 跑到的条款 |
 > |---|---|---|
-> | `aio` / `boxlite`（**真实内建类**） | `packages/modules/sandbox/test/contract/builtin-providers.contract.spec.ts` | SP-00、CAP-01（结构半场）——**无条件跑**，构造这两个 provider 既不连 docker 也不起 micro-VM |
+> | `aio` / `boxlite`（**真实内建类**） | `packages/modules/sandbox/test/contract/builtin-providers.contract.spec.ts` | SP-00、CAP-01（结构半场）、**CAP-02**、**CAP-03**——**无条件跑**，构造这两个 provider 既不连 docker 也不起 micro-VM |
 > | `aio` / `boxlite`（**真实内建类，live**） | `apps/api/test/e2e/builtin-provider-contract.e2e-spec.ts` | 再加 SP-01（真 create→destroy）。宿主不可用时**大声 skip**（stderr 打黄框，说明缺什么），绝不假装通过 |
-> | `fake`（内存实现） | `packages/contracts/test/contract/sandbox-provider.contract.spec.ts` | SP-00、CAP-01、SP-01 |
+> | `fake`（内存实现） | `packages/contracts/test/contract/sandbox-provider.contract.spec.ts` | SP-00、CAP-01、CAP-02、**CAP-03**、SP-01 |
 > | `codex` / `claude-code`（**真实内建 adapter**） | `packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts` | RA-03、RA-08 ~ RA-14（见 §10.3）——**无条件跑** |
 > | 第三方 provider + adapter | `apps/api/test/e2e/registry-extension.e2e-spec.ts`（注册链路验收，非 testkit） | —— |
 >
@@ -1464,6 +1525,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | **CAP-01** | MUST | **声明的每个能力位都必须与实际行为一致** | 对每个声明 `true` 的位跑其挂靠条款；对声明 `false` 的位，断言调用对应可选方法抛 `UNSUPPORTED_CAPABILITY` |
 | **SP-J1** | MUST（`headlessTask`） | **作业生存义务**：`startJob` 与 `releaseJob` 之间，作业必须在其 `JobSpec.timeoutMs` 期间保持可读可杀，且**读取不得成为保活手段** | 起一个时长接近 `timeoutMs` 的作业，全程**不**轮询，到期后再读——必须仍能拿到输出与退出码。⚠️ 这条专治一类默认就违反它的实现：内建 agent 的会话有闲置 TTL（默认 1 小时），而**读输出不刷新它的时钟**、回收也**不检查命令是否在跑**（§2.6 ★★★）。✅ 已落地为 live e2e（`apps/api/test/e2e/agent-task-job-plane.e2e-spec.ts`，aio 与 boxlite 各一遍），并**同时断言沙箱确实是带着放大后的 TTL / 会话上限启动的**——只断言「到期后读得到」会让一个从没放大过 TTL 的实现也蒙混过关。仍未进 testkit（它需要真 host） |
 | **CAP-02** | MUST | **有面挂靠的能力位与该面的存在性双向一致**：`headlessTask` ⟺ `provider.jobs` 与 `provider.files` 同时存在（§2.6） | 断言 `(provider.jobs !== undefined) === capabilities.headlessTask`，`files` 同理。**两个方向都判**：声明 `true` 而无面 ⇒ 应用层调到 `undefined`；有面而声明 `false` ⇒ `GET /api/providers` 瞒报，前端据此显隐控件会漏掉可用能力 |
+| **CAP-03** | MUST | **行为半场：一位为 `true`，当且仅当它是「可兑现的」** —— 对应契约里有一个可选方法且 provider 实现了它；契约里**没有**兑现途径的位（`pauseResume` / `snapshot`）**只能是 `false`** | testkit 里一张**穷举**的判据表 `CAPABILITY_EXERCISE`：位 ⟺ `typeof provider.<method> === 'function'`（双向，理由同 CAP-02）；`method: null` 的位断言必须为 `false`。⚠️ **表本身也是断言**：`CAPABILITY_KEYS` 里出现表中没有的位，本条立刻红 —— 新增一位必须同时回答「平台怎么兑现它」 |
 | SP-T1 | MUST（`spawnTty`） | `spawn({tty:true})` 能双向收发，`resize()` 生效 | 写入 `stty size` 并 resize，断言输出的行列数随之变化 |
 | SP-T2 | **SHOULD**（`spawnTty`） | `ProcessStream.ref` 稳定可复用：用它作 `reuse` 重连回同一会话 | 建会话 → 写入标记 → 断开 → `spawn({reuse: ref})` → 断言能看到先前会话的现场。**维持 SHOULD，但理由已更换（2026-08）**：原理由是「保活依赖 tmux 而 §7 只把 tmux 定为 SHOULD，一个 MUST 一个 SHOULD 自相矛盾」（审计 P1-10）——tmux 升 MUST 后该矛盾不复存在，原理由作废。**现在的理由更硬**：现场保活由**沙箱内的 tmux server**提供，与 provider 支不支持 `ref` 复用正交——网关重连时再跑一次 `tmux attach` 同样回到现场，并不要求 provider 复用同一个 `ProcessStream.ref`。因此 ref 复用是**省一次 spawn 的优化**，不是保活的前提，不该定成准入线。⚠️ 原文那句「不具备会话保活的实现必须降级为网关侧 ring buffer」**已随 B 档一起作废**（§7 ★ / 06 §6），不要再照它实现 |
 | SP-V1 | MUST（`volumeMount`） | `stop()` → `start()` 后工作区数据仍在 | 停机前写文件，重启后读出同一内容 |
@@ -1471,7 +1533,7 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | SP-U1 | MUST（`updateResources`） | 改配额后 `inspect().resourceUsage` 或实体限额随之变化，且**不重建**（句柄不变） | 断言前后 `providerSandboxId` 相同 |
 | SP-P1 | MUST（`pauseResume`） | pause 后 `inspect()` 为 `instance_paused`，resume 后回到 `instance_running` | 状态往返断言 |
 
-> **已落地的条款**：**SP-00**、**CAP-01 的结构半场**（七位能力位齐全且都是 boolean，另可用 `opts.expectedCapabilities` 逐位钉死）、**CAP-02**（静态条款，无宿主需求；已做**反例验证**——把 `aio` 的 `headlessTask` 篡改成 `true` 而不挂面，CAP-01 与 CAP-02 双双变红并给出准确消息，还原后恢复绿，不是空转用例）——这两条无宿主需求，`aio`/`boxlite`/fake 一律无条件跑；**SP-01** 为 live 条款，只在传入 `opts.context` 时打开。其余 SP-02 ~ SP-12 / SP-T\* / SP-V1 / SP-W1 / SP-U1 / SP-P1 与 CAP-01 的**行为半场**（声明 false 的位调用即抛 `UNSUPPORTED_CAPABILITY`）**尚未进 testkit**——它们都要真宿主，属 live 条款，随 sandbox-run 切片补齐；其中 create→exec→destroy、stop→start 数据留存、重启重连等路径今天由 `docker-backend.e2e` / `boxlite-provider.e2e` / `boxlite-microvm.e2e` 单独覆盖（不是 testkit 形态，所以第三方实现复用不到）。
+> **已落地的条款**：**SP-00**、**CAP-01 的结构半场**（七位能力位齐全且都是 boolean，另可用 `opts.expectedCapabilities` 逐位钉死）、**CAP-02**（静态条款，无宿主需求；已做**反例验证**——把 `aio` 的 `headlessTask` 篡改成 `true` 而不挂面，CAP-01 与 CAP-02 双双变红并给出准确消息，还原后恢复绿，不是空转用例）——这两条无宿主需求，`aio`/`boxlite`/fake 一律无条件跑；**SP-01** 为 live 条款，只在传入 `opts.context` 时打开。其余 SP-02 ~ SP-12 / SP-T\* / SP-V1 / SP-W1 / SP-U1 / SP-P1 **尚未进 testkit**——它们都要真宿主，属 live 条款，随 sandbox-run 切片补齐。**CAP-03**（行为半场的静态那一半：位 ⟺ 可选方法在不在，且无兑现途径的位只能是 false）2026-08-29 已落地，无宿主需求、三个 provider 无条件跑，并做了**反例验证**（把 `updateResources`/`pauseResume` 谎报回 `true`、反向实现 `watchEvents()` 却声明 `false`、以及给契约新增一位却不填判据表——四种变异全部变红）。仍留在 live 侧的是「声明 false 的位**调用即抛** `UNSUPPORTED_CAPABILITY`」那一段；其中 create→exec→destroy、stop→start 数据留存、重启重连等路径今天由 `docker-container-runtime.e2e`（2026-08-29 从 `docker-backend.e2e` 改名并收窄为**只测控制面** —— 原先那条 `docker exec ls /` 的数据面断言随 `DockerExecAgentClient` 一起删除）/ `boxlite-provider.e2e` / `boxlite-microvm.e2e` 单独覆盖（不是 testkit 形态，所以第三方实现复用不到）。
 
 ### 10.3 RuntimeAdapter 条款
 
