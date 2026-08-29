@@ -37,6 +37,10 @@ const WEB_ROOT = path.join(ROOT, 'web');
 const WEB_OPENAPI = path.join(WEB_ROOT, 'openapi.json');
 const API_WS_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'ws-protocol.ts');
 const WEB_WS_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'ws-protocol.ts');
+// B5：SSE 帧契约。**与 ws-protocol 同放**是 10 §6 的要求（「流帧类型必须手写并与 WS
+// 协议文件同放，走同一套 SYNC WITH 纪律」），所以这两条路径与上面两条只差文件名。
+const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
+const WEB_SSE_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'sse-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -1010,6 +1014,7 @@ checkOpenapiCoverage();
 checkMcpToolParity();
 checkOpenapiCrossRepo();
 checkWsProtocolCrossRepo();
+checkSseProtocolCrossRepo();
 
 // ---------------------------------------------------------------------------
 // B3 openapi 跨仓一致：api/openapi.json 与 web/openapi.json 必须逐字节相同
@@ -1052,39 +1057,91 @@ function checkOpenapiCrossRepo() {
 // 「钉死字面量」纪律同款。
 // ---------------------------------------------------------------------------
 function checkWsProtocolCrossRepo() {
-  const missing = [API_WS_PROTOCOL, WEB_WS_PROTOCOL].filter((f) => !fs.existsSync(f));
+  crossRepoCanonical({
+    id: 'B4',
+    name: 'WS 协议跨仓对账',
+    constant: 'WS_PROTOCOL_CANONICAL',
+    files: [API_WS_PROTOCOL, WEB_WS_PROTOCOL],
+    missingHint: 'submodule 未 checkout ⇒ 本轮没有人在把关 WS 帧形状的跨仓漂移',
+    absentHint:
+      '两仓都必须导出同一个 canonical 字面量，否则 WS 帧形状没有任何跨仓约束（S6 集成审查发现）。',
+    driftHint:
+      '改帧形状必须两仓同时改（10 §7.4 是权威定义）。这条漂移编译期发现不了，只会在运行时表现为「某种帧收不到」。',
+  });
+}
+
+// ---------------------------------------------------------------------------
+// B5 SSE 协议跨仓对账：两仓的 SSE_PROTOCOL_CANONICAL 字面量必须相同
+//
+// 为什么需要它（照 B4 的实现，但理由更迫切）：10 §6 已经写死
+// 「`openapi-typescript` 只能生成 `/api/system/diagnose` 的 content-type 声明，
+//   **流帧的类型必须手写**」—— 也就是说 SSE 帧与 WS 帧一样是两仓各持一份手抄，
+// 而 WS 至少有 B4 兜着，SSE 在此之前是**一份手抄、零守卫**。
+//
+// ⚠️ 本仓刚在 `TRIGGERED_BY` 上抓到同样的形态（三份手抄、零守卫），代价是中文界面上
+// 漏一个英文标识符而全量测试一条都不红。所以这条门禁与 SSE 帧的代码**同一轮**落地，
+// 而不是等它先出一次事再补。
+//
+// 与 B4 同样**不比较结构**（两侧一个是 TS interface、一个是 zod schema，比结构会脆），
+// 只比两仓各自声明的 canonical 字面量：改帧形状就必须两边同时改。
+// ---------------------------------------------------------------------------
+function checkSseProtocolCrossRepo() {
+  crossRepoCanonical({
+    id: 'B5',
+    name: 'SSE 协议跨仓对账',
+    constant: 'SSE_PROTOCOL_CANONICAL',
+    files: [API_SSE_PROTOCOL, WEB_SSE_PROTOCOL],
+    missingHint: 'submodule 未 checkout ⇒ 本轮没有人在把关诊断 SSE 帧形状的跨仓漂移',
+    absentHint:
+      '两仓都必须导出同一个 canonical 字面量，否则 SSE 帧形状没有任何跨仓约束（10 §6：流帧类型必须手写）。',
+    driftHint:
+      '改帧形状必须两仓同时改（02 §5.3 是权威定义）。这条漂移编译期发现不了，只会在运行时表现为「某一项诊断结果渲染不出来」。',
+  });
+}
+
+/**
+ * B4 / B5 共用的跨仓 canonical 对账。
+ *
+ * ⚠️ 抽出来不是为了少写几行，而是因为**两条检查的失效方式必须一样**：B4 曾经是唯一
+ * 一条这种形态的门禁，B5 照抄一遍就意味着有两份会分头漂移的正则与两套差不多的提示。
+ * 一份实现 + 两组参数，改进（比如将来支持模板字符串）一次就同时惠及两条。
+ */
+function crossRepoCanonical({ id, name, constant, files, missingHint, absentHint, driftHint }) {
+  const missing = files.filter((f) => !fs.existsSync(f));
   if (missing.length > 0) {
-    record('B', 'B4', 'WS 协议跨仓对账', 'skip',
-      `SKIP —— 找不到 ${missing.map(rel).join('、')}`,
-      ['submodule 未 checkout ⇒ 本轮没有人在把关 WS 帧形状的跨仓漂移']);
+    record('B', id, name, 'skip', `SKIP —— 找不到 ${missing.map(rel).join('、')}`, [missingHint]);
     return;
   }
-  const pick = (f) => {
-    const src = fs.readFileSync(f, 'utf8');
-    const m = /WS_PROTOCOL_CANONICAL\s*[:=][^'"`]*((?:'[^']*'|`[^`]*`)(?:\s*\+\s*(?:'[^']*'|`[^`]*`))*)/.exec(src);
-    if (!m) return null;
-    return [...m[1].matchAll(/'([^']*)'|`([^`]*)`/g)].map((x) => x[1] ?? x[2]).join('');
-  };
-  const a = pick(API_WS_PROTOCOL);
-  const b = pick(WEB_WS_PROTOCOL);
-  if (a === null || b === null) {
-    const who = [a === null && rel(API_WS_PROTOCOL), b === null && rel(WEB_WS_PROTOCOL)].filter(Boolean);
-    record('B', 'B4', 'WS 协议跨仓对账', 'fail',
-      `${who.join('、')} 里没有 WS_PROTOCOL_CANONICAL`,
-      ['两仓都必须导出同一个 canonical 字面量，否则 WS 帧形状没有任何跨仓约束（S6 集成审查发现）。']);
+  const values = files.map((f) => pickCanonical(f, constant));
+  if (values.some((v) => v === null)) {
+    const who = files.filter((_, i) => values[i] === null).map(rel);
+    record('B', id, name, 'fail', `${who.join('、')} 里没有 ${constant}`, [absentHint]);
     return;
   }
+  const [a, b] = values;
   if (a === b) {
-    record('B', 'B4', 'WS 协议跨仓对账', 'ok', `两仓 canonical 一致（${a.length} 字符）`);
+    record('B', id, name, 'ok', `两仓 canonical 一致（${a.length} 字符）`);
     return;
   }
   const at = a.split('|');
   const bt = b.split('|');
   const only = (xs, ys) => xs.filter((x) => !ys.includes(x));
-  record('B', 'B4', 'WS 协议跨仓对账', 'fail', 'WS 帧形状在两仓之间漂移了',
-    [...only(at, bt).map((x) => `仅 api 有：${x}`),
-     ...only(bt, at).map((x) => `仅 web 有：${x}`),
-     '改帧形状必须两仓同时改（10 §7.4 是权威定义）。这条漂移编译期发现不了，只会在运行时表现为「某种帧收不到」。']);
+  record('B', id, name, 'fail', '帧形状在两仓之间漂移了', [
+    ...only(at, bt).map((x) => `仅 api 有：${x}`),
+    ...only(bt, at).map((x) => `仅 web 有：${x}`),
+    driftHint,
+  ]);
+}
+
+/** `export const X = 'a' + 'b' + \`c\`` → 拼好的字面量；找不到声明回 `null`。 */
+function pickCanonical(file, constant) {
+  const src = fs.readFileSync(file, 'utf8');
+  const re = new RegExp(
+    `${constant}\\s*[:=][^'"\`]*((?:'[^']*'|\`[^\`]*\`)(?:\\s*\\+\\s*(?:'[^']*'|\`[^\`]*\`))*)`,
+  );
+  const m = re.exec(src);
+  if (!m) return null;
+  return [...m[1].matchAll(/'([^']*)'|\`([^\`]*)\`/g)].map((x) => x[1] ?? x[2]).join('');
 }
 
 const ICON = { ok: '✔', fail: '✗', skip: '⚠' };

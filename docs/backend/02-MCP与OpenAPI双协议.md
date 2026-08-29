@@ -196,31 +196,70 @@ export class SandboxMcpTools {
 
 ### 5.3 诊断接口的传输方式定案：**SSE**
 
-`POST /api/system/diagnose` 逐项执行容器运行时连通性、`/dev/kvm`、磁盘余量、端口占用、外网连通（镜像仓库/授权域名）、WS 回环（P22 §3），**每项超时 5s**，整轮最坏接近 30s。
+`POST /api/system/diagnose` 执行**八项**（P21-5 §6 的权威清单，固定顺序）：① 容器运行时连通性 ② `/dev/kvm` ③ 磁盘余量 ④ 端口占用 ⑤ 外网连通（镜像仓库/授权域名）⑥ WS 回环 ⑦ `DATA_ROOT` 文件系统 ⑧ **预制镜像就绪**（P21-5 §9A 的五步链）。**每项超时 5s**。
+
+⚠️ **整轮耗时是并行的 ≈ 最慢那项，不是累加。** 本节原文写「整轮最坏接近 30s」，那是串行假设，与 P21-5 §6「**异步并行**但展示顺序固定」矛盾（2026-08-28 订正）。八项并行的最坏值仍接近单项超时 5s，串行才是 40s。
+
+⚠️ 这不削弱流式的必要性（见下），但**理由要换对**：不是「省 30s 白屏」，而是「诊断的使用场景是『系统好像坏了』，此时**最可能发生的就是某一项 hang 满 5s**——逐项出结果让用户立刻看到其余七项是好的，而不是被一项卡着看不到任何东西」。
 
 **选 SSE（`text/event-stream`），理由**：
 
-1. **必须流式**：一次性 JSON 要等最慢一项跑完才有输出，用户面对 30s 白屏——而诊断的使用场景恰恰是"系统好像坏了"，此时最不该让人干等。逐项 ✅/❌ 边跑边出是产品要求（P22 §3 的"每项 ✅/❌ + 修复建议"）。
+1. **必须流式**：一次性 JSON 要等**最慢一项**跑完才有输出。诊断的使用场景恰恰是"系统好像坏了"，此时最可能发生的就是某一项 hang 满超时——那一项会把其余七项的结果一起扣住。逐项 ✅/❌ 边跑边出是产品要求（P22 §3 的"每项 ✅/❌ + 修复建议"）。
 2. **不选 WS**：诊断是**单向、一次性、请求-响应**语义，WS 的双工与连接生命周期管理在这里全是负担；而且诊断要能在 WS 本身出问题时使用——用 WS 传诊断结果，等于用可能坏掉的东西去诊断它自己（回环测试项直接自相矛盾）。
-3. **不选轮询**：需要服务端保存中间态与任务 id，为一个 30s 的操作引入一套 job 管理，不划算。
+3. **不选轮询**：需要服务端保存中间态与任务 id，为一个数秒的操作引入一套 job 管理，不划算。
 4. **SSE 的代价可接受**：它跑在普通 HTTP 上，穿代理、走同一套 Guard/拦截器管线，浏览器端 `EventSource`（或 fetch + ReadableStream，以便带 POST body）即可。
 
-帧格式（每项一帧，最后一帧汇总）：
+帧格式（**✅ 2026-08-28 落地**，权威定义在两仓的 `sse-protocol.ts`，B5 跨仓对账 / 10 §6.7）：
 
 ```
-event: check
-data: {"id":"docker-runtime","label":"容器运行时连通性","status":"ok","durationMs":124}
+event: start
+data: {"checks":[{"id":"container-runtime","label":"容器运行时可达"}, … 共 8 项],"timeoutMs":5000}
 
 event: check
-data: {"id":"outbound-ghcr","label":"镜像仓库连通","status":"fail","errorCode":"NETWORK","hint":"配置 HTTP_PROXY 后重试","durationMs":5000}
+data: {"id":"container-runtime","label":"容器运行时可达","status":"ok","summary":"容器运行时可达（/var/run/docker.sock，7ms）","durationMs":8}
+
+event: check
+data: {"id":"port-conflict","label":"端口占用","status":"fail","summary":"端口 3000（平台 HTTP/WS 服务…）被 com.docke (pid 41235) 占用","hint":"先确认它是什么：lsof -nP -iTCP:3000 -sTCP:LISTEN；…","detail":{…},"durationMs":31}
+
+event: check
+data: {"id":"preset-image","label":"预制镜像就绪","status":"info","step":"staged","summary":"预制镜像已就绪，但尚未在本机铺开 —— 首个任务需要数分钟准备镜像","durationMs":12}
 
 event: done
-data: {"okCount":5,"failCount":1,"totalMs":7310}
+data: {"okCount":6,"infoCount":1,"warnCount":0,"failCount":1,"totalMs":312}
 ```
+
+**三处与本节初稿不同，都是落地时定死的**：
+
+1. **多了 `start` 首帧。** 它在任何一项跑完之前发出，页面据它画出八个 ⏳ 占位。没有它，
+   前端要么自己硬抄一份八项清单（= 又一份手抄），要么「收到一项画一项」—— 而并行执行下
+   最快的可能是第 ⑥ 项，页面会先画出一行孤零零的「WS 回环 ✅」，看起来像诊断只有一项。
+2. **`status` 是五取值 `ok | info | warn | fail | timeout`，`info` 与 `warn` 必须分开。**
+   第 ⑧ 项第 5 步（镜像未 staged）**只能是 `info`**：镜像是好的，只是这台机器还没把 rootfs
+   铺开。渲染成 ⚠️ 会让用户去修一个不需要修的东西，而他能想到的「修法」是删了重推
+   （P21-5 §9A 第 5 步）。
+3. **`errorCode` 只在预制镜像链上出现**，取值是 10 §6.8 主表里那四个 `PRESET_IMAGE_*`
+   （每步一个，「不许合成一条」的机器可判形式）。⚠️ 本节初稿示例里的 `"errorCode":"NETWORK"`
+   **是示意不是契约** —— `NETWORK` 从来不在 §6.8 码表里，实现也不产出它。其余七项刻意不发码：
+   它们的结论天然带着这一次实测出来的具体数字（哪个端口、被谁占、还剩多少 GB），
+   按码查一句固定文案反而更差。
+4. `check` 帧另有 **`summary`**（一行人话，直接上 UI）与 **`step`**（仅预制镜像链）。
+   `id` 与展示顺序由契约常量 `DIAGNOSE_CHECK_IDS` 钉死，装配对不上时**开机即抛**
+   —— 少发一帧的后果是前端那一格永远停在 ⏳，一个看起来像「还在跑」的永久状态。
 
 - 单项超时 5s 由服务端保证，超时即发 `status:"timeout"` 帧继续下一项——**一项卡住不阻塞整轮**。
 - 断连即中止剩余检查（无副作用，诊断是只读的）。
 - OpenAPI 里以 `text/event-stream` 响应声明（`openapi-typescript` 只生成响应类型，流的消费由前端手写 —— 10 §6 已标注）。
+  ⚠️ **只写 `@ApiProduces` 产不出那一节**：实测那样得到的是 `"200": {"description": ""}`，
+  **连 content-type 都没有**。要显式 `@ApiResponse({ content: { 'text/event-stream': … } })`。
+  schema 只能是 `string`：在这里编一个对象 schema 会对 codegen 撒谎，生成出「一次拿到一个
+  DiagnoseFrame」的签名，而实际是一条流。
+- **`POST` 而不是 `GET`**（尽管诊断只读）：`EventSource` 不支持带 body，而产品要的是
+  「点一下按钮跑一轮」；前端用 `fetch` + `ReadableStream` 消费（F21-5 §7.1）。
+  响应显式 `@HttpCode(200)` —— Nest 对 POST 默认 201，而 SSE 是一条持续的 200 流。
+- 响应头带 `X-Schema-Hash: sb-diagnose-v1`（与 WS 那两个 hash 各自独立）。⚠️ **在 SSE 上它是
+  「告知」不是「门」**：因版本不匹配中断一次只读诊断，等于在最需要它的时候把它关掉。
+  另带 `X-Accel-Buffering: no` —— nginx 默认缓冲上游响应，少了它「逐项出结果」这个唯一的
+  产品要求会当场失效，**而且只在生产上失效**。
 - 另提供 `./diagnose.sh` 覆盖"后端进程本身起不来"的场景（P22 §3），与本端点共用同一套检查项定义。
 
 ## 6. 横切面复用
