@@ -62,6 +62,12 @@
 
 ---
 
+> ⏳ **= 设计已定、代码里还没有**（口径与 `10 §6` 同源，那里有完整分组表与理由）。
+> 2026-08-31 对 `openapi.json` 逐条核实后补的标记 —— 此前它们与已落地端点混排且无标记，
+> 直接导致 `02 §5.2` 写下「`start_sandbox` / `stop_sandbox` —— REST 已有」这句假话。
+> ⚠️ A4 只比对本文与 `10 §6` 两份**文档之间**是否相等，**两边一起错它是绿的**；
+> B1 又是单向的（文档 ⊇ openapi）。⇒ 加端点时请顺手维护这个标记。
+
 ## 2. sandbox 上下文（Task）
 
 > 领域模型 23 §5 · 时序 24 §1/§5 · 调用图 26 §1/§5。**产品叫 Task，接口叫 sandbox**（23 §3 统一语言）。
@@ -71,10 +77,10 @@
 | `listSandboxes` | `GET /api/sandboxes?projectId=&status=` | `list_sandboxes` | 按项目过滤是主链路默认形态 | `SandboxDto[]`，含派生 `waitingInput` | `list-sandboxes` query | — | — | — |
 | `getSandbox` | `GET /api/sandboxes/:id` | `get_sandbox` | | `SandboxDto` + 资源占用；**`status='failed'` 时带 `failureCode` / `failureMessage`**（10 §7.3——异步失败没有同步响应可承载错误码，这是刷新后仍能解释失败的唯一出口） | `get-sandbox` query | — | `NOT_FOUND` | — |
 | `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、**`INSTALL_FAILED`**(500，装 CLI 失败，04 §4 / 03 §4.3 ③)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed`（+ `starting` 期间 0..n 条 **`runtime.install_progress`**） |
-| `startSandbox` | `POST /api/sandboxes/:id/start` | `start_sandbox` | | `SandboxDto` | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace） | `INVALID_STATE`(409)、`RESOURCE_EXHAUSTED`(429) | `sandbox.status_changed` |
-| `stopSandbox` | `POST /api/sandboxes/:id/stop` | `stop_sandbox` | | `SandboxDto` | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409) | `sandbox.status_changed` |
+| `startSandbox` | `POST /api/sandboxes/:id/start` ⏳ | `start_sandbox` | | `SandboxDto` | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace） | `INVALID_STATE`(409)、`RESOURCE_EXHAUSTED`(429) | `sandbox.status_changed` |
+| `stopSandbox` | `POST /api/sandboxes/:id/stop` ⏳ | `stop_sandbox` | | `SandboxDto` | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409) | `sandbox.status_changed` |
 | `destroySandbox` | `DELETE /api/sandboxes/:id` | `destroy_sandbox` | **`{ keepVolume?: boolean }`**（body 或 `?keepVolume=`，query 优先）。**默认值两面不同**：REST 由前端表单传（UI 默认勾选保留）；**MCP 默认 `false`** | 204 | `destroy-sandbox` command | I-SBX-4、I-RV-1/3 | `INVALID_STATE`(409) | `sandbox.status_changed` → `sandbox.removed` |
-| `execInSandbox` | `POST /api/sandboxes/:id/exec` | `exec_in_sandbox` | 非交互命令；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }` | — | I-SBX-3 | `INVALID_STATE`(409)、`TIMEOUT`(504) | — |
+| `execInSandbox` | `POST /api/sandboxes/:id/exec` ⏳ | `exec_in_sandbox` | 非交互命令；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }` | — | I-SBX-3 | `INVALID_STATE`(409)、`TIMEOUT`(504) | — |
 | `runAgentTask` | `POST /api/sandboxes/:id/runtimes/:rt/tasks` → **202** | `run_agent_task` | `RunAgentTaskSchema`：`prompt`(≤8000) · `timeoutMinutes`(30/60/120/240) · `resumeFrom?` · `extraArgs?`（**白名单枚举，不是自由数组**） | **202** + `AgentTaskDto`（含 `id`；流式输出走 WS `/tasks`） | `run-agent-task` command | I-SBX-5、**provider 必须 `headlessTask`** | `UNSUPPORTED_CAPABILITY`(409)、`INVALID_STATE`(409)、`NOT_FOUND`(404) | `/tasks` 的 socket.io 事件名恒为 **`frame`**，判别靠帧内 `type`：`event` · `caught_up` · `exit`（见下方 `/tasks` 引注第 1 条） |
 | `listAgentTasks` | `GET /api/sandboxes/:id/tasks` | **不进 MCP**（列表是 UI 恢复用途，agent 自己持有 taskId） | — | `AgentTaskDto[]`，按 `startedAt` 倒序 | `list-agent-tasks` query | — | `NOT_FOUND`(404) | — |
 | `getAgentTask` | `GET /api/sandboxes/:id/tasks/:taskId` | **不进 MCP**（同上） | — | `AgentTaskDto` | `get-agent-task` query | — | `NOT_FOUND`(404) | — |
@@ -123,8 +129,8 @@
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
 | `cancelClone` | `POST /api/projects/:id/cancel-clone` | — | **只取消克隆、不删项目**：中止在跑的 clone（排队中的直接出队）；项目 id / 名称 / 已关联 Task 全部保留，之后仍可 `retryClone` 或 `convertToEmpty`。**非 cloning 态是 no-op**（回当前 `ProjectDto`，不报 409） | `ProjectDto`（`cloneStatus:'failed'`、`errorCode:'INTERRUPTED'`） | `cancel-clone` command | I-PRJ-6 | — | `project.clone_progress`（`phase:'failed'`） |
 | `deleteProject` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 先取消克隆再删**（要"取消但保留项目"用上一行的 `cancelClone`） | 204 | `delete-project` command | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
-| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` | — | | `RetainedVolumeDto[]` | `list-retained-volumes` query | — | — | — |
-| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` | — | | 204 | — | I-RV-2 | `NOT_FOUND` | — |
+| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` ⏳ | — | | `RetainedVolumeDto[]` | `list-retained-volumes` query | — | — | — |
+| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` ⏳ | — | | 204 | — | I-RV-2 | `NOT_FOUND` | — |
 
 **前端要知道的三件事**：
 
@@ -262,14 +268,14 @@
 
 | 能力 | REST | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|
-| `listAutomations` | `GET /api/projects/:id/automations` | | `AutomationDto[]` | `list-automations` query | — | — | — |
+| `listAutomations` | `GET /api/projects/:id/automations` ⏳ | | `AutomationDto[]` | `list-automations` query | — | — | — |
 | `createAutomation` | `POST /api/projects/:id/automations` | `{ name, runtimeId, prompt, schedule, **timezone**, timeoutMinutes, webhookUrl?, triggerOn?, artifactRetentionDays? }`——**`timezone` 由前端传当前浏览器时区，创建后快照不变** | `AutomationDto` | `create-automation` command | I-AUT-5、I-AUT-6、**I-AUT-7（每项目 ≤20）**、**I-AUT-9（IANA 非空、不可隐式改写）** | `INVALID_ARGUMENT`(400)、`409`（超上限） | — |
-| `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
-| `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
-| `listRuns` | `GET /api/automations/:id/runs`（分页） | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
-| `getRun` | `GET /api/automations/runs/:runId` | | `AutomationRunDto` + `outputSummary`（末尾 1KB） | `get-run` query | — | `NOT_FOUND` | — |
-| `readRunLogs` | `GET /api/automations/runs/:runId/logs?offset=&limit=` | 分页字节区间，默认回末尾 64KB | 原始 stdout/stderr | `read-run-logs` query | I-AUR-4（≤30MB） | `NOT_FOUND` | — |
-| `webhookTest` | `POST /api/automations/webhook-test` | `{ url }` | `{ ok, errorCode?, message }` | — | I-AUT-6（http/https + SSRF 谓词） | `INVALID_ARGUMENT`(400) | — |
+| `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` ⏳ | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
+| `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` ⏳ | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
+| `listRuns` | `GET /api/automations/:id/runs`（分页） ⏳ | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
+| `getRun` | `GET /api/automations/runs/:runId` ⏳ | | `AutomationRunDto` + `outputSummary`（末尾 1KB） | `get-run` query | — | `NOT_FOUND` | — |
+| `readRunLogs` | `GET /api/automations/runs/:runId/logs?offset=&limit=` ⏳ | 分页字节区间，默认回末尾 64KB | 原始 stdout/stderr | `read-run-logs` query | I-AUR-4（≤30MB） | `NOT_FOUND` | — |
+| `webhookTest` | `POST /api/automations/webhook-test` ⏳ | `{ url }` | `{ ok, errorCode?, message }` | — | I-AUT-6（http/https + SSRF 谓词） | `INVALID_ARGUMENT`(400) | — |
 
 **前端要知道的四件事**：
 
@@ -289,7 +295,7 @@
 | `getInitStatus` | `GET /api/system/init-status` | 冷启动首屏第一个请求 | `{ initialized, checks?[], resources? }` | — | 附上次出网检测结果，避免一进来就重跑一轮 |
 | `initialize` | `POST /api/system/init` | `{ proxyConfig?, acknowledgeOffline? }` | `{ initialized:true }` | **409 `ALREADY_INITIALIZED`** · **409 `OFFLINE_NOT_ACKNOWLEDGED`** | **一次性操作**，重复调用即冲突（不是幂等）⇒ `ALREADY_INITIALIZED`，前端据它跳过向导；模型 API 全挂而未带 `acknowledgeOffline` ⇒ `OFFLINE_NOT_ACKNOWLEDGED`，**零副作用、前端不许放行**。⚠️ 两种 409 **必须两个码**（10 §6.8）|
 | `getSettings` / `updateSettings` | `GET / PUT /api/system/settings` | | `SystemSettingsDto` | — | **永不回显口令 hash** |
-| `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
+| `setAccessPasscode` | `PUT /api/system/access-passcode` ⏳ | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：首帧 `event: start`（八项清单，页面据它画 ⏳ 占位）+ 逐项 `event: check` + 末尾 `event: done` | — | 八项**并行**，整轮 ≈ 最慢那项 ≈ 5s（不是累加的 40s）；单项超时 5s，一项卡住不阻塞整轮。含 **`DATA_ROOT` 文件系统与 reflink**（实测一次 FICLONE，不查文件系统名）与 **⑧ 预制镜像五步链**（P21-5 §9A）。帧类型手写于两仓 `sse-protocol.ts`，B5 对账 |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
 | `listAudit` | `GET /api/system/audit` | — | 游标增量（`seq`），可按 category / severity / subjectId 筛 | — | **观察设施非账本**（13 §2.8.2）：写入永不阻断业务，故产品文案不得声称"完整无遗漏"；`subjectId` 支撑沙箱详情时间线 |
