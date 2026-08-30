@@ -94,9 +94,9 @@ export class SandboxMcpTools {
 | `GET /api/sandboxes/:id` | 详情 + 资源占用 + `waitingInput` |
 | `POST /api/sandboxes` | 创建，**202 + pending 记录**；body `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；进度经 WS `sandbox.status_changed` 推送。**`timeoutMinutes` 缺省规则（审计 P1-13）**：`headless=true` 且未传 → 服务端补 **120**；`headless=false` 且传了 → **400 `INVALID_ARGUMENT`**（交互式 Task 的兜底是 idle + 24h，不接受硬超时）。不这样定的话请求会一路撞到 DB 的 CHECK 上抛 500（13 §2.1 I-SBX-5）。**`require: { spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }`** 是能力前置条件（**刻意无 `watchEvents`**，04 §5）：要求的位而所选 provider 声明 `false` → **409 `UNSUPPORTED_CAPABILITY`**，校验在**解析项目/落库/进调度之前**（03 §3.1）。**`initialPrompt` 的处置（S5 裁决 D-14，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-1）**：① **落库** `sandboxes.initial_prompt`（13 §2.1.1）——它的消费点在 202 之后的 provision workflow，跨了请求边界就必须有存储；② T1 内同时按 P21-1 §9 从它**派生默认任务名**写入 `sandboxes.name`；③ **不进任何响应 DTO**（10 §7.3）。**它由 provision 的 `bootstrapAgentSession` 执行（03 §4.3 ⑤），不再依赖用户点开终端** |
 | **`GET /api/providers`** | **能力发现**：`ProviderDto[]`（扁平数组）`{ name, capabilities(7 位全量), isDefault }`。**registry 驱动**——第三方经 04 §8 注册后自动出现，本 controller 不改一行。前端据此渲染 provider 选项与按能力显隐控件。**不进 MCP**（§5.2 末段 / 27 §11.3） |
-| `POST /api/sandboxes/:id/{start,stop}` | 生命周期 |
+| `POST /api/sandboxes/:id/{start,stop}` | 生命周期，**200 + `SandboxDto`**。`start` 仅 `stopped` 可调（I-SBX-1），答的是**已受理**（DTO 回 `starting`，进度走 WS）——重启要重跑整个 `starting` 段（03 §4.3），实测冷镜像库铺 rootfs 就 190s，挂在请求上不是选项。`stop` 仅 `running`/`idle` 可调，**保留实例与工作区**。非法态一律 **409 `INVALID_STATE`** |
 | **`DELETE /api/sandboxes/:id { keepVolume?: boolean }`** | 销毁；`keepVolume=true` 保留工作区卷并登记 `retained_volumes`（03 §7.7 / P20 §6）。**DELETE 带 body 不是所有客户端都友好**，因此同时接受 query 形式 `?keepVolume=true`，两者等价、query 优先 |
-| `POST /api/sandboxes/:id/exec` | 非交互命令执行（交互式 TTY 走 WS `/terminal`） |
+| `POST /api/sandboxes/:id/exec` | 非交互命令执行（交互式 TTY 走 WS `/terminal`）。`{ command }` 经 `sh -c` 执行 → `{ stdout, stderr, exitCode }`。**非零退出回 200**（它是结果不是错误）；**60s 期限双保险**——`ProcessSpec.timeoutMs` 让进程在沙箱内真被杀，平台侧再赛一次跑保证 HTTP 一定收口、并产出 504 `TIMEOUT` |
 | `POST /api/sandboxes/:id/runtimes/:rt/tasks` | 无头任务（`RuntimeTaskSpec`，04 §3） |
 
 **project**（P20 §9.4 缺口）
@@ -179,9 +179,9 @@ export class SandboxMcpTools {
 | `list_sandboxes` | GET /sandboxes | ✅ | 状态过滤；支持 `projectId` |
 | `create_sandbox` | POST /sandboxes | ✅ | image + runtime 参数；`initialPrompt` **可选**（交互式会话的初始任务指令，映射 RuntimeTaskSpec.prompt，04 §3——**agent CLI 启动即带指令开工，S5 起由 provision 的 `bootstrapAgentSession` 保证，03 §4.3 ⑤**）；`projectId` **可选**（缺省落到默认项目）；quota 为**可选**（缺省由平台自动分配——镜像 resource_defaults + 调度策略，03 §1；UI 不暴露此参数）；**`require` 可选**——与 REST 共用同一份 `CreateSandboxSchema`，因此该参数是**加字段即自动获得的，MCP 壳没写一行代码**（§3 zod 单源的直接结果；27 §11.1） |
 | `destroy_sandbox` | DELETE /sandboxes/:id | ✅ | 带 `keepVolume?: boolean` 参数（默认 **false**——MCP 是程序化消费方，默认不留下需要人工清理的卷；UI 侧的默认勾选保留是产品层的表单默认值，两者不冲突） |
-| `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ⏳ | 生命周期。⚠️ **REST 也没有**——本列此前写「REST 已有，MCP 壳待补」，2026-08-31 对 `openapi.json` 核实：这两个端点在代码里根本不存在，10 §6 与 27 §2 里那两行也一直没标 ⏳（已补）。所以这不是「补个 MCP 壳」，是端点本身要先做 |
-| `get_sandbox` | GET /sandboxes/:id | ⏳ | 详情 + 资源占用 |
-| `exec_in_sandbox` | POST /sandboxes/:id/exec | ⏳ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP）。⚠️ 同上：**它依赖的 REST 端点也不存在** |
+| `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ✅ | 生命周期。**先做端点、再包壳**——这一列此前写「REST 已有，MCP 壳待补」，2026-08-31 对 `openapi.json` 核实后才发现两个端点根本不存在，于是「先做端点」被登记成了「补个壳」；本迭代两层一起落地。⚠️ **`start_sandbox` 返回时沙箱还没起来**：它答 `starting`，调用方轮询 `get_sandbox` 到 `running`（同 `create_project` 的异步 clone 口径）。重启是**新会话**，上一轮对话上下文不保留、工作区文件保留（P22 §2） |
+| `get_sandbox` | GET /sandboxes/:id | ✅ | 详情；`status='failed'` 时带 `failureCode`/`failureMessage`（10 §7.3） |
+| `exec_in_sandbox` | POST /sandboxes/:id/exec | ✅ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP）。⚠️ **这是第二个让外部调用方执行东西的 tool，且它没有 `run_agent_task` 那样的白名单**——`command` 按契约就是自由文本（10 §7.3）。约束它的是**沙箱边界本身**：命令跑在隔离实例里、永不上宿主，与终端一直依赖的是同一道边界。不给这个 tool 只会把调用方推去用「prompt 里写『请执行这条命令』」的 `run_agent_task`，同样的能力、更差的可观测性 |
 | `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | ✅ | 无头模式跑 codex/claude code 任务，**202 返回 taskId**（一次运行最长 4 小时，把一个 tool 调用阻塞那么久不是选项）。S6 落地，[T-4](../TASK-LAUNCH-DECISIONS.md) 的三条阻塞已解决：handler = `RunAgentTaskWorkflow`；输出走新增的 WS `/tasks` 命名空间（**不是再多一条 `/events` 事件**——任务输出是高频字节流，压进走 Outbox 的投影通道只会淹掉整个 UI 依赖的通道）；日志从 automation 口径上提为 Task 口径（`agent_tasks` + `data/logs/agent-tasks/`，13 §2.1.4）。**`extraArgs` 是白名单枚举、不是自由数组**——它会被拼进 CLI 的 argv，放开等于把「在沙箱里执行任意命令」开放给任何能调它的人 |
 | `cancel_agent_task` | POST /sandboxes/:id/tasks/:taskId/cancel | ✅ | 终止一个在跑的无头 Task（SIGTERM → 5s → SIGKILL，03 §8.3）。**与 `run_agent_task` 同切片是刻意的**：只给「发起」不给「终止」，上层 agent 发出一个 4 小时档位的任务后就只能干等硬超时——它连「关掉浏览器标签」这条退路都没有 |
 | **`list_projects`** | GET /projects | ✅ | 上层 agent 先看有哪些工作区（P20 §9.4） |
@@ -190,7 +190,7 @@ export class SandboxMcpTools {
 | **`retry_clone`** | POST /projects/:id/retry-clone | ✅ | **本表此前漏收** |
 | **`delete_project`** | DELETE /projects/:id | ✅ | **本表此前漏收** |
 
-**合计：设计 14 个，已注册 10 个**（`create_sandbox` · `list_sandboxes` · `destroy_sandbox` · `run_agent_task` · `cancel_agent_task` · `create_project` · `list_projects` · `get_project` · `retry_clone` · `delete_project`）。27 §1.3 / §12 的计数与本表同源。
+**合计：设计 14 个，已注册 14 个**（`create_sandbox` · `list_sandboxes` · `get_sandbox` · `start_sandbox` · `stop_sandbox` · `exec_in_sandbox` · `destroy_sandbox` · `run_agent_task` · `cancel_agent_task` · `create_project` · `list_projects` · `get_project` · `retry_clone` · `delete_project`）。27 §1.3 / §12 的计数与本表同源。
 
 镜像管理、凭证配置、自动化规则、系统初始化**不进 MCP 面**：它们是管理员的一次性配置动作，交给 LLM 调用方既无价值也扩大攻击面（凭证类接口尤甚）。**`GET /api/providers`（能力发现）同样不进 MCP，但理由是另一条**：它不涉及安全，而是**UI 管道**——读者是要渲染 provider 单选框的前端；agent 调用方拿到这张表没有可做的决策（不传 `provider` 即用默认档，能力不匹配后端以 409 明确拒绝），为一个无决策的只读列表多开 tool 只是徒增 MCP 面（27 §2 / §11.3）。**Git 凭证端点族（`GET /api/credentials?kind=git`、`POST /api/credentials/git`、`POST /api/credentials/git/test`、`DELETE /api/credentials/git/:id`）明确仅 REST、不进 MCP**（I5；27 §11.3 差异清单同源）。
 
