@@ -377,6 +377,32 @@ function sliceSections(file, wanted) {
   return out;
 }
 
+/**
+ * 与 `extractEndpoints` 同口径（只认表格行**前两格**），但额外带出「这一格标了 ⏳ 没有」。
+ * 供 B6 用：⏳ 是「设计已定、代码里还没有」的唯一人工信号（10 §6 的说明段）。
+ */
+function extractEndpointsWithPending(lines) {
+  const found = new Map();
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t.startsWith('|') || /^\|[\s|:-]*$/.test(t)) continue;
+    const decl = tableCells(t).slice(0, 2).join(' ');
+    const pending = decl.includes('⏳');
+    for (const m of decl.matchAll(/\/api\/[A-Za-z0-9/:{}._?=*-]+/g)) {
+      const k = normPath(m[0]);
+      if (k && !found.has(k)) found.set(k, { raw: m[0], pending });
+    }
+  }
+  return found;
+}
+
+const endpoints10WithPending = () =>
+  extractEndpointsWithPending(sliceSections(path.join(ROOT, DOC_10), (lvl, txt) => {
+    if (lvl <= 2) return false;
+    if (lvl === 3) return /^6\.[1-6]\b/.test(txt);
+    return undefined;
+  }));
+
 const endpoints10 = () =>
   extractEndpoints(sliceSections(path.join(ROOT, DOC_10), (lvl, txt) => {
     if (lvl <= 2) return false; // 出了 ## 6 就关
@@ -718,6 +744,62 @@ function checkOpenapiCoverage() {
 //   ③ 顺带核对三处计数与本表同源：02 §5.2 的「合计」句、27 §1.3、27 §12
 //      （09 §2.4「暴露面计数核对」里 MCP tools 那一行由此落地）。
 // ---------------------------------------------------------------------------
+// B6 未实现端点已标注：10 §6 里**没标 ⏳** 的端点必须在 openapi.json 里真实存在
+//
+// ⚠️ 它补的是 B1 的**反方向**。B1 判「10 §6 ⊇ openapi」——单向，为的是允许文档写
+// 规划中的端点；代价是文档里可以躺着一条代码没有的端点而门禁全绿。A4 又只比对
+// 27 与 10 两份**文档之间**是否相等，两边一起错它也是绿的。
+//
+// 这个缺口真的付出过代价（2026-08-31）：`POST /sandboxes/:id/start` · `/stop` 在
+// 10 §6 与 27 §2 里各躺了一行、都没标 ⏳，于是 02 §5.2 据此写下「REST 已有，MCP 壳
+// 待补」——而那两个端点**从来就不存在**，一条「先做端点」的工作被登记成了「补个壳」。
+//
+// ⇒ 规划中的端点必须标 ⏳。标了就放行（那正是 B1 要保留的自由度），没标就必须实现。
+// 判据只看**前两格**，与 extractEndpoints 同口径：备注里顺带提到的端点不算声明。
+// ---------------------------------------------------------------------------
+function checkPlannedEndpointsMarked() {
+  if (!fs.existsSync(OPENAPI)) {
+    record('B', 'B6', '未实现端点已标注', 'skip', `SKIP —— 找不到 ${rel(OPENAPI)}`, [
+      'api submodule 未 checkout ⇒ 无从判断哪些端点真的存在。',
+      '  本地：git submodule update --init api',
+    ]);
+    return;
+  }
+  let spec;
+  try {
+    spec = JSON.parse(fs.readFileSync(OPENAPI, 'utf8'));
+  } catch (e) {
+    record('B', 'B6', '未实现端点已标注', 'fail', `api/openapi.json 解析失败：${e.message}`, []);
+    return;
+  }
+  const impl = new Set(Object.keys(spec.paths ?? {}).map(normPath));
+  const doc = endpoints10WithPending();
+  const unmarked = [];
+  let pending = 0;
+  for (const [k, v] of doc) {
+    if (v.pending) pending += 1;
+    if (!v.pending && !impl.has(k)) unmarked.push(v.raw);
+  }
+  const summary = `10 §6 共 ${doc.size} 个端点，其中 ${pending} 个已标 ⏳`;
+  if (unmarked.length === 0) {
+    record('B', 'B6', '未实现端点已标注', 'ok', `${summary}，其余全部在 openapi 中`);
+    return;
+  }
+  record('B', 'B6', '未实现端点已标注', 'fail',
+    `${summary}；另有 ${unmarked.length} 个既没标 ⏳、openapi 里也不存在`,
+    unmarked.map((p) => `· ${p}`).concat([
+      '',
+      '→ 二选一，别留在中间态：',
+      '   ① 它确实还没做 ⇒ 在 10 §6 与 27 §2–§9 对应行的**路径那一格**标 ⏳',
+      '      （标在备注格里 B6 看不见——判据只取前两格，与 A4/B1 同口径）',
+      '   ② 它已经做了 ⇒ cd api && pnpm openapi:emit，把契约重新导出',
+      '',
+      '⚠️ 不标的代价不是「少个符号」：02 §5.2 曾据此把一条不存在的端点写成',
+      '   「REST 已有，MCP 壳待补」，把「先做端点」误登记为「补个壳」。',
+    ]));
+}
+
+// ---------------------------------------------------------------------------
 
 /** 递归收集 api 源码里的 .ts（跳过依赖、构建产物、测试） */
 function walkApiTs(dir, out = []) {
@@ -1012,6 +1094,7 @@ checkCapabilityCatalog();
 checkErrorCodeCatalog();
 checkOpenapiCoverage();
 checkMcpToolParity();
+checkPlannedEndpointsMarked();
 checkOpenapiCrossRepo();
 checkWsProtocolCrossRepo();
 checkSseProtocolCrossRepo();

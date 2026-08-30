@@ -179,9 +179,9 @@ export class SandboxMcpTools {
 | `list_sandboxes` | GET /sandboxes | ✅ | 状态过滤；支持 `projectId` |
 | `create_sandbox` | POST /sandboxes | ✅ | image + runtime 参数；`initialPrompt` **可选**（交互式会话的初始任务指令，映射 RuntimeTaskSpec.prompt，04 §3——**agent CLI 启动即带指令开工，S5 起由 provision 的 `bootstrapAgentSession` 保证，03 §4.3 ⑤**）；`projectId` **可选**（缺省落到默认项目）；quota 为**可选**（缺省由平台自动分配——镜像 resource_defaults + 调度策略，03 §1；UI 不暴露此参数）；**`require` 可选**——与 REST 共用同一份 `CreateSandboxSchema`，因此该参数是**加字段即自动获得的，MCP 壳没写一行代码**（§3 zod 单源的直接结果；27 §11.1） |
 | `destroy_sandbox` | DELETE /sandboxes/:id | ✅ | 带 `keepVolume?: boolean` 参数（默认 **false**——MCP 是程序化消费方，默认不留下需要人工清理的卷；UI 侧的默认勾选保留是产品层的表单默认值，两者不冲突） |
-| `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ⏳ | 生命周期；REST 已有，MCP 壳待补 |
+| `start_sandbox` / `stop_sandbox` | POST /sandboxes/:id/{start,stop} | ⏳ | 生命周期。⚠️ **REST 也没有**——本列此前写「REST 已有，MCP 壳待补」，2026-08-31 对 `openapi.json` 核实：这两个端点在代码里根本不存在，10 §6 与 27 §2 里那两行也一直没标 ⏳（已补）。所以这不是「补个 MCP 壳」，是端点本身要先做 |
 | `get_sandbox` | GET /sandboxes/:id | ⏳ | 详情 + 资源占用 |
-| `exec_in_sandbox` | POST /sandboxes/:id/exec | ⏳ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP） |
+| `exec_in_sandbox` | POST /sandboxes/:id/exec | ⏳ | 非交互命令执行（交互式 TTY 走 WS，不进 MCP）。⚠️ 同上：**它依赖的 REST 端点也不存在** |
 | `run_agent_task` | POST /sandboxes/:id/runtimes/:rt/tasks | ✅ | 无头模式跑 codex/claude code 任务，**202 返回 taskId**（一次运行最长 4 小时，把一个 tool 调用阻塞那么久不是选项）。S6 落地，[T-4](../TASK-LAUNCH-DECISIONS.md) 的三条阻塞已解决：handler = `RunAgentTaskWorkflow`；输出走新增的 WS `/tasks` 命名空间（**不是再多一条 `/events` 事件**——任务输出是高频字节流，压进走 Outbox 的投影通道只会淹掉整个 UI 依赖的通道）；日志从 automation 口径上提为 Task 口径（`agent_tasks` + `data/logs/agent-tasks/`，13 §2.1.4）。**`extraArgs` 是白名单枚举、不是自由数组**——它会被拼进 CLI 的 argv，放开等于把「在沙箱里执行任意命令」开放给任何能调它的人 |
 | `cancel_agent_task` | POST /sandboxes/:id/tasks/:taskId/cancel | ✅ | 终止一个在跑的无头 Task（SIGTERM → 5s → SIGKILL，03 §8.3）。**与 `run_agent_task` 同切片是刻意的**：只给「发起」不给「终止」，上层 agent 发出一个 4 小时档位的任务后就只能干等硬超时——它连「关掉浏览器标签」这条退路都没有 |
 | **`list_projects`** | GET /projects | ✅ | 上层 agent 先看有哪些工作区（P20 §9.4） |
