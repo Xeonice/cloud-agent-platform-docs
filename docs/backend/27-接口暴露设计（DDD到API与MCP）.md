@@ -287,7 +287,7 @@
 | 能力 | REST | 请求要点 | 响应 | 可能错误码 | 备注 |
 |---|---|---|---|---|---|
 | `getInitStatus` | `GET /api/system/init-status` | 冷启动首屏第一个请求 | `{ initialized, checks?[], resources? }` | — | 附上次出网检测结果，避免一进来就重跑一轮 |
-| `initialize` | `POST /api/system/init` | `{ proxyConfig?, acknowledgeOffline? }` | `{ initialized:true }` | **409（已初始化）** | **一次性操作**，重复调用即冲突（不是幂等）；前端遇 409 直接跳过向导 |
+| `initialize` | `POST /api/system/init` | `{ proxyConfig?, acknowledgeOffline? }` | `{ initialized:true }` | **409 `ALREADY_INITIALIZED`** · **409 `OFFLINE_NOT_ACKNOWLEDGED`** | **一次性操作**，重复调用即冲突（不是幂等）⇒ `ALREADY_INITIALIZED`，前端据它跳过向导；模型 API 全挂而未带 `acknowledgeOffline` ⇒ `OFFLINE_NOT_ACKNOWLEDGED`，**零副作用、前端不许放行**。⚠️ 两种 409 **必须两个码**（10 §6.8）|
 | `getSettings` / `updateSettings` | `GET / PUT /api/system/settings` | | `SystemSettingsDto` | — | **永不回显口令 hash** |
 | `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：首帧 `event: start`（八项清单，页面据它画 ⏳ 占位）+ 逐项 `event: check` + 末尾 `event: done` | — | 八项**并行**，整轮 ≈ 最慢那项 ≈ 5s（不是累加的 40s）；单项超时 5s，一项卡住不阻塞整轮。含 **`DATA_ROOT` 文件系统与 reflink**（实测一次 FICLONE，不查文件系统名）与 **⑧ 预制镜像五步链**（P21-5 §9A）。帧类型手写于两仓 `sse-protocol.ts`，B5 对账 |
@@ -395,7 +395,8 @@ Step2 确认：
 
 ```
 向导：GET /api/system/init-status → POST /api/system/diagnose（SSE，逐项 ✅/❌）
-     → POST /api/system/init { proxyConfig?, acknowledgeOffline? }（409 = 已初始化，跳过）
+     → POST /api/system/init { proxyConfig?, acknowledgeOffline? }
+       （409 ALREADY_INITIALIZED = 已初始化，跳过；409 OFFLINE_NOT_ACKNOWLEDGED = 离线未确认，⛔ 不跳过）
 系统状态页：GET /api/system/resources（含磁盘水位）· GET /api/system/providers
           · POST /api/system/diagnose（同一个 SSE 端点，与向导复用）
 访问口令：PUT /api/system/access-passcode { action } → 明文只回显一次，务必提示用户立即保存

@@ -165,7 +165,7 @@ export class SandboxMcpTools {
 | 端点 | 说明 | 版本 |
 |---|---|---|
 | **`GET /api/system/init-status`** | `{ initialized, checks?: [{ id, label, status, hint? }], resources?: { cores, ramMb, diskMb } }`——冷启动首屏据此决定是否进初始化向导（P21-8 §2）。`initialized=false` 时附带上一次出网检测结果，避免前端一进来就重跑一轮 | MVP |
-| **`POST /api/system/init`** | `{ proxyConfig?: { httpProxy?, httpsProxy?, noProxy? }, acknowledgeOffline?: boolean }` → 写 `system_settings.initialized=true`（13 §2）。**已初始化时返回 409**——注意这是**「一次性操作，重复调用即冲突」**而不是幂等（审计 P2-4：原文写「幂等：…返回 409」是措辞矛盾，幂等应当重复调用同样成功）。前端遇 409 直接跳过向导即可。出网检测本身走 `POST /api/system/diagnose`（同一套检查项，单项超时 5s，§5.3），初始化向导直接复用，不另开探测端点 | MVP |
+| **`POST /api/system/init`** | `{ proxyConfig?: { httpProxy?, httpsProxy?, noProxy? }, acknowledgeOffline?: boolean }` → 写 `system_settings.initialized=true`（13 §2）。**已初始化时返回 409 `ALREADY_INITIALIZED`**——注意这是**「一次性操作，重复调用即冲突」**而不是幂等（审计 P2-4：原文写「幂等：…返回 409」是措辞矛盾，幂等应当重复调用同样成功）；前端遇它直接跳过向导。⚠️ **这条端点还有第二种 409：`OFFLINE_NOT_ACKNOWLEDGED`**（模型 API 全部不可达且未带 `acknowledgeOffline`）——**两个码，处置相反**，那一种平台一个字都没写，前端必须留在向导里（10 §6.8）。⛔ 别写成「遇 409 就跳过向导」：那会把一台根本没初始化的机器放进工作台。出网检测本身走 `POST /api/system/diagnose`（同一套检查项，单项超时 5s，§5.3），初始化向导直接复用，不另开探测端点 | MVP |
 | `GET / PUT /api/system/settings` | 运行期读改代理配置等；**永不回显** `accessPasscodeHash` | MVP |
 | **`PUT /api/system/access-passcode`** | `{ action: 'enable' \| 'regenerate' \| 'disable' }` → 启用/重新生成时**响应体一次性返回 16 位明文**（此后任何接口都不再回显，只存 hash，11 §3.1）；`disable` 清空 hash。**重新生成不影响已通过的 session**（P21-8 §3） | **MVP**（审计 P0-3 从 v1.1 提前） |
 | `POST /api/system/backup` · `GET /api/system/version` | 备份导出（凭证密文默认不入包）· 版本检查（静默失败） | **v1.5，仅列名占位** |
