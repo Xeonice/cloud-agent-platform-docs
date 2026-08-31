@@ -266,17 +266,33 @@
 ## 8. automation 上下文（v1.1）
 
 > 领域模型 23 §11 · 时序 24 §4 · 调度器 03 §8。**不进 MCP**（管理员配置动作）。
+>
+> **✅ 11 个端点整块落地（F21-7，2026-08-31）**，`⏳` 全摘。落点：`@platform/automation`
+> （四层齐全）+ 两张表（migration `0018`）+ `AutomationScheduler`。
+>
+> **实现侧三条与本表原文的偏差，如实记在这里：**
+> 1. **`automation_runs.log_path` 指向 Task 自己那份 stdout**（`data/logs/agent-tasks/<taskId>/stdout.jsonl`），
+>    **不再另写一份 `data/logs/automation-runs/<runId>/output.log`**。判据是 03 §8.6 自己立的
+>    「正文只写一份」：S6 已把无头 Task 的日志上提为 Task 口径，而自动化触发的就是一个标准
+>    无头 Task，再抄一份等于同样的兆字节写第二遍 + 多一处会与另一处不一致的地方。
+>    `automation_runs` 仍是自动化自己的记录，只是它的 `log_path` **指过去**而不是复制过来。
+> 2. **`AutomationRunDto.startedAt` 是 optional**（本表与 10 §7.3 上一版写成必填）——
+>    `skipped`/`missed` 的 run 是触发时刻直接落定的（I-AUR-1），根本没有「开始执行」这个时刻。
+>    DTO 另出一个**必有**的 `triggeredAt`。
+> 3. **`labels.automation_id` 接不上**：`sandboxes.labels` 这一列 13 §2.1 设计了、**库里没有**。
+>    所以前端目前**无法**据它渲染 `[自动]` 标签；反向溯源（run → Task）走
+>    `automation_runs.sandbox_id`，是通的。这条缺口需要 sandbox 上下文补一列，不在本切片内。
 
 | 能力 | REST | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|
-| `listAutomations` | `GET /api/projects/:id/automations` ⏳ | | `AutomationDto[]` | `list-automations` query | — | — | — |
+| `listAutomations` | `GET /api/projects/:id/automations` | | `AutomationDto[]` | `list-automations` query | — | — | — |
 | `createAutomation` | `POST /api/projects/:id/automations` | `{ name, runtimeId, prompt, schedule, **timezone**, timeoutMinutes, webhookUrl?, triggerOn?, artifactRetentionDays? }`——**`timezone` 由前端传当前浏览器时区，创建后快照不变** | `AutomationDto` | `create-automation` command | I-AUT-5、I-AUT-6、**I-AUT-7（每项目 ≤20）**、**I-AUT-9（IANA 非空、不可隐式改写）** | `INVALID_ARGUMENT`(400)、`409`（超上限） | — |
-| `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` ⏳ | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
-| `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` ⏳ | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
-| `listRuns` | `GET /api/automations/:id/runs`（分页） ⏳ | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
-| `getRun` | `GET /api/automations/runs/:runId` ⏳ | | `AutomationRunDto` + `outputSummary`（末尾 1KB） | `get-run` query | — | `NOT_FOUND` | — |
-| `readRunLogs` | `GET /api/automations/runs/:runId/logs?offset=&limit=` ⏳ | 分页字节区间，默认回末尾 64KB | 原始 stdout/stderr | `read-run-logs` query | I-AUR-4（≤30MB） | `NOT_FOUND` | — |
-| `webhookTest` | `POST /api/automations/webhook-test` ⏳ | `{ url }` | `{ ok, errorCode?, message }` | — | I-AUT-6（http/https + SSRF 谓词） | `INVALID_ARGUMENT`(400) | — |
+| `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
+| `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
+| `listRuns` | `GET /api/automations/:id/runs`（分页） | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
+| `getRun` | `GET /api/automations/runs/:runId` | | `AutomationRunDto` + `outputSummary`（末尾 1KB） | `get-run` query | — | `NOT_FOUND` | — |
+| `readRunLogs` | `GET /api/automations/runs/:runId/logs?offset=&limit=` | 分页字节区间，默认回末尾 64KB | 原始 stdout/stderr | `read-run-logs` query | I-AUR-4（≤30MB） | `NOT_FOUND` | — |
+| `webhookTest` | `POST /api/automations/webhook-test` | `{ url }` | `{ ok, errorCode?, message }` | — | I-AUT-6（http/https + SSRF 谓词） | `INVALID_ARGUMENT`(400) | — |
 
 **前端要知道的四件事**：
 
