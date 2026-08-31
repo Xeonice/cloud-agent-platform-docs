@@ -25,10 +25,13 @@ interface ResourcePoolSnapshot {
 
 - **quota 值的来源（产品决策：用户不暴露配额概念）**：创建 sandbox 时用户**不输入**任何资源参数——平台自动决定：以镜像的 `resource_defaults`（04 §7 / 13 §2）为基础，后端策略可按 runtime/当前负载调整；REST/MCP API 保留**可选** quota 参数供程序化消费方（如上层 agent）使用，缺省即自动。调度、配额登记、对账等内部机制不变。
 - 启动时探测宿主机资源：`os.cpus().length` / `os.totalmem()`。
-- **安全余量**：默认保留 15% 给宿主 OS 与平台自身进程（可配置）。
-- **超配策略**：CPU 允许超配（`overcommit.cpuRatio`，如 1.5——AI CLI 多为突发负载）；**内存不超配**（防 OOM）；**磁盘不超配**（超配等于必然写满）。
+  - ⚠️ **这两个 API 在容器里报的是宿主的值，不是 cgroup 限额**，而平台自己就是以 docker-compose 形态部署的：一个被限到 2 核 4GB 的 api 容器会以为自己有 64 核 512GB，然后按那个数发配额。落地时因此加了三个显式覆盖 `SCHEDULER_HOST_CORES` / `SCHEDULER_HOST_RAM_MB` / `SCHEDULER_HOST_DISK_MB`（不填则退回探测；裸装单机时探测是对的）。**可用空间刻意不可覆盖** —— 声明总量是策略，声明可用量就是直接对着 `statfs` 撒谎。
+- **安全余量**：默认保留 15% 给宿主 OS 与平台自身进程（可配置：`SCHEDULER_SAFETY_MARGIN`，取值 `[0,1)`）。
+- **超配策略**：CPU 允许超配（`overcommit.cpuRatio`，如 1.5——AI CLI 多为突发负载）；**内存不超配**（防 OOM）；**磁盘不超配**（超配等于必然写满）。落地为 `SCHEDULER_CPU_OVERCOMMIT`（默认 1.5）；内存与磁盘只乘安全余量，没有对应旋钮 —— 那是有意的，不是漏了。
 - **磁盘参与调度（审计 P1-9）**：工作区是宿主目录（§7.1），一个 Task 副本 ≈ 仓库体积；十几个 Task 就能写满盘，而 CPU/内存往往还很闲——**磁盘才是本平台的真实瓶颈**，必须进调度而不是只在准备阶段做一次预检。
   - 登记：创建时在**互斥区内**按 `projects.baseline_size_bytes × 1.2`（空项目取配置下限，默认 512MB）登记 `resource_allocations.disk_mb_reserved`；**消除 TOCTOU**——原先"准备阶段才预检"的写法在并发下会让 N 个 Task 同时通过预检然后一起写满盘。
+    - ✅ **已落地**（`diskMbForBaseline` / `planQuota`，见 §3 的落点说明）。⚠️ 实现把「配置下限」做成了**全局下限**（`max(下限, ×1.2)`）而不是只在「空项目」那一格生效：按 ×1.2 直算，一个 3MB 的仓库会登记 4MB —— 而工作区里最终躺着的不只是基线（git 对象、依赖、构建产物、agent 写下的东西），`disk_mb_reserved > 0` 的 CHECK 也不接受向下取整成 0 的算法。下限旋钮是 `SANDBOX_DISK_FLOOR_MB`。
+    - ⚠️ **`projects.baseline_size_bytes` 经 `ProjectFacade.getRuntimeContextForTask` 透出**（新增字段 `baselineSizeBytes`，`null` = 还没量过）；换算规则住在 sandbox 上下文，project 侧只报原始字节。
   - 释放：与 CPU/内存同时释放；但**保留目录（§7.7）占用的磁盘不进资源池**（它已脱离 sandbox 生命周期），改为治理视角展示（P21-5 水位 + 保留卷占用横幅）。
   - 探测：`statfs(DATA_ROOT)` 取总量与已用；同样留 15% 安全余量。
 
@@ -51,10 +54,62 @@ interface SchedulingStrategy {
 
 ## 3. 并发控制（防超分配）
 
+> **✅ 已落地（2026-08-31 互斥登记切片）。** 落点：
+> `api/packages/modules/sandbox/src/application/resource-allocator.ts`（`async-mutex` 临界区）+
+> `domain/services/resource-pool.domain-service.ts`（纯函数：`snapshotOf` / `trySchedule` /
+> `planQuota`）+ `resource_allocations` 表（13 §2.1.3，`drizzle/0019`）。
+>
+> ⭐ **这是 `RESOURCE_EXHAUSTED` 在本平台的第一个真实抛出点。** 此前全仓 grep 该码只有枚举
+> 定义、HTTP 映射表、automation adapter 的 catch，以及两个自己造错误的 spec —— **零个 throw
+> 点**。叠加 `SandboxApplicationService.create` 的后半段是 `void provision.runSafely(...)`，
+> 容量类失败根本不在 `createSandbox` 的调用栈上，于是 §8.2 决策表行 3 连同它下面那一整套
+> （`queueRetry` / `listPendingRetries` / `retry_at` / 「已排队 n/5」）全是死代码，而真实的
+> 资源不足走「后台 provision 失败 ⇒ 记一次失败 ⇒ `consecutive_failures++`」——机器一忙，一条
+> 只是排队等资源的规则连撞三次降频、十次自动禁用（I-AUT-1 明说那不是规则的错）。
+>
+> **登记因此必须发生在 `create` 同步返回之前**（互斥区里那一小段读-改-写），而耗时的
+> provision 照旧在临界区外异步跑 —— 两件事，不能合并。
+>
+> **✅ `SchedulerQueue`（FIFO）已落地** —— `application/scheduler-queue.ts`。上一轮它只是
+> `ResourceAllocator` 内部一个裸的 `async-mutex`：行为对（`async-mutex` 本身按 `acquire()`
+> 的调用顺序放行，就是 FIFO），但本节要的两件事一件都没有 —— 没有可以指名道姓的队列对象，
+> **也没有队列深度可观测**。现在互斥与排队都归队列，`ResourceAllocator` 只负责「判定什么、
+> 写什么」。三条落地口径：
+>
+> - ⚠️ **队列与互斥区在实现里是同一个东西，不是两层。** 下面那张图把「SchedulerQueue」与
+>   「互斥区」画成前后两格；单机单进程下，一个一次只放行一个的 FIFO **就同时是**这两格，
+>   再套一层 mutex 只会多一次可以死锁的嵌套。图保留（它讲的是概念顺序），但别照着它去找
+>   两个对象。
+> - ⚠️ **进队列的是「读-改-写资源池」那一小段，不是整个请求。** 本节第 3 条说慢 IO 在临界区
+>   **外**并行，而字面意义上的「所有创建/销毁请求先进队列」会把 `provider.destroy()` 那几十秒
+>   也串起来 —— 两条自相矛盾，按第 3 条办：`create` 进的是配额登记，`destroy` 进的是配额释放。
+> - ⭐ **第三类请求：对账。** 13 §4 的判孤儿 + 释放同样是对账本的读-改-写，也排这条队 ——
+>   不排的话，「用户按了销毁」与「对账判它是孤儿」可能同时改同一行登记，后到的那次撞上
+>   I-RA-1「释放不可回退」抛异常，而那是一个只在真实并发下出现的偶发。
+>
+> **可观测落在哪（本轮的选择）**：**审计流** —— `AUDIT_RECORDER` → `audit_events` →
+> 已有的 `GET /api/system/audit`（13 §2.8.2 的写入口 ②），type `sandbox.scheduler.queued`；
+> 外加一条深度告警日志（`SCHEDULER_QUEUE_WARN_DEPTH`，默认 8）。
+> ⛔ **没有新造 HTTP 端点，也没有改 `GET /api/system/resources` 的响应形状** —— 那会连带动
+> 10 §6 / 27 与两仓 codegen，而这条信息今天还没有前端消费方。
+> ⚠️ **只有真的排过队才记一条**（入队时前面有人），与 §7.8「`sandbox.health` 只在翻转时记，
+> 不是每 30s 记一条」是同一条纪律：空闲平台上每次创建都记一行「深度 0」，等于把审计面板变成
+> 运行日志。⚠️ 判据是**深度**不是耗时 —— 耗时要读 `Clock`，而测试里的 `Clock` 是可冻结的，
+> 用 `waitedMs > 0` 当判据会让这条分支在单测里永远走不到（`waitedMs` 仍照记，它是 detail）。
+> ⚠️ **只读的容量探测（决策表行 3 的判据）不进队列**：它没有读-改-写，而「队列深度」这个数字
+> 的意思是「有多少创建/销毁请求卡在调度上」，把自动化每分钟一次的探测算进去，那个数字就
+> 开始撒谎。
+>
+> **两道闸，各挡各的**（实现在 `trySchedule`）：① **账本闸** `已登记 + 本次 ≤ 池子上限`，挡
+> 并发超分配；② **物理闸** `statfs` 的可用字节 ≥ `WORKSPACE_MIN_FREE_BYTES`，挡账本看不见的
+> 占用（别的程序、日志、保留卷）。②复用的就是工作区复制前那道预检的同一个环境变量 ——
+> 把它提前到互斥区里，正是 §1「必须进调度而不是只在准备阶段做一次预检」那句话的意思；
+> §7.6 里那一次**不删**（它覆盖「登记之后、复制之前，别人把盘写满了」）。
+
 - **能力静态校验是创建链路的第 0 步**，在进队列之前就把不可能成功的请求挡掉（详见 §3.1）。
 - 资源池"读-改-写"（校验剩余容量 → 登记占用）必须在**临界区**内完成：`async-mutex` 或 Promise 链式队列，只把「配额登记/释放」这一小段串行化。
 - 慢 IO（拉镜像、起容器）在临界区**外**并行执行；失败时回滚已登记配额。
-- 所有创建/销毁请求先进 `SchedulerQueue`（FIFO），保证公平性与可预测性。
+- 所有创建/销毁请求先进 `SchedulerQueue`（FIFO），保证公平性与可预测性。✅ 已落地；**进队列的是各自那一小段读-改-写**，不是整个请求（理由见上方落地说明），对账是第三类。
 
 ```
 请求 → [能力静态校验] → 解析项目 → 落 pending 记录 → SchedulerQueue(FIFO)
@@ -80,6 +135,9 @@ interface SchedulingStrategy {
 > **"零副作用"是这一步的关键性质，不只是"早"**：校验失败时**没有 sandbox 记录落库、没有配额登记、`provider.create()` 一次都没被调用、不产生任何 WS 事件**（单测 `capability-negotiation.spec.ts` 逐条断言 `provider.create` 未被调用且仓储零行）。因此调用方拿不到 sandbox id，前端**不应**按"创建失败可重试"渲染，而应就地提示改选 provider——这与 `WORKSPACE_PREPARE_FAILED` 那类"已落库、已进调度、中途失败"的错误在产品语义上完全不同（27 §2）。
 >
 > 顺带一提，**放在项目解析之前也是有意的**：能力不匹配是"这个请求本身不可能成功"，与项目存不存在、能不能接任务无关；先做项目解析只会让一个必然被拒的请求多打一次 DB。
+>
+> ⚠️ **§3 的配额登记落在这道门之外，门的「零副作用」因此原样保住**（`capability-negotiation.spec.ts` 那几条断言未改一字）。互斥登记发生在 `admit()` 返回**之后**，它是这条链路上第一个会改变世界的动作。
+> 由此产生一个刻意的取舍：容量不足的 `RESOURCE_EXHAUSTED`（429）**事实上也什么都没写**（登记与落库同一个事务，判定在写之前），但它的信封里**不带 `sideEffectFree`**。理由是那个标记的可信度来自它是**位置**决定的 —— `atDoor` 包住的那一段结构上就碰不到 `uow`；在门外手写一个 `true`，等于把一条结构性事实退回成「每个抛出点各自记得」的承诺，而 `create-door.spec.ts` 整个守卫就是冲着这件事来的。缺席 = 保守读法，而 `retryable:true` 已经把用户真正需要的下一步（等一会儿再来）说清楚了。
 
 ## 4. 生命周期状态机
 
@@ -264,6 +322,8 @@ starting ─┬─ ① provider.start(handle)
 
 - 调度器只产出「决策 + 配额登记」；实际实例操作走 `SandboxProvider` contract（文档 04），调度器不依赖任何具体实现细节。
 - 配额登记表持久化（重启后恢复资源池视图：扫描存活容器 + 落库配额对账）。
+  - ✅ **已全部落地** —— `application/quota-reconciler.ts`：**开机全量**（`onApplicationBootstrap`）+ **运行期每 5min 增量**（`setInterval`，`unref` + `onModuleDestroy` 清理）。增量按 13 §4 的口径**只挑长时间未更新的活跃记录**（默认 30min 未核对，单轮上限 20 条，最旧的先来），不是每 5 分钟重扫一遍全部。
+  - 三处实现口径（`instance_missing` 才算查无 / `inspect` 抛异常一律不动 / 不改 `sandboxes.status`）**两条路径共用同一段判据**，细节与 `SandboxReconciledAsOrphan` 的产出方都记在 13 §4。
 
 ## 7. 工作区编排：项目 clone 与 Task 独立副本
 
@@ -637,7 +697,7 @@ scheduling 完成（配额已登记，含 disk_mb_reserved —— §1 已消除 
 - **`starting` 阶段的凭证注入步（S5 provision 接线点，05 §7.1 第 2 条留的那个）**：`prepare → inject → record` 三步——`CREDENTIAL_FACADE.prepareRuntimeCredential` → `adapter.injectCredential(cred, exec)` 一次性 exec → 写 `credential_sandbox_bindings` 台账（吊销联动依赖它，05 §4 吊销行）。两条实现纪律来自 **S5 技术验证（2026-08 真容器实测）**：
   - **注入形态按 05 §4 的最小暴露优先级，且已按实测修订**：codex 落 `0600` 的 `auth.json` 且 **`refresh_token` 值替换为占位串**（字段必须保留——直接删会 `missing field 'refresh_token'`；真值绝不进沙箱，05 §1★★）；claude 走 `CLAUDE_CODE_OAUTH_TOKEN` env。
   - **落点路径按沙箱内实际 `$HOME` 展开，不硬编码 `/root`**——⚠️ 原写"实测 aio 的 `$HOME=/root`（uid 0）、boxlite 的 `$HOME=/home/gem`（uid 1000）"，**已更正**：那是 `docker run` 通道的观察，平台走的是 in-sandbox API（以 `gem` 用户跑），**真实通道下两侧 `$HOME` 同为 `/home/gem`**——所以硬编码 `/root` 在**两侧都必错**（04 §2.1★）。工作区本身不受此影响：bind mount 落在 `/workspace`（§7.1），实测宿主与沙箱**双向可见、uid 映射正常**。
-- **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
+- **失败即 `WORKSPACE_PREPARE_FAILED`**（磁盘写满时用更具体的 `DISK_INSUFFICIENT`）→ 状态转 `failed` + `rm -rf` 半成品目录 + 回滚配额登记（§3）。✅ **回滚配额那一步已落地**：`ProvisionSandboxWorkflow` 的 catch 里 `resources.release(sandbox.id)`（`restart` 失败同款），`SandboxApplicationService.destroy` / `stop` 失败路径亦然。⚠️ **`stopped` 刻意不释放** —— 工作区还在盘上、实例还在，`start` 会把它接回来；只有终态（`failed` / `destroyed`）才回池。⚠️ **`keepVolume` 也照样释放**：登记的是 sandbox 的占用，留下的那块盘由 §7.7「保留卷占用」横幅去说，不由资源池去记（§1 已定）。此时**尚未创建实例**，补偿动作比旧顺序更简单——这是把 `preparing-workspace` 前移的附带收益。
 - **取消的清理**：用户在进度卡取消或进程重启后发现残留 → 扫 `workspaces/` 下标记文件为 `preparing` 的目录，一律 `rm -rf`（启动对账，13 §4）。半成品目录没有任何保留价值。
 - **`ready` 孤儿目录清理**（交叉评审 P2-8）：销毁 keepVolume 流程中"`provider.destroy` 后、打 `kept` 标记/登记 `RetainedVolume` 前"崩溃，会留下标记仍为 `ready` 且 DB 无 `retained_volumes` 记录的孤儿目录。启动对账补一条判据：**sandbox 已 destroyed/failed 但目录标记仍 `ready` 且无 retained 记录 → `rm -rf`**（有 retained 记录的 `kept` 目录才保留）。
 - 复制期间不占用 CPU/内存配额（配额已在 §3 互斥区登记，此处只是 IO），但**计入并发准备数上限**（`sandbox.maxConcurrentWorkspacePrepare`，默认 2）防止多个 Task 同时复制大仓库把磁盘 IO 打满。**在 CoW 文件系统上这个上限可以调高**（reflink 复制几乎不产生 IO）。
@@ -776,8 +836,10 @@ export interface SandboxRuntimeStatus {
 | `sandbox.state_changed` | 状态流转 | from / to / actor | 已有 transitions，补 actor | ✅ |
 | `sandbox.credential.absent` | 凭证缺席 | 缺哪个 runtime 的凭证 | **凭证缺席不发任何领域事件**，projector 收不到 | ✅ |
 | `sandbox.runtime_install` | 运行时安装状态变化 | runtime / 状态 | — | ✅ |
+| `sandbox.scheduler.queued` | 请求**真的排过队**时（入队时前面有人），非每次创建 | `kind`（create/destroy/reconcile）/ `depthOnEnqueue` / `peakDepth`；`durationMs` = 等了多久 | 「公平性与可预测性」（§3）此前没有任何出口 —— 队列深度只活在进程内存里 | ✅ |
+| `sandbox.reconciled_orphan` | 对账判定实例已不在、并释放其配额 | `status`（**当时**的，对账不改它）/ `reason` / `projectId` | 对账发生在没人在看的时刻；用户下次打开只看见一个状态没变、配额却被收走的沙箱 | ✅ |
 
-⚠️ `sandbox.health` **只在状态翻转时记**，不是每 30s 记一条——否则一个长命沙箱一天就是 2880 条噪音，把审计流冲垮。
+⚠️ `sandbox.health` **只在状态翻转时记**，不是每 30s 记一条——否则一个长命沙箱一天就是 2880 条噪音，把审计流冲垮。**`sandbox.scheduler.queued` 遵守同一条**：只有真的排过队才记，空闲平台上一行都不写。
 
 ✅ **`sandbox.health` 已有落点**（2026-08-31）：`SandboxHealthMonitor`（`packages/modules/sandbox/src/application/sandbox-health.monitor.ts`）每 30s 采样 `running`/`idle` 的沙箱，翻转时写这一条。两个 provider 的 `inspect()` 也已经填上 `health`（`boxlite-health.ts` / `aio-health.ts`）。
 
@@ -834,6 +896,26 @@ export interface SandboxRuntimeStatus {
 | 4 | 以上皆否 | 创建**标准无头 Task**（同状态机、同配额登记、同独立副本——自动化层**不得**绕过任何一条，P21-7 §9） | `success` / `failed` |
 
 - 重试不是新的 run 记录：同一 `automation_runs` 行更新 `retry_count` 与 `retry_at`，历史上显示"已排队 n/5"（P21-7 §3.3）。
+
+> **✅ 行 3 到本轮才真正成立。** 在 §3 的互斥登记落地之前，`schedulingDecision` 在
+> `AutomationScheduler.fireOne` 里**恒传 `'ok'`**（源码注释当时如实写着「没有真实产出方」），
+> 而 `RESOURCE_EXHAUSTED` 全仓没有 throw 点 —— 整行连同重试机器都是死代码。
+>
+> **它有两条路径，缺一条就等于修了一半：**
+> - **同步路径** —— `AutomationTaskLauncher.capacityFor()`（只读判据，走创建门那份 quota）
+>   给出 `resource-exhausted` ⇒ 落一条 run 直接 `queueRetry`，**一个沙箱都不建**；即便判定
+>   放行，创建那一刻的互斥区仍可能拒（那才是闸），adapter 把 429 信封认成
+>   `AutomationResourceExhausted`。
+> - **后台路径** —— 沙箱已经建出来了，但 provision 阶段撞上容量（典型：工作区复制时磁盘
+>   写满 ⇒ `DISK_INSUFFICIENT`）。这一条此前 100% 走 `applyOutcome('failed')`，也就是
+>   `consecutive_failures++`。现在 `AutomationTaskPhase` 带上了 `errorCode`，调度器按
+>   `CAPACITY_FAILURE_CODES`（`RESOURCE_EXHAUSTED` / `DISK_INSUFFICIENT`）判定，走与同步路径
+>   **同一段记账**。判据是**码**不是文案。
+>
+> ⛔ `WORKSPACE_PREPARE_FAILED` **不在容量码集合里**：它是泛化码（权限、分支、git 炸了都用
+> 它），重试一百次也不会好；算进去会让一条真坏了的规则永远停在「已排队 n/5」上不报警。
+>
+> 只有 5 次排完仍无资源才转终态 `failed`，**那一次才计入失败计数**（§8.4）。
 - **宕机 missed**：扫描时发现 `next_trigger_at` 已过期**超过一个调度周期**（或超过 `missedThresholdMin`，默认 5min），判定为宕机错过 → 记 `missed`、**不补跑**、直接推进到下一个未来时刻（P21-7 §5；catchup v1.2）。
 - 触发产生的 sandbox 打 `labels.automation_id`，前端据此渲染 `[自动]` 标签并溯源到规则。
 
@@ -917,7 +999,7 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 
 | 风险 | 缓解 |
 |---|---|
-| 并发创建导致超分配 | §3 互斥登记；集成测试并发压测验证 |
+| 并发创建导致超分配 | §3 互斥登记（✅ 已落地）；回归用例 `resource-admission.spec.ts`「6 并发 / 容量 3 ⇒ 恰好 3 成功」+「用时间证明互斥区真的串行」，存储层由 `uq_alloc_active` 部分唯一索引兜底（13 §2.1.3） |
 | 平台重启后资源池视图漂移 | 启动对账：inspect 存活容器 vs 落库配额，差异以实际容器为准修正 |
 | CPU 硬限流压制突发负载 | §5 双模式 + burst 余量 |
 | **磁盘写满导致全平台不可用**（工作区是宿主目录） | §1 磁盘进调度 + 互斥区内登记消 TOCTOU；11 §1 推荐 btrfs/xfs 拿 CoW；诊断报出 DATA_ROOT 文件系统类型 |
