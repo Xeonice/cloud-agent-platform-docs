@@ -708,12 +708,52 @@ Interval 10s / Timeout 5s / Retries 8
                                   ↓ 出现异常迹象
 异常确认（按需）  ── 数据面层 ──  一次最小 exec（boxlite native / aio 谨慎）
                                   ↓ 连续 N 次失败
-                     status: running → unhealthy + 审计 error + WS 通知
+                     health.state: healthy → unhealthy + 审计 error + WS 通知
+                     ⚠️ 翻转的是 health，**不是 status** —— status 保持 running，见下
 ```
 
 - **异常迹象**：`execErrorsTotal` 相对上次采样增长 ／ `info().state.running == false` ／ aio: `State.Health` **由 healthy 翻转**（只取翻转，不取绝对值——绝对值天然为 unhealthy，见上）
 - **抗抖动**：用契约里**早就定义好**的 `HealthStatus.consecutiveFailures`（04 `SandboxRuntimeStatus.health`）——⚠️ 该字段与 `resourceUsage` 一样，**两个 provider 的 `inspect()` 至今都没填**，本节就是把它填上
 - **单次探测超时**必须远小于采样周期，否则探测自己会堆积
+
+##### ⚠️ 健康度**不进状态机**：翻转 `health.state`，不加第 13 个 `status`（2026-08-31 修正）
+
+本节此前写的是「`status: running → unhealthy`」，那句话**与本仓自己的契约冲突**，而且
+挡住过一次实现（「要加第 13 个状态、跨仓枚举变更」被判为前置门槛）。契约里两者从一开始
+就是**分开**的：
+
+```ts
+// packages/contracts/src/sandbox-provider.contract.ts
+export type HealthState = 'healthy' | 'unhealthy' | 'unknown' | 'starting';
+export interface SandboxRuntimeStatus {
+  lifecycleState: SandboxRuntimeLifecycleState;   // 生命周期
+  health?: HealthStatus;                          // 健康度 —— 独立字段
+}
+```
+
+⇒ `SANDBOX_STATUSES` 那 12 个取值**一个都不用动**。`status` 保持 `running`，翻转的是
+`health.state`。
+
+**三条理由，第三条是本节自己的话：**
+
+1. **枚举不可扩展。** Kubernetes 在 [#7856](https://github.com/kubernetes/kubernetes/issues/7856)
+   里把这件事讲透了：「Enums aren't extensible. Every addition is a breaking,
+   non-backward-compatible API change.」——加一个状态值是一次破坏性的跨仓契约变更
+   （本仓两侧各有一份 `status-enum-parity` 对账），而它换来的东西用一个可选字段就能表达。
+2. **把健康度塞进 phase 会被读成状态机迁移。** 同一个 issue：「users and developers
+   apparently think of phases as **states in a state machine**, regardless of how much
+   we try to dissuade them」——顽固到 K8s 一度想干脆废掉 phase。现代做法是
+   **conditions 是事实来源、phase 是推导出来的摘要**，而不是把 condition 挤进 phase。
+3. ⭐ **本节自己就写了「`unhealthy` ⇏ agent 不可用」**（见上文 aio HEALTHCHECK 那段：
+   语义是单向的，`healthy` 才是充分条件）。**一个连"不可用"都推不出来的信号，没有资格
+   决定生命周期。** 它进 `status` 之后，`running` 这个值反而变得更不可信 —— 恰好是本节
+   要消灭的那种「状态字段在撒谎」。
+
+⚠️ **对外怎么表达**：`SandboxDto` 增一个可选 `health`（不是改 `status`），前端据它渲染
+角标/提示；老客户端读不到这个字段时**行为与今天完全一致**（`status` 仍是 `running`），
+这也正是可选字段相对枚举扩展的全部好处。
+
+
 
 ### 实现纪律
 
@@ -732,14 +772,18 @@ Interval 10s / Timeout 5s / Retries 8
 | `sandbox.probe` | 每次探测 | **argv（不含 env 值）** / exitCode / 输出尾部 | 探测失败只有一行 message | ✅ |
 | `sandbox.workspace.prepared` | 工作区就绪 | 源 baseline **是否存在** / 产出条目数（`entryCount`，**不含**平台自己写的 `.platform-workspace-state`） | workspace 空了无人报错 | ✅ |
 | `sandbox.agent_session` | 会话启动后 | 起没起 / 跑的是什么 | 要进 tmux 才知道 CLI 没起 | ✅ |
-| `sandbox.health` | 状态翻转时（非每次采样） | state / consecutiveFailures / 判据 | running 但 agent 已挂 | ⏳ |
+| `sandbox.health` | 状态翻转时（非每次采样） | state / previousState / consecutiveFailures / 判据 / **`status`（恒 `running` —— 别去找一个不存在的状态流转）** | running 但 agent 已挂 | ✅ |
 | `sandbox.state_changed` | 状态流转 | from / to / actor | 已有 transitions，补 actor | ✅ |
 | `sandbox.credential.absent` | 凭证缺席 | 缺哪个 runtime 的凭证 | **凭证缺席不发任何领域事件**，projector 收不到 | ✅ |
 | `sandbox.runtime_install` | 运行时安装状态变化 | runtime / 状态 | — | ✅ |
 
 ⚠️ `sandbox.health` **只在状态翻转时记**，不是每 30s 记一条——否则一个长命沙箱一天就是 2880 条噪音，把审计流冲垮。
 
-⏳ **`sandbox.health` 目前无处可挂**：本仓没有任何健康采样或状态翻转设施（本节 §7.8 设计的那套还没实现），所以这一条是**清单里唯一空着的**。它要等本节前半部分的分层探针落地。
+✅ **`sandbox.health` 已有落点**（2026-08-31）：`SandboxHealthMonitor`（`packages/modules/sandbox/src/application/sandbox-health.monitor.ts`）每 30s 采样 `running`/`idle` 的沙箱，翻转时写这一条。两个 provider 的 `inspect()` 也已经填上 `health`（`boxlite-health.ts` / `aio-health.ts`）。
+
+⚠️ **实测纠正了本节一个假设**（真微 VM，2026-08-31）：`agent-infra/sandbox:latest` 的 `info().healthStatus.state === 'None'` —— **这张镜像根本没配 health check**。于是零成本层能拿到的正面证据只有「VM 在跑」+「`execErrorsTotal` 没涨」。⇒ monitor **不把「没有异常迹象」写成 `healthy`**（那是替沙箱担保一件没人问过的事，而本节定的语义是「`healthy` ⇒ agent 可用」这个**充分条件**）；没有正面信号时是 `unknown`，`healthy` 要么由 provider 明确报出、要么由**数据面确认成功**挣来。
+
+⚠️ **aio 那一侧本机没有镜像，验证不了**：`aio-health.ts` 的判据（8080 探活 / `State.Health` 仅作诊断详情）目前只有纯函数单测覆盖映射逻辑，**没有活容器背书**。别把它当成已验证。
 
 ##### 落地时补上的三处契约缺口（2026-08-27）
 

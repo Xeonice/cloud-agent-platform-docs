@@ -129,8 +129,9 @@
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
 | `cancelClone` | `POST /api/projects/:id/cancel-clone` | — | **只取消克隆、不删项目**：中止在跑的 clone（排队中的直接出队）；项目 id / 名称 / 已关联 Task 全部保留，之后仍可 `retryClone` 或 `convertToEmpty`。**非 cloning 态是 no-op**（回当前 `ProjectDto`，不报 409） | `ProjectDto`（`cloneStatus:'failed'`、`errorCode:'INTERRUPTED'`） | `cancel-clone` command | I-PRJ-6 | — | `project.clone_progress`（`phase:'failed'`） |
 | `deleteProject` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 先取消克隆再删**（要"取消但保留项目"用上一行的 `cancelClone`） | 204 | `delete-project` command | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
-| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` ⏳ | — | | `RetainedVolumeDto[]` | `list-retained-volumes` query | — | — | — |
-| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` ⏳ | — | | 204 | — | I-RV-2 | `NOT_FOUND` | — |
+| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` | — | **不含已清理的**（`deletedAt` 非空即只读，对外等于不存在）；不带 `projectId` = 全部项目 | `RetainedVolumeDto[]` | `list-retained-volumes` query | I-RV-2 | — | — |
+| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` | — | **先删目录、再置 `deletedAt`**（反过来崩溃就留下一个 reaper 再也扫不到的目录）；记录留档供审计 | 204 | — | I-RV-2 | `NOT_FOUND` | — |
+| `downloadRetainedVolume` | `GET /api/retained-volumes/:id/archive` | — | **不进 MCP**（二进制流不适合 tool 返回，与 `downloadTaskArtifact` 同理） | **tar 流** + 精确 `Content-Length`（口径见 10 §6 那张表：git 口径挑内容、不压缩换进度、`.git` 保留） | — | I-RV-2（`deletedAt` 非空即只读，不可下载） | `NOT_FOUND` | — |
 
 **前端要知道的三件事**：
 
