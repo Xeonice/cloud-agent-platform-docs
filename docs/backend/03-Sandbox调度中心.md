@@ -805,6 +805,17 @@ export interface SandboxRuntimeStatus {
 
 ### 8.1 扫描循环
 
+> **✅ 已落地（F21-7，2026-08-31）：`AutomationScheduler`（`@platform/automation`）。**
+> 本节五条逐条实现并各有变异验证。两点与原文的措辞差异：
+> - **不用 `@nestjs/schedule`/`@Cron`**：`setInterval(60_000)` + `timer.unref()`，与
+>   `VolumeReaper` / `CredentialRefreshScanner` 同款。为一个每分钟一次的循环引入一个新的
+>   调度框架不划算，而 `unref()` 是那两个循环已经付过的学费。
+> - **`async-mutex` 用的是 `isLocked()` 早退，不是排队**：默认的 `runExclusive` 会把第二个
+>   调用者排队等前一个跑完；对一个每分钟一次的定时器，排队意味着一轮跑了 90 秒之后立刻
+>   再跑一轮，越积越多。本节要的是「上一轮没完就跳过这一轮」（25 T-AUT-42 的原话是
+>   「第二次**立即返回**」）。
+> - **`outcome_applied` 这一列 13 §2.7.2 原本没有**（只有本节要求它）。已按本节落地并回填 13。
+
 - `AutomationScheduler` 定时任务，**每分钟**扫描 `WHERE enabled = true AND next_trigger_at <= now()`（走 `(enabled, next_trigger_at)` 索引，13 §2）。
 - **单实例串行**：整个扫描批次在一个 `async-mutex` 内跑完，防止上一轮未结束时下一轮重入（单机单进程前提；多节点时改为 DB 行级锁 + `claimed_by`，见 11 §4 预留）。
 - **outcome-pending 孤儿 run 补扫（交叉评审 P2-7）**：run 已 `finalize`（终态写入）但 `Automation.recordOutcome()`（增 `consecutive_failures` / 触发降频）尚未生效时崩溃——仅按 `next_trigger_at` 扫规则无法发现它，会**漏记一次失败计数**。故每轮额外扫 `automation_runs WHERE status IN (failed,timeout,success) AND outcome_applied = false`，对每条补调 `recordOutcome` 并置 `outcome_applied=true`（幂等，13 automation_runs 加 `outcome_applied` 列）。
@@ -878,6 +889,23 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 > - **正文只写一份**。库里只存指针（`agent_tasks.log_path`）与摘要；**不另存一份解析后的事件流**——`parseOutput` 是纯函数且逐行独立，把原始行重放一遍就能得到完全相同的事件与序号，回放因此不需要第二份日志。
 
 `RuntimeAdapter.parseOutput` 产出的是**结构化 `RuntimeEvent`**（04 §3），用于进度展示；原始字节另需一条独立链路：
+
+> **✅ 已落地（F21-7，2026-08-31）——但落法与下面这段原文有一处偏差，如实记在这里。**
+>
+> `automation_runs.log_path` **存的是那份 Task 日志的绝对路径**
+> （`data/logs/agent-tasks/<taskId>/stdout.jsonl`），**不再另写一份
+> `data/logs/automation-runs/<runId>/output.log`**。
+>
+> 判据是本节自己立的第二条纪律 **「正文只写一份」**：S6 已经把无头 Task 的日志上提为
+> Task 口径（13 §2.1.4），而自动化触发的**就是**一个标准无头 Task —— 它的字节已经落在
+> 那里了。再抄一份等于同样的兆字节写第二遍，还多出一处会与另一处不一致的地方。
+> `automation_runs` 仍然是自动化自己的记录（本节「automation 口径保留不动」那句保住了），
+> 只是它的 `log_path` **指过去**而不是复制过来。
+>
+> 由此，「10MB × 3 分片轮转」由 **Task 侧**的落盘策略负责；`automation_runs.log_bytes`
+> 只是那份文件当时的体积，I-AUR-4 的 30MB 上限照旧在 `AutomationRun.attachLog` 里把关。
+> `GET /api/automations/runs/:runId/logs` 按字节区间读那个路径（`text/plain`，游标走
+> `x-log-offset`/`x-log-total`/`x-log-eof` 三个响应头，`offset` 缺席即回末尾 64KB）。
 
 - **捕获**：`spawn({ tty:false })` 的 stdout/stderr 原样写入 `data/logs/automation-runs/<runId>/output.log`（tty=false 时两路已由 provider 解复用，04 §2.2）。
 - **轮转**：单文件上限 **10MB**、最多 **3 个** 分片（`output.log.1/.2`），超出即丢弃最旧分片并在文件头写一行截断标记——agent 刷屏能轻易写满磁盘，无上限的日志是运维事故。
