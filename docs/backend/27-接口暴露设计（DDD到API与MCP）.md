@@ -46,7 +46,7 @@
 | 面 | 数量 | 权威清单 |
 |---|---|---|
 | REST 端点 | **63**（+1：`GET /api/providers` 能力发现；+2 实现期补录：`POST /api/projects/:id/cancel-clone`、`POST /api/access/unlock`；+4 S6 无头 Task：`GET /api/sandboxes/:id/tasks`、`GET …/tasks/:taskId`、`GET …/tasks/:taskId/artifacts/:name`、`POST …/tasks/:taskId/cancel`；**+2 分支与基线同步：`GET /api/projects/:id/branches`、`POST /api/projects/:id/sync`**；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
-| MCP tools | **14 设计 / 10 已注册**（⏳ 4 个设计中未注册：`start_sandbox` · `stop_sandbox` · `get_sandbox` · `exec_in_sandbox`。S6 新增并注册了无头 Task 的发起与终止两个 tool，见 §2） | 02 §5.2 |
+| MCP tools | **14 设计 / 14 已注册**（本迭代把最后四个补齐——它们的 REST 端点此前也不存在，所以是「先做端点、再包壳」两层一起落地，见 §2） | 02 §5.2 |
 | WS 通道 | **3**（`/events`、`/terminal`、`/tasks`） | 10 §6.7 |
 | WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
 | SSE 端点 | **1**（`POST /api/system/diagnose`） | 02 §5.3 |
@@ -77,10 +77,10 @@
 | `listSandboxes` | `GET /api/sandboxes?projectId=&status=` | `list_sandboxes` | 按项目过滤是主链路默认形态 | `SandboxDto[]`，含派生 `waitingInput` | `list-sandboxes` query | — | — | — |
 | `getSandbox` | `GET /api/sandboxes/:id` | `get_sandbox` | | `SandboxDto` + 资源占用；**`status='failed'` 时带 `failureCode` / `failureMessage`**（10 §7.3——异步失败没有同步响应可承载错误码，这是刷新后仍能解释失败的唯一出口） | `get-sandbox` query | — | `NOT_FOUND` | — |
 | `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、**`INSTALL_FAILED`**(500，装 CLI 失败，04 §4 / 03 §4.3 ③)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed`（+ `starting` 期间 0..n 条 **`runtime.install_progress`**） |
-| `startSandbox` | `POST /api/sandboxes/:id/start` ⏳ | `start_sandbox` | | `SandboxDto` | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace） | `INVALID_STATE`(409)、`RESOURCE_EXHAUSTED`(429) | `sandbox.status_changed` |
-| `stopSandbox` | `POST /api/sandboxes/:id/stop` ⏳ | `stop_sandbox` | | `SandboxDto` | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409) | `sandbox.status_changed` |
+| `startSandbox` | `POST /api/sandboxes/:id/start` | `start_sandbox` | 仅 `stopped` 可调 | `SandboxDto`，**`status:'starting'`**——答的是「已受理」不是「已就绪」 | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace）、I-SBX-3（没有 provider 实例可启 ⇒ 409 而不是背地里失败） | `INVALID_STATE`(409)。⚠️ **`RESOURCE_EXHAUSTED`(429) 落地后拿不到**：`start` 与 `create` 同为异步（`starting` 段实测可达数分钟），provider 抛的资源不足发生在响应发出**之后**，只能经 `sandbox.status_changed.errorCode` + `SandboxDto.failureCode` 到达（04 §4 那条「异步失败没有同步响应可承载错误码」）。要让它成为 429，得先有个**同步的准入检查**（ResourcePool，03 §1 —— 今天不存在） | `sandbox.status_changed` |
+| `stopSandbox` | `POST /api/sandboxes/:id/stop` | `stop_sandbox` | 仅 `running`/`idle` 可调 | `SandboxDto`（`status:'stopped'`）。**保留实例与工作区**——否则 `start` 无物可启 | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409)。provider 停不下来 ⇒ 聚合落 `failed`（不留在 `stopping`）+ 透传 provider 码 | `sandbox.status_changed` |
 | `destroySandbox` | `DELETE /api/sandboxes/:id` | `destroy_sandbox` | **`{ keepVolume?: boolean }`**（body 或 `?keepVolume=`，query 优先）。**默认值两面不同**：REST 由前端表单传（UI 默认勾选保留）；**MCP 默认 `false`** | 204 | `destroy-sandbox` command | I-SBX-4、I-RV-1/3 | `INVALID_STATE`(409) | `sandbox.status_changed` → `sandbox.removed` |
-| `execInSandbox` | `POST /api/sandboxes/:id/exec` ⏳ | `exec_in_sandbox` | 非交互命令；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }` | — | I-SBX-3 | `INVALID_STATE`(409)、`TIMEOUT`(504) | — |
+| `execInSandbox` | `POST /api/sandboxes/:id/exec` | `exec_in_sandbox` | `{ command }` 经 `sh -c` 执行；**交互式 TTY 走 WS，不走这里** | `{ stdout, stderr, exitCode }`。⚠️ **非零退出是 200 的结果**，不是错误——否则 `exitCode` 这个字段只会是 0；⚠️ **`stderr` 今天恒为空串**：`ProcessStream` 是单条已解复用字节流（04 §2.4），`toExecFn` 拆不回来，要分流请在命令里 `2>&1` | — | I-SBX-3（仅 `running`/`idle`——exec 派生自 `spawn({tty:false})`，没起来就没有进程可 spawn，04 §2.3） | `INVALID_STATE`(409)、`TIMEOUT`(504，**60s 平台常量**：契约里没有 `timeoutMs` 字段，花掉的是平台自己的一条 HTTP 连接；真要跑久的走无头 Task。期限**下发给 provider 一份**让进程在沙箱内真被杀，平台侧再赛一次跑保证请求一定收口) | — |
 | `runAgentTask` | `POST /api/sandboxes/:id/runtimes/:rt/tasks` → **202** | `run_agent_task` | `RunAgentTaskSchema`：`prompt`(≤8000) · `timeoutMinutes`(30/60/120/240) · `resumeFrom?` · `extraArgs?`（**白名单枚举，不是自由数组**） | **202** + `AgentTaskDto`（含 `id`；流式输出走 WS `/tasks`） | `run-agent-task` command | I-SBX-5、**provider 必须 `headlessTask`** | `UNSUPPORTED_CAPABILITY`(409)、`INVALID_STATE`(409)、`NOT_FOUND`(404) | `/tasks` 的 socket.io 事件名恒为 **`frame`**，判别靠帧内 `type`：`event` · `caught_up` · `exit`（见下方 `/tasks` 引注第 1 条） |
 | `listAgentTasks` | `GET /api/sandboxes/:id/tasks` | **不进 MCP**（列表是 UI 恢复用途，agent 自己持有 taskId） | — | `AgentTaskDto[]`，按 `startedAt` 倒序 | `list-agent-tasks` query | — | `NOT_FOUND`(404) | — |
 | `getAgentTask` | `GET /api/sandboxes/:id/tasks/:taskId` | **不进 MCP**（同上） | — | `AgentTaskDto` | `get-agent-task` query | — | `NOT_FOUND`(404) | — |
@@ -129,8 +129,9 @@
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
 | `cancelClone` | `POST /api/projects/:id/cancel-clone` | — | **只取消克隆、不删项目**：中止在跑的 clone（排队中的直接出队）；项目 id / 名称 / 已关联 Task 全部保留，之后仍可 `retryClone` 或 `convertToEmpty`。**非 cloning 态是 no-op**（回当前 `ProjectDto`，不报 409） | `ProjectDto`（`cloneStatus:'failed'`、`errorCode:'INTERRUPTED'`） | `cancel-clone` command | I-PRJ-6 | — | `project.clone_progress`（`phase:'failed'`） |
 | `deleteProject` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 先取消克隆再删**（要"取消但保留项目"用上一行的 `cancelClone`） | 204 | `delete-project` command | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
-| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` ⏳ | — | | `RetainedVolumeDto[]` | `list-retained-volumes` query | — | — | — |
-| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` ⏳ | — | | 204 | — | I-RV-2 | `NOT_FOUND` | — |
+| `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` | — | **不含已清理的**（`deletedAt` 非空即只读，对外等于不存在）；不带 `projectId` = 全部项目 | `RetainedVolumeDto[]` | `list-retained-volumes` query | I-RV-2 | — | — |
+| （手动清理保留卷） | `DELETE /api/retained-volumes/:id` | — | **先删目录、再置 `deletedAt`**（反过来崩溃就留下一个 reaper 再也扫不到的目录）；记录留档供审计 | 204 | — | I-RV-2 | `NOT_FOUND` | — |
+| `downloadRetainedVolume` | `GET /api/retained-volumes/:id/archive` | — | **不进 MCP**（二进制流不适合 tool 返回，与 `downloadTaskArtifact` 同理） | **tar 流** + 精确 `Content-Length`（口径见 10 §6 那张表：git 口径挑内容、不压缩换进度、`.git` 保留） | — | I-RV-2（`deletedAt` 非空即只读，不可下载） | `NOT_FOUND` | — |
 
 **前端要知道的三件事**：
 
@@ -295,7 +296,7 @@
 | `getInitStatus` | `GET /api/system/init-status` | 冷启动首屏第一个请求 | `{ initialized, checks?[], resources? }` | — | 附上次出网检测结果，避免一进来就重跑一轮 |
 | `initialize` | `POST /api/system/init` | `{ proxyConfig?, acknowledgeOffline? }` | `{ initialized:true }` | **409 `ALREADY_INITIALIZED`** · **409 `OFFLINE_NOT_ACKNOWLEDGED`** | **一次性操作**，重复调用即冲突（不是幂等）⇒ `ALREADY_INITIALIZED`，前端据它跳过向导；模型 API 全挂而未带 `acknowledgeOffline` ⇒ `OFFLINE_NOT_ACKNOWLEDGED`，**零副作用、前端不许放行**。⚠️ 两种 409 **必须两个码**（10 §6.8）|
 | `getSettings` / `updateSettings` | `GET / PUT /api/system/settings` | | `SystemSettingsDto` | — | **永不回显口令 hash** |
-| `setAccessPasscode` | `PUT /api/system/access-passcode` ⏳ | `{ action:'enable'\|'regenerate'\|'disable' }` | 启用/重生成时**一次性返回 16 位明文** | `INVALID_STATE`(409) | **MVP 即可用**；明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session** |
+| `setAccessPasscode` | `PUT /api/system/access-passcode` | `{ action:'enable'\|'regenerate'\|'disable' }` | `{ enabled, passcode? }`——启用/重生成时**一次性返回 16 位明文**（`disable` 时 `passcode` 键缺席） | `INVALID_STATE`(409)×3 | **✅ 落地**。明文只此一次，之后任何接口都不再回显；重新生成**不影响已通过 session**（cookie 签名密钥与口令解耦，独立落库）。三种 409：已启用再 `enable` / 未启用就 `regenerate` / `ACCESS_PASSCODE` env 固定了口令。`disable` 幂等。⚠️ `enable` 会把调用者自己挡在门外（此前没有门就没有 session），明文已在响应里，走一次 `POST /api/access/unlock` 即可 |
 | `diagnose` | `POST /api/system/diagnose` | — | **SSE `text/event-stream`**：首帧 `event: start`（八项清单，页面据它画 ⏳ 占位）+ 逐项 `event: check` + 末尾 `event: done` | — | 八项**并行**，整轮 ≈ 最慢那项 ≈ 5s（不是累加的 40s）；单项超时 5s，一项卡住不阻塞整轮。含 **`DATA_ROOT` 文件系统与 reflink**（实测一次 FICLONE，不查文件系统名）与 **⑧ 预制镜像五步链**（P21-5 §9A）。帧类型手写于两仓 `sse-protocol.ts`，B5 对账 |
 | `getResources` | `GET /api/system/resources` | | CPU/内存/**磁盘水位** + 保留卷占用 | — | 磁盘是本平台真实瓶颈（03 §1），要显性展示 |
 | `listAudit` | `GET /api/system/audit` | — | 游标增量（`seq`），可按 category / severity / subjectId 筛 | — | **观察设施非账本**（13 §2.8.2）：写入永不阻断业务，故产品文案不得声称"完整无遗漏"；`subjectId` 支撑沙箱详情时间线 |
@@ -478,7 +479,7 @@ Step2 确认：
 |---|---|---|---|
 | REST 端点（不含 v1.5 占位） | 61 | 61 | 0 |
 | REST v1.5 占位 | 2 | 2（§9 标注） | 0 |
-| MCP tools | 14 设计 / **10 已注册** | 14 | 0（⏳ 4 个设计中未注册，§1.3 列名） |
+| MCP tools | 14 设计 / **14 已注册** | 14 | 0 |
 | WS 通道 | 3 | 3（§7 + §2 的 `/tasks`） | 0 |
 | WS 事件类型 | 7 | 7（§10.8 全量表） | 0 |
 | SSE 端点 | 1 | 1（§9） | 0 |
