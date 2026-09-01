@@ -252,7 +252,7 @@ interface ──▶ application ──▶ domain
 
 | 层 | 允许依赖 | 明确禁止 |
 |---|---|---|
-| `domain` | domain、shared-kernel/domain | **任何三方 IO 库**（provider SDK/drizzle/socket.io）、NestJS 装饰器以外的框架代码 |
+| `domain` | domain、shared-kernel、`node:crypto`（纯计算）、`node:stream`（**仅 `import type`**） | **其余一切 import**：三方库（provider SDK/drizzle/socket.io/better-sqlite3）、`@nestjs/*`、`node:fs` / `node:child_process` 等 IO 内建、`@platform/contracts` 与别的 module |
 | `application` | domain、contracts（端口接口） | 直接 import infrastructure 具体实现（由 DI 运行时注入到接口 token） |
 | `interface` | application 暴露的 DTO/Service | 触碰 domain 内部细节 |
 | `infrastructure` | domain（实现端口）、contracts、三方库 | — |
@@ -260,7 +260,28 @@ interface ──▶ application ──▶ domain
 
 具体 ESLint 配置落在文档 09 §2。
 
-**一条额外的全仓禁令**：禁止直接 `new Date()` / `Date.now()` / `crypto.randomUUID()`，统一走 shared-kernel 的 `Clock` / `IdGenerator` 端口（`no-restricted-syntax` 强制，端口实现处豁免）。理由：时间与 ID 是本项目最大的测试不确定性来源（idle 阈值、设备码 15min、重试 24min×5、调度器每分钟扫描），端口化之后这些逻辑才能被写成确定性用例（见 [25 §1.4](./25-后端测试体系.md)）。
+**domain 的 import 白名单**（`@typescript-eslint/no-restricted-imports`，2026-09 补齐）。这一条以前只写在纸上：`boundaries` 只认**仓内元素**（domain/application/…），`node_modules` 里的包压根不是元素，所以上面那句「明确禁止任何三方 IO 库」**没有任何一行配置在执行**——实测把 `dockerode` / `drizzle-orm` / `socket.io` / `better-sqlite3` 逐个 import 进 domain 实体，`pnpm lint` 全绿。补上的是**白名单**而不是黑名单：黑名单只挡得住今天 `package.json` 里的那几个名字，下一个被引进来的 SDK 照样通过，而「下一个」正是这条规则要防的东西。
+
+豁免边界按「**这个 import 会不会带来 IO / 不确定性**」画，不按「是不是三方包」画：
+
+- `node:crypto` **放行** —— 纯计算，不碰 fd/socket/子进程。现役用法是 `credential/domain/value-objects/masked-identifier.vo.ts` 的 `createHash` 做 sha256，是个纯函数。它里面唯一危险的那部分（`randomUUID` / `randomBytes`）由下面的 syntax 禁令单独挡，两条规则各管一段。
+- `node:stream` **只放行 `import type`** —— 现役用法是 `project/domain/ports/retained-volume-store.port.ts` 用 `Readable` 写端口签名，编译后一行代码都不剩；运行时 `import { Readable }` 去构造流就是 IO 了，照红。这是全配置里唯一一处「按 `import type` 划线」。
+- `@nestjs/*` **不放行** —— 比本表原先的表述（「NestJS 装饰器以外的框架代码」）收紧了一格。理由：为了一个 `@Injectable` 就得把整个 `@nestjs/common` 拉进 domain，而 `Logger`、`HttpException` 就在同一个包里，白名单没法只放行装饰器；domain 里真需要 DI 的类可以在 `*.module.ts`（组装根）用 `useClass`/`useFactory` 登记，不必让实体认识框架。实测全仓 domain **零个** `@nestjs` import，收紧不打红任何一行。
+- `@platform/contracts` 与别的 module **不放行** —— 与 boundaries 的 `from: 'domain'` 规则保持同一口径（跨上下文协作走 application service 或领域事件，见 §5）。
+
+**一条额外的全仓禁令**：禁止直接 `new Date()` / `Date.now()` / `randomUUID()`，统一走 shared-kernel 的 `Clock` / `IdGenerator` 端口（`no-restricted-syntax` 强制，端口实现处豁免）。理由：时间与 ID 是本项目最大的测试不确定性来源（idle 阈值、设备码 15min、重试 24min×5、调度器每分钟扫描），端口化之后这些逻辑才能被写成确定性用例（见 [25 §1.4](./25-后端测试体系.md)）。
+
+> ⚠️ `randomUUID` 这条要挡**两种写法**：`crypto.randomUUID()` 的成员调用，和 `import { randomUUID } from 'node:crypto'` 之后的裸调。2026-09 之前只有前者的选择器（`callee.property.name`），后者是 `callee.name`，**一行 import 就把整条禁令绕干净了**——`apps/api/src/bootstrap/error-envelope.filter.ts` 就是这么在门禁全绿的情况下活到今天的。「看着有规则、实际匹配不到」比没有规则更糟：它让每个来 review 的人以为这里查过了。
+
+**随机源禁令的射程只到 `domain` / `application`**（含 `shared-kernel/src/domain`）：`Math.random()` 与 `randomBytes()` 在这两层禁止，再往外**不禁**。这不是打折，是照着上面那句理由画的——禁令保护的是「业务逻辑能被写成确定性用例」；出了业务层，随机恰恰是正确答案而不是问题：AES 的 IV（`credential/infrastructure/crypto/aes-gcm.crypto.ts`）、主密钥（`shared-kernel/src/crypto/master-key.ts`）、WS session key（`terminal/interface/gateway/terminal.gateway.ts` 的 128-bit）、容器内临时目录名（`sandbox/infrastructure/providers/aio/*`），要的都是**密码学强度的不可预测**。把它们赶去走 `IdGenerator`（那是给业务实体发 ID 的端口）会让下一个人误以为这些值可复现——那是安全事故，不是洁癖。所以边界画在**层**上，而不是逐处 `eslint-disable`：层是结构性判据，不需要每个新文件的作者重新判断一次。
+
+时间/ID 禁令的豁免清单（每条都在 `api/eslint.config.mjs` 里带理由）：
+
+| 豁免处 | 豁免什么 | 为什么 |
+|---|---|---|
+| `apps/api/src/platform/time/**`、`apps/api/src/platform/access-passcode/**`、`packages/shared-kernel/src/ports/time.util.ts` | 时间 + ID | 端口实现本身；`time.util.ts` 是纯 `epoch → Date` 换算，从不读时钟 |
+| `apps/api/src/bootstrap/error-envelope.filter.ts` | 仅 `randomUUID()` | `traceId` 是**可观测性关联 ID**，不是业务实体 ID（没有任何断言在钉它，它反而要求每个响应都不同）；且该 filter 由 `configure-app.ts` 手工 `new` 装上、**不走 DI**，为拿一个 traceId 开一条注入通道是让门禁反过来改架构。豁免只画到这**一个文件**，不是整个 `bootstrap/` |
+| `**/*.spec.ts`、`**/test/**` | 时间 + ID + 随机 | 测试要的就是自己造时间 |
 
 ## 4. 关键选型
 
