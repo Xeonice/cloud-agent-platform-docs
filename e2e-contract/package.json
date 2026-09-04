@@ -1,0 +1,21 @@
+{
+  "name": "cloud-agent-platform-e2e-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "跨仓运行时契约 e2e（29 §3.1.1）：真后端 + 真前端，前端不挂任何 page.route。",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "test": "playwright test",
+    "api": "tsx server/start-api.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "^22",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -9,3 +9,10 @@
 
 # Node（主仓只有零依赖的 docs:check 脚本，正常不会有 node_modules）
 node_modules/
+
+# 跨仓运行时契约 e2e（e2e-contract/，29 §3.1.1）的跑测产物。
+# ⚠️ `node_modules/` 已被上面那条覆盖，但 playwright 的两个产物目录没有 ——
+# 实测 `git add e2e-contract/` 会把 `test-results/` 里的 `.last-run.json` 与失败快照
+# 一起带进版本库（CI 上还会多一个 `playwright-report/`，因为那边挂了 html reporter）。
+e2e-contract/test-results/
+e2e-contract/playwright-report/

@@ -79,6 +79,10 @@
 
 四条全部**只在有人专门去改坏实现时才暴露**。没有那个动作，它们会一直绿着。
 
+> ⚠️ **累计已是 5 条**（2026-09-03 更新）：第 5 条是从上面这份「已修好」名单里抓出来的
+> —— 那条 webhook 重定向测试当时验过两条变异都真红、判定为有效，**判错了**，
+> 详见 §3.5.2b。⇒ **金标准集现在是 5 条**，且它证明了「变异验证本身也会漏」。
+
 ### 1.4.1 ✅ 用例质量实测：干净（2026-09-02 全量扫描）
 
 「有没有用例重合、质量低下」是本次审视被专门追问的两个问题。**结论是都没有**，
@@ -158,6 +162,13 @@ api，跨仓契约的运行时一致性天然没有归属，于是三次事故�
 
 ### 3.1 ⭐ 一条真链路 e2e —— 唯一能堵住 §1.2 的手段
 
+> ✅ **已落地（2026-09-04）**：主仓 `e2e-contract/`，**6 条**用例覆盖七处漂移中的七处
+> （其中两处只覆盖了一部分，如实记在 §3.1.1 的表里）。**连跑 3 遍全绿**，单次
+> **21.6s / 26.4s / 29.1s**（本机，含 `next build`）。CI 落点
+> `.github/workflows/contract-e2e.yml` —— ⚠️ **刻意不在 PR 上触发、也不进 required
+> checks**，理由见 §3.1.1「CI 编排」。
+> ⭐ **4 条变异验证全部验红**（M1'/M2/M3/M4），记录见 §3.1.1「变异验证实录」。
+
 **这是本文最重要的一条。** 起真后端（真 sqlite，provider 用 fake）+ 真前端，前端不挂
 任何 `page.route`，让请求真的打过去。
 
@@ -186,9 +197,14 @@ api，跨仓契约的运行时一致性天然没有归属，于是三次事故�
     └── *.spec.ts                 # 5–10 条
 ```
 
-**运行形态**：`api` 起在 3100（真 sqlite 临时库、provider 用 fake）、`web` 起在 3000 并
-走 `next.config.mjs` 的 rewrites 同源代理（那套已验证能转发 WS）。前端**不挂任何
-`page.route`**。
+**运行形态**：`api` 起在 ~~3100~~ **3110**（真 sqlite 临时库、provider 用 fake）、`web` 起在
+~~3000~~ **3210** 并走 `next.config.mjs` 的 rewrites 同源代理（那套已验证能转发 WS）。
+前端**不挂任何 `page.route`**。
+
+⚠️ **端口改掉是实现时被迫的，不是审美**：本机 3000 长期被 docker 占着、3100 与开发时手工
+起的后端撞车 —— 而这一层的 webServer 是 `reuseExistingServer` 的，撞上一个**别人起的、
+配置完全不同的**进程时，用例会红在一堆看不懂的地方。挪到 3110/3210 两个没人用的号上，
+再由 `CONTRACT_API_PORT` / `CONTRACT_WEB_PORT` 兜住例外。
 
 ⚠️ 现有 `web/.env.local` 正是这个形态（`API_ORIGIN=http://127.0.0.1:3100`），本地手工
 已跑通 —— 缺的只是固化成自动化。⚠️ 但 CI 是干净 checkout **没有 `.env.local`**，
@@ -203,13 +219,224 @@ api，跨仓契约的运行时一致性天然没有归属，于是三次事故�
 时前端 zod 当场炸；webhook 响应体 ⇒ 真后端返回 `{ok:false}` 时断言会看到失败提示；
 fixture 缺字段 ⇒ 根本不存在 fixture。
 
+#### 3.1.1 详细设计（2026-09-04）
+
+> ✅ **本节已从「设计」变成「实录」**：下面每一小节都已实现，实现时**站不住的三处判断
+> 已就地改写并标注**（种子数据那一节的 `SCHEDULER_HOST_CORES=1`、端口号、以及漂移 5 的
+> 挂靠端点）。⛔ 保留原文再打叉，而不是删掉重写 —— 删掉就看不出「当时是怎么想错的」。
+
+##### 判据先行：这一层的验收标准是「能不能抓到已经发生过的漂移」
+
+⛔ **不是「功能对不对」** —— 那由现有 264 条 api e2e + 44 条 web e2e 各自保证，重复它
+只会得到一套更慢更脆的同类测试。这一层只验**两边对得上**：字段名、必填性、错误码、
+分页形状、时间格式。
+
+**七处已知漂移就是验收清单**（前三条来自 §1.2 的事故表，后四条是 §3.2 补 fixture 时扒出来的）：
+
+| # | 漂移 | 端点 | 真链路能抓到吗 | ✅ 落地：被哪条用例覆盖（2026-09-04 实测） |
+|---|---|---|---|---|
+| 1 | `errorCode` 前端 2 值 / 契约 3 值 ⇒ 整页解析失败 | `GET /api/automations/{id}/runs` | ✅ 真后端返回第 3 个值时 zod 当场炸 | `automation-runs.spec.ts` ⭐ **变异验红（M1'）** |
+| 2 | webhook-test 响应体没读，`200 + {ok:false}` 当成功 | `POST /api/automations/webhook-test` | ✅ 真后端真的会回 `ok:false` | `webhook-test.spec.ts` ⭐ **变异验红（M2）** |
+| 3 | fixture 缺 `triggerOn`/`createdAt`/`updatedAt` | `GET /api/projects/{id}/automations` | ✅ **根本不存在 fixture** | `automation-list.spec.ts`（⏳ 未单独变异验红） |
+| 4 | git 凭证响应替身多 5 个字段 | `POST /api/credentials/git` | ✅ 真响应只有两个字段 | `git-credential.spec.ts` ⭐ **变异验红（M4）** |
+| 5 | runtime 凭证多 `activeAuthMethod` | `PUT /api/runtimes/{rt}/auth-mode` | ⚠️ **只盖住了读取面** | `runtime-auth-mode.spec.ts` ⭐ **变异验红（M3）**；⛔ 缺口见下 |
+| 6 | `ProjectResponseDto.updatedAt` 必填但 fixture 缺 | `GET /api/projects` | ⚠️ **分辨力弱于其余六条** | `first-screen.spec.ts`（⏳ 未单独变异验红）；⛔ 缺口见下 |
+| 7 | health 替身回 `{status:'ok'}` 而契约无 body | `GET /api/health` | ✅ 同 3 | `first-screen.spec.ts`（与 6 合一条，同一次首屏） |
+
+⇒ **首批就照这七条选链路**，而不是照「核心用户旅程」选。理由：那七条是**已经真实发生
+过**的失败，覆盖它们能立刻证明这一层有价值；而「核心旅程」是猜测。
+
+⚠️ **两处如实记下的缺口**（2026-09-04 实测，⛔ 不许当成「已覆盖」）：
+
+- **漂移 5 只盖住了读取面，没盖住 `PUT /auth-mode` 本身。** 验收表把它挂在那个 PUT 上，
+  但那个端点**在真链路里够不着**：`AuthMethodRadioRow#handleSelect` 只在「目标模式已配置
+  且当前不生效」时才发 PUT，也就是要求同一个 runtime 上**同时**配好两种模式；而另一种
+  模式（`oauth-device` / `setup-token`）都要走真的厂商授权，e2e 里造不出来（实测
+  `POST /api/runtimes/claude-code/auth/begin` 会去拉真 helper，直接挂住）。
+  ⇒ 用例改盯 `activeAuthMethod` **唯一被前端读取的那一处**
+  （`lib/credential/runtimeCredential.ts` 的 `runtime.activeAuthMethod === mode`，grep 确认
+  `src/` 里只有这一处）。发出 PUT 的那半段由 api 侧 e2e 单独保着，**这一层没有**。
+- **漂移 6 只钉住了「时间格式」这一格，钉不住「必填性」。** `GET /api/projects` 在前端
+  **没有任何 zod**（`types/project.ts` 只是生成类型的别名，`project.service.ts` 拿到 `data`
+  直接返回）⇒ 后端少给一个 `updatedAt` **不会报错，只会静默降级**。真正的必填性锁在
+  §3.2 的 `satisfies` 与 `docs:check` 的 B3 上，不在这一层。
+
+##### 目录与进程形态
+
+```
+主仓/
+├── scripts/docs-check.mjs        # 跨仓：静态契约（11 门）
+└── e2e-contract/                 # 跨仓：运行时契约
+    ├── playwright.config.ts      # webServer 起两个进程
+    ├── server/start-api.ts       # 真 AppModule + fake provider，固定端口
+    ├── fixtures/seed.ts          # 种子数据（走真 API，不写库）
+    └── *.spec.ts                 # 首批 5–7 条
+```
+
+**后端**：⚠️ 现有 e2e 用 `app.listen(0)`（随机端口），真链路**必须固定端口**（前端的
+`API_ORIGIN` 要指过去）。写一个 `server/start-api.ts`：
+`Test.createTestingModule({imports:[AppModule]}).overrideProvider(SANDBOX_PROVIDER_REGISTRY)`
+注入 `FakeProvider`（复用 `api/apps/api/test/e2e/_fakes.ts` 那一份），
+`DATABASE_URL=':memory:'`、临时 `DATA_ROOT`、`DISABLE_AUTOMATION_SCHEDULER=1`、
+`DISABLE_VOLUME_REAPER=1`（定时器不该在 e2e 里自己跑），然后 `listen(3100)`。
+
+**前端**：`pnpm build && pnpm start -H 127.0.0.1`，`API_ORIGIN=http://127.0.0.1:3100`
+走 `next.config.mjs` 的 rewrites 同源代理（那套已验证能转发 WS）。
+⛔ **不挂任何 `page.route`** —— 挂了就退化成第二套 web e2e。
+⚠️ 环境变量由 `playwright.config.ts` 显式注入，**不要依赖 `web/.env.local`**：CI 是干净
+checkout 没有那个文件，而它存在与否会让 build 产物不同（11 §1.3 踩过）。
+
+##### 种子数据：走真 API，不写库
+
+⛔ **不直接写 sqlite**。绕过业务逻辑造出来的状态可能是真实系统永远不会产生的，
+用它验契约等于验一个不存在的契约。
+
+边缘状态用**环境变量 + fake provider** 造，不用直接改数据：
+- ~~`RESOURCE_EXHAUSTED`（漂移 1 要的）⇒ `SCHEDULER_HOST_CORES=1` 把容量压到发不出第二发~~
+  ⛔ **这一句实现时站不住，两处都错**（2026-09-04 实测，已在 `server/start-api.ts` 就地更正）：
+
+  1. **`=1` 压不住。** 准入判据是 `usedCores + request.cores > totalCores`
+     （`resource-pool.domain-service.ts#trySchedule`），而
+     `totalCores = host.cores × (1 - safetyMargin) × cpuOvercommitRatio`；本层把后两个旋钮
+     设成 0 与 1 ⇒ `=1` 得到 `totalCores = 1`，判据是 `0 + 1 > 1` = **false ⇒ 放行**。
+     一核的宿主装得下一个一核的沙箱（假镜像的 `resourceDefaults` 正是 1 核）。
+     ⭐ **它曾经「跑通过」，是因为 `reuseExistingServer` 复用的后端进程里躺着前几轮留下的、
+     还没释放登记的沙箱**，`usedCores` 已经 ≥ 1 才让判据成立 —— 一条**靠残留数据凑出前置
+     条件**的用例：干净进程里第一条就红，跑第二遍反而绿。改用 `0.5`（`--cpus=0.5` 是这个
+     旋钮的日常取值），`totalCores = 0.5 < 1` 让判据**恒成立**，与库里有没有残留无关。
+  2. **光压容量也到不了 `errorCode`。** 压到发不出配额只会得到 `status:'resource-exhausted'`
+     的**排队**行，`errorCode` 是**空的**。真正写下 `errorCode='RESOURCE_EXHAUSTED'` 的只有
+     `RetryPolicy.canRetry(5) === false` 那一支（`automation.scheduler.ts#queueOrGiveUp`），
+     而 5 次重试之间隔 24 分钟 ⇒ **必须能拨时钟**，否则这一格只能靠直接 INSERT 伪造
+     （而那正是本节禁的那件事）。⇒ 加了一个 `/__contract__/*` 控制面：它**一行数据都不写**，
+     只改 `process.env`（容量探针每次重读、不缓存）与拨时钟 + 手敲一轮真的
+     `AutomationScheduler.runOnce()`。决策表、重试上限、终态写入**一行都没被跳过**。
+     实测拨完之后 `retryCount` 1→2→3→4→5，第 5 轮转终态 `failed` + `RESOURCE_EXHAUSTED`。
+- webhook `ok:false`（漂移 2）⇒ 指向一个内网地址，让真的 SSRF 策略拒掉
+  ✅ **这一句成立且好用**：未启用访问口令时私网段一律 `deny-private`，
+  `http://192.168.0.1/hook` 拿到 `200 + {ok:false, errorCode:'HOST_NOT_ALLOWED'}`。
+  ⚠️ 关键是用**私网 IP 字面量**而不是「一个连不上的公网地址」——策略在**发请求之前**就拒了
+  （实测 8ms，零网络 IO），既不依赖 DNS 也不依赖任何超时；换成公网不可达地址会拿到
+  `UPSTREAM_UNAVAILABLE`，那条路要真的等一次 fetch 失败，是这一层最典型的 flaky 来源。
+
+##### 用例数量与形态的硬约束
+
+- **首批 5–7 条，上限 10 条。** ✅ 实际落 **6 条**（七处漂移里 6/7 各占一条，漂移 6 与 7
+  合并成同一条首屏用例 —— 它们守的是**同一次页面加载**上的两个字段面，拆开只是让同一段
+  首屏跑两遍）。⚠️ 这是三层里最慢、最容易 flaky 的一层，
+  膨胀到几十条就会变成没人愿意看的红灯来源，然后被 `--no-verify` 绕过或直接关掉
+  （与 §3.3.4 不设分数门禁是同一条工程现实）。
+- **每条只断言契约面**：字段存在性/必填性、错误码取值、分页信封形状、时间格式。
+  ⛔ 不断言文案、不断言像素、不断言交互细节 —— 那些各归 web e2e 与 storybook。
+- **每条都要能说出它守的是哪一处漂移**。说不出来的，就是在重复别的层已经做过的事。
+
+##### CI 编排
+
+⚠️ **先不进 PR 阻断门禁**，理由与 §3.3.4 同：新门禁第一周误伤就会被绕过或关掉。
+先跑起来、让人看见结果，稳定后再谈阻断。落点是主仓 workflow（那里已经能拉两个
+submodule，`docs-check` 就在这么干）。
+
+✅ **已落地**：`.github/workflows/contract-e2e.yml`。
+
+- **触发面刻意只有三个**：`push: [main]`、每晚 `cron`、`workflow_dispatch`。
+  ⛔ **没有 `pull_request:`** —— 「不阻断」写成 `continue-on-error: true` 是**假的不阻断**：
+  那会让整个 workflow 的结论变成 success，红被**藏起来**，而本节要的恰恰是「让人看见结果」。
+  真正的做法是让它红得见、但**根本不出现在 PR 上**，同时不进 branch protection。
+- ⇒ **升级成 PR 门禁要改两处，缺一不可**：① `on:` 加回 `pull_request:`；
+  ② 仓库设置里把 `契约 e2e` 加进 required status checks。只改一处会得到一道假门。
+- 与 `docs-check` 的**一处关键区别**：那边拉 submodule 挂了 `continue-on-error`（拉不到就
+  把 B 类判成 skip，不让 A 类跟着瘫痪），**这里不行** —— 两个 submodule 是这一层的全部
+  被测对象，拉不到就没有任何东西可跑 ⇒ 大声失败，⛔ 不静默 skip。
+- 步骤：拉两个 submodule → corepack（⚠️ 不钉 pnpm 版本：三处 `packageManager` 并不相同）
+  → `api` install + `pnpm build`（`server/start-api.ts` require 的是 `dist/`）
+  → `web` install（⛔ **不在 CI 里 build**：产物必须由 `playwright.config.ts` 注入的那套 env
+  烘出来，先 build 一次只会得到一份 env 不同、随后被覆盖的废产物）
+  → `e2e-contract` install + `playwright install chromium`（⚠️ 只装 chromium：本层验的是
+  字段名/必填性/错误码/分页信封/时间格式，没有一条与浏览器差异有关）→ 跑测 → 传报告。
+
+##### ⭐ 变异验证实录（2026-09-04）
+
+⛔ **一条从没红过的测试和一条不存在的测试等价**（§0）。这一层落地时逐条把前端改回漂移前
+的形态，确认对应用例**真的红**、而且**红在该红的那一句**上：
+
+| # | 注入点 | 变异 | 结果 |
+|---|---|---|---|
+| M1' | `web/src/types/automation.ts` | `AUTOMATION_SKIP_REASONS` 运行时数组砍成 2 个值（静态类型不动） | ✅ `automation-runs.spec.ts` 红在②`run-history-error` 存在 |
+| M2 | `web/src/services/api/automation.service.ts` | `testWebhook` 退回「只 `ensureOk`、响应体一个字节不读」 | ✅ `webhook-test.spec.ts` 红在①`webhook-test-error` 找不到 |
+| M3 | `web/src/lib/credential/runtimeCredential.ts` | `activeAuthMethod` 改读一个真后端不发的字段名 | ✅ `runtime-auth-mode.spec.ts` 红在②radio 未选中 |
+| M4 | `web/src/views/settings/GitCredentialCard.view.tsx` | 掩码改读一个只有替身给过的字段 | ✅ `git-credential.spec.ts` 红在①②掩码不上屏 |
+
+⭐ **M1 的第一版是「红在环境上」，不算数，值得单独记一笔。** 最初照漂移 1 的原形把
+`AutomationSkipReason` **类型**也手抄回 2 个值 —— 结果 `next build` 直接编译失败
+（`automation.schema.ts` 的 `Exact<AssertRun>` 挡下）。
+⇒ ① 这**不是**契约红，是 build 红，⛔ 不能记成「用例抓到了」；
+⇒ ② 但它顺带证明了一件好事：**§3.2 那道 `Exact<>` 双向锁已经把漂移 1 挡在编译期**，
+   真链路这一层守的是它**漏过去之后**的运行时那一半。
+⇒ ③ 要验运行时那一半，变异必须**能编译**：改成只砍运行时数组、保留静态类型（M1'），
+   于是 zod 少一个取值而 tsc 全绿 —— 这才是真链路唯一能回答的问题。
+
+⚠️ **变异验证的操作纪律（这一轮踩过）**：注入与还原**必须成对**，中途中断会把仓库留在
+坏状态（上一轮就把 `types/automation.ts` 的手抄版留在了工作区）。每次还原后**立刻**
+`git diff` 确认干净再做下一件事。⚠️ 还有一条只在这一层成立的：**改完前端必须先杀掉
+`next start`**——它服务的是上一次 `build` 的产物，不杀的话变异**根本没进到浏览器里**，
+用例照绿，得到一条完美的假绿。
+
+##### 实测耗时与稳定性（2026-09-04，本机）
+
+**连跑 3 遍全绿**：21.6s / 26.4s / 29.1s（单 worker，含 `next build`；6 条用例本身
+0.1–2.1s，绝大部分时间在起两个 webServer）。
+
+⚠️ **后两遍变慢是有原因的、也是这一层的一个已知性质**：`reuseExistingServer` 复用同一个
+后端进程，而它的库是**共享的 in-memory 库** —— 每跑一遍就多攒一批项目，首屏要渲染的行
+越来越多。⇒ 用例之间靠**各建各的项目**隔离（`fixtures/seed.ts#uniq`），⛔ 断言不许依赖
+「库里只有我这一条」。M1' 那次事故（靠残留沙箱凑出 `RESOURCE_EXHAUSTED`）就是违反这条
+的代价，而它**在干净 CI 上才会暴露**——本机永远绿。
+
 ### 3.2 前端替身向后端看齐
 
 - `src/mocks/handlers.ts`：13 个工厂函数已有返回类型，**补齐剩下 15 处裸字面量**。
 - `e2e/**`：171 处 route 替身统一挂 `satisfies XxxDto`（`e2e/**/*.ts` 已在 tsconfig
   include 里，所以这是**真锁** —— 上一轮实测删掉一个必填字段当场 TS1360）。
-- 加一道轻量门禁：扫 `handlers.ts` 与 `e2e/**` 里未经类型标注的响应字面量。口径与
-  `docs:check` 的 B6 同源 —— **人工信号也要有机器兜底**。
+- ✅ **机器兜底门禁已落地**（2026-09-04）：`web/scripts/check-mock-contract-anchoring.ts`，
+  `pnpm check:mock-contracts`，接在 CI `static-checks` 里 `check:stories` 之后。
+  口径与 `docs:check` 的 B6 同源 —— **人工信号也要有机器兜底**：上面两条是人工补到 100% 的，
+  没有门禁的话下次新增一处裸字面量不会有任何东西红。
+
+  **⛔ 不用正则，走 TypeScript AST**（`ts.createSourceFile` + 遍历）。此前用正则扫过两轮，
+  误报率 10–20%：嵌套括号 `(saved ? [A] : []) satisfies T[]` 匹配不上、`json: [PROJECT]`
+  的数组包装被判未锚定、`satisfies` 落在截断窗口外的长对象被判未锚定。这三类 AST 全都能准确判。
+
+  **检查点**：`src/mocks/**`（除 `*.test.ts`）里的 `HttpResponse.json(<body>, …)` 第一个实参，
+  以及 `e2e/**/*.ts` 里 `route.fulfill({ json: <body> })` 的值。当前共 **133 处**
+  （handlers 54 + e2e 79），全部通过，**0 处豁免**。
+
+  **判据**（任一成立即算已锚定，全部沿 AST 递归传递）：
+
+  | # | 形态 | 例 |
+  |---|---|---|
+  | ① | `satisfies T`（T 不能是 `any`/`unknown`/`object`） | `[…] satisfies ProjectDto[]` |
+  | ② | `as T`（同上排除；`as const` 透明穿过，不构成锚定） | `x as AuditListDto` |
+  | ③ | 具名常量/变量，且该声明自己已锚定（有 `: T` 标注，或初始值已锚定）；跨文件 import 会继续追（`@/…` 与相对路径都解析） | `json: RUNTIMES` |
+  | ④ | 有显式返回类型的 helper 调用；`function f(): T`、`const f = (x): T =>`、**以及形参形态** `respond: (q) => AuditListDto` | `projectDto({…})` / `respond(query)` |
+  | ⑤ | 数组字面量且**每一项**都已锚定（含 spread） | `json: [PROJECT]` |
+  | ⑥ | 三元 / `??` / `||`，**每个分支**都已锚定 | `saved ? [CARD] : […]` |
+  | ⑦ | 保型数组方法（`filter/slice/concat/sort/toSorted/reverse/toReversed/at`）且接收者已锚定；`map`/`flatMap` 不保型 ⇒ 改看**回调体**是否锚定 | `IMAGE_MANIFESTS.filter(…)` / `FIXTURES.map((r) => ({…}) satisfies AutomationDto)` |
+
+  反过来：裸对象字面量、裸字符串/数字、空数组 `[]`、`JSON.parse(…)`、未标注的属性访问一律红
+  （空数组要写成 `[] satisfies XxxDto[]`）。
+
+  **豁免口径**：⛔ 不设白名单。要豁免就在**该值所在行的行尾**、或**上一行的整行注释**里写
+  `contract-exempt: <理由>`，理由必填（≥4 字符）且会被脚本读出来打进报告。
+  "上一行"只认整行注释——否则上一行的行尾豁免会顺手把下一行也放过去（自检时真踩到了）。
+
+  当前 **0 处豁免**，因为那三类"本就不该锚定"的响应根本不走这两个检查点：204 空体是
+  `new HttpResponse(null, {status:204})`、审计导出 tar 是 `HttpResponse<Blob>`、
+  SSE 是文本流。机制留着给将来真的需要它的那一处。
+
+  **门禁自己红过**（29 §1.4 的教训：从没红过的门禁 = 没有门禁）：往 `handlers.ts` 和
+  `e2e/smoke.spec.ts` 各塞一处裸字面量 ⇒ 两处都被点名、exit 1；另用一个临时 spec 逐条打
+  空数组 / `satisfies unknown` / 未锚定常量 / `.map` 无 satisfies / `JSON.parse` / `as any` /
+  太短的豁免理由 ⇒ 七条全部各自报红。验完删除，现状复跑绿。
 
 ### 3.3 变异验证制度化：框架做广度，人做深度
 
@@ -376,7 +603,7 @@ Survived     352  20.7%
 
 | 文件 | 改前 | 改后 | 说明 |
 |---|---:|---:|---|
-| `automation/…/http-webhook.sender.ts` | **14.9%** | **92.4%** | 新建 `webhook-sender.spec.ts` 17 条；35 条变异 35 红 |
+| `automation/…/http-webhook.sender.ts` | **14.9%** | **93.3%** | 新建 `webhook-sender.spec.ts` 17 条；35 条变异 35 红 |
 | `sandbox/…/agent-task.mapper.ts` | 28.6% | **97.2%** | 新建 spec 8 条，未覆盖归零 |
 | `project/…/git/error.classifier.ts` | 46.0% | **86.0%** | 剩余 7 个存活**全部实证为等价变异体** |
 | `apps/…/access-audit.ts` | 43.2% | — | 31 条针对性变异全红（见 §3.5.2c 的测量盲区） |
@@ -435,6 +662,103 @@ api unit 1240 → **1275** 条，118 次变异验证。
 - 常态纪律仍照 09 §2.3.1：每条新断言交付前必须有一次「改坏 → 确认红」。
 - 优先抽查**否定性断言**（「不应该出现 X」「不发第二次请求」「DOM 里不含 Y」）：
   它们在实现坏掉时最容易仍然为真，§1.4 四条假绿有三条是这个形状。
+
+#### 3.3.4 CI 编排：nightly 全量 + PR 增量，**两条都不阻断**（2026-09-04 落地）
+
+落点 `api/.github/workflows/mutation.yml`，两个 job。**刻意不并进 `ci.yml`** ——
+ci.yml 的每一步都是阻断门禁（typecheck / lint / format:check / unit / contract /
+integration / e2e / build / openapi drift），把不阻断的东西混进去，会让「CI 红 = 不能合」
+这条最重要的信号变浑浊。
+
+| | **nightly 全量**（job `full`） | **PR 增量**（job `changed`） |
+|---|---|---|
+| 触发 | `schedule` 18:00 UTC（= 02:00 CST）+ `workflow_dispatch` | `pull_request` |
+| 变异范围 | 全仓（配置默认的 `mutate`） | `git diff` 算出的改动 src 文件 |
+| 跑哪些测试 | 全仓 unit（1275 条） | vitest `related` 挑出的相关测试文件 |
+| 实测耗时 | **33 分**（本机 4 并发；§3.3.2b-2） | 1 文件 / 50 变异体 → **7 秒**；48 文件 / 3259 变异体 → **10 分 22 秒** |
+| 产出 | job summary + `mutation-report-full` artifact（json + html，30 天） | job summary（分数 + 存活热点 + 改了哪些文件）+ `mutation-report-changed`（14 天） |
+| 阻断合并 | ⛔ 否（`thresholds.break: null`） | ⛔ 否（`thresholds.break: null` + 步骤永远 `exit 0` + `continue-on-error`） |
+
+⛔ **为什么两条都不设分数门禁** —— §3.3.3 第 1 条的直接推论，外加一条工程现实：
+等价变异体让 100% 永不可达，任何绝对阈值都只是给一个不可达的数字画一条随意的线；
+而**一个新门禁如果第一周就误伤，会立刻被 `--no-verify` 绕过或者被人关掉**。
+先让它跑、让人看见数字，稳定之后再谈要不要阻断。
+
+##### 增量方案：为什么是「`git diff` 算文件 → 塞进 `mutate`」
+
+三个候选都验过，前两个不是「不合适」，是**真的不能用**：
+
+| 候选 | 判断 |
+|---|---|
+| `--since` | ⛔ **Stryker 10 根本没有这个选项。** 实测 `@stryker-mutator/api@10.0.0` 的 `stryker-core.json`：41 个顶层选项里没有 `since`（那是 v6 时代的东西，早已移除）。传了只会被当成未知选项 |
+| `--incremental` | ⛔ 选项存在（`incrementalFile` 默认 `reports/stryker-incremental.json`），但它要靠 `actions/cache` 把那个 ~9MB 的文件跨 job 保留。缓存未命中 —— 仓库的第一个 PR、7 天没用被清、fork 来的 PR 拿不到写权限 —— 就退化成**在 PR 上跑 33 分钟全量**。那正是「第一周就误伤」的形状。它换来的好处（PR 上也能报全仓分数）对一条不阻断的信息流不值这个风险 |
+| ⭐ **`git diff` → `STRYKER_MUTATE_FILES`** | ✅ **选它。** 自足、确定、不依赖任何缓存；没有可变异文件时干净跳过。代价是 PR 上只能报「改动文件的分数」，报不了全仓分数 —— 全仓分数本来就该由 nightly 报 |
+
+⚠️ **必须走 env，不能走 CLI 的 `--mutate`**：CLI 传 `--mutate` 会**整体替换**配置里那份
+数组，连 `!**/*.module.ts`、`!apps/api/src/main.ts`、`!**/drizzle/**` 这些排除项一起丢掉
+—— 增量跑反而会去变异装配文件和生成物。所以改动文件从 `STRYKER_MUTATE_FILES` 进来，
+在配置里与**同一份** `excludes` 合并；workflow 的 `git diff` 那一段也按同样口径过滤一遍
+（刻意冗余：workflow 少过滤只是白跑几分钟，配置少过滤会把噪音算进分数）。
+
+⚠️ **`fetch-depth: 0` 是必需的**：`actions/checkout` 默认浅检出，拿不到 base 分支，
+`git merge-base` 直接失败。
+
+##### ⚠️ 踩到的坑：`vitest.related` 既是增量能跑起来的原因，也是它唯一的失败形态
+
+`@stryker-mutator/vitest-runner` 的 `vitest.related` 默认 `true` —— 只跑「import 到被变异
+文件」的测试文件。两个方向都实测过：
+
+- **关掉它**（`related: false`）：每个变异体都要重跑全仓 1275 条。单文件 63 个变异体
+  **跑了 5 分钟还没完**，而全量基线是约 10 个变异体/秒 ⇒ **增量比全量还慢**，方案作废。
+- **开着它**：单文件那次 dry run 只跑 84 条 / 1 秒，整轮 **6.7 秒**。
+- **代价**：改动的文件在 unit 层**一条相关测试都没有**时，相关测试集为空 ⇒ Stryker 报
+  `No tests were executed` 并 **exit 1**。实测 `apps/api/src/platform/system/initialization.service.ts`
+  （只由 e2e 覆盖）就是这个形状。⇒ CI 认这条日志，把它翻译成「这些文件 unit 层没人管，
+  值得问一句是不是真的只能靠 e2e 守」写进 job summary，**不当成跑挂**。
+
+##### ⭐ 顺手修掉的一个真坑：报告文件名按 scope 复用
+
+原来所有 `STRYKER_SCOPE=…` 的跑法共用 `reports/mutation/scoped.json`。两个后果：
+
+1. 跑完 sandbox 再跑 automation，读到的可能是上一轮 sandbox 的报告；
+2. **更阴的一个 —— 跑失败时 Stryker 不写报告，旧文件原地不动**，于是「这次挂了」
+   看起来像「这次成功、且分数没变」。
+
+⚠️ 这不是假想：复验 automation 时就是这么读到上一轮 sandbox 的旧报告，得出「分数对不上」
+的假结论。现在两条一起改：
+
+- **文件名带身份**：`full` / `packages-modules-automation` / 增量是
+  `changed-<改动文件集的 sha1 前 8 位>`；
+- **跑之前先 `rmSync` 掉本次的目标文件**（在 `stryker.conf.mjs` 模块顶层，读配置即执行）。
+
+两条合起来，让「读到别人的报告」和「读到上一轮的报告」**在文件系统层面都不可能**。
+CI 里更进一步：增量那一步把真实报告路径写进 `$GITHUB_OUTPUT` 传给 summary，
+而不是让 summary 去猜「目录里最新的那个」—— 猜路径正是这个坑的另一种写法。
+
+##### 验证方式：本机没有 Docker ⇒ `act` 跑不了，改为逐字执行 workflow 的 `run:` 块
+
+`act` 依赖 Docker，本机 Docker 没起。替代做法是写一个 30 行的 harness：**从 YAML 里按
+步骤名取出 `run:` 块原文**（不手抄，保证测的就是提交的那份），替换 `${{ }}`，并给
+`$GITHUB_OUTPUT` / `$GITHUB_STEP_SUMMARY` 做替身。PR 场景用 `git worktree` + 临时
+`refs/remotes/origin/<base>` 造出来，跑完即删。
+
+| 场景 | 怎么造 | 结果 |
+|---|---|---|
+| 只改 1 个**有 unit 测试**的 src 文件 | worktree 里改 `project/…/git/error.classifier.ts` 并提交 | 1 文件 / 50 变异体 / **6.7 秒** / `status=ok`，分数 **86.0%、7 个存活** —— 与 §3.3.2b-5 记录的那次逐字吻合 |
+| 只改 1 个**没有 unit 测试**的 src 文件 | 真实 PR #20（`initialization.service.ts`，只由 e2e 覆盖） | `status=no-unit-tests` / **3.7 秒** / 步骤 exit 0，summary 说人话 |
+| 改 48 个 src 文件（近 25 次提交里最大的一次） | 真实提交 `1cdaa25` | 3259 变异体 / **10 分 22 秒** / `status=ok`，72.4% |
+| 一个 src 文件都没改 | 真实提交 `9d65b74`（纯文档/测试） | `count=0`，干净跳过，不装 Node 不装依赖 |
+| Stryker 跑挂 | 直接喂 `status=failed` 给 summary 步骤 | 输出「跑挂了（不阻断合并）」 |
+| nightly 全量 | 真跑一遍 `pnpm test:mutation --reporters json,html,clear-text` | 见下 |
+
+⭐ **这一轮验证自己抓了两个 bug，都是「只改 workflow 就宣布完成」绝对发现不了的**：
+
+1. `vitest.related` 那条（上面已写）—— 第一次跑增量就 `No tests were executed`，
+   而 YAML 完全正确；
+2. 改配置注释时**误删了整个 `mutate` 键**，Stryker 静默退回默认 glob
+   `{src,lib}/**/*`（本仓根本没有 `src/`）⇒ `Instrumented 0 source file(s)`，
+   然后同样以 `No tests were executed` 收场。⚠️ **它的症状和第 1 条一模一样** ——
+   如果不是第二个场景本该有测试却报了「没有测试」，这个配置 bug 会一路带进 CI。
 
 ### 3.4 前后端用例的分工：实测**没有重复**，不要去"消除"
 
@@ -500,7 +824,7 @@ api unit 1240 → **1275** 条，118 次变异验证。
 > 它挑的是「值得优先人工看」的高危项，不是「判定它们无效」。带着 10–20% 误报去
 > 人工复核 39 条是划算的；拿它当结论则不行。
 
-⚠️ **把已知假绿存成金标准集**（§1.4 那四条 + 今后新发现的）：它们是**验证任何检测手段的
+⚠️ **把已知假绿存成金标准集**（§1.4 四条 + §3.5.2b 第 5 条 + 今后新发现的）：它们是**验证任何检测手段的
 基准** —— 包括 Stryker。§3.3.1 就是拿它验出「Stryker 抓不到这四条」的，
 否则会误以为上了框架就万事大吉。
 
@@ -600,12 +924,12 @@ api unit 1240 → **1275** 条，118 次变异验证。
    | 指标 | 当前值 | 口径 | 怎么读 |
    |---|---|---|---|
    | **Stryker 变异分数（仅已覆盖）** | **70.0%** | 算子级、全量、机器 | 广度。单模块 69.6% / 全仓 70.0% ⇒ 稳定的仓库属性，**看趋势与热点文件**，不看绝对值（等价变异体让 100% 不可达） |
-   | **针对性变异存活率** | **≈5%** | 语义级、人挑的高价值点、人工 | 深度。80+ 条抓出 4 条假绿。⚠️ 它的分母是**精心挑过的断言**，命中率天然高于全量 |
+   | **针对性变异存活率** | **≈5%**（⚠️ 偏乐观） | 语义级、人挑的高价值点、人工 | 深度。80+ 条抓出 4 条假绿。⚠️ 分母是**精心挑过的断言**，命中率天然高于全量。⚠️ **这个数偏低** —— 同一批里还有第 5 条漏网，隔一轮才被抓出来（§3.5.2b） |
 
    ⛔ **别把 70% 和 5% 放一起比** —— 前者的分母是所有算子级变异体（大量是「改了但没人
    在乎」的边角），后者的分母是人判断过「这条断言守着一件要紧事」的点。
    `http-webhook.sender.ts` 就是活证据：针对性变异说它守住了（2/2 真红），
-   Stryker 说它 14.9%（74/87 存活）—— **两个都对**（§3.3.2b-3）。
+   Stryker 说它 14.9%（74/87 存活，**补断言之前**）—— **两个都对**（§3.3.2b-3）。
 2. **事故回溯命中率** = 逃逸缺陷中「本该有一层拦住且真的拦住了」的比例。
    三次跨仓契约事故的答案都是「没有任何一层」—— 这个数字降到 0 之前，
    §3.1 的真链路 e2e 就是第一优先级。
@@ -628,15 +952,18 @@ api unit 1240 → **1275** 条，118 次变异验证。
 
 | 序 | 事项 | 量 | 依据 | 状态 |
 |---|---|---|---|---|
-| 1 | §3.1 真链路 e2e，落主仓 `e2e-contract/` | 5–10 条 | 唯一堵住 §1.2 的手段，三次事故都指向它 | ⏳ |
-| 2 | **§3.3 接入 Stryker** | — | **广度基线，机器做**。取代原计划里那个误报两成的静态嗅探 | ✅ 配置固化（`api/stryker.conf.mjs` + 两份 vitest config，`pnpm test:mutation`）· ✅ **全仓基线已跑：70.0%，33 分钟**（§3.3.2b-2）。⏳ 剩：决定 nightly / PR 增量的 CI 编排 |
-| 3 | §3.2 前端替身类型约束 | ~190 处 | 成本低、当场生效，防住 fixture 那一类 | ✅ **已完成**：15 处裸字面量全上类型，e2e 78 处 json 响应体 100% 锚在契约上，8 处变异双向验红（少字段/多字段都挡）。顺带扒出 **4 条契约漂移**（替身比真后端多字段/少必填字段/凭空造字段）。⏳ **仍缺第三条：机器兜底门禁** —— 这轮是人工补到 100%，下次新增一处裸字面量不会有任何东西红 |
-| 4 | §3.5.4 B1 批 + 变异热点补断言 | 39 条 / 4 个热点文件 | **深度，人做** | ✅ **首轮已完成**（§3.3.2b-5）：4 个热点文件分数 14.9→92.4 / 28.6→97.2 / 46.0→86.0，118 次变异验证。⭐ 顺带抓出**一条存量假绿**（§3.5.2b）与**一个测量盲区**（§3.5.2c）。⏳ 剩 `codex.output-parser.ts`(48.0%) 与 `automation.scheduler.ts`(51.1%) |
+| 1 | §3.1 真链路 e2e，落主仓 `e2e-contract/` | 5–10 条 | 唯一堵住 §1.2 的手段，三次事故都指向它 | ✅ **已落地**（2026-09-04）：**6 条**盖住七处漂移（漂移 5/6 各只盖住一部分，缺口如实记在 §3.1.1 表下）。连跑 3 遍全绿 21.6s/26.4s/29.1s。⭐ **4 条变异全部验红**（M1'/M2/M3/M4，§3.1.1「变异验证实录」）。CI `.github/workflows/contract-e2e.yml` —— ⚠️ 刻意不在 PR 触发、不进 required checks（§3.1.1「CI 编排」）。⏳ 剩：漂移 3/6 未单独变异验红、漂移 5 的 `PUT /auth-mode` 够不着 |
+| 2 | **§3.3 接入 Stryker** | — | **广度基线，机器做**。取代原计划里那个误报两成的静态嗅探 | ✅ **全部完成**：配置固化 · 全仓基线 70.0% / 33 分钟（§3.3.2b-2）· **CI 编排已落地**（§3.3.4：nightly 全量 + PR 增量，两条都不阻断） |
+| 3 | §3.2 前端替身类型约束 | ~190 处 | 成本低、当场生效，防住 fixture 那一类 | ✅ **三条全完成**：15 处裸字面量全上类型，e2e 78 处 json 响应体 100% 锚在契约上，8 处变异双向验红（少字段/多字段都挡）。顺带扒出 **4 条契约漂移**（替身比真后端多字段/少必填字段/凭空造字段）。✅ **机器兜底门禁已落地**（`check:mock-contracts`，AST 非正则，接在 CI `static-checks`；133 处全绿、0 豁免；已用注入裸字面量验红，判据与豁免口径见 §3.2） |
+| 4 | **按 Stryker 热点补断言**（⚠️ 不是 §3.5.4 的 B1 批，那 39 条来自正则漏斗、至今一条没做） | 4 个热点文件 | **深度，人做** | ✅ **首轮已完成**（§3.3.2b-5）：4 个热点文件分数 14.9→93.3 / 28.6→97.2 / 46.0→86.0，118 次变异验证。⭐ 顺带抓出**一条存量假绿**（§3.5.2b）与**一个测量盲区**（§3.5.2c）。⏳ 剩 `codex.output-parser.ts`(48.0%) 与 `automation.scheduler.ts`(51.1%) |
 | 5 | §3.5.4 B2/B3 批 | ~385 条 | **按 §3.3.2b-2 的全仓存活热点表重排**（前 8 名已列出），不要按 §3.5.3 的正则漏斗 | ⏳ |
-| — | 金标准集（已知 4 条假绿） | 4 条 | 验证任何检测手段的基准，含 Stryker 自己 | ✅ 已记于 §1.4 |
+| — | 金标准集 | **5 条** | 验证任何检测手段的基准，含 Stryker 自己 | ✅ §1.4 四条 + §3.5.2b 新抓的第 5 条（那条还是从「已修好」名单里抓出来的） |
 | — | §3.3 变异验证写进 09 §2 | — | 把口头纪律变成制度 | ✅ 09 §2.3.1 |
 | — | §1.6 `12 §3` Bun → Vitest | — | 它是纪律松弛的先行指标 | ✅ 全节重写 |
 | — | §3.4 前后端分工核对 | — | 实测无重复，改为记录分工原则 | ✅ 已改写 |
 
-⚠️ **不做的**：全量变异测试框架（§3.3）、覆盖率阈值门禁（25 §1.5 已否）、
-为提高数字而补的测试。
+⚠️ **不做的**：覆盖率阈值门禁（25 §1.5 已否）、为提高数字而补的测试、
+B1–B3 之外的 2000+ 条存量变异（§3.5.4 末尾）。
+
+> ⚠️ 本行初版还写着「不做全量变异测试框架」—— **已作废**（2026-09-03）：那条基于一个
+> 错误的成本估算，见 §3.3 开头的修正。现在框架已接入并跑出基线。
