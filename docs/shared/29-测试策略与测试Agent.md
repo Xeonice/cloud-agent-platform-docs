@@ -521,33 +521,44 @@ Survived     352  20.7%
 两处，而这两个恰好是上一轮改动最多、也真的出过假绿的文件。**B2/B3 批应按这张表重排，
 而不是按正则漏斗。**
 
-#### 3.3.2b-2 ⭐ 全仓基线（2026-09-03）
+#### 3.3.2b-2 ⭐ 全仓基线（最新：2026-09-04）
 
-`pnpm test:mutation`，369 文件 / 19669 变异体 / **33 分 04 秒**（4 并发）。
+`pnpm test:mutation`，370 文件 / 19669 变异体 / **32 分 52 秒**（4 并发）。
 
 | 状态 | 数量 | 占比 |
 |---|---:|---:|
-| NoCoverage | 8030 | 40.8% |
-| Killed | 7216 | 36.7% |
-| **Survived** | **3110** | **15.8%** |
+| NoCoverage | 7965 | 40.5% |
+| Killed | 7399 | 37.6% |
+| **Survived** | **2989** | **15.2%** |
 | Ignored（static，见下） | 1282 | 6.5% |
-| Timeout | 30 | 0.2% |
+| Timeout | 33 | 0.2% |
 
-- 变异分数（含未覆盖，不含 Ignored）**39.4%**
-- ⭐ **变异分数（仅已覆盖）= 70.0%** ← **断言有效性基线**
+- 变异分数（含未覆盖，不含 Ignored）**40.4%**
+- ⭐ **变异分数（仅已覆盖）= 71.3%** ← **断言有效性基线**
 
-⭐ 与 automation 单模块那次的 **69.6%** 几乎一致 ⇒ 这个数字是**稳定的仓库属性**，
-不是采样偶然。今后看趋势就看它。
+**趋势**（同一把尺子、同一份配置）：
+
+| 日期 | 已覆盖分数 | 存活 | 备注 |
+|---|---:|---:|---|
+| 2026-09-03（首个全仓基线） | 70.0% | 3110 | automation 单模块那次是 69.6% ⇒ 稳定的仓库属性，不是采样偶然 |
+| **2026-09-04** | **71.3%** | **2989** | 首轮四个热点文件的分数**都守住了**：webhook sender 93.3% / agent-task.mapper 97.2% / error.classifier 86.0% / access-audit **100.0%** |
+
+⚠️ 变异体总数没变（19669）而已覆盖分数上升，是因为新断言让原本 NoCoverage 的行被走到、
+同时把存活的杀掉 —— **看趋势只能看「仅已覆盖」那一列**，「含未覆盖」会被「测试跑到了
+更多行」拉低，方向与实际改善相反。
 
 **按层分布 —— 排序与 DDD 分层的严谨度完全吻合**：
 
 | 层 | 变异体 | 存活 | 未覆盖 | 已覆盖分数 |
 |---|---:|---:|---:|---:|
-| `domain` | 2308 | 415 | 149 | **79.7%** |
-| `apps/bootstrap` | 3989 | 442 | 2175 | 73.4% |
-| `application` | 4478 | 969 | 1550 | 66.3% |
-| `infrastructure` | 6338 | 1134 | 2533 | 64.7% |
-| `interface` | 541 | 16 | **491** | 52.9% |
+| `domain` | 2197 | 415 | 149 | **79.7%** |
+| `apps/bootstrap` | 3834 | 421 | 2158 | 74.9% |
+| `application` | 4429 | 955 | 1535 | 67.0% |
+| `infrastructure` | 5744 | 1049 | 2500 | 67.7% |
+| `interface` | 525 | 16 | **491** | 52.9% |
+
+（另有 1657 个变异体落在 `shared-kernel` / `contracts` 这些不属于四层的文件上，
+已覆盖分数 74.7%。）
 
 ⚠️ **那 8030 个 NoCoverage 主要不是「没测试」**，是「归 integration / e2e 管，而这两层
 进不来」（§3.3.3 第 2、3 条）。`interface` 层 541 个变异体里 491 个未覆盖 —— controller
@@ -555,16 +566,27 @@ Survived     352  20.7%
 
 **存活热点（B2/B3 批应按此表重排，而不是 §3.5.3 的正则漏斗）**：
 
-| 已覆盖分数 | 存活/已覆盖 | 文件 |
-|---:|---:|---|
-| **14.9%** | 74/87 | `automation/…/http-webhook.sender.ts` ⭐ 见下 |
-| 28.6% | 15/21 | `sandbox/…/dto/agent-task.mapper.ts` |
-| 43.2% | 21/37 | `apps/…/access-passcode/access-audit.ts` |
-| 46.0% | 27/50 | `project/…/git/error.classifier.ts` |
-| 48.0% | 103/198 | `runtime/…/codex/codex.output-parser.ts` |
-| 51.1% | 108/221 | `automation/…/automation.scheduler.ts` |
-| 55.8% | 114/258 | `sandbox/…/workflows/provision-sandbox.workflow.ts` |
-| 66.7% | 114/342 | `sandbox/…/workflows/run-agent-task.workflow.ts` |
+**2026-09-04 基线的热点表**（已覆盖 ≥15 个变异体的文件，按已覆盖分数升序）：
+
+| 已覆盖分数 | 存活/已覆盖 | 文件 | 状态 |
+|---:|---:|---|---|
+| **33.3%** | 10/15 | `apps/…/platform/audit/audit-recorder.impl.ts` | ⏳ 新进榜 |
+| 46.7% | 8/15 | `runtime/…/adapters/home-probe.util.ts` | ⏳ 新进榜 |
+| 48.0% | 103/198 | `runtime/…/codex/codex.output-parser.ts` | ✅ 第二轮 → **93.5%** |
+| 51.1% | 108/221 | `automation/…/automation.scheduler.ts` | ✅ 第二轮 → **72.4%** |
+| 51.6% | 30/62 | `sandbox/…/workspace/workspace-preparer.ts` | ⏳ 新进榜 |
+| 52.9% | 16/34 | `terminal/…/gateway/terminal.gateway.ts` | ⏳ 新进榜 |
+| 55.6% | 96/216 | `sandbox/…/providers/boxlite/boxlite-jobs.ts` | ⏳ 新进榜 |
+| 55.8% | 114/258 | `sandbox/…/workflows/provision-sandbox.workflow.ts` | 🔸 第二轮 → 58.3%（只补了 agent_session 那一条记录） |
+| 55.9% | 41/93 | `sandbox/…/resource-allocator.ts` | ⏳ 新进榜 |
+| 56.2% | 28/64 | `apps/…/platform/logging/platform-logger.service.ts` | ⏳ 新进榜 |
+| 57.8% | 70/166 | `apps/…/bootstrap/error-envelope.filter.ts` | ⏳ 新进榜 |
+| 61.5% | 69/179 | `runtime/…/claude-code/claude-code.output-parser.ts` | ✅ 第二轮 → **70.4%**（顺带，见 §3.5.2c） |
+| 66.7% | 114/342 | `sandbox/…/workflows/run-agent-task.workflow.ts` | 🔸 第二轮 → 68.6% |
+
+⚠️ **前十名里有七个是新面孔** —— 不是它们变差了，是首轮把原来垫底的四个拉上来之后，
+**下一层的地板露了出来**。这正是热点表该有的用法：它是一个每轮重排的队列，不是一份
+一次性的清单。
 
 #### 3.3.2b-3 ⭐⭐ 一个实证：两种变异手段确实互补
 
@@ -622,6 +644,114 @@ api unit 1240 → **1275** 条，118 次变异验证。
 **重定向途中**被复检拒 ⇒ `SsrfRefusal` 抛在 `post()` 的 try 里被同一个 catch 吞掉 ⇒
 对外变成 `UPSTREAM_UNAVAILABLE`。同一件事两个码，前端按码分支时分不出「地址不让发」
 和「对面挂了」。**已钉住现状并写明缘由，交回 automation 那条线处置。**
+
+#### 3.3.2b-6 ⭐ 第二轮（2026-09-04，§4 第 5 项 B2/B3 批）
+
+按 §3.3.2b-2 重跑出来的新基线派活，做了 **74 次变异注入**（**69 条真红**；另 5 条经逐条分析判为等价变异体或归别的层管，见本节末尾的跳过清单）。
+
+| 文件 | 改前 | 改后 | 存活 | 说明 |
+|---|---:|---:|---:|---|
+| `runtime/…/codex/codex.output-parser.ts` | 48.0% | **93.5%** | 103 → 14 | ⭐ **一半是测量盲区**，见下 |
+| `automation/…/automation.scheduler.ts` | 51.1% | **72.4%** | 108 → 71 | +21 条用例（定时器 / 通知旁路 / 审计 / 补扫 / 阈值 / 相位机） |
+| `runtime/…/claude-code/claude-code.output-parser.ts` | 61.5% | **70.4%** | 69 → 53 | **没写一条新用例** —— 纯粹是盲区修复的顺带结果 |
+| `sandbox/…/workflows/run-agent-task.workflow.ts` | 66.7% | **68.6%** | 114 → 111 | 产物收集口径 / 会话 ref 冲突 / replay 逐 seq |
+| `sandbox/…/workflows/provision-sandbox.workflow.ts` | 55.8% | **58.3%** | 114 → 108 | 只补了 `sandbox.agent_session` 那条记录的**内容** |
+
+api unit **1276 → 1329** 条（+53）。首轮四个文件的分数**全部守住**（见 §3.3.2b-2 的趋势表）。
+
+##### ⭐⭐ 最大的一笔来自「测量盲区」，不是来自新断言
+
+`task-event-parsers.spec.ts` 里两个 `describe` 的第一行是
+`const events = codex.parseOutput(read(…))` —— **`describe` 回调在收集期跑，早于任何用例
+开始**，而 Stryker 的 `perTest` 要等用例开始才激活变异体。于是那 7 条 golden 断言检查的
+一直是**没有被变异过**的解析结果：变异体照跑、断言照绿。这正是 §3.5.2c 记的同型盲区，
+只是上一轮只在 `access-audit.ts` 上见过一次。
+
+把两处解析挪进 `it` 之后（**一行都没改断言**），codex 解析器 48.0% → 约 88%，claude 解析器
+61.5% → **70.4%**。剩下的 93.5% 才是新增的 15 条分支用例贡献的。
+
+⇒ **读热点表时，先问「这个文件的断言是不是被看见了」，再问「断言够不够」。**
+⚠️ 已做全仓扫描（`describe` 体内直接执行被测对象的语句）：**全仓只有这一处**，现已修掉。
+
+##### 这一轮补的是什么
+
+- **codex 解析器**：两个 golden run 之外的每一个分支 —— 空 `thread_id` 不发
+  `session-started`（否则空 `sessionRef` 会被当成下一轮的 `resumeFrom`）、
+  `agent_message` 的 started 半边被丢弃、未测过的 item 类型被丢弃而不是硬贴成 `tool-call`、
+  ⭐ **CLI 没报的 `exit_code` 保持缺席而不是合成一个 0**（`toEqual` 认为
+  `{exitCode: undefined}` 等于没有这个键，所以这一条必须用 `toStrictEqual` + `in`）、
+  `turn.failed` 的四种 error 形状各自扁平化、非对象 JSON 行被丢弃。
+  另加**消毒器的畸形输入**：顶层不是对象要抛、`tokens` 是数组/字符串时重建 ——
+  这两道闸此前一次都没被走过，而它们守的是「注入进沙箱的那份文件里没有真 refresh_token」。
+- **调度器**：定时器装/拆/`unref`（`vi.getTimerCount()` **证明不了 unref**，要直接看
+  handle 上的 `unref` 被调没被调）、webhook 投递炸掉不能变成 unhandled rejection、
+  凭证过期发通知而「上一发还在跑」不发、连续 10 次失败的 `automation.disabled` 审计、
+  规则已删的孤儿 run、补扫批量 100、日志体积夹在 30MB、`AUTOMATION_MISSED_THRESHOLD_MIN`
+  的四种坏值、`isPreviousStillGoing` 的三种答案、⭐ **「记账那一笔真的落库了吗」**。
+- **sandbox**：产物收集的口径（目录不是产物 / 递归 / 500 上限 / 报不上大小记 0）、
+  一次 resume attach 到别的会话要记下来但不能把跑着的 job 扔掉、replay 从**每一个**
+  `fromSeq` 都精确（二分的 off-by-one 只在某一个边界上错）、`sandbox.agent_session`
+  记录的内容（`started` / `reusedExisting` / `promptCarried`，且 **detail 里没有 prompt 正文**）。
+
+##### ⚠️ 两处「替身让实现看不见」的问题，已在测试侧修掉
+
+1. **内存仓储把聚合按引用交出去** ⇒ 调度器改完内存对象之后，`rows.get(id)` 读到的就是
+   改过的那一份，于是**把 `runs.saveSync` 整段挖掉，26 条用例一条都不红**。已给
+   `InMemoryRunRepo` 加 `saveLog` 快照（automation 那侧本来就有），断言改读快照。
+2. **`bootstrapAgentSession` 的替身永远返回 `reusedExisting: false`** ⇒ 「会话已存在，
+   沿用」那一支在单测里根本到不了，一个恒写 `started: true` 的实现与正确实现完全同形。
+   已加 `bootstrapReusesExisting` seam。
+
+⚠️ 另有一个**存量类型错误**：`_scheduler-doubles.ts` 的 `listByAutomation` 对一个 `Map`
+调 `.filter()`。它是死代码（单测不走这条），而 `pnpm typecheck`（`tsc -b`）的
+`include` 只有 `src/**`，**测试文件不在任何一个 tsconfig 的编译范围里**，所以八步门禁
+一个都拦不住它。已顺手改对；⏳ **「测试代码谁来 typecheck」这个洞本身还开着。**
+
+##### ⛔ 判定为「不该补」而跳过的（与补了什么同样重要）
+
+| 类别 | 实例 | 依据 |
+|---|---|---|
+| **等价变异体** | `safeJson` 的 `parsed !== null` / `!Array.isArray()`（codex 与 claude 各 6 个）—— 下游 `if (!parsed) continue` 已经吸收；`{...null}` 与 `{}` 结果相同；`line.trim()` 与不 trim（`JSON.parse` 本来就吃空白）；`switch` 的 `default:` 被删（返回 `undefined` 与返回 `null` 在 `if (event)` 下同义）；`firstLineAfter` 的 `>` → `>=`（只多读一行，输出逐字节相同）；`isPreviousStillGoing` 去掉 `isTerminal` 早退（被 `TriggerDecisionService` 的同一判据挡住） | 改了但**可观测行为不变**，本就不该红（§3.3.3 第 1 条） |
+| **归别的层管** | `provision` 的 `Math.max(0, …)` 时长夹取 —— 只有系统时钟**向后跳**才有意义，单测的 Clock 替身造不出来，硬造一个 seam 是为分数服务 | §3.3.3 第 2/3 条 |
+| **不测文案** | skip 的两句 `errorMessage`（"the previous run has not reached a terminal state yet" 等）、各处 `logger.warn/error` 的字符串 —— 它们贡献了调度器剩余存活里相当一部分 | §3.4「后端不测文案」 |
+
+##### ✅ 一处疑似实现缺陷，按 §2.3 只钉现状 + 上报 —— **已在 2026-09-04 由 automation 那条线修掉**
+
+> **回填（2026-09-04）**：下面这条交回的发现**确认为真缺陷并已修复**，同时立了一条新
+> 不变量 **I-AUT-10**（23 §11.1 / 03 §8.1）：*一个已到期的触发槽在被移出扫描面之前，
+> 必须在 `automation_runs` 里留下恰好一行（triggered / skipped / missed 之一）。*
+>
+> - **修法**：`recordOutcome()` 失败分支末尾那行**无条件重算**去掉，改成与 success 分支
+>   同构（只在 degraded/disabled **真的翻转**时才重算）；重算本身收进
+>   `recomputeFutureTrigger()`，它**结构上拒绝动一个 `<= now` 的槽**。⛔ 没有加任何补偿
+>   代码 —— 槽留在原地，`fireDue()` 照常取到，走既有三条出路之一。
+> - **那条「⚠️ 现状记录」用例已改成正向断言**，并新增「三路对齐」（failed / success /
+>   还在跑 ⇒ 都恰好留下一行）与「失败恰好把规则打进降频时槽也还在」两条。
+> - **⭐ 结构性保证**：`_nextTriggerAt` 的五个写口各带一个 `// slot: …` 标记，
+>   `automation-slot-writes.spec.ts` 钉住这张表 —— 新增第六个写口会红着要求先回答
+>   「那个槽去哪了」。这正是本节反复说的那件事：**只有能被机器验证的规约才真正生效。**
+> - **副作用（明确接受）**：连续失败的规则在降频闸落下之前仍按原频率跑。
+> - **变异复验**：13 次注入，12 条真红；`if (wasDegraded)` / `if (scheduleTouched)` 这类
+>   「多算一次」的条件在修完之后成了**等价变异体** —— 不必要的重算现在是个 no-op
+>   （未到期的槽重算得同一个值，到期的槽被早退挡住）。automation 模块已覆盖分数
+>   81.26% → **81.34%**，`automation.entity.ts` 80.79% → **81.44%**，
+>   `automation.scheduler.ts` **72.4% 原地不动**。
+
+**上一发在同一轮里刚落成 `failed` ⇒ 本轮那个到期的槽无声消失。**
+`advanceInFlight` 先把上一发推成 `failed` ⇒ `Automation.recordOutcome('failed')` 里那行
+「降频/禁用会改变下一次算在哪，所以重算一次」**在没有降频时也会执行** ⇒
+`next_trigger_at` 被推到下一个整点 ⇒ 紧接着的 `fireDue` 用 `listDue(now)` 已经取不到它。
+结果：这一槽既没有触发、也没有 `skipped`/`missed`，**历史里是一个没有任何行的空洞**。
+同样的局面下，上一发若是 `success` 会正常触发，若还在跑会留下
+`skipped/PREVIOUS_RUNNING` —— **三条路径给出三种历史**。窗口是一分钟量级，
+已用一条绿色用例（含对照组）钉住现状并写明缘由，交回 automation 那条线处置。
+**⇒ 已修（见本小节开头的回填）；那条用例现在断言的是「那一槽仍然留下一行」。**
+
+**顺带一处注释与实现不符**（不是缺口）：`fireDue` 的 catch 上写着「它的
+`next_trigger_at` 已经推进过了」，但 `findLatest` / `phaseOf` / `stateOf` / `capacityFor`
+这四步都在推进**之前**。推进之前抛意味着一条 run 都没落，所以不会「一分钟一发」，
+只是下一轮再试；等外部恢复时若已过阈值，`decide` 会把它判成 `missed` 并在那时推进。
+两种情形已各有一条用例。
 
 #### 3.3.2c 接入时踩的三个坑（都与 pnpm / vitest workspace 有关）
 
@@ -881,6 +1011,13 @@ CI 里更进一步：增量那一步把真实报告路径写进 `$GITHUB_OUTPUT`
 ⇒ **通用教训**：`describe` 外的模块顶层不要构造被测对象，否则变异测量看不见你的断言。
 ⚠️ **全仓其它 spec 可能有同型盲区** —— 读 §3.3.2b-2 的存活热点时要先排除这一类，
 否则会把「测量不到」误读成「没断言」。
+
+⭐ **2026-09-04 已按这条查了一遍，并且真的又抓到一个**：`task-event-parsers.spec.ts`
+的两个 `describe` 把 `codex.parseOutput(…)` / `claude.parseOutput(…)` 写在 `describe`
+体的第一行 —— 同一个形状的另一种写法（不是「顶层 `const ALL`」，而是「`describe` 体内
+直接跑被测函数」，两者都在**用例开始之前**执行）。挪进 `it` 之后，两个解析器分别
+48.0% → 93.5% 与 61.5% → 70.4%（§3.3.2b-6）。**全仓扫描的结论是：只有这一处**，
+判据是「`describe` 回调体内直接执行被测对象的语句」，帮手函数的声明不算。
 
 #### 3.5.3 优先级模型与实测漏斗（2026-09-02）
 
@@ -1246,7 +1383,7 @@ snapshot 而 aio 没有，本检查会红在 `boxlite.snapshot` 这一位上，*
 | 3 | §3.2 前端替身类型约束 | ~190 处 | 成本低、当场生效，防住 fixture 那一类 | ✅ **三条全完成**：15 处裸字面量全上类型，e2e 78 处 json 响应体 100% 锚在契约上，8 处变异双向验红（少字段/多字段都挡）。顺带扒出 **4 条契约漂移**（替身比真后端多字段/少必填字段/凭空造字段）。✅ **机器兜底门禁已落地**（`check:mock-contracts`，AST 非正则，接在 CI `static-checks`；133 处全绿、0 豁免；已用注入裸字面量验红，判据与豁免口径见 §3.2） |
 | 4 | **按 Stryker 热点补断言**（⚠️ 不是 §3.5.4 的 B1 批，那 39 条来自正则漏斗、至今一条没做） | 4 个热点文件 | **深度，人做** | ✅ **首轮已完成**（§3.3.2b-5）：4 个热点文件分数 14.9→93.3 / 28.6→97.2 / 46.0→86.0，118 次变异验证。⭐ 顺带抓出**一条存量假绿**（§3.5.2b）与**一个测量盲区**（§3.5.2c）。⏳ 剩 `codex.output-parser.ts`(48.0%) 与 `automation.scheduler.ts`(51.1%) |
 | 4.5 | **§3.7 取值镜像检查** | 22 个值 | **契约管不住的值**：层 1 只收得住 `format`/`enum` 表达得了的部分；剩下 100 个自由 string 里真正按值分支的只有 5 个字段，而它们的依据只写在注释里 | ✅ **已落地**（2026-09-04）：`scripts/check-fixture-values.mjs`（AST 非正则，M1 provider 能力位 + M2 runtime 身份）。⭐ **上来就抓到 4 处存量漂移**，而全仓 3400+ 条测试 + 12 道门禁 + 6 条契约 e2e **全部照绿**（反事实表见 §3.7.5）。2 条注入变异（M5/M6）各自验红。⚠️ **刻意不做成阻断门禁**（§3.3.4 同一条工程现实）。⛔ 同时**否掉**了原设想的两个方案：录制替换 / 逐字段同形比对 —— 理由与数据见 §3.7.2（96% 噪声）与 §3.7.3。⭐ **api 侧镜像同日落地**（§3.7.8）：`api/scripts/check-fake-provider-caps.mjs`，14 个值（2 个内置 provider × 7 位），补上 Q3 那个盲区的源头「谁保证 `_fakes.ts#CAPS` 是真的」；2 条变异各自验红，⭐ 其中 M-A 复刻了真实漂移路径（pin 被同步更新后主动闭眼），漂移在场时 41 contract + 220 e2e + 6 条契约 e2e **全绿** |
-| 5 | §3.5.4 B2/B3 批 | ~385 条 | **按 §3.3.2b-2 的全仓存活热点表重排**（前 8 名已列出），不要按 §3.5.3 的正则漏斗 | ⏳ |
+| 5 | §3.5.4 B2/B3 批 | ~385 条 | **按 §3.3.2b-2 的全仓存活热点表重排**（每轮重排一次），不要按 §3.5.3 的正则漏斗 | 🔸 **第二轮已完成**（§3.3.2b-6）：新基线 **71.3%**（+1.3），5 个热点文件 48.0→93.5 / 51.1→72.4 / 61.5→70.4 / 66.7→68.6 / 55.8→58.3，api unit 1276→**1329**，**74 次变异注入 / 69 条真红**（另 5 条判为等价或归别的层）。⭐ 最大一笔来自**又一处测量盲区**（§3.5.2c），并已做全仓扫描确认再无同型。⭐ 顺带扒出**两处替身让实现看不见**（内存仓储按引用交出聚合 / bootstrap 替身够不到 `reusedExisting`）与**一处疑似实现缺陷**（失败落地吃掉同轮到期槽，已钉现状交回）。⏳ 剩 `provision-sandbox.workflow.ts`(58.3%) 与新进榜的七个：`audit-recorder.impl`(33.3%) · `home-probe.util`(46.7%) · `workspace-preparer`(51.6%) · `terminal.gateway`(52.9%) · `boxlite-jobs`(55.6%) · `resource-allocator`(55.9%) · `error-envelope.filter`(57.8%) |
 | — | 金标准集 | **5 条** | 验证任何检测手段的基准，含 Stryker 自己 | ✅ §1.4 四条 + §3.5.2b 新抓的第 5 条（那条还是从「已修好」名单里抓出来的） |
 | — | §3.3 变异验证写进 09 §2 | — | 把口头纪律变成制度 | ✅ 09 §2.3.1 |
 | — | §1.6 `12 §3` Bun → Vitest | — | 它是纪律松弛的先行指标 | ✅ 全节重写 |

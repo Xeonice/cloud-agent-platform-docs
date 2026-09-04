@@ -882,6 +882,22 @@ export interface SandboxRuntimeStatus {
 - **单实例串行**：整个扫描批次在一个 `async-mutex` 内跑完，防止上一轮未结束时下一轮重入（单机单进程前提；多节点时改为 DB 行级锁 + `claimed_by`，见 11 §4 预留）。
 - **outcome-pending 孤儿 run 补扫（交叉评审 P2-7）**：run 已 `finalize`（终态写入）但 `Automation.recordOutcome()`（增 `consecutive_failures` / 触发降频）尚未生效时崩溃——仅按 `next_trigger_at` 扫规则无法发现它，会**漏记一次失败计数**。故每轮额外扫 `automation_runs WHERE status IN (failed,timeout,success) AND outcome_applied = false`，对每条补调 `recordOutcome` 并置 `outcome_applied=true`（幂等，13 automation_runs 加 `outcome_applied` 列）。
 - 触发即 `next_trigger_at` **先推进后执行**（按 `schedule_kind` + `schedule_config` + `timezone` 算下一次），保证任何执行异常都不会导致同一时刻被反复触发。
+- ⭐ **一个已到期的触发槽不许无声消失（I-AUT-10，2026-09-04 立）**：`next_trigger_at <= now` 的槽在被移出扫描面之前，必须在 `automation_runs` 里留下**恰好一行**（triggered / skipped / missed 之一）。
+
+  > **它是被一处真缺陷逼出来的**（测试 agent 上报，29 §3.3.2b-6 末尾）：本节的三步顺序
+  > `applyPendingOutcomes() → advanceInFlight() → fireDue()` 与聚合里那行「失败之后顺手
+  > 重算 `next_trigger_at`」叠在一起，会让**上一发在本轮刚落成 `failed`** 的规则在
+  > `fireDue()` 的 `listDue(now)` 里消失 —— 那一槽既没触发也没记录。同样局面下上一发若是
+  > `success` 会正常触发、若还在跑会留下 `skipped/PREVIOUS_RUNNING`，**三条路径三种历史**。
+  >
+  > **修法是把那行无条件重算去掉**（只在 degraded/disabled 状态真的翻转时才重算，且重算
+  > 不许动一个已到期的槽），不是加补偿代码：槽留在原地 ⇒ `fireDue()` 照常取到 ⇒ 走既有的
+  > 三条出路之一。⚠️ 代价是**连续失败的规则在降频闸落下之前仍按原频率跑** —— 明确接受，
+  > 理由是 §8.4 的降频/禁用已经是那道闸，再叠一层隐式退避重复且不可见。
+  >
+  > 落点在聚合的结构上（`_nextTriggerAt` 的五个写口各带 `// slot: …` 标记 + 一条守卫用例），
+  > 逐条见 23 §11.1「I-AUT-10 的来历与落点」。⛔ **调度器这一侧不需要任何新代码** ——
+  > 这是判断「这条不变量修对了没有」的标志：它由既有结构自动满足。
 - **时区（快照语义，产品 P21-7 §3.2）**：计算下一次触发时间**只用规则自己的 `automations.timezone` 列**（13 §2.7.1），**绝不读服务器系统时区、也不读请求方时区**。该列在规则创建时快照（前端默认填当时的浏览器时区），此后**规则存续期内不变**——用户换个时区的机器再打开平台，既有规则的触发时刻不会漂移（"每天凌晨 3 点"不会变成中午 3 点）；只有**新建**规则才继承当时的用户时区。
   - 算法：在 `timezone` 下按**本地墙钟**语义求下一个满足 `schedule_config` 的时刻，再转 UTC 存 `next_trigger_at`。夏令时切换日照此自然处理——"每天 08:00"永远是当地 08:00，UTC 偏移随 DST 变化（25 T-AUT-4）。
   - 编辑规则时**不隐式改写 `timezone`**：用户要换时区必须显式改这个字段（否则"改了个 prompt 顺手把触发时刻挪了 8 小时"是最难排查的一类 bug）。
@@ -950,6 +966,11 @@ consecutive_failures：success 清零；failed / timeout 累加（skipped 与 mi
 ```
 
 `degraded=true` 时 `next_trigger_at` 按"每日一次"重算（沿用原规则的时刻，只把频率压到一天一次），规则原始的 `schedule_kind/schedule_config` **不改写**——恢复时直接按原配置重算即可。
+
+⚠️ **「重算」只发生在状态真的翻转的那一次**（转降频 / 从降频恢复 / 转禁用），
+**一次普通失败不动 `next_trigger_at`**（I-AUT-10，2026-09-04）。而且翻转时的重算也
+**不许推走一个已经到期的槽** —— 降频由那一槽触发时的推进兑现，晚一步，但那一步有记录。
+⇒ 一条连续失败的规则在降频闸落下之前**仍按原频率跑**，这是明确接受的取舍（见 §8.1）。
 
 ### 8.5 Webhook 通知（v1.1）
 
