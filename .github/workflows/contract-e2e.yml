@@ -1,0 +1,117 @@
+# 跨仓**运行时**契约 e2e（权威定义：docs/shared/29-测试策略与测试Agent.md §3.1 / §3.1.1）
+#
+# 它与 docs-check 是**同一性质**的检查，只是问法不同：
+#   · docs-check 的 B3 问「两份 openapi.json 是否逐字节相同」—— 查**静态定义**同源；
+#   · 本 workflow 问「真前端打真后端，两边对不对得上」—— 查**运行时行为**一致。
+# 主仓是唯一同时持有 api 与 web 两个 submodule 的地方，所以两道门都落在这里。
+#
+# ⚠️⚠️ **本 workflow 刻意不在 `pull_request` 上触发，也刻意不进 branch protection 的
+# required checks。** 理由写在 29 §3.1.1「CI 编排」与 §3.3.4：这是三层 e2e 里最慢、最容易
+# flaky 的一层，**新门禁第一周误伤就会被绕过或直接关掉**——那比没有这道门更糟，因为关掉
+# 之后没人会记得再打开。所以先只在 main 与每晚跑，让人**看见结果**、攒够「它红过几次、
+# 每次是真红还是抖动」的样本；稳定之后再谈阻断。
+#
+# ⇒ 升级成 PR 阻断门禁时要改两处（缺一不可，只改一处会得到一道假门）：
+#     ① 这里的 `on:` 加回 `pull_request:`；
+#     ② 仓库设置里把 `契约 e2e` 加进 required status checks。
+name: contract-e2e
+
+on:
+  push:
+    branches: [main]
+  # 每天 UTC 19:00（北京时间次日 03:00）跑一轮：不阻断任何人，但持续攒样本。
+  schedule:
+    - cron: '0 19 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: contract-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract-e2e:
+    name: 契约 e2e
+    runs-on: ubuntu-latest
+    # 实测本机整轮 ~22–30s，但 CI 上要多出三次 pnpm install + 一次 api `tsc -b` +
+    # 一次 `next build`。30 分钟是**保护性上限**，不是预期耗时。
+    timeout-minutes: 30
+    steps:
+      - name: Checkout 主仓
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # ⚠️ 与 docs-check 的同名 step 有一处**关键区别**：那边 `continue-on-error: true`
+      # （拉不到就把 B 类判成 skip，不让 A 类跟着瘫痪），**这里不行** —— 两个 submodule
+      # 是这一层的全部被测对象，拉不到就没有任何东西可跑。⇒ 大声失败，不静默 skip。
+      - name: 拉取 api / web submodule（本层的硬前提）
+        env:
+          SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
+          GIT_TERMINAL_PROMPT: '0'
+        run: |
+          set -euo pipefail
+          if [ -n "${SUBMODULE_TOKEN:-}" ]; then
+            git config --global url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "git@github.com:"
+          else
+            echo "::error title=缺少 SUBMODULE_TOKEN::契约 e2e 要同时起真 api 与真 web，两个 submodule 都拉不到就无事可做。"
+            exit 1
+          fi
+          git submodule update --init --depth 1 api web
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      # ⚠️ 走 corepack 而不是 pnpm/action-setup 钉一个版本：三处 `package.json` 的
+      # `packageManager` 并不相同（主仓 9.15.0 / api 9.12.0 / web 9.15.0），corepack 会
+      # 按**各自目录**那一份取版本，钉死一个反而会与 api 的 lockfile 打架。
+      - name: 启用 corepack
+        run: corepack enable
+
+      # ── 后端：只需要 `dist`（`server/start-api.ts` require 的是 dist/app.module.js）──
+      - name: 安装 api 依赖
+        working-directory: api
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建 api
+        working-directory: api
+        run: pnpm build
+
+      # ── 前端：只装依赖；`next build` 由 playwright 的 webServer 自己跑 ──────────
+      # ⚠️ 不在这里 build：产物必须由 `playwright.config.ts` 显式注入的那套 env
+      # （API_ORIGIN / NEXT_PUBLIC_* / PORT）烘出来。在这里先 build 一次会得到一份
+      # env 不同的产物，然后被 webServer 那次覆盖 —— 白跑一次，还容易看错。
+      - name: 安装 web 依赖
+        working-directory: web
+        run: pnpm install --frozen-lockfile
+
+      - name: 安装 e2e-contract 依赖
+        working-directory: e2e-contract
+        run: pnpm install --frozen-lockfile
+
+      # ⚠️ 只装 chromium。装全套浏览器在这一层没有收益：本层验的是字段名/必填性/错误码
+      # /分页信封/时间格式，没有一条与浏览器差异有关（跨浏览器是 web e2e 的活）。
+      - name: 安装 playwright chromium
+        working-directory: e2e-contract
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: 跑契约 e2e
+        working-directory: e2e-contract
+        run: pnpm test
+
+      # 红了要能看现场。⚠️ `if: always()` 不是 `if: failure()`：绿的那轮也留一份，
+      # 才比得出「这次红与上次绿之间，页面到底差在哪」。
+      - name: 上传 playwright 报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-e2e-report-${{ github.run_id }}
+          path: |
+            e2e-contract/playwright-report/
+            e2e-contract/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
