@@ -946,6 +946,295 @@ CI 里更进一步：增量那一步把真实报告路径写进 `$GITHUB_OUTPUT`
 2. **事故回溯命中率**：每次线上/联调发现的问题，回头问「哪一层本该拦住它」。三次契约
    事故的答案都是「没有任何一层」—— 这个数字降到 0 之前，§3.1 就是第一优先级。
 
+### 3.7 ⭐ 契约管不住的那些**值**：评估、结论、以及只做了很小的一件事（2026-09-04）
+
+> **一句话结论**：原本设想的两个方案（**A 录制替换 fixture**、**B 录制作对照 + 逐字段同形比对**）
+> **投入产出都不成立**，理由是实测数据，不是判断；⇒ 只落了一件**很窄**的事 ——
+> `scripts/check-fixture-values.mjs`：**替身里自称「抄自后端某处」的值，机器去那一处对一遍**。
+> 它当场抓出 **4 处存量漂移** —— 而那 4 处在场时，**所有看得见它的层**都照绿：web 1362 unit + 400 storybook + 44 e2e、`check:mock-contracts`、四道静态检查、`docs:check` 11 门、以及 6 条真链路契约 e2e。反事实全表见 §3.7.5。
+
+#### 3.7.1 问题的层次：这是第三层，前两层管不到它
+
+```
+① 契约本身弱   → 层 1：给 37 个时刻/URL 字段加 format:date-time / uri，前端 zod 跟进 .datetime()
+② 替身照契约写，值不真实 → ← 本节
+③ 44 条 web e2e 跑在替身上 → §3.1 的真链路 e2e（6 条）
+```
+
+⚠️ **`check:mock-contracts`（§3.2）在这一层是无效的，必须先说清楚**：它查 AST **类型**锚定，
+而 `format` 在生成类型里只落成一行注释，`createdAt` 仍然是 `string` ⇒ `'not-a-date'` 编译期照过。
+类型锚定管**形状**，管不了**值**。
+
+#### 3.7.2 三个先决问题，用实测数据回答
+
+**Q1 · 契约管不住的字段里，前端真正「按值分支」的有多少？**
+
+`api/openapi.json` 52 个 schema / **259 个属性**：
+
+| | 数量 |
+|---|---:|
+| 字符串字段 | 166 |
+| 带 `format`（层 1 收的那一批 + 原有） | 25 |
+| 带 `enum`（闭集，契约管得住） | 41 |
+| **自由 `string`（契约管不住）** | **100** |
+| 其中长在**响应侧**（替身要造的那一半） | **61** |
+
+对这 61 个逐一 grep `web/src` 生产代码（排除 `types/generated`、`mocks`、`*.test.*`、`__stories__`）：
+
+| 分类 | 数量 | 说明 |
+|---|---:|---|
+| **前端根本没读** | 9 | `stdout`/`stderr`/`baseImage`/`derivedFromDigest`/`currentDigest`/`publicBaseUrl`/`userCode`/`passcode`/`AutomationRunDto.automationId` |
+| **只渲染 / 当不透明 key** | ~47 | 值漂了没有可观测后果：`failureMessage`、`maskedIdentifier`、`displayName`、`vendor`、各种 `id`/`projectId`/`sandboxId`（React key + URL 路径段，UUID 与 `proj-e2e` 行为完全一样） |
+| **⭐ 真的按值分支** | **5** | 见下 |
+
+那 5 个（**这一层的全部真实风险面**）：
+
+| 字段 | 前端怎么消费 | 落点 |
+|---|---|---|
+| `SandboxResponseDto.failureCode` | 查 22 键文案表，未收录走兜底 | `lib/sandbox/sandboxErrorCopy.ts#COPY_TABLE` |
+| `ImageManifestResponseDto.ref` | **解析**：先找 `@`，否则找**最后一个 `/` 之后**的 `:` | `lib/image/imageManifestCards.ts#parseManifestRef` |
+| `ImageManifestResponseDto.digest` | 按长度截断 + 与魔法哨兵 `'sha256:unresolved'` 比 | `lib/image/imageCardModel.ts` |
+| `RuntimeResponseDto.id` | `=== 'claude-code' ? 'sk-ant-' : 'sk-'` | `lib/credential/authFlow.ts#apiKeyExpectedPrefix` |
+| `runtime` / `provider`（沙箱/任务 DTO 上） | **跨端点 join**：`runtimeList.find(r => r.id === runtime)` ⇒ 找不到就没有凭证门 | `containers/sandbox/SandboxTerminalContainer.tsx:194` |
+
+⇒ **风险面是个位数，不是 90 个。** 任何「对 90 个字段一视同仁」的方案，从这里就已经错了。
+
+**Q2 · fixture 的值离真后端有多远？先录一次真响应比一比**
+
+起真后端（`e2e-contract/server/start-api.ts`，3110）录 **30 个端点**的真响应；
+再用 `msw/node` 把 `src/mocks/handlers.ts` 当服务器跑一遍录同样的端点；
+写一个值形状分类器（`iso-utc-ms` / `uuid` / `sha256-digest` / `oci-ref` / `SCREAMING_SNAKE` / …）逐字段对：
+
+```
+69 行差异
+ ├─ 45 行 FIXTURE-ONLY —— 真后端那一侧是空的（没凭证、没运行历史、没保留卷）⇒ 种子覆盖不足，不是漂移
+ ├─  3 行 REAL-ONLY
+ └─ 21 行 SHAPE-DIFF  —— 绝大多数是「我 seed 时用了 ASCII 名字、fixture 用中文演示名」
+                          「`2026-08-01T00:00:00Z` 无毫秒 vs 真后端 `.000Z`」这类无后果差异
+```
+
+**值得看的只有 2–3 行 ⇒ 噪声率约 96%。** 其中唯一真有意思的一行：
+
+> ⭐ `GET /api/health` **三方各说各话**：契约声明 **无 body**；真后端回 `{"status":"ok","uptimeSec":52}`；
+> 替身回 `{}`（`fixtures.ts#HEALTH_BODY: Record<string, never>`，层 1 之后"契约正确"了）。
+> 前端 `getHealth` 只读 `response.ok` ⇒ 三方不一致**没有任何后果**。
+> 但它说明一件事：**照契约把替身改"对"，可能反而离真后端更远。**
+
+⇒ **Q2 的答案是：差距很小，且差在没后果的地方。**「录制替换」（方案 A）**换不回等价的防护力**，
+而它要付出的代价是实打实的 —— 本轮实测 `web/e2e/**`：
+
+- **非 2xx 响应 5 处**（2×409、3×500）：真后端要按需吐 500，只能再造一个注错机制；
+- **请求计数/顺序状态 2 处**（`taskLaunch.spec.ts#syncHits`、`offlineBanner.spec.ts#diagnoseFromWorkbench`）：
+  断言的是「发了几次」，与响应体无关，录制在这里没有位置；
+- **更普遍的一条是场景特异性**：要测「空列表」就不能用录到的非空数据，要测「6 种 run 状态各一行」
+  就得先把真后端摆成那个样子 —— 那已经是在真后端里**重建一遍 fixture**，是方案 A 的成本
+  配方案 B 的收益。
+
+**Q3 · ⛔ 更要命的一条：在本仓，「录真后端」录到的不是真值**
+
+`e2e-contract/server/start-api.ts` 为了能在**没有 docker 的 CI** 里跑，必须
+`overrideProvider(SANDBOX_PROVIDER_REGISTRY).useValue(makeFakeRegistry(...))`。于是：
+
+- 录到的 `GET /api/providers` 能力位，是 **`api/apps/api/test/e2e/_fakes.ts#CAPS`** 的值，
+  **不是** `aio-sandbox.provider.ts` 的值；两者今天恰好相等，纯粹因为有人手工同步过。
+- 同理 `IMAGE_SPEC_REGISTRY` / `WORKSPACE_PREPARER` / `PROJECT_FACADE` / `CLOCK` 都被换成了替身。
+
+⇒ **把这份录制当"契约样本"，等于把第二层替身固化成第一层替身的判据** —— 一个看着很权威、
+其实什么都没多证明的循环。**而下面 3.7.4 抓到的 4 处真漂移，恰好就长在这个盲区里**：
+录制永远看不见它们。
+
+⇒ 方案 A 与方案 B **共同的前提（"录到的是真值"）在本仓不成立**，两个一起否掉。
+
+#### 3.7.3 ⇒ 改做的那件很窄的事：**取值镜像检查**
+
+判据来自一个观察：这一层真正会漂的值，有个共同特征 ——
+**它的依据写在注释里，而注释不会红**。`handlers.ts` 里就有整段这样的话：
+
+> 「能力位**逐位抄自**两个 provider 类自己声明的 `capabilities`」
+> 「runtime id **取自**后端 `{codex,claude-code}.adapter.ts` 的 `readonly id`」
+
+⇒ **`scripts/check-fixture-values.mjs`**（落主仓，与 `docs-check.mjs` / `e2e-contract/` 同为跨仓设施
+—— 主仓是唯一同时持有两个 submodule 的地方，理由同 §3.1）。
+
+| | |
+|---|---|
+| **判据** | 替身里自称抄自后端某处的值，必须**逐字等于**后端那一处的声明 |
+| **权威来源** | ⛔ **不是任何一次运行的输出**（见 Q3），而是**声明处的源码** |
+| **手段** | TypeScript AST（`ts.createSourceFile`），⛔ 不用正则 —— 与 §3.2 同一条教训 |
+| **当前管辖** | **M1** provider 七位能力位 ×2（`api/…/providers/{aio,boxlite}/*-sandbox.provider.ts#capabilities` ⟷ `handlers.ts#PROVIDER_REGISTRY`）· **M2** runtime 身份 4 项 ×2（`api/…/adapters/{codex,claude-code}/*.adapter.ts` 的 `readonly id/displayName/vendor` + `getAuthMethods()` ⟷ `handlers.ts#RUNTIME_REGISTRY`）⇒ 共 **22 个值** |
+| **阻断性** | ⛔ **不是门禁**：不进 `docs:check` 的 11 门、不进 web 的 `static-checks`。手动 `node scripts/check-fixture-values.mjs`。理由与 §3.3.4 / §3.1.1 同：新门禁第一周误伤就会被 `--no-verify` 绕过或直接关掉 |
+
+⚠️ **三处刻意不管**，每一处都是为了不把它变成误报机器：
+
+- ⛔ **不管 `web/e2e/**` 的 `providerCaps()`**：那个 helper 的注释明写「每条用例按自己要走的
+  分支挑值」——它**不自称是镜像**。把它一并管起来会立刻误伤一批合法的场景取值。
+- ⛔ **不做全字段比对**（Q2 那 69 行 96% 噪声就是它的样子）。
+- ⛔ **不管 `ErrorEnvelope.code`**：后端**没有**权威闭集（`z.string()`，全仓 72 个码散在各处），
+  没有可对的那一处 ⇒ 这一格由 `docs:check` 的 A5「源码 72 个码 ⟷ 10 §6.8 表 72 行」守，不在这里重复。
+
+⚠️ **求值器只认四种形态**（字符串/布尔字面量、数组字面量、指向顶层 `const` 的标识符、
+顶层 `const` 对象字面量的属性访问），读不出就**报「读不出」**，⛔ **不猜** ——
+猜出来的值会让这份检查自己变成又一个替身。同理：`typescript` 从 `e2e-contract`/`web`/`api`
+任一 `node_modules` 借，三处都没有就 **exit 2 大声跳过**，⛔ 不静默 exit 0（那会让「没跑」
+看起来像「跑绿了」）。
+
+#### 3.7.4 ⭐ 它一上来就抓到 4 处存量漂移（不是注入的，是本来就在那里的）
+
+```
+✗ [M1] aio.updateResources     后端 false / 替身 true
+✗ [M1] aio.pauseResume         后端 false / 替身 true
+✗ [M1] aio.watchEvents         后端 false / 替身 true
+✗ [M1] boxlite.watchEvents     后端 false / 替身 true
+```
+
+⚠️ **而那四位正上方的注释写着**「逐位写全 ⇒ 每一位都得有人对着后端源码点头」。
+点头是发生过的，同步没有 —— 这就是「依据写在注释里 ＝ 没有依据」的实物。
+
+⭐ **它们能活下来的原因，正好是这一层存在的理由**：这四位**今天没有任何 UI 读**
+（`types/sandbox.ts` 的能力位注释明写：七位里前端只消费 `spawnTty` 与 `headlessTask`），
+形状又完全合法 ⇒ 类型、zod、契约、断言**没有一个会红**。
+
+**已修**（改替身，⛔ 不改后端；`src/mocks/**` 属测试 agent 地盘，§2.4），并把这段经过写进
+`handlers.ts` 那段注释里 —— 下一个人改那几位之前会先看见它。
+
+#### 3.7.5 变异验证：注入 → 红，撤掉本层 → 绿
+
+⛔ 一条从没红过的检查和一条不存在的检查等价（§0）。**反事实用的是上面那 4 处真漂移**
+（比注入的更有说服力：它们**当时就在工作区里**）：
+
+| 跑什么 | 4 处漂移在场时 | 备注 |
+|---|:--:|---|
+| web `typecheck` / `lint` / `format:check` / `check:stories` | 🟢 绿 | |
+| web **`check:mock-contracts`**（133 处锚定） | 🟢 绿 | §3.2 那道门查类型不查值 |
+| web unit **1362** | 🟢 绿 | 含 `handlers.test.ts` 那道「替身自洽性」门 —— 它只查**替身内部**自洽 |
+| web storybook **400** | 🟢 绿 | |
+| web e2e **44** | 🟢 绿 | |
+| 主仓 `docs-check` **11 门** | 🟢 绿 | B3 逐字节相同 ⇒ 静态定义同源，与值无关 |
+| 主仓 `e2e-contract` **6 条** | 🟢 绿 | 真链路那一层**也看不见** —— 它录到的是 `_fakes.ts#CAPS`（Q3） |
+| **`check-fixture-values.mjs`** | 🔴 **红 4 处** | ⇒ 防护力确实来自这一层 |
+
+另做两条注入变异（成对注入/还原，还原后 `shasum` + `git diff` 各确认一次）：
+
+| # | 注入点 | 变异 | 结果 |
+|---|---|---|---|
+| **M5** | `handlers.ts#PROVIDER_REGISTRY` | `aio.watchEvents` `false → true`（把刚修的那位改回去） | ✅ 红在 M1 那一条，exit 1 |
+| **M6** | `handlers.ts#RUNTIME_REGISTRY` | `codex.vendor` `'OpenAI' → 'OpenAI Inc.'`（一个真后端永远不会发的值） | ✅ 红在 M2 那一条，exit 1；⭐ 同时 `check:mock-contracts` + 1362 unit + 400 storybook **全绿** ⇒ M2 这条路径也只有本层守得住 |
+
+#### 3.7.6 维护方式（Q3 的另一半：谁来重录、怎么发现过期）
+
+这正是**不选录制方案**换来的好处：**没有任何东西需要"重录"，也就没有"录的东西过期了"这件事。**
+
+- **判据永远是当下的 api 源码**：后端改了 `readonly capabilities`，下次跑检查立刻红在替身那一侧
+  —— 它比较的是两个**都在版本控制里**的活文件，不是一份会腐化的快照。
+- **谁来跑**：改 `src/mocks/handlers.ts` 的注册表常量、或改 api 两个 provider 类 / 两个 adapter 时。
+  ⚠️ 前者在前端 agent 手里、后者在后端 agent 手里，而这条缝**不属于任何一个仓** ——
+  这正是 §2.1 说的那种"天然没有归属"的检查，归测试 agent。
+- **扩它的判据**（⛔ 不许随手加）：新增一条镜像，必须能点名 api 侧**唯一一处**权威声明，
+  且替身那边**自称**在抄它。说不出这两样的，说明它不是镜像，是场景取值 —— 别管。
+- ⚠️ **升级成阻断门禁要改两处**（与 §3.1.1「CI 编排」同型）：① 挂进某条 workflow；
+  ② 进 required checks。只改一处会得到一道假门。**现在刻意两处都没改。**
+
+#### 3.7.7 ⛔ 这一层不做的事（写下来是为了别有人再去做一遍）
+
+| 不做 | 理由（都在上面有数据） |
+|---|---|
+| 用录制的 fixture 替换现有 44 条 e2e 的手写替身 | 30% 结构性替身真后端造不出来；录到的值本身还掺着第二层替身（Q3）；且现有值离真值本来就很近（Q2） |
+| 逐字段「同形」比对 | 96% 噪声（Q2）。收窄到不噪声，剩下的就是本节这 22 个值 |
+| 给那 61 个自由 string 字段普遍加取值域检查 | 其中 56 个漂了也没有可观测后果（Q1）。为它们建门禁是在给一个不存在的风险收税 |
+| 扩 `e2e-contract/` 去覆盖这一层 | ①它够不着（Q3：它自己看到的就是替身值）；②§3.1.1 有 10 条硬上限，扩大只会得到一层更慢更脆的东西 |
+
+#### 3.7.8 ⭐ 同一件事在 api 侧的镜像：替身能力位 ⟷ 真 provider（2026-09-04）
+
+> **一句话**：§3.7.3 管的是「web 替身抄后端」，本节管的是「**api 自己的 e2e 替身抄 api 自己的真
+> provider**」。⭐ 它补的是 Q3 那个盲区的**源头**——Q3 说契约 e2e 录到的 `GET /api/providers`
+> 其实是 `_fakes.ts#CAPS`；那么**谁来保证 `CAPS` 是真的**？此前的答案是「没有人」。
+
+**落点**：`api/scripts/check-fake-provider-caps.mjs`（⚠️ 落 **api 仓**，不是主仓 —— 两侧源文件
+都在 api 里，与 §3.7.3 那条「主仓是唯一同时持有两个 submodule 的地方」的理由正好相反）。
+**14 个值** = 2 个内置 provider × 7 位。
+
+| | |
+|---|---|
+| **判据** | 替身注册表里**每一个与内置真 provider 同名**的替身，其 `capabilities` **逐位等于**那个真 provider 的 `readonly capabilities` |
+| **权威来源** | `packages/modules/sandbox/src/infrastructure/providers/{aio,boxlite}/*-sandbox.provider.ts#capabilities`（声明处源码，⛔ 不是任何一次运行的输出） |
+| **被比的一侧** | `apps/api/test/e2e/_fakes.ts#makeFakeRegistry` 里的 `new FakeProvider('aio' \| 'boxlite')` |
+| **手段** | TypeScript AST，⛔ 不用正则（理由见下「三个坑」①） |
+| **阻断性** | ⛔ **不是门禁**：不进 `ci.yml` 的八步、不进 husky。手动 `node scripts/check-fake-provider-caps.mjs` |
+
+**为什么是「逐位相等」，而不是「替身只能更保守」**（先查过「有没有正当理由让它们不同」）：
+
+1. 这几位**被当作真值消费**：`sandbox-application.service.ts` 把 `p.capabilities.*` 逐位铺进
+   `GET /api/providers` 的 DTO，而契约 e2e 录的就是这份响应 ⇒ 替身漂哪个方向，录到的样本就假在哪个方向。
+2. 平台的**准入分支**按这几位分流（`assertCapabilities`：`spawnTty:false` 一律拒建；
+   `create({require:{…}})` 的创建前静态校验；headless Task 的 409）。替身更保守 ⇒ e2e 走进一条线上
+   不存在的拒绝分支；替身更宽松 ⇒ 拒绝分支从没被覆盖。**两个方向都坏**。
+3. ⭐ **刻意的降级路径已经有正当表达方式**：`makeNoHeadlessProvider()` 用
+   `new FakeProvider('noheadless', {...CAPS, headlessTask:false})` —— 它走的是**另一个名字**，
+   没有冒充任何真 provider ⇒ 天然在管辖外。**正当理由存在，但它不需要放宽判据。**
+
+**⛔ 刻意不管的三处**（每一处都是「正当的不同」）：
+
+| 不管 | 理由 |
+|---|---|
+| `makeNoHeadlessProvider()` 的 `headlessTask:false` | 见上 3：另一个名字，不冒充谁 |
+| 各 e2e 文件里的场景 caps（`registry-extension` 的 `spawnTty:false`、`ACME_CAPS`、`agent-bootstrap` 的临时 caps） | 按用例要走的分支挑的值，**不自称是镜像**（与对 web `providerCaps()` 的口径同源） |
+| `makeFakeRegistry` 的 `defaultProvider: 'aio'` | 真注册表的默认**跟宿主平台走**（`hostPreferredProvider()`：darwin ⇒ boxlite，否则 aio）。替身钉死 `'aio'` 是为了让 e2e 与录制不随开发机 OS 变 —— **刻意的不同，不是漂移** |
+
+⛔ **也不管 `builtin-providers.contract.spec.ts` 的 `expectedCapabilities` pin**：那份手抄件
+**已经有机器守着**（它自己就是断言，真 provider 一改当场红）。⚠️ 但它恰好解释了这条缝
+**为什么会长出来** —— 真 provider 改一位 ⇒ pin 红 ⇒ 有人把 pin 更新了 ⇒ **没有任何东西提醒
+他还有 `_fakes.ts#CAPS`** ⇒ 替身独自留在旧值上，全绿。本检查守的就是这最后一步。
+
+**⚠️ 判据是 per-provider 的，⛔ 不是「三方全等」**：今天 aio 与 boxlite 七位相同是**巧合**
+（04 §8 的注册表是开放的，docker 容器与微 VM 本就可能长出不同能力）。将来 boxlite 支持了
+snapshot 而 aio 没有，本检查会红在 `boxlite.snapshot` 这一位上，**修法是给替身分成两份 caps**
+（今天 `makeFakeRegistry` 用同一个 `CAPS` 常量喂两个替身），⛔ 不是把真 provider 改回一致。
+内置 provider 的名单也**不硬编码**：从 `provider-registry.ts` 构造函数注入的类反查 ⇒ 新增第三个
+内置 provider 自动进入管辖，替身缺它也会报。
+
+**⚠️ 三个坑，都实际踩到过：**
+
+1. ⛔ **不许用正则读源码里的布尔值。** boxlite 的 `snapshot` 那一位上方有一大段注释写着
+   「SDK 有完整快照 API」，正则会把注释里的词当成值，**误报成 `true`**（实际 `false`）。
+   本检查走 AST，M-B 变异实测读到的正是 `false`（与 §3.2 / §3.7.3 同一条教训）。
+2. **替身未必应该无条件等于真 provider** —— 先查清楚再定判据。查的结果见上三条「刻意不管」：
+   ⭐ **有两处正当的不同**（`noheadless` 的降级位、`defaultProvider` 的宿主偏好），
+   而它们都不需要放宽判据，因为它们各自有正当的表达方式。
+3. **两个真 provider 之间也可能不同** ⇒ 判据 per-provider，见上。
+
+##### 3.7.8a 变异验证 + ⭐ 反事实（漂移在场时，现有门禁全绿）
+
+⛔ 一条从没红过的检查等价于不存在（§0）。两条变异都**成对注入/还原**，还原后
+`shasum -a 256 -c` + `git diff` 各确认一次。
+
+| # | 注入点 | 变异 | 本检查 |
+|---|---|---|---|
+| **M-A**（⭐ 真实漂移路径） | `aio-sandbox.provider.ts` **＋** `builtin-providers.contract.spec.ts` 的 pin | `aio.volumeMount` `true → false`，**pin 同步更新**（模拟「pin 红了→有人更新了 pin→忘了替身」） | 🔴 红 1 处，点名 `aio.volumeMount`，打印权威来源路径，exit 1 |
+| **M-B** | `_fakes.ts#CAPS` | `snapshot` `false → true`（只动替身） | 🔴 红 2 处（`aio.snapshot` + `boxlite.snapshot`），exit 1 |
+
+⭐ **反事实（漂移在场时跑现有门禁）**：
+
+| 跑什么 | M-A 在场 | M-B 在场 |
+|---|:--:|:--:|
+| api `pnpm test:contract`（41） | 🟢 绿（pin 已被同步更新 ⇒ 它看不见了） | 🟢 绿 |
+| api **`pnpm test:e2e`（220）** | 🟢 绿 | 🟢 绿 |
+| 主仓 **`e2e-contract` 真链路（6 条）** | 🟢 绿 | 🟢 绿 |
+| **`check-fake-provider-caps.mjs`** | 🔴 **红** | 🔴 **红** |
+
+⇒ M-A 那一列是最硬的一条证据：**那正是这条缝真实的发生方式** —— 唯一看得见「真 provider 改了
+一位」的那道 pin，在人把它更新掉之后就**主动闭眼**了，而 220 条 e2e 与 6 条契约 e2e 结构上
+就看不见（它们跑的、录的都是这个替身）。
+
+##### 3.7.8b 维护方式
+
+- **谁来跑**：改 `{aio,boxlite}-sandbox.provider.ts` 的 `readonly capabilities` 时，或改
+  `_fakes.ts#CAPS` / `makeFakeRegistry` 时。⚠️ 前者在后端 agent 手里、后者在测试 agent 手里 ——
+  **这条缝不属于任何一方**，与 §3.7.6 同型，归测试 agent。
+- **不需要"重录"**：判据永远是当下的 api 源码，两侧都在版本控制里。
+- ⭐ **`_fakes.ts#CAPS` 上方已经写上了这段经过**（自称镜像 + 指向本检查 + 「想测降级分支就另起
+  一个名字」），下一个想改那七位的人会先看见它 —— 与 §3.7.4 在 `handlers.ts` 里做的是同一件事。
+- ⚠️ **升级成阻断门禁要改两处**（挂进 workflow ＋ 进 required checks）。**现在刻意两处都没改。**
+
 ---
 
 ## 4. 落地顺序
@@ -956,6 +1245,7 @@ CI 里更进一步：增量那一步把真实报告路径写进 `$GITHUB_OUTPUT`
 | 2 | **§3.3 接入 Stryker** | — | **广度基线，机器做**。取代原计划里那个误报两成的静态嗅探 | ✅ **全部完成**：配置固化 · 全仓基线 70.0% / 33 分钟（§3.3.2b-2）· **CI 编排已落地**（§3.3.4：nightly 全量 + PR 增量，两条都不阻断） |
 | 3 | §3.2 前端替身类型约束 | ~190 处 | 成本低、当场生效，防住 fixture 那一类 | ✅ **三条全完成**：15 处裸字面量全上类型，e2e 78 处 json 响应体 100% 锚在契约上，8 处变异双向验红（少字段/多字段都挡）。顺带扒出 **4 条契约漂移**（替身比真后端多字段/少必填字段/凭空造字段）。✅ **机器兜底门禁已落地**（`check:mock-contracts`，AST 非正则，接在 CI `static-checks`；133 处全绿、0 豁免；已用注入裸字面量验红，判据与豁免口径见 §3.2） |
 | 4 | **按 Stryker 热点补断言**（⚠️ 不是 §3.5.4 的 B1 批，那 39 条来自正则漏斗、至今一条没做） | 4 个热点文件 | **深度，人做** | ✅ **首轮已完成**（§3.3.2b-5）：4 个热点文件分数 14.9→93.3 / 28.6→97.2 / 46.0→86.0，118 次变异验证。⭐ 顺带抓出**一条存量假绿**（§3.5.2b）与**一个测量盲区**（§3.5.2c）。⏳ 剩 `codex.output-parser.ts`(48.0%) 与 `automation.scheduler.ts`(51.1%) |
+| 4.5 | **§3.7 取值镜像检查** | 22 个值 | **契约管不住的值**：层 1 只收得住 `format`/`enum` 表达得了的部分；剩下 100 个自由 string 里真正按值分支的只有 5 个字段，而它们的依据只写在注释里 | ✅ **已落地**（2026-09-04）：`scripts/check-fixture-values.mjs`（AST 非正则，M1 provider 能力位 + M2 runtime 身份）。⭐ **上来就抓到 4 处存量漂移**，而全仓 3400+ 条测试 + 12 道门禁 + 6 条契约 e2e **全部照绿**（反事实表见 §3.7.5）。2 条注入变异（M5/M6）各自验红。⚠️ **刻意不做成阻断门禁**（§3.3.4 同一条工程现实）。⛔ 同时**否掉**了原设想的两个方案：录制替换 / 逐字段同形比对 —— 理由与数据见 §3.7.2（96% 噪声）与 §3.7.3。⭐ **api 侧镜像同日落地**（§3.7.8）：`api/scripts/check-fake-provider-caps.mjs`，14 个值（2 个内置 provider × 7 位），补上 Q3 那个盲区的源头「谁保证 `_fakes.ts#CAPS` 是真的」；2 条变异各自验红，⭐ 其中 M-A 复刻了真实漂移路径（pin 被同步更新后主动闭眼），漂移在场时 41 contract + 220 e2e + 6 条契约 e2e **全绿** |
 | 5 | §3.5.4 B2/B3 批 | ~385 条 | **按 §3.3.2b-2 的全仓存活热点表重排**（前 8 名已列出），不要按 §3.5.3 的正则漏斗 | ⏳ |
 | — | 金标准集 | **5 条** | 验证任何检测手段的基准，含 Stryker 自己 | ✅ §1.4 四条 + §3.5.2b 新抓的第 5 条（那条还是从「已修好」名单里抓出来的） |
 | — | §3.3 变异验证写进 09 §2 | — | 把口头纪律变成制度 | ✅ 09 §2.3.1 |
