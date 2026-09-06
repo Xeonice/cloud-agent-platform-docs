@@ -44,9 +44,24 @@ jobs:
         with:
           fetch-depth: 1
 
-      # ⚠️ 与 docs-check 的同名 step 有一处**关键区别**：那边 `continue-on-error: true`
-      # （拉不到就把 B 类判成 skip，不让 A 类跟着瘫痪），**这里不行** —— 两个 submodule
-      # 是这一层的全部被测对象，拉不到就没有任何东西可跑。⇒ 大声失败，不静默 skip。
+      # ⚠️ 与 docs-check 的同名 step 有一处**关键区别**：那边拉不到会把 B 类判成 skip
+      # （不让 A 类跟着瘫痪），**这里不行** —— 两个 submodule 是这一层的全部被测对象，
+      # 拉不到就没有任何东西可跑。⇒ 大声失败，不静默 skip。
+      #
+      # ⛔ **但「没有 SUBMODULE_TOKEN」不等于「拉不到」**（2026-09-07 修）。本 step 原本
+      # 在 token 缺席时**直接 `exit 1`，连试都不试**，于是这道门从建立起 **7 次全红、
+      # 每次 8–11 秒**，一次真正的测试都没跑过 —— 而 `.gitmodules` 写的是 `git@github.com:`
+      # 形式的 URL，runner 上没有 SSH key，所以**无论仓库公开与否都必须改写成 HTTPS**。
+      #
+      # ⚠️ 判据是**改写成什么**，不是**有没有 token**：
+      #   · 有 token ⇒ 带凭证的 HTTPS（私有仓也拉得到）；
+      #   · 没 token ⇒ 匿名 HTTPS —— 这正是隔壁 docs-check 一直在走的那条，
+      #     而它的 B3/B5【跨仓逐字节对账】天天在 CI 上真跑，就是这两个 submodule
+      #     **匿名拉得到**的实证。当初那句「拉不到就无事可做」是**没验证的推断**，
+      #     而反例就摆在同一个 workflows 目录里。
+      #
+      # ⇒ 无论如何都试一次；真拉不到时 `git submodule update` 自己会失败，
+      #   那才是「无事可做」该出现的地方 —— 由**事实**判定，不由一个 secret 在不在判定。
       - name: 拉取 api / web submodule（本层的硬前提）
         env:
           SUBMODULE_TOKEN: ${{ secrets.SUBMODULE_TOKEN }}
@@ -56,8 +71,8 @@ jobs:
           if [ -n "${SUBMODULE_TOKEN:-}" ]; then
             git config --global url."https://x-access-token:${SUBMODULE_TOKEN}@github.com/".insteadOf "git@github.com:"
           else
-            echo "::error title=缺少 SUBMODULE_TOKEN::契约 e2e 要同时起真 api 与真 web，两个 submodule 都拉不到就无事可做。"
-            exit 1
+            echo "::notice title=未配置 SUBMODULE_TOKEN::改走匿名 HTTPS（与 docs-check 同）。私有化之后要补这个 secret。"
+            git config --global url."https://github.com/".insteadOf "git@github.com:"
           fi
           git submodule update --init --depth 1 api web
 
