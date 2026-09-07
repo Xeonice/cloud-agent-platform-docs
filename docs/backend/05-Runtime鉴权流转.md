@@ -60,6 +60,36 @@
 
 **创建流程的阶段序列因此固定为**：初始化 → 拉镜像 → 准备工作区 → 启动实例（凭证注入发生在此，用户无感）→ 连接终端（P20 §3.3）。**没有"等待登录"阶段**——任何在创建链路里等待鉴权的实现都是对本决策的违反。
 
+**决策 A 的合规边界（2026-09-08 查一手条款补）。** 上面论证的是**技术可行**，这一段是**允许不允许**——两件事，此前只写了前者。
+
+⚠️ **先更正一条广为流传的说法。** 网上（含多家媒体，2026-02）说「Anthropic 禁止订阅用于第三方」。查一手：[Consumer Terms](https://www.anthropic.com/legal/consumer-terms)（末次更新 2025-10-08）**全文没有 OAuth / token / harness 字样**，只有一句通用的「不得共享账号凭证」。真正的条文在 **Claude Code 自己的 [Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) 页**，而它说的与那句流传的话**不是一回事**。
+
+**它禁的是什么（原文）：**
+
+> Anthropic does not permit third-party developers to **offer Claude.ai login into their own applications**, or to **route requests through Free, Pro, or Max plan credentials on behalf of their users**. Moreover, developers may not **collect, store, or intermediate Claude.ai credentials or session tokens** — sign-in to a Claude account must complete through Anthropic's own flow.
+
+**它明确允许的是什么（原文）：** 同一页有一整节 *Can customers offer Claude Code in their products?*，**点名了我们这种形态**（"e.g. in hosted sandboxes or other agent infrastructure"），并且鉴权那节收尾处写着：
+
+> Nor does it prevent **an end user from signing in to the unmodified Claude Code binary with their own Claude subscription**, including where **a platform hosts Claude Code** as described under *Can customers offer Claude Code in their products?* above.
+
+⇒ **平台承载 Claude Code、用户用自己的订阅登录，是被明写允许的。** 但附三条硬条件，每一条都对本设计有约束：
+
+| 条件（原文要点） | 对本平台的约束 |
+|---|---|
+| **二进制不许改**，且不许移除/禁用它内置的任何鉴权方式 | ⇒ 只能原样安装官方版；⛔ 不许为了「简化」去裁剪登录方式，也不许包一层自己的登录入口 |
+| **不得代付、转售或中介**用户的 Claude 用量；每个终端用户用**自己的**凭证，账单直接记在他名下 | ⇒ 与单机私有化部署天然一致；⛔ 但这条封死了「平台买一个 Max 账号给所有用户共用」这类形态 |
+| **不得 collect / store / intermediate** Claude.ai 凭证或 session token；登录必须在 Anthropic 自己的流程里完成 | ⚠️ **本设计与这条有张力，见下** |
+
+⚠️⚠️ **一个尚未定论的问题，别当它已经解决：第三条与「凭证入 Vault」的张力。**
+
+有利的一面：登录**全程在 Anthropic 自己的流程里**（用户在自己浏览器上对着 claude.com 授权，平台既没做登录页也没碰密码，决策 B 说的就是这件事）；我们存的是 `claude setup-token` 的产物，而[官方文档](https://code.claude.com/docs/en/authentication)明写它就是给 CI/脚本用的（"For CI pipelines, scripts, or other environments where interactive browser login isn't available"），用法正是设成 `CLAUDE_CODE_OAUTH_TOKEN`。同一页还允许把凭证放进 "a development environment, secrets manager, or machine image"。
+
+不利的一面：那句豁免的措辞是 **"their own API keys or third-party inference provider credentials"** —— **没把 subscription credential 列进去**；而 "may not collect, store, or intermediate" 那句**没有例外从句**。
+
+⇒ **这是法务判断，不是技术判断**，本文档不替它下结论。留一个已知的、更保守的替代形态备查：**平台不代存 token，改由用户在沙箱里自己跑一次登录**（凭证落在他那个沙箱的 HOME，平台全程不经手）。代价正是决策 A 当初为体验否掉的那个——每个新沙箱都要重登一次。
+
+⚠️ **Codex 侧未做同等核查。** 本节只查了 Anthropic。OpenAI 对「用 ChatGPT 订阅跑 Codex CLI」有没有对应条款，**尚未查证**，不要假设与 Anthropic 同构。
+
 **决策 B：后端不代理 OAuth、不接触用户密码。** 帐号授权的登录命令跑在 auth helper 的 pty 里；后端只做三件事：
 1. 从 pty 输出**捕获** AuthChallenge（URL / device-code）；
 2. 转发给前端展示，用户在**自己的浏览器**完成真正授权（不经过我们的服务器）；

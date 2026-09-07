@@ -1443,6 +1443,43 @@ install plan 现装只作兜底（**未预装不影响可选性**，见 ⑤）�
 
 ## 8. Registry 注册机制（双通道）
 
+> **★8a 加一个新 runtime 要花多少钱：默认是零，订阅捕获是特例（2026-09-08 调研补）**
+>
+> 一个反复被问的问题：「每加一个 runtime 都要接一条鉴权路径吗？」——**不。今天只有两个 runtime 走了那条贵的路，而且它不会变多。**
+>
+> **两档，成本差一个数量级：**
+>
+> | | 走什么 | 加一个新 runtime 的成本 |
+> |---|---|---|
+> | **BYOK（默认）**<br>`api-key` / `access-token-paste` | `submitSecret` **短路直存** —— 不经 auth helper、不起 pty、不产生 challenge（05 §3.1） | 实现 `validateApiKey` + `createCredentialFromSecret` + `injectCredential`。**平台代码零改动**，`registry-extension.e2e-spec.ts` 里那个树外 `acme-agent` 就是这么接的 |
+> | **订阅捕获（特例）**<br>`setup-token` / `oauth-device` | auth helper + 真 pty + per-CLI 解析器（05 §3） | 贵。**只对「我们跑它自己官方 CLI，且厂商明示支持 headless token」的 runtime 开** |
+>
+> **为什么订阅捕获不该被抽象成通用能力 —— 两个独立的理由：**
+>
+> **① 各家正在自己关掉这条路**（2026 调研）。它不是在扩张，是在收窄：
+>
+> | Harness | 订阅/账号登录 | 拿凭证的方式 |
+> |---|---|---|
+> | Claude Code | ✅ | **只能跑 CLI**（`setup-token`）→ `CLAUDE_CODE_OAUTH_TOKEN` |
+> | Codex | ✅ | **只能跑 CLI**（`login --device-auth`）→ `CODEX_AUTH_JSON` |
+> | Gemini CLI | ❌ 2026-06-18 停掉免费 Sign-in 与 AI Pro/Ultra 登录 | 控制台 API key |
+> | Qwen Code | ❌ 2026-04-15 停掉 Qwen OAuth | API key / 阿里云 Coding Plan |
+> | Copilot CLI | 有订阅，但无头场景走 env（`COPILOT_GITHUB_TOKEN` 等，细粒度 PAT） | GitHub UI 建 PAT |
+> | opencode / pi | 无（或可选） | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env 或 `.env` |
+> | Kimi / GLM / MiniMax / DeepSeek | —— | Anthropic 兼容端点：`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` |
+>
+> ⚠️ **区别不在登录形态，在有没有别的取 token 的办法**：Copilot 能在 GitHub UI 建 PAT、Gemini/Qwen 能在控制台建 key，**而 Claude / Codex 没有「生成 token」按钮，CLI 是唯一的铸币机**。那套 helper + 真 pty，本质上是替用户跑那台铸币机。
+>
+> **② 通用化会踩合规红线。** Anthropic 明文禁止第三方开发者 "offer Claude.ai login into their own applications"（05 §2 决策 A 合规边界，附原文）。把「订阅登录」做成一个**面向任意 runtime 的通用入口**，正是那条禁令描述的形状。⇒ 它必须留在 per-adapter 的 `beginAuth` / `completeAuth` 里，**不上升为平台能力**。
+>
+> **落到契约上，这条纪律已经被表达了：**
+>
+> - `RUNTIME_AUTH_METHODS` 是闭集（`oauth-device` / `setup-token` / `api-key` / `access-token-paste`）。它不是缺口，**它挡住的正是「给每个新 runtime 发明一种登录方式」这个冲动**。其中 3 种是 BYOK 形状，覆盖上表除 Claude/Codex 外的全部已知 harness。
+> - `access-token-paste` 是万能逃生口：**让用户在自己机器上用官方方式登录，把产出的 token 贴进来**。任何 runtime 都能这么接，平台一行不改。
+> - `getAuthMethods()` 让 adapter 自己声明支持哪几种 ⇒ **平台不需要知道谁支持订阅**。
+>
+> ⏳ **一个已知的小缺口**：Kimi / GLM / DeepSeek 这类走 Anthropic 兼容端点的场景，需要 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` **两个** env，而当前 `api-key` 路径只存一把 key、**没有地方放 base URL**。⚠️ 这**不是一个新 runtime**，是 `claude-code` 这个 runtime 的一个 provider 变体 —— 修法是凭证 payload 多带一个 base URL，比加一个 runtime 便宜得多。
+
 ### 方式一（主）：DI Token + 动态模块
 
 ```typescript
