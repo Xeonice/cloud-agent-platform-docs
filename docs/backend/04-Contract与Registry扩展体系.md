@@ -623,6 +623,63 @@ interface RuntimeAdapter {
 > 于是**同一沙箱内多轮接续不需要任何新机制**——上下文文件本来就在那儿，只有"引用"需要旅行。这是主路径，也是当前唯一一条。
 >
 > **形态完全不同，所以只能留在 adapter**：codex 是**子命令**、claude 是**旗标**。没有任何通用包装能同时容纳两者——与 ★2「关掉各 CLI 内层沙箱」是同一条理由。
+
+> **★2a 关掉内层沙箱还不够：claude 还要一句「我确实在沙箱里」（2026-09-07 真机补）**
+>
+> 沙箱里是 root（两档预制镜像都没有 `USER`），而 claude **拒绝** root +
+> `--dangerously-skip-permissions`：
+>
+> ```
+> --dangerously-skip-permissions cannot be used with root/sudo privileges for security reasons
+> [platform] agent session ended (exit 1); you now have a shell
+> ```
+>
+> ⚠️ **它拒的不是 root，是「root 而且不在一个刻意的沙箱里」** —— 从 2.1.261 二进制里挖出的
+> 判据一字不差（那个函数干脆就叫 `isRootOutsideDeliberateSandbox`）：
+>
+> ```js
+> process.getuid() === 0 && process.env.IS_SANDBOX !== '1' && !CLAUDE_CODE_BUBBLEWRAP
+> ```
+>
+> ⇒ `IS_SANDBOX=1` 是官方留的那个声明口，而我们**确实**满足它（agent 跑在 boxlite 微 VM
+> 或 aio 容器里，与宿主隔离）。这是**如实声明，不是绕过检查**。
+>
+> ⛔ **别改用「在镜像里造个非 root 用户」来躲开**：那会连带动到工作区属主、凭证文件权限、
+> 以及两档镜像的构建 —— 为了一个环境变量能表达清楚的事实，去改整条运行形态。
+>
+> ⚠️ **两个入口都要带**：`buildStartCommand`（任务）与 `buildAttachCommand`（交互会话）
+> 走的是同一条命令行，那道闸门一样拦。只改一个会漏掉另一个（真机上挂的正是 tmux 那条）。
+>
+> ⚠️ env 会被 tmux 脚本 materialise 成 `K=V` 前缀，而 argv/env 在沙箱里能被 `ps` 读到
+> （§2.3★ 第 2 条）⇒ **这里只允许出现这一个声明位**，凭证永远不走这条路。
+
+> **★2b 终端必须强制 UTF-8，否则 agent 界面里所有非 ASCII 变成 `_`（2026-09-07 镜像内实测）**
+>
+> agent 会话由沙箱内的 tmux 持有（§7 ★），而 tmux 按**客户端 locale** 决定要不要按 UTF-8
+> 渲染。预制镜像里 `LC_CTYPE=POSIX` ⇒ tmux 把它认为客户端表示不了的字符**逐个替换成 `_`**。
+> 同一段输出、同一个 tmux 3.3a：
+>
+> ```
+> attach 无 -u :  BLOCK ___ STAR _ ELL _ MID (0~
+> attach 加 -u :  BLOCK ▐▛█ STAR ✻ ELL … MID ·
+> ```
+>
+> 用户看到的是 Claude Code 的横幅 `▐▛███▜▌` 变成 `_______`、spinner `✻` 变成 `_`、
+> `⏵⏵ bypass permissions` 变成 `__` —— **一眼像字体坏了**，而字体是好的（同一套字体栈在
+> 浏览器里渲染这些字符完全正常，已单独验证）。
+>
+> ⇒ 两处各修一半，**缺一不可**：
+>
+> | 修在哪 | 修的是什么 | 为什么不能只做一处 |
+> |---|---|---|
+> | 平台侧：每个 tmux 调用都带 `-u` | 强制 UTF-8，**与镜像无关** | 用户可以注册自己的镜像（§7 血统只保证有 tmux，不保证有 locale），这一侧是唯一能给出保证的地方 |
+> | 镜像侧：`ENV LANG=C.UTF-8` | `ls` / `grep` / `sort` 等工具的多字节处理 | 那些工具不经 tmux，`-u` 管不到它们 |
+>
+> ⚠️ **四个 tmux 入口一个都不能漏**：server 端（`new-session`）决定怎么存，client 端
+> （`attach`）决定怎么渲染 —— 只加一半，另一半照样把字符吃掉。
+>
+> ⚠️ 镜像侧还要**构建期自证** `C.UTF-8` 真的存在，否则基础镜像哪天不带它了，发出去的是
+> 一张「跑起来但字符是 `_`」的镜像 —— 那种只有用户会发现。
 >
 > **会话 id 从哪来：走事件，不另开门。** 实测两个 CLI **都在第一个输出事件里**就吐出了自己的会话 id——codex 是 `thread.started.thread_id`，claude 是 `system/init.session_id`。它天生就是个事件，那就走 `parseOutput` 这一个既有出口，因此新增 `RuntimeEventType` 成员 `'session-started'`，而不是给 adapter 单开一个 `sessionRefOf()` 方法。
 >
