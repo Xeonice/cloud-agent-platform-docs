@@ -90,6 +90,7 @@
    │──POST .../auth/complete { pastedText? }──▶
    │      · setup-token 场景：后端把粘贴内容 write 进 pty stdin
    │      · device-auth 场景：后端持续读 pty 输出直到 CLI 提示登录成功
+   │      ⚠️ setup-token **还有一条不经过本端点的主路**，见下 §3.0★
    │                                                        │
    │                          CLI 落盘凭证（.credentials.json / auth.json）
    │                          RuntimeAdapter 收编（claude 从 stdout 拼 token / codex 读 auth.json）
@@ -99,6 +100,38 @@
    │                               （防坏 token 多沙箱反复失败触发账号锁）
    │                            → CredentialVault 加密存储（AES-256-GCM）
    │◀──────── 返回 RuntimeCredential 元数据（掩码，不回传明文）────────────┘
+
+#### §3.0★ setup-token 的**两条**完成路径（2026-09-07 真机补）
+
+⛔ **平台此前只接了「用户粘贴」这一条，而它不是主路。**
+
+`claude setup-token` 会**起一个本地监听**（实测 `127.0.0.1:51321`）。浏览器授权后，
+`platform.claude.com` 的回调页把授权码**直接送进那个端口** —— 页面于是显示
+「成功，可以关闭此窗口」，**同机流程下根本不显示码**。CLI 自己的措辞就很准确：
+`Paste code here **if prompted**`。
+
+⚠️ 而 `completeAuth` **强制要求 `pastedText`**：于是码送到了、CLI 把 token 打在 pty 上了，
+平台还在等一个**永远不会有的粘贴**。用户看到浏览器说成功、这边一直转圈到超时。
+两边各自「没错」，合起来是死等。
+
+| 路径 | 触发 | 何时发生 |
+|---|---|---|
+| **CLI 自完成**（主路） | 浏览器与 helper **同机**，回调页够得到 CLI 的本地监听 | `beginAuth` 之后后台守着 pty，token 自己出现就落库；用户什么都不用做 |
+| 用户粘贴（退路） | 浏览器与 helper **不在同一台机器**（真远端部署），回调页够不到那个端口，于是页面显示码 | `POST .../auth/complete { pastedText }` |
+
+⇒ 契约上加 `RuntimeAdapter.awaitSelfCompletion?()`（04 §3）；不实现 = 这个 runtime 没有
+自完成这条路（codex 的设备码就没有，它由轮询驱动）。
+
+⚠️ **两条路都在等同一个 pty 上的 token，都会成功** —— 所以它们共用一个出口，且：
+- **锁必须在第一个 `await` 之前同步拿到**：只查「会话还在不在」不够，`storeCredential` 是
+  异步的，两条路会在任何一方结算之前**双双通过检查**，同一个 token 被存两遍（实测过）；
+- **输的那条不能只拿到 null**：赢家「已占锁、尚未结算」的窗口里墓碑还不存在，输家会查不到
+  结果而报 404 —— 用户明明成功了却看到失败（同样实测过）。⇒ 赢家把那次结算挂出来，
+  输家 `await` 它，两条报同一个结果。
+
+⚠️ **前端也要跟着改**：`awaiting-paste` 期间必须轮询 `auth/status`（只认 `success`，其余状态
+不许打断用户正在进行的粘贴），否则后端自动落库了界面也不知道。
+
 
 注入：任何 sandbox 启动时，credential 上下文经门面交出 RuntimeCredential
       （CREDENTIAL_FACADE.prepareRuntimeCredential(runtimeId)，受控明文包装，
