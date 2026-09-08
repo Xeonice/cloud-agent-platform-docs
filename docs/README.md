@@ -77,7 +77,7 @@ docs/
 | 01 | [后端仓库目录结构与 DDD 分层](./backend/01-后端目录结构与DDD分层.md) | 需求 1、2（后端部分） | ✅ 可评审 |
 | 02 | [MCP 与 OpenAPI 双协议接入层](./backend/02-MCP与OpenAPI双协议.md) | 需求 3 | ✅ 可评审 |
 | 03 | [Sandbox 调度中心设计](./backend/03-Sandbox调度中心.md) | 需求 4（core/ram 配额、调度策略、生命周期状态机） | ✅ 可评审 |
-| 04 | [Contract 与 Registry 扩展体系](./backend/04-Contract与Registry扩展体系.md) | 需求 6、7、8（sandbox/runtime/镜像三层 contract 与注册机制） | ✅ 已细化重写，可评审 |
+| 04 | [Contract 与 Registry 扩展体系](./backend/04-Contract与Registry扩展体系.md) | 需求 6、7、8（sandbox/runtime/镜像三层 contract 与注册机制）。**要加一个新 runtime 从 §8 ★8b 开始读**——四步 + 活样板 + 已知会撞的墙 | ✅ 已细化重写，可评审 |
 | 05 | [Runtime 鉴权流转设计](./backend/05-Runtime鉴权流转.md) | 需求 9（codex / claude code 订阅登录、凭证注入 sandbox） | ✅ 可评审 |
 | 06 | [TTY 终端链路设计](./backend/06-TTY终端链路.md) | 需求 5 的后端半段（PTY → WebSocket → 前端） | ✅ 可评审 |
 | 07 | [前端仓库目录结构与视图逻辑分离](./frontend/07-前端目录结构与视图逻辑分离.md) | 需求 1、2（前端部分）、5 | ✅ 可评审 |
