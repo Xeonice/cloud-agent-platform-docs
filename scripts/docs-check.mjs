@@ -37,6 +37,8 @@ const WEB_ROOT = path.join(ROOT, 'web');
 const WEB_OPENAPI = path.join(WEB_ROOT, 'openapi.json');
 const API_WS_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'ws-protocol.ts');
 const WEB_WS_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'ws-protocol.ts');
+const API_RESERVED_ENV = path.join(API_ROOT, 'packages', 'shared-kernel', 'src', 'domain', 'reserved-env.ts');
+const WEB_RESERVED_ENV = path.join(WEB_ROOT, 'src', 'lib', 'image', 'validateEnvVar.ts');
 // B5：SSE 帧契约。**与 ws-protocol 同放**是 10 §6 的要求（「流帧类型必须手写并与 WS
 // 协议文件同放，走同一套 SYNC WITH 纪律」），所以这两条路径与上面两条只差文件名。
 const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
@@ -592,6 +594,26 @@ function collectErrorCodesFromSource() {
       const items = [...m[0].matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)];
       if (items.length >= 2) for (const u of items) add(u[1], rel);
     }
+    // ⑤ `as const` 数组闭集：`const XXX_ERROR_CODES = ['A', 'B'] as const;`
+    //
+    // ⚠️ **这条是 2026-09-08 补的，补的是同一个病的第二次发作。** 上面 ④/④b 只认
+    // 「联合类型」形态；而当一个闭集需要**同时**当值用（给别处 `SANDBOX_FAILURE_CODES`
+    // 组合、给 testkit 遍历），本仓的写法就会从 `type A = 'X' | 'Y'` 变成
+    // `const A_CODES = ['X','Y'] as const` —— 形状一变，这条检查就看不见它了。
+    //
+    // 实际发作：`AdapterAuthErrorCode` 从 runtime 的 domain 搬进 contracts 时改成了
+    // `as const` 数组，于是 6 个成员里的 `BINARY_NOT_FOUND` / `PARSE_ERROR`
+    // **从源码侧整个消失**（另外 4 个恰好在别处还有第二个产出点，所以只丢了 2 个）——
+    // 又一次「一个闭集被扫了三分之二」，与本函数注释开头记的那次一模一样。
+    //
+    // 常量名必须带错误码语义（ERROR/CODE/FAILURE/REJECTION），否则会把
+    // `RESERVED_ENV_EXACT` 这类同样是全大写字面量的数组一起收进来。
+    for (const m of src.matchAll(
+      /const\s+[A-Z][A-Z0-9_]*(?:ERROR|CODE|FAILURE|REJECTION)[A-Z0-9_]*\s*(?::[^=]+?)?=\s*\[([\s\S]*?)\]\s*as\s+const/g,
+    )) {
+      const items = [...m[1].matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)];
+      if (items.length >= 2) for (const u of items) add(u[1], rel);
+    }
   }
   return found;
 }
@@ -1098,6 +1120,7 @@ checkPlannedEndpointsMarked();
 checkOpenapiCrossRepo();
 checkWsProtocolCrossRepo();
 checkSseProtocolCrossRepo();
+checkReservedEnvCrossRepo();
 
 // ---------------------------------------------------------------------------
 // B3 openapi 跨仓一致：api/openapi.json 与 web/openapi.json 必须逐字节相同
@@ -1274,3 +1297,85 @@ if (skipped.length > 0) {
   console.log(`✔ docs:check 通过：${results.length} 项检查全绿。`);
 }
 process.exit(0);
+
+// ---------------------------------------------------------------------------
+// B7 保留环境变量黑名单跨仓对账：后端拦的每一个名字，前端也必须拦
+//
+// 为什么需要它，以及为什么必须落在【主仓】：
+// 这张表是**两仓各持一份手抄**（后端 `shared-kernel/domain/reserved-env.ts` 是权威，
+// 05 §4.1；前端 `lib/image/validateEnvVar.ts` 是给 env 编辑器做即时校验的镜像）。
+// 2026-09-08 实测已经漂移过一次 —— 前端漏了 `CLAUDE_CONFIG_DIR`，用户在编辑器里输入它
+// 一路绿灯、提交时被后端拒绝，而那正是前端那个文件的注释说自己要防的事。
+//
+// ⛔ 这条**只能**落在主仓：两个 submodule 各自的 CI 只 checkout 自己那一个仓，
+// web 侧那条同名对账在 CI 上永远 skip。主仓的 docs-check workflow 两个 submodule 都拉，
+// 是唯一能真的阻断「后端新增一项而前端没跟」的位置 —— 与 B3/B4/B5 同一条理由。
+//
+// ⚠️ 判据是**包含**不是**相等**：前端多拦几个（如 `GIT_PRIVATE_KEY`、几个被 `CODEX_` 前缀
+// 已覆盖的具体名）在安全上无害，不判失败；少拦一个就是上面那个 bug。
+//
+// ⛔ 它抓不到的那一半（必须说清楚，否则这条检查会被当成比实际更强的保证）：
+// 后端的黑名单现在是「静态表 ∪ 已注册 adapter 申报的名字」（04 §3 ★3z `reservedEnvNames`）。
+// **adapter 那一半是运行期事实，静态解析拿不到**，前端的静态镜像原理上也不可能齐。
+// 第三方 runtime 带来的名字只能靠提交时后端的 `ENV_NAME_RESERVED` 兜底。
+// ---------------------------------------------------------------------------
+function checkReservedEnvCrossRepo() {
+  const ID = 'B7';
+  const NAME = '保留 env 跨仓对账';
+  const missing = [API_RESERVED_ENV, WEB_RESERVED_ENV].filter((f) => !fs.existsSync(f));
+  if (missing.length > 0) {
+    record('B', ID, NAME, 'skip', `SKIP —— 找不到 ${missing.map(rel).join('、')}`, [
+      'submodule 未 checkout ⇒ 本轮没有人在把关保留名黑名单的跨仓漂移（前端说 OK、后端拒绝）',
+    ]);
+    return;
+  }
+
+  // ⚠️ 解析不出来时**抛**，不返回空数组：空集恒被包含，那会让这条检查变成一句空洞的假绿。
+  const arrayLiteral = (file, constName) => {
+    const src = fs.readFileSync(file, 'utf8');
+    const m = new RegExp(`${constName}\\s*(?::[^=]+)?=\\s*\\[([^\\]]*)\\]`).exec(src);
+    if (m === null) throw new Error(`${rel(file)} 里找不到 ${constName} 的数组字面量`);
+    const items = [...m[1].matchAll(/['"]([^'"]+)['"]/g)].map((x) => x[1]);
+    if (items.length === 0) throw new Error(`${rel(file)} 的 ${constName} 解析出 0 项`);
+    return items;
+  };
+
+  let apiExact, apiPrefixes, webExact, webPrefixes;
+  try {
+    apiExact = arrayLiteral(API_RESERVED_ENV, 'RESERVED_ENV_EXACT');
+    apiPrefixes = arrayLiteral(API_RESERVED_ENV, 'RESERVED_ENV_PREFIXES');
+    webExact = arrayLiteral(WEB_RESERVED_ENV, 'RESERVED_ENV_KEYS');
+    webPrefixes = arrayLiteral(WEB_RESERVED_ENV, 'RESERVED_ENV_PREFIXES');
+  } catch (e) {
+    record('B', ID, NAME, 'fail', '两仓的黑名单解析失败', [
+      String(e instanceof Error ? e.message : e),
+      '⚠️ 解析失败按 FAIL 处理而不是 skip：常量改名/改形状也是一种漂移，静默放过就等于没有这条检查。',
+    ]);
+    return;
+  }
+
+  const webBlocks = (name) =>
+    webExact.includes(name) || webPrefixes.some((p) => name.startsWith(p));
+
+  const details = [];
+  for (const name of apiExact) {
+    if (!webBlocks(name)) {
+      details.push(
+        `· 后端拦 \`${name}\`，前端放行 —— 用户会先看到绿色通过、提交时被后端拒绝` +
+          `（补进 ${rel(WEB_RESERVED_ENV)} 的 RESERVED_ENV_KEYS）`,
+      );
+    }
+  }
+  for (const p of apiPrefixes) {
+    if (!webPrefixes.includes(p)) {
+      details.push(`· 后端有前缀 \`${p}*\`，前端没有 —— 漏的是一整族名字，不是一个`);
+    }
+  }
+
+  const scale = `后端 ${apiExact.length} 名 + ${apiPrefixes.length} 前缀`;
+  if (details.length === 0) {
+    record('B', ID, NAME, 'ok', `${scale}，前端全部覆盖`);
+  } else {
+    record('B', ID, NAME, 'fail', `${scale}，${details.length} 项前端没拦`, details);
+  }
+}
