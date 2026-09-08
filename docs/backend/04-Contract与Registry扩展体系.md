@@ -798,6 +798,52 @@ type SandboxExecFn = (cmd: string[], opts?: Omit<ProcessSpec, 'cmd' | 'tty'>) =>
   Promise<{ stdout: string; stderr: string; exitCode: number }>;
 ```
 
+> **⛔ ★3z `RuntimeAdapter` 缺一组「向平台申报事实」的静态声明位（2026-09-08 审视结论）**
+>
+> 上面这份契约把**行为**抽象得很干净:平台调 adapter 的方法,不认识任何一个 CLI。
+> 但平台还需要知道关于这个 runtime 的**若干静态事实**,而契约里没有位置放它们——
+> 于是这些事实以**内置 CLI 的字面量**形式散在了平台代码的四个角落:
+>
+> | 缺的申报位 | 今天写死在哪 | 第三方撞上会怎样 |
+> |---|---|---|
+> | `authFileRelPath` | `credential-refresh.scanner.ts:100,104` = `'auth.json'` | 刷新静默失效(05 §5.1 ★5.1a ②) |
+> | `eligibleMethods`（哪些方法可刷新） | `credential.repository.impl.ts:73` = `'oauth-device'` | 声明被仓储过滤器否决(同上 ①) |
+> | `configDirEnvNames` | `host-auth-helper.ts:71` = `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | 登录时凭证落进**后端进程的真 HOME**,`dispose()` 的 `rm -rf` 清不到,并发登录还会串 |
+> | `reservedEnvNames` | `shared-kernel/domain/reserved-env.ts` 静态表 | 第三方的**重定向类**变量无保护(05 §4.1 ★4.1a) |
+> | `apiKeyPrefix` | 前端 `web/src/lib/credential/authFlow.ts:187` | 有效的 key 被标红——这是全仓**唯一**一处 `runtimeId === '<id>'` 字面量比较 |
+> | `connectivityTargets` | `connectivity.probe.ts:101,107` = 两家域名 | 只探 anthropic/openai;`offline` 判据是 `modelApis.every(!ok)`,第三方装机被一个它不用的端点判成离线 |
+> | `tokenRedactPatterns` | `log-redactor.ts` + `secret-redactor.ts` 两份复制 | 第三方 token 原样进日志(05 §7.1 ③b) |
+>
+> ⚠️ **这个模式在本仓已经被证明成立**——`credentialTtlMs`（本节上方）与
+> `refreshCapability` 就是两个现成的申报位,而且 `credentialTtlMs` 的注释**逐字**
+> 论证了「为什么这类事实必须归 adapter 而不是应用层」。只是它漏了上表这几项。
+>
+> ⛔ **其中 `reservedEnvNames` 是安全项**,不是整洁项:`provision-sandbox.workflow.ts:175`
+> 的 `{ ...image.env, ...credential.env }` 顺序只兜得住**凭证名**类,对**重定向名**类无效。
+>
+> ---
+>
+> **⛔ ★3y `parseOutput` 不实现 ⇒ 结构化输出全丢,而契约承诺的兜底没有生产者**
+>
+> 本节上方 `RuntimeEvent` 联合里有一个 `'stdout-chunk'`,契约注释写着它「is left for
+> what its name says — RAW bytes from a runtime with no structured mode」。
+>
+> ⏳ **但它在全仓有零个生产者（2026-09-08 复核）**。实际实现是:
+> ```ts
+> // sandbox/application/workflows/run-agent-task.workflow.ts:625
+> private parse(adapter: RuntimeAdapter, chunk: string): RuntimeEvent[] {
+>   if (!adapter.parseOutput) return [];      // ← 一个事件都不产出
+> ```
+> 前端**已经接好了**（`web/src/lib/task/taskStream.ts:206` 消费 `stdout-chunk`）,只差后端这一行。
+>
+> ⚠️ 精确说后果:**原始日志仍然照写**(那条路径不经 `parseOutput`),丢的是**结构化事件流**——
+> 所以现象是「日志里什么都有、任务输出面板全空」。
+>
+> 而且 `run-agent-task.workflow.ts:158` 无条件传 `outputFormat: 'json-stream'`:
+> 一个没有 JSON 模式的 CLI,`buildStartCommand` 只能忽略这个参数。
+>
+> **修法**:那一行改成把整块包成 `stdout-chunk` 返回,契约已经这么承诺了。
+
 ## 4. 统一错误模型
 
 ```typescript
@@ -828,6 +874,35 @@ class SandboxProviderError extends Error {
 // ImageSpecProvider：REGISTRY_UNREACHABLE / REF_NOT_FOUND / MANIFEST_INVALID
 //   / IMAGE_CONTRACT_VIOLATION —— 运行期实测发现镜像违反 §7 约定（当前唯一触发点：缺 tmux）
 ```
+
+> **⛔ ★4z 上面这套错误码,树外 adapter 今天拿不到——照着 testkit 写会得到 500（2026-09-08 复核）**
+>
+> 这是一个**闭合的陷阱**,三步走完你会得到一个真绿的测试和一个 500:
+>
+> | 步 | 发生什么 |
+> |---|---|
+> | 1 | testkit RA-03 的注释教你:「`contracts` defines no adapter error CLASS, so a plain Error is tolerated; but an error that DOES carry a code must carry the right one」⇒ **抛一个带 `code` 的普通 Error** |
+> | 2 | 你照做。RA-03 **真绿**（它用 `errorCodeOf(thrown)` 鸭子类型读 `code`） |
+> | 3 | 运行期 `runtime-application.service.ts:444` 的 `mapAdapterError` 用的是 **`e instanceof AdapterAuthError`** ⇒ 你的普通 Error 走 else 分支、原样上抛 ⇒ **500 INTERNAL** |
+>
+> 而 `AdapterAuthError` **既不在 `@platform/contracts`,也不在 `@platform/runtime` 的
+> `index.ts` 导出里**（那里只导出 4 样东西）。内置 adapter 因为同包内可以直接 import,
+> 所以走 switch 拿到 401/400/404;树外只能拿到 500。
+>
+> ⚠️ 用户看到的差别:填错 API Key 格式,内置 runtime 是「401 + 具体原因」,
+> 第三方 runtime 是「500 内部错误」。
+>
+> ⛔ **testkit 抓不到,因为 testkit 用的判定方式(鸭子类型)恰好是运行期没用的那种。**
+> 这是「测试与实现对同一件事用了两套判据」的典型形态。
+>
+> **修法（二选一,都很小）**:
+> - `mapAdapterError` 改**鸭子类型**判 `code`——与 testkit 的 `errorCodeOf` 对齐,一行;
+> - 或把 `AdapterAuthError` / `AdapterAuthErrorCode` 常量表**搬进 contracts** 并导出,
+>   让树外能 `instanceof`。
+>
+> ⚠️ 顺带:`AUTH_REJECTED` **不在** `SANDBOX_FAILURE_CODES`(`contracts/src/sandbox-failure-codes.ts`,
+> 只收了 `INSTALL_FAILED`)。codex `injectCredential` 写文件失败抛的 `AUTH_REJECTED`
+> 落到 provision 的失败分类里会变成 `INTERNAL`。**这条内置也一样**,不是扩展性问题。
 
 **分层映射原则**：infrastructure 抛 contract 层错误，只在 infrastructure→application 边界短暂穿越；application 统一 `mapProviderErrorToDomain()` 转为 domain 错误再上抛——**domain 层永不依赖 contract 包的错误类**（保持文档 01 的依赖方向纯净）。
 
@@ -1443,6 +1518,201 @@ install plan 现装只作兜底（**未预装不影响可选性**，见 ⑤）�
 
 ## 8. Registry 注册机制（双通道）
 
+> **★8a 加一个新 runtime 要花多少钱：默认是零，订阅捕获是特例（2026-09-08 调研补）**
+>
+> 一个反复被问的问题：「每加一个 runtime 都要接一条鉴权路径吗？」——**不。今天只有两个 runtime 走了那条贵的路，而且它不会变多。**
+>
+> **两档，成本差一个数量级：**
+>
+> | | 走什么 | 加一个新 runtime 的成本 |
+> |---|---|---|
+> | **BYOK（默认）**<br>`api-key`（⏳ `access-token-paste` 未接通，见 §8 ★8a 末） | `submitSecret` **短路直存** —— 不经 auth helper、不起 pty、不产生 challenge（05 §3.1） | 实现 `validateApiKey` + `createCredentialFromSecret` + `injectCredential`。**平台代码零改动**，`registry-extension.e2e-spec.ts` 里那个树外 `acme-agent` 就是这么接的 |
+> | **订阅捕获（特例）**<br>`setup-token` / `oauth-device` | auth helper + 真 pty + per-CLI 解析器（05 §3） | 贵。**只对「我们跑它自己官方 CLI，且厂商明示支持 headless token」的 runtime 开** |
+>
+> **为什么订阅捕获不该被抽象成通用能力 —— 两个独立的理由：**
+>
+> **① 各家正在自己关掉这条路**（2026 调研）。它不是在扩张，是在收窄：
+>
+> | Harness | 订阅/账号登录 | 拿凭证的方式 |
+> |---|---|---|
+> | Claude Code | ✅ | **只能跑 CLI**（`setup-token`）→ `CLAUDE_CODE_OAUTH_TOKEN` |
+> | Codex | ✅ | **只能跑 CLI**（`login --device-auth`）→ `CODEX_AUTH_JSON` |
+> | Gemini CLI | ❌ 2026-06-18 停掉免费 Sign-in 与 AI Pro/Ultra 登录 | 控制台 API key |
+> | Qwen Code | ❌ 2026-04-15 停掉 Qwen OAuth | API key / 阿里云 Coding Plan |
+> | Copilot CLI | 有订阅，但无头场景走 env（`COPILOT_GITHUB_TOKEN` 等，细粒度 PAT） | GitHub UI 建 PAT |
+> | opencode / pi | 无（或可选） | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env 或 `.env` |
+> | Kimi / GLM / MiniMax / DeepSeek | —— | Anthropic 兼容端点：`ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` |
+>
+> ⚠️ **区别不在登录形态，在有没有别的取 token 的办法**：Copilot 能在 GitHub UI 建 PAT、Gemini/Qwen 能在控制台建 key，**而 Claude / Codex 没有「生成 token」按钮，CLI 是唯一的铸币机**。那套 helper + 真 pty，本质上是替用户跑那台铸币机。
+>
+> **② 通用化会踩合规红线。** Anthropic 明文禁止第三方开发者 "offer Claude.ai login into their own applications"（05 §2 决策 A 合规边界，附原文）。把「订阅登录」做成一个**面向任意 runtime 的通用入口**，正是那条禁令描述的形状。⇒ 它必须留在 per-adapter 的 `beginAuth` / `completeAuth` 里，**不上升为平台能力**。
+>
+> **落到契约上，这条纪律已经被表达了：**
+>
+> - `RUNTIME_AUTH_METHODS` 是闭集（`oauth-device` / `setup-token` / `api-key` / `access-token-paste`）。它不是缺口，**它挡住的正是「给每个新 runtime 发明一种登录方式」这个冲动**。其中 3 种**在设计上**是 BYOK 形状，覆盖上表除 Claude/Codex 外的全部已知 harness ——
+>   ⏳ 但**今天真正能走通的只有 `api-key` 一种**，见下条。
+> - `access-token-paste` **设计上**是万能逃生口：让用户在自己机器上用官方方式登录、把产出的 token 贴进来。
+>   契约层已经支持 —— `createCredentialFromSecret(method: 'api-key' | 'access-token-paste', …)` 明确收两个值。
+>
+>   ⏳ **但这条路今天走不通，链路只接通了 `api-key` 那一半（2026-09-08 复核）。** 四处都要改：
+>
+>   | # | 位置 | 现状 |
+>   |---|---|---|
+>   | 1 | `runtime.schema.ts` `RuntimeDto.authMethods` | 类型是 `RuntimeBeginMethodSchema.or(z.literal('api-key'))`，**结构上表达不了这个值** |
+>   | 2 | `runtime-application.service.ts` `listRuntimes` | `.filter((m) => m !== 'access-token-paste')` —— **主动过滤掉** |
+>   | 3 | `SubmitSecretRequestSchema.method` | `z.literal('api-key')`，唯一的直存端点只收这一个 |
+>   | 4 | `runtime-application.service.ts` `submitSecret` | `createCredentialFromSecret('api-key', secret)` —— **硬编码第一个实参** |
+>
+>   ⚠️ 后果不是报错，是**静默**：`getAuthMethods()` 返回 `['access-token-paste']` 的 runtime，
+>   在 `GET /api/runtimes` 里 `authMethods: []`，前端渲染成「没有可用的配置方式」。
+>
+>   ⚠️ 而**谎报成 `api-key` 是错的绕法**：`obtained_via='api-key'` 会让 DB 派生出 `mode='api-key'`（13 §2.5.1 `credentials`.`mode`），
+>   于是用户的**账号凭证被放进 API Key 那张卡**，「帐号授权」卡永远空着，`setAuthMode('account')` 还会 409。
+> - `getAuthMethods()` 让 adapter 自己声明支持哪几种 ⇒ **平台不需要知道谁支持订阅**。
+>
+> ⏳ **一个已知的小缺口**：Kimi / GLM / DeepSeek 这类走 Anthropic 兼容端点的场景，需要 `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` **两个** env，而当前 `api-key` 路径只存一把 key、**没有地方放 base URL**。⚠️ 这**不是一个新 runtime**，是 `claude-code` 这个 runtime 的一个 provider 变体 —— 修法是凭证 payload 多带一个 base URL，比加一个 runtime 便宜得多。
+
+> **★8b 加一个 runtime：从哪下手（2026-09-08 补）**
+>
+> ⚠️ **本节只指路，不重述契约** —— 契约本身在 §3，而且**它是可执行的**（见第 2 步）。
+> 补这一节是因为：以上所有东西都在代码里，而一个新人无从知道它们存在。
+>
+> **四步：**
+>
+> | # | 做什么 | 在哪 |
+> |---|---|---|
+> | 1 | 实现 `RuntimeAdapter` | 契约见 §3。TypeScript 会逼你补齐必需成员；可选成员（`validateApiKey` / `createCredentialFromSecret` / `awaitSelfCompletion` / `refreshCapability`）**不实现 = 声明这个 runtime 没有那条能力**，不是偷懒 |
+> | 2 | **跑契约测试包自检** | `import { runRuntimeAdapterContractTests } from '@platform/contracts/testkit'`。活样板：`packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts` |
+> | 3 | `register(adapter)` 注册 | 见下方两种注册通道。重名 **fail fast**（第三方包影子掉 `codex` 必须在 boot 时炸，而不是悄悄接管它的登录） |
+> | 4 | 在 `getAuthMethods()` 里声明鉴权方式 | 只声明 `['api-key']` ⇒ 走 BYOK 短路，**平台零改动**（成本对照见 ★8a） |
+> | 5 | **在真沙箱里跑一次「授权 → 建任务 → agent 真干活」** | ⛔ 不可跳过。理由见本节末「验不到的那一半」——三条真机缺陷全是这么抓到的，testkit 一条都抓不到 |
+>
+> **树外样板**：`apps/api/test/e2e/registry-extension.e2e-spec.ts`。⚠️ 读之前先分清里面**两个**树外件：
+>
+> | 树外件 | 走到哪 | 状态 |
+> |---|---|---|
+> | `acme`（**provider**） | 注册 → `GET /api/providers` 列出 → `POST /api/sandboxes` 真建 → 能力协商 409 → 缺 `spawnTty` 被拒 | ✅ 全链路 |
+> | `acme-agent`（**runtime adapter**） | 注册 → `GET /api/runtimes` 列出（含自己声明的 authMethods）→ `credentials/secret` 存凭证（跑自己的校验、用自己的 TTL） | ⚠️ **只有鉴权半边** |
+>
+> ⏳ **`acme-agent` 的运行半边一次都没跑过（2026-09-08 复核）。** 那四处建沙箱用的都是
+> `runtime: 'claude-code'`，acme 只在 provider 位上出场；adapter 的运行半边摊的是
+> `test/_run-half.ts` 的 `runHalfStub`，五个方法**全是 `throw new Error('run-half not exercised')`**。
+>
+> ⇒ 也就是说：**注册 / 列表 / 鉴权 / 存凭证**这半边有活样板可抄；
+> **装 CLI / 起 agent / 出输出**那半边**没有**，而它恰好是坑最多的一半（见本节末「验不到的那一半」）。
+>
+> **而且 `acme` 是全代码库统一的「第三方」代号** —— `grep -rn acme --include='*.ts'` 一把捞出
+> 它在各子系统里的样子：registry 注册与重名、凭证 TTL、refresh 扫描、`submit-secret`、
+> 能力协商、provision、预制镜像自检。⚠️ **这些命中全部在 `test/` 下，`src/` 零处** ——
+> 也就是说平台源码里没有一行为第三方开的特判，第三方走的就是内置走的那条路。
+>
+> ---
+>
+> **⛔ 契约测试包不是可选的，它是验收标准。** 而且**内置 adapter 跑的是同一套**
+> （§10「无双重标准」）—— 平台不给自己开后门，所以你不会遇到「内置的能干而我不能」。
+>
+> 它逐条验 17 项，其中 **4 条是凭证安全红线**，全部与「明文绝不出现在它不该出现的地方」有关：
+>
+> | 条 | 它挡住的事 |
+> |---|---|
+> | **RA-14** | `injectCredential()` 把凭证明文写进 argv —— 沙箱里 `ps` 就能读到（§2.3★ 第 2 条） |
+> | **RA-15** | 交给 `exec` 的**任何一个字节**里出现真 `refresh_token` |
+> | **RA-16** | 注入的 auth 文件丢掉 `refresh_token` 字段，或值不是占位符 |
+> | **RA-17** | 凭证记录里带着完整 authFile 时，注入侧顺手把它一起漏出去 |
+>
+> ⚠️ **它会明说自己「因为你没给料所以没验」**，而不是假装通过：
+>
+> ```
+> RA-14 (MUST) SKIPPED — no injectable credential fixture supplied
+>                        (pass opts.injectionCases or opts.validApiKeySample)
+> RA-15 / RA-16 (MUST) SKIPPED — no injection case declares `platformOnly`
+>                        (the real refresh_token this adapter must never inject)
+> ```
+>
+> ⇒ **看到 SKIPPED 就当作没验过**。它挡的正是「测试全绿但其实什么都没测」那种假绿。
+>
+> ⚠️ 但要分清两种 SKIPPED —— testkit 里的标题自己写明了是哪一种：
+>
+> - `(MUST)` SKIPPED ⇒ **你漏给料了**，这条红线现在没人守（如上面 RA-14 / RA-15 / RA-16 / RA-17）
+> - `(MUST when declared)` SKIPPED ⇒ **你没声明这条能力，所以本来就不该验**（RA-11 没有 `validateApiKey`、
+>   RA-12 没有 `credentialTtlMs`、RA-13 没有 `refreshCapability`）—— 这是正常的，不是缺口
+>
+> ⇒ 这正是第 1 步说的「不实现 = 声明这个 runtime 没有那条能力」在测试侧的对应物：
+> **可选成员不是「以后再补」，是一个会被验收流程读到的声明。**
+>
+> ⚠️ 而 `builtin-adapters.contract.spec.ts` 里还有一条值得照抄的手法：注入用的 fixture
+> 是**从 adapter 自己的 `parseRefreshedAuth` 推导出来的**，不是手写一份「已经干净的」文件。
+> 区别在于——手写的话，adapter 的**净化器**哪天坏了这条测试照样绿；推导的话它会红。
+>
+> ---
+>
+> **⛔ 契约测试包验不到的那一半：真机行为。** 它是 CLI-free、network-free 的纯契约检查，
+> 所以下面这类**只在真沙箱里才暴露**的东西，它一条都抓不到（每一条都是 2026-09 真机踩出来的）：
+>
+> - 登录 CLI **检测 TTY**，非 TTY 时一个字节都不输出（05 §3）
+> - 沙箱里是 root，claude 因此拒绝 `--dangerously-skip-permissions`（§3 ★2a）
+> - 镜像没有 UTF-8 locale 时，tmux 把 agent 界面里的非 ASCII **逐个换成 `_`**（§3 ★2b）
+>
+> ⇒ **跑绿 testkit 只说明契约面对了，不等于能用。** 新 runtime 接完必须在真沙箱里跑一次
+> 「授权 → 建任务 → agent 真干活」，那三条正是这么被抓到的。
+>
+> ---
+>
+> **⛔ 已知会撞的墙（2026-09-08 全链路审视,每条都复核过 `file:line`）**
+>
+> ⚠️ 下面这些**不是**「契约没写清楚」,而是**平台侧今天只对内置形状有效**。
+> 共同点:**全部静默**——不报错、不留日志,你会在上线后才发现。
+>
+> | 你做的事 | 会发生什么 | 详情 |
+> |---|---|---|
+> | 实现 `refreshCapability` | 永远「刷新成功」,永远同一个过期 token | [05 §5.1 ★5.1a](../backend/05-Runtime鉴权流转.md) |
+> | 抛错(照 testkit RA-03 教的写法) | 用户看到 **500**,内置同样的错是 401 | §4 ★4z |
+> | 不实现 `parseOutput` | 日志里什么都有,**任务输出面板全空** | §3 ★3y |
+> | `getAuthMethods()` 返回 `['access-token-paste']` | `GET /api/runtimes` 里 `authMethods: []`,前端显示「没有可用的配置方式」 | §8 ★8a 末 |
+> | 你的 CLI 认 `$ACME_CONFIG_DIR` 而非 `$HOME` | 登录凭证落进**后端进程的真 HOME**,临时目录 `rm -rf` 清不到,并发登录互串 | §3 ★3z |
+> | 你的凭证 env 名不叫 `ANTHROPIC_*`/`OPENAI_*`/`CODEX_*` | 用户能在项目 env 里覆盖它;**重定向类**变量没有任何兜底 | §3 ★3z · [05 §4.1 ★4.1a](../backend/05-Runtime鉴权流转.md) |
+> | 你的 token 前缀不是 `sk-`/`sk-ant-` | 前端给有效的 key 标红 | §3 ★3z |
+> | 你的 token 出现在日志里 | **不被任何一份脱敏表遮蔽** | §3 ★3z |
+> | 你的会话 id 不是 UUID/ULID | **没有多轮对话**(`SESSION_REF_RE`,`task.schema.ts:60`) | 见下 |
+> | `getInstallPlan` 返回 `'sidecar-inject'` | 被**当成 `preinstalled`** 处理(`orchestrator:98` 判的是 `!== 'install-on-start'`),报错文案还会说「declares X as sidecar-inject, but it is not present」 | 见下 |
+>
+> ⚠️ **`SESSION_REF_RE` 那条的安全理由完全成立**(`resumeFrom` 作为位置参数进 argv,
+> clap 会把 `-` 开头的 token 读成选项,`-cmodel_provider.base_url=...` 就能把注入的密钥
+> 发去攻击者端点)。**但用「必须是 UUID/ULID」来实现「不能以 `-` 开头」是过窄的**——
+> 合理的形状是 `^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`,或让 adapter 声明自己的 pattern。
+>
+> ⚠️ 另有两处**闭集里躺着内置专属值**:`TaskExtraArgSchema = z.enum(['--verbose'])`
+> (`task.schema.ts:45`,claude 专属 flag,你的白名单参数进不来);
+> `sidecar-inject` 在 `strategy` 闭集里但没有实现路径。
+>
+> ⏳ 还有两处**「产出了但没人消费」**:`estimatedInstallSec`(你测出来的数字全仓零读者,
+> 前端那句 12.5 分钟是硬编码文案);`stdout-chunk`(前端接好了,后端零生产者,见 ★3y)。
+>
+> ---
+>
+> **⏳ 可复用件今天拿不到。** adapter 真正需要的那几样都在
+> `runtime/src/infrastructure/adapters/` 下,而 `packages/modules/runtime/src/index.ts`
+> **一个都不导出**:
+>
+> | 文件 | 它解决的问题 | 自己重写的风险 |
+> |---|---|---|
+> | `install-plan.util.ts` | 组装 plan + `imagePreinstalls` | 低 |
+> | `home-probe.util.ts` | 现探沙箱 HOME 不缓存 | 中(诱人硬编码 `/home/gem`) |
+> | `pty-reader.util.ts` | 读 pty 到某个 pattern | 中 |
+> | `session-ref.util.ts` | `--` 终止符 + 二次断言 | **高(安全)** |
+> | `ansi.util.ts` | 去 ANSI | 低 |
+> | `codex.adapter.ts` 里的 `WRITE_FILE_SCRIPT` | `umask 077` + stdin + chmod 写 0600 文件 | ⛔ **最高(安全)** ——RA-14/15/16 能抓「明文进了 argv」,抓不到「忘了 `umask 077`,文件在 `chmod` 之前短暂 world-readable」 |
+>
+> ⏳ 且 `@platform/contracts` 目前是 `private: true`(§9)——**今天「树外开发者」这个角色
+> 严格说还不存在**,加 runtime 仍需在 monorepo 里干活。★8b 里说的「平台代码零改动」
+> 成立于「不改平台代码」,不成立于「不用 clone 平台仓」。
+>
+> ⏳ `RA-04`(golden fixtures)是 testkit 的**名义条款但不在 testkit 里**:
+> `testkit/fixtures/` 下只有一份写着 "placeholder / No real fixtures are recorded yet"
+> 的 `CLI-VERSION-MATRIX.md`,真 fixture 在 `runtime/test/fixtures/cli-output/` 树外拿不到,
+> 也没有可复用的 runner。⚠️ 而解析器是文件自己说的「the single most fragile point in
+> the system」——**它唯一的防线,恰好是唯一没有 testkit 支持的部分。**
+
 ### 方式一（主）：DI Token + 动态模块
 
 ```typescript
@@ -1614,6 +1884,9 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 | **RA-17** | MUST | **`authFile` 非空时仍不泄漏**：用一条「凭证确实带着完整 auth.json 存在库里」的用例跑 RA-15/RA-16 | 构造带真 `authFile` 的凭证记录 → 走完整 `prepareRuntimeCredential → injectCredential` 路径 → 断言 RA-15/16 仍然通过。**这一条专门盯「分支漏改」**：注入与刷新此前共用同一个对象，只要有一个分支忘了脱敏就泄漏（裁决 D-18 用类型分家把它变成编译期问题，本条是运行期复核） |
 | **RA-14** | MUST | **密钥禁进 argv**：`injectCredential()` 构造的任何命令行都不得含凭证明文 | 用假 `SandboxExecFn` 捕获全部 argv，断言不含任何给定密钥片段（契约纪律来自 05 §4/§7 #3——`/proc/<pid>/cmdline` 在沙箱内可读，进了 argv 就是泄漏）。**只查 argv，不查 env**：api-key 形态本来就走 env 在沙箱启动时注入（05 §4.1 ④），查 env 会把合法通道判成违规 |
 
+| **RA-18** ⏳ | MUST（声明了 `refreshCapability`） | `parseRefreshedAuth(<不是本 runtime 格式的内容>)` **必须抛**，不许静默返回一个看起来合理的对象 | 喂 `''` / `'{}'` / 一段别的 runtime 的 auth 文件，断言 throw。⛔ **这条盯的是 05 §5.1 ★5.1a ② 那个静默循环**：平台今天会把**自己刚写进去的那份文件**读回来喂给它，一个宽松的解析器会返回「成功」，于是永远「刷新成功」、永远同一个过期 token。**纯逻辑，零 CLI** |
+| **RA-19** ⏳ | MUST（声明了 `refreshCapability`） | 必须同时在 `credentialTtlMs` 里为**至少一个** account 类方法给出 TTL | 断言 `credentialTtlMs` 存在且与 `refreshCapability` 的 `eligibleMethods` 有交集。⛔ 盯的是 ★5.1a ③：不给 TTL 时刷新路径会盖上 codex 的一小时。**纯逻辑，零 CLI** |
+
 > **已落地的条款**：**RA-03、RA-08 ~ RA-14**——全部零 CLI、零网络，`codex` / `claude-code` 两个真实内建 adapter 无条件跑（`packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts`）。
 >
 > **与上表的差异**：
@@ -1624,7 +1897,15 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 > - **RA-07**：`buildStartCommand` / `buildAttachCommand` 同样还不在 S4 契约里；其"非空 argv + 纯函数"的判定纪律已由 **RA-10** 用在 `loginCommand` 上。
 > - **RA-15 / RA-16 / RA-17（S5 新增）**：要等契约层的类型拆分（`InjectableRuntimeCredential` / `RefreshableRuntimeCredential`）与 shared-kernel 占位常量落地后才能写；三条都是**零 CLI、零网络**（假 `exec` 即可），落地后进无条件跑的那一组。落点见 25 §3.4 / §4.3。
 > - **RA-06 的判据已随 D-19 改写**（上表），实现时注意别照抄旧的"绝对路径"断言。
+> - **RA-18 / RA-19（2026-09-08 新增，⏳ 未实现）**：两条都是**纯逻辑、零 CLI、零网络**，
+>   落地成本极低。它们补的是 RA-13 的盲区——RA-13 只做结构断言（`probeCommand` 非空 +
+>   `parseRefreshedAuth` 是函数），所以 05 §5.1 ★5.1a 那三条 codex 专用常量导致的静默失效
+>   **三条全绿**。⚠️ **这是「真绿的假绿」，比 SKIPPED 更隐蔽**：SKIPPED 至少会明说自己没验。
 > - **RA-03 的判定放宽**：`contracts` 里没有 adapter 错误**类**（`AdapterAuthError` 在 runtime 的 domain 层，第三方拿不到），所以断言是"必须 reject；若错误对象带 `code`，则必须是 `UNSUPPORTED_METHOD`"——裸 `Error` 容忍，错的 `code` 不容忍。
+>   ⛔ **但这条放宽今天有一个未被记录的后果**：运行期 `mapAdapterError` 用的是
+>   `instanceof AdapterAuthError`，所以**照本条教的写法（带 `code` 的裸 Error）抛出的错，
+>   到了用户那里是 500**，而内置同样的错是 401。testkit 用鸭子类型判、运行期用 `instanceof` 判——
+>   **同一件事两套判据**。详见 §4 ★4z。
 
 ### 10.4 ImageSpecProvider 条款
 

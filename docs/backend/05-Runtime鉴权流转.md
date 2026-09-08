@@ -60,6 +60,36 @@
 
 **创建流程的阶段序列因此固定为**：初始化 → 拉镜像 → 准备工作区 → 启动实例（凭证注入发生在此，用户无感）→ 连接终端（P20 §3.3）。**没有"等待登录"阶段**——任何在创建链路里等待鉴权的实现都是对本决策的违反。
 
+**决策 A 的合规边界（2026-09-08 查一手条款补）。** 上面论证的是**技术可行**，这一段是**允许不允许**——两件事，此前只写了前者。
+
+⚠️ **先更正一条广为流传的说法。** 网上（含多家媒体，2026-02）说「Anthropic 禁止订阅用于第三方」。查一手：[Consumer Terms](https://www.anthropic.com/legal/consumer-terms)（末次更新 2025-10-08）**全文没有 OAuth / token / harness 字样**，只有一句通用的「不得共享账号凭证」。真正的条文在 **Claude Code 自己的 [Legal and compliance](https://code.claude.com/docs/en/legal-and-compliance) 页**，而它说的与那句流传的话**不是一回事**。
+
+**它禁的是什么（原文）：**
+
+> Anthropic does not permit third-party developers to **offer Claude.ai login into their own applications**, or to **route requests through Free, Pro, or Max plan credentials on behalf of their users**. Moreover, developers may not **collect, store, or intermediate Claude.ai credentials or session tokens** — sign-in to a Claude account must complete through Anthropic's own flow.
+
+**它明确允许的是什么（原文）：** 同一页有一整节 *Can customers offer Claude Code in their products?*，**点名了我们这种形态**（"e.g. in hosted sandboxes or other agent infrastructure"），并且鉴权那节收尾处写着：
+
+> Nor does it prevent **an end user from signing in to the unmodified Claude Code binary with their own Claude subscription**, including where **a platform hosts Claude Code** as described under *Can customers offer Claude Code in their products?* above.
+
+⇒ **平台承载 Claude Code、用户用自己的订阅登录，是被明写允许的。** 但附三条硬条件，每一条都对本设计有约束：
+
+| 条件（原文要点） | 对本平台的约束 |
+|---|---|
+| **二进制不许改**，且不许移除/禁用它内置的任何鉴权方式 | ⇒ 只能原样安装官方版；⛔ 不许为了「简化」去裁剪登录方式，也不许包一层自己的登录入口 |
+| **不得代付、转售或中介**用户的 Claude 用量；每个终端用户用**自己的**凭证，账单直接记在他名下 | ⇒ 与单机私有化部署天然一致；⛔ 但这条封死了「平台买一个 Max 账号给所有用户共用」这类形态 |
+| **不得 collect / store / intermediate** Claude.ai 凭证或 session token；登录必须在 Anthropic 自己的流程里完成 | ⚠️ **本设计与这条有张力，见下** |
+
+⚠️⚠️ **一个尚未定论的问题，别当它已经解决：第三条与「凭证入 Vault」的张力。**
+
+有利的一面：登录**全程在 Anthropic 自己的流程里**（用户在自己浏览器上对着 claude.com 授权，平台既没做登录页也没碰密码，决策 B 说的就是这件事）；我们存的是 `claude setup-token` 的产物，而[官方文档](https://code.claude.com/docs/en/authentication)明写它就是给 CI/脚本用的（"For CI pipelines, scripts, or other environments where interactive browser login isn't available"），用法正是设成 `CLAUDE_CODE_OAUTH_TOKEN`。同一页还允许把凭证放进 "a development environment, secrets manager, or machine image"。
+
+不利的一面：那句豁免的措辞是 **"their own API keys or third-party inference provider credentials"** —— **没把 subscription credential 列进去**；而 "may not collect, store, or intermediate" 那句**没有例外从句**。
+
+⇒ **这是法务判断，不是技术判断**，本文档不替它下结论。留一个已知的、更保守的替代形态备查：**平台不代存 token，改由用户在沙箱里自己跑一次登录**（凭证落在他那个沙箱的 HOME，平台全程不经手）。代价正是决策 A 当初为体验否掉的那个——每个新沙箱都要重登一次。
+
+⚠️ **Codex 侧未做同等核查。** 本节只查了 Anthropic。OpenAI 对「用 ChatGPT 订阅跑 Codex CLI」有没有对应条款，**尚未查证**，不要假设与 Anthropic 同构。
+
 **决策 B：后端不代理 OAuth、不接触用户密码。** 帐号授权的登录命令跑在 auth helper 的 pty 里；后端只做三件事：
 1. 从 pty 输出**捕获** AuthChallenge（URL / device-code）；
 2. 转发给前端展示，用户在**自己的浏览器**完成真正授权（不经过我们的服务器）；
@@ -247,6 +277,41 @@ CredentialVault 加密落库（obtained_via='api-key'）──▶ 返回掩码�
 
 黑名单以**常量表**形式与 RuntimeAdapter 声明的凭证变量名对账：新增 adapter 时若其 `RuntimeCredential` 用到新的 env 名，CI 断言该名已在黑名单内（防"新 runtime 上线后凭证名可被明文覆盖"）。**判据（P1-2 扩展）**：黑名单不止拦"凭证变量名"，而是**凡能改变凭证注入目标路径或 CLI 凭证查找位置的变量**（如 `CLAUDE_CONFIG_DIR`、`CODEX_HOME`、`HOME`）——它们不含凭证却能把 CLI 指向攻击者可控的凭证目录。CI 对账清单**显式列这一类**（重定向类），与凭证名类并列断言。
 
+> **⛔ ★4.1a 上面这段承诺的 CI 对账是同义反复的,而且前后端两份清单已经漂移（2026-09-08 复核）**
+>
+> **① 那条 CI 断言不会因为「新增 adapter」而红。** 实现是:
+> ```ts
+> // contracts/test/unit/reserved-env.spec.ts:19-23
+> for (const name of RUNTIME_CREDENTIAL_ENV_NAMES) expect(isReservedEnvName(name)).toBe(true);
+> ```
+> 它断言的是「硬编码表 A 被硬编码表 B 覆盖」。**没有任何东西枚举 adapter** ——
+> `RuntimeCredential.env` 是运行期值不是静态声明,所以第三方 adapter 用 `ACME_API_KEY`
+> 注入时,这条测试一次都不会红。上面那句「新增 adapter 时 CI 断言该名已在黑名单内」
+> **描述的是意图,不是现状**。
+>
+> 后果分两类:
+> - **凭证名类**（`ACME_API_KEY`）:`provision-sandbox.workflow.ts:175` 的
+>   `{ ...image.env, ...credential.env }` 顺序还兜得住——凭证最后写,仍然赢
+> - ⛔ **重定向类**（`ACME_CONFIG_DIR`）:**没有任何兜底**。用户在项目 env 里把它指向
+>   工作区内一个 agent 自己可写的目录,就是本节 P1-2 描述的那条攻击原样复现
+>
+> **② 前端那份清单缺 `CLAUDE_CONFIG_DIR`,而它恰好是 P1-2 的主角。** 实测:
+>
+> | 变量名 | `web/src/lib/image/validateEnvVar.ts` | 后端 `shared-kernel/domain/reserved-env.ts` |
+> |---|---|---|
+> | `CLAUDE_CONFIG_DIR` | **放行** | 拦 |
+> | `CODEX_HOME` | 拦（`CODEX_` 前缀） | 拦（同） |
+> | `ACME_CONFIG_DIR`（第三方） | 放行 | 放行 |
+>
+> ⚠️ 前端那个文件的注释**自己写着**它存在的理由是防「前端说 OK、后端换个说法拒绝」,
+> 还写着「技术 05 §4.1 为唯一权威」——然后抄漏了这一项。用户会先看到绿色通过、
+> 提交时被后端拒绝。
+>
+> **修法**:① 给 `RuntimeAdapter` 加 `reservedEnvNames?: { credential: string[]; redirect: string[] }`,
+> 让 `reserved-env.ts` **组合** registry 里每个 adapter 的申报而不是维护静态表,
+> 那条 CI 对账改成遍历 `registry.list()` ——它才第一次真的能红;
+> ② 前端不再手抄,改从生成的类型/接口取(或至少补上 `CLAUDE_CONFIG_DIR` 并加一条前后端对账测试)。
+
 `secret: true` 的值字段级加密存储、响应永远掩码（13 §2 image_manifests），materialize 时才解密进合并引擎——**解密后的 secret 值与凭证一样只在内存流转，不写日志**。
 
 ### 4.2 Vault master key 的生成 / 存放 / 轮换 / 备份（审计 P1-11）
@@ -355,6 +420,45 @@ P/scheduler/timers.ts#every(15min)
 - API key 类凭证无过期，同样不参与。
 - **并发去重（加固 P2-1）**：刷新 scanner 加**进程内单例锁**（mutex），且**per-credential in-flight 去重**——手动触发（重授权/管理动作）与定时扫描**共用同一把锁与 in-flight 集合**，避免同一凭证被并发刷新产生 token 写回竞态（呼应 §5.1 方案 A 拒绝方案 B 的同一理由）。
 - **每次隔离（P1-3）**：见上方流程——每个待刷凭证用 `mkdtemp` 独立 HOME，`finally` 必删；刷新 scanner 与交互登录用彼此隔离的临时根。
+
+> **⏳ ★5.1a 刷新链路目前是 Codex 专用形状，第三方 runtime 声明 `refreshCapability` 会静默失效（2026-09-08 复核）**
+>
+> ⚠️ 这不是「还没做」，是**做了但只对一种形状有效**,而失败方式是**静默**——不报错、
+> 不留日志,凭证表里还会多出一条看起来很正常的「已刷新」记录。
+>
+> 契约面上 `RuntimeRefreshCapability`（04 §3）很干净:只有 `probeCommand` +
+> `parseRefreshedAuth(raw)`,scanner 里也确实**没有** `runtimeId === 'codex'` 分支
+> （`credential-refresh.scanner.ts:87` 的注释就是这么写的）。但 Codex 的三个常量被
+> **下推**到了三个 adapter 看不见的地方:
+>
+> | # | 位置 | 写死了什么 | 第三方撞上会怎样 |
+> |---|---|---|---|
+> | ① | `credential.repository.impl.ts:73` | `c.obtainedVia === 'oauth-device'` | 凭证经 `setup-token` / `access-token-paste` 得来 ⇒ **`listRefreshDue` 根本不把它交给 scanner**。adapter 的声明被一个它看不见的仓储过滤器否决 |
+> | ② | `credential-refresh.scanner.ts:100,104` | 认证文件名 `auth.json` | 平台把文件写到 CLI 不认识的路径 → probe 以**未登录**状态跑 → 平台读回**自己刚写进去的那份** → `parseRefreshedAuth` 解析成功 → 存一条值完全相同的「新」凭证。**永远刷新成功,永远是同一个过期 token** |
+> | ③ | `credential-refresh.scanner.ts:17` | `REFRESHED_ACCESS_TTL_MS = 1h` | 注释自己写着 "codex-class hourly default"。第三方的 token 不管真实寿命多长,一律被盖上 Codex 的一小时 |
+>
+> ⛔ **③ 尤其讽刺**:04 §3 `credentialTtlMs` 的契约注释**逐字**论证了不能这么干——
+> 「keying it off the METHOD alone would hand every third-party runtime that happens to
+> use `oauth-device` the Codex hour」。**登录路径按契约从 adapter 取,刷新路径没跟上。**
+> 同一个错误,一条路径修了,另一条留着。
+>
+> ⚠️ **testkit 抓不到**:RA-13 只断言 `probeCommand` 非空 + `parseRefreshedAuth` 是函数,
+> 三条全绿。这是「真绿的假绿」,比 SKIPPED 更隐蔽。
+>
+> **修法**（两个字段 + 一处取值,均无破坏性）:
+>
+> ```
+> RuntimeRefreshCapability 加:
+>   authFileRelPath: string                  → 替掉 scanner:100,104 的 'auth.json'
+>   eligibleMethods: RuntimeAuthMethod[]     → 替掉 repository.impl.ts:73 的 'oauth-device'
+> scanner:114 改读 adapter.credentialTtlMs[cred.obtainedVia] ?? 现有常量
+> testkit 补 RA-18/RA-19（纯逻辑,不需要真 CLI）:
+>   RA-18  parseRefreshedAuth(<非本格式内容>) 必须抛,不许静默返回
+>          ——今天平台把自己写的文件读回来喂给它,宽松解析器会返回「成功」
+>   RA-19  声明了 refreshCapability ⇒ credentialTtlMs 必须为至少一个 account 类方法给出 TTL
+> ```
+>
+> ⚠️ **在修好之前,「第三方可以实现凭证刷新」这句话在本文档中不成立。**
 - 落点：01 目录树 `credential/infrastructure/refresh/`、26 §11 定时任务表、13 §2.5.1 `credentials.expires_at` 语义、25 §3.4 新增用例。
 
 ## 6. 风险与备选
@@ -389,7 +493,25 @@ P/scheduler/timers.ts#every(15min)
 
 **边界纪律**：runtime 凭证 materialize **注入 sandbox**（写文件/env），git 凭证**只在平台进程内、绝不注入 sandbox**（§3.2）——两条管道共用 Vault/表/门面，但物化出口不同。这也是 `credential_sandbox_bindings` 只服务 runtime、对 git 写零行的原因（13 §2.5.2 I3）。
 
-### 7.1 S4 交付边界 vs 后续 slice（验收者须知：以下三处是"设计就绪、非本 slice 可用"，勿当已上线功能）
+### 7.1 S4 交付边界 vs 后续 slice
+
+> **⚠️ 本节已于 2026-09-08 逐条复核并更新。** 原先三条「设计就绪、非本 slice 可用」中,
+> **两条半已经落地**——继续按旧文验收会把已经能用的功能当成不可用。下表是复核结果,
+> 每条都给了判据位置,复核方式是读调用方而不是读声明。
+
+| 原条目 | 2026-09-08 实际状态 | 判据 |
+|---|---|---|
+| ① pty helper 未落地 | ✅ **已落地** | `host-auth-helper.ts` 已改用 `@lydell/node-pty` 真 PTY;实测 `claude setup-token` 走管道 0 字节、走真 PTY **3654 字节 + 5 个 OSC-8** |
+| ② 注入门面零真实调用方 | ✅ **已接线** | `provision-sandbox.workflow.ts:451` `prepareRuntimeCredential` / `:513` `recordRuntimeInjection` |
+| ③a reserved-env 黑名单未接线 | ✅ **已接线** | `image/domain/value-objects/env-var-set.vo.ts:79` 调 `isReservedEnvName` |
+| ③b secret-redactor 未接线 | ⏳ **仍未接线,且已分裂成两份** | `runtime/domain/services/secret-redactor.ts` 的 `redactClaude`/`redactCodex` **只被测试引用**;热路径上跑的是 `apps/api/src/platform/logging/log-redactor.ts` 那份**复制**(它自己的文件头承认是复制,靠一条对账测试同步) |
+
+⛔ **③b 的扩展性后果**:两份脱敏表都硬编码 `sk-ant-oat01-` / `sk-ant-` / `sk-`,
+**第三方 runtime 的 token 形状不被任何一份遮蔽**——它会原样进日志。这条与下面 §5.1 的
+缺口同源,见 04 §3「adapter 申报位」。
+
+<details>
+<summary>原文存档（S4 验收时的三条边界，2026-08 写下）</summary>
 
 本 slice（S4 runtime 鉴权）交付的是 **登录 → 收编凭证 → 存 Vault → 模式开关 → 吊销联动 → 刷新 scanner** 的闭环骨架。以下三块**代码/表结构已就位但尚未接线到真实运行时数据流**，验收时不应把它们当"端到端可用"：
 
@@ -398,3 +520,5 @@ P/scheduler/timers.ts#every(15min)
 2. **注入门面与 `credential_sandbox_bindings` 记账当前零真实调用方**。`CREDENTIAL_FACADE.prepareRuntimeCredential` / `injectCredential` / `recordRuntimeInjection` 三个方法 + `credential_sandbox_bindings` 表都已实现且单测覆盖，但**真正的 sandbox exec 注入接线属 S5 provision slice**（provision 起容器后 `prepare → inject → record` 三步接入——**这句「起容器后」是对的，而 24 §1 / 26 §1 此前画成了「先注入再 start」，S5 已按本句更正**；接线的确切位置是 03 §4.3 的第 ④ 步）。本 slice 特意**留了干净接线点**（application 层 hook 注释已标，见 `sandbox-application.service` provision 路径与 `credential-revoked.handler`），**不是半接线的坏态**——`recordRuntimeInjection` 未被调用 ⇒ 台账当前为空 ⇒ 吊销联动当前遍历零 binding（符合预期，非 bug）。吊销联动逻辑本身（超时兜底 + 强制销毁 + 失败保留重试）已完整实现并单测，S5 接线后即自动生效。
 
 3. **secret-redactor 与 reserved-env 黑名单"定义好但未接线"**。日志/transcript 脱敏器（§4 per-CLI 两套）与镜像 env 保留名黑名单（§4.1）的**常量定义与判定函数已就位**，但**接入点在 transcript 落库 / env-merge 切片**——那两条链路本 slice 未交付，故这两套定义**当前不在任何热路径上生效**。验收者勿据"黑名单已存在"推断"env 覆盖已被拦截"——本 slice 的安全性来自 §4.1"凭证最后写入永远赢"的**顺序保证**，黑名单是后续切片的体验层前置提示。
+
+</details>
