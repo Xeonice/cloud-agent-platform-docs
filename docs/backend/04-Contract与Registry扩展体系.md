@@ -680,6 +680,43 @@ interface RuntimeAdapter {
 >
 > ⚠️ 镜像侧还要**构建期自证** `C.UTF-8` 真的存在，否则基础镜像哪天不带它了，发出去的是
 > 一张「跑起来但字符是 `_`」的镜像 —— 那种只有用户会发现。
+
+> **★2c 每个 tmux 入口还要前置 `set -g mouse on`，否则滚轮变成往 agent 灌方向键（2026-09-08 实测）**
+>
+> 与 ★2b 同源的一条：`-u` 决定**怎么渲染**，`mouse` 决定**滚轮落到谁身上**，两条都只能由平台侧
+> 的 argv 给保证（用户自带镜像里没有我们的 `~/.tmux.conf`）。
+>
+> 症状是「codex 里滚轮完全没反应，claude code 却能滚」。**两个 CLI 的差别是巧合**，真因逐层实测：
+>
+> | 层 | 实测到的事实 |
+> |---|---|
+> | ① `tmux attach` | 把客户端（xterm.js）切进**备用屏** —— 抓到 `ESC[?1049h`，**两个 CLI 都有**（tmux 发的，不是应用发的） |
+> | ② 备用屏里 | 没有回滚缓冲，xterm.js 于是把滚轮**翻译成方向键**：一格 = `ESC[A` × 17 |
+> | ③ 那串方向键 | **原样进了 pane 里的 agent**。claude 的 TUI 把 Up/Down 当滚动自己的记录 ⇒「看起来能滚」；codex 不这么映射 ⇒「完全没反应」 |
+>
+> ⚠️ **所以这不是个体验问题**：每次滚轮都在往 agent 里灌 17 个按键，在别的 TUI 上足以移动选中项
+> 或翻历史 —— **比没反应更糟**。
+>
+> ⇒ 开 `mouse` 之后，镜像里 tmux 3.3a 的默认绑定是：
+>
+> ```
+> WheelUpPane if-shell "#{||:#{pane_in_mode},#{mouse_any_flag}}" {send-keys -M} {copy-mode -e}
+> ```
+>
+> 判据是「已在某个 mode **或**应用自己要了鼠标」，**与备用屏无关** —— 应用没要鼠标就 `copy-mode -e`
+> 滚 tmux 自己的回滚缓冲（两个 CLI 都管用），要了就转发给它（也对）。
+>
+> ⚠️ **`attach` 那条不能省，理由和 `-u` 的「四个入口」不一样**：`mouse` 是 **server 端的会话内状态、
+> 且只在设的那一刻生效**。只在建会话时设，**改动之前就已经起着的会话永远拿不到** —— 真机复现过
+> （三个 running 沙箱全是 `mouse off`，是逐个 `exec` 补上的）。attach 前置一次 = 每次开终端都补一遍。
+>
+> ⚠️ **必须前置**：`attach` 与 `new-session -A` 都是**前台阻塞**命令，写在它们后面的 `set` 要等其退出
+> 才轮得到执行，等于没设。（`has-session` 是唯一**不加** `MOUSE_ON` 的入口 —— 它的载荷是退出码。）
+>
+> ⚠️ **tmux 3.3a 没有 `alternate-scroll` 选项**（实测 `invalid option`），别照老文章设。
+>
+> ⚠️ **代价**：开鼠标后拖拽选择被 tmux 接管，不再是浏览器原生选区，出路是**按住 Shift 拖拽** ——
+> 这条要落到用户可见文案里（前端侧完整链路见 08 §7.5）。
 >
 > **会话 id 从哪来：走事件，不另开门。** 实测两个 CLI **都在第一个输出事件里**就吐出了自己的会话 id——codex 是 `thread.started.thread_id`，claude 是 `system/init.session_id`。它天生就是个事件，那就走 `parseOutput` 这一个既有出口，因此新增 `RuntimeEventType` 成员 `'session-started'`，而不是给 adapter 单开一个 `sessionRefOf()` 方法。
 >

@@ -72,6 +72,7 @@ node-pty 仅在未来"本地进程 provider"场景才需要（node-gyp 原生编
 - **`socketSessionKey` 由服务端生成（审计 P2-9）**：开会话时服务端产出 128 bit 随机串随首帧下发，前端只负责持久化并在重连时带回。**不能让前端自选**——它是重连凭据，前端自选意味着猜到或拿到别人的 key 就能 attach 到别人的终端（本平台没有用户体系，这是唯一的会话归属凭据）。同时校验：重连请求携带的 key 必须属于**未 closed** 的会话，且该 sandbox 未销毁。
 - **命名边界（审计 P1-5 的延伸裁决）**：**DB 列是 `socket_session_key`（snake），对外的 URL query 参数与 TS 字段是 `socketSessionKey`（camel）**，映射在 gateway 层完成——与全局约定一致（对外一律 camelCase，DB 一律 snake_case，02 §5.1）。看到两种写法**不是漏改**：query 参数属对外契约、列名属存储。
 - **scrollback 的权威是沙箱内的 tmux**：re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（前端侧说明见 08 §5.2）。网关不再持有任何 scrollback 副本。
+- **⚠️ 那份 scrollback 用户滚不到，除非 tmux 开了 mouse**：`attach` 把客户端切进备用屏，xterm.js 在备用屏里把滚轮**翻译成方向键**灌进 agent（实测一格 = `ESC[A` × 17）——不只是"滚不动"，是在往 TUI 里注入按键。⇒ **每个 tmux 入口前置 `set -g mouse on`**，与 `-u` 同属平台侧 argv 必须给的保证（04 §3 ★2c；前端侧 08 §7.5）。**`mouse` 只在设的那一刻生效**，所以 `attach` 那条不能省——否则改动之前就已经起着的会话永远拿不到。
 
 ### 6.3 ring buffer 的处置：随 B 档一起退役（判断依据写在这里，别再照旧实现）
 

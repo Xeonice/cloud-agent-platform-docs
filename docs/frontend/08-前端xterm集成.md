@@ -229,7 +229,7 @@ interface TerminalRegistrySlice {
 - **LRU 淘汰**：并发实例超上限（**默认 4–6 个**）时，对最久未激活者 `terminal.dispose()` + 关 WS；可保留"最后一屏文本快照"作再次打开时的占位，真实内容依赖后端 replay。
   - **为什么是 4–6 而不是 8–10**（审计 P2-11）：每个启用 WebGL renderer 的 Terminal 各占一个 **WebGL 上下文**，而浏览器对同源页面的并发上下文数有硬上限（Chrome/Safari 量级在 **8–16**），**接近上限时最早的上下文会被浏览器主动回收**——表现为"切回某个旧终端，画面是黑的/花的，但没有任何报错"。把默认压到 4–6 是给上下文预算留安全余量，代价只是多一次 tmux re-attach（几百毫秒，且用户无感——见 §8 第一类场景，静默重建不提示）。
   - 上限做成**可配常量**而非硬编码；WebGL 不可用而降级到 canvas renderer 时可放宽到 8–10（无上下文约束），由 `useTerminalInstance` 按实际 renderer 决定。
-- **scrollback 权威在后端的 tmux session**（文档 06 §6；~~网关 ring buffer 降级~~ 已取消，06 §6.3）：前端实例保留只是渲染缓存。注意 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端 tmux 的 `history-limit` 决定。
+- **scrollback 权威在后端的 tmux session**（文档 06 §6；~~网关 ring buffer 降级~~ 已取消，06 §6.3）：前端实例保留只是渲染缓存。注意 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端 tmux 的 `history-limit` 决定。⚠️ **"权威在后端"不只是个归属声明，它决定了滚轮往哪去**：attach 之后前端那份 scrollback 是滚不到的，滚轮必须落到 tmux 的 copy-mode 上才有效——见 §7.5。
 
 为什么不销毁重建：每次切换都会"清空→重连→重渲染 scrollback"闪烁 + 网络开销；后端若不支持 replay 则历史输出直接丢失。
 
@@ -324,7 +324,7 @@ data 帧 → lib/writeBatcher.ts#push(bytes)
 
 | 选项 | 取值 | 理由 |
 |---|---|---|
-| `scrollback` | **5000 行** | 前端只是渲染缓存（权威在后端 tmux，§5.2）。5000 行足够回看一次构建输出；再大则每实例内存显著上升，而 LRU 只允许 4–6 个实例并存 |
+| `scrollback` | **5000 行** | 前端只是渲染缓存（权威在后端 tmux，§5.2）。⚠️ **注意它在 agent 终端里几乎用不上**：`tmux attach` 之后客户端处在备用屏，xterm 的这份回滚根本滚不到（§7.5）——留 5000 是为**非 tmux 场景**（将来若有直连 pty 的标签页）和内存兜底；再大则每实例内存显著上升，而 LRU 只允许 4–6 个实例并存 |
 | `theme` | 纯黑底（`background: #000`）+ 产品暗色主题的前景/选区色，常量放 `lib/terminalTheme.ts` | 产品规定"全局暗色，终端区纯黑底"（P21 §3）；集中成常量避免主题色散落 |
 | `fontFamily` | `'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace` | 等宽栈逐级降级；**必须以 `monospace` 收尾**，否则某些系统回落到比例字体会导致列对不齐 |
 | `fontSize` | 默认 14，**persist**（uiSlice `terminalFontSize`，15 §3.5） | 产品要求字号记忆（P21-1 §6）；改动后必须补 fit（§4.2） |
@@ -348,6 +348,22 @@ data 帧 → lib/writeBatcher.ts#push(bytes)
 **切走不 dispose 的具体机制**：`display:none` 隐藏容器，Terminal 与 socket 继续存活；此时 `write` 照常（内容不丢），但**不 fit、不滚动**（§6.1）。切回时 `display:''` + 补一次 fit 即可，无重连、无闪烁。
 
 **唯一的 ref 竞态**：容器 ref 在 React 重挂载后是**新的 DOM 节点**，而 Terminal 已 open 在旧节点上。处理办法是 `attach()` 检测到 `entry.container !== newContainer` 时，把 xterm 的根元素**移动**到新容器（`newContainer.appendChild(terminal.element)`）而不是重新 `open()`——`open()` 只能调一次，重复调用会留下孤儿 DOM。
+
+### 7.5 滚轮的真实归宿是 tmux 的 copy-mode，不是 xterm 的 scrollback（2026-09-08 实测）
+
+**症状**：codex 的终端里滚轮**完全没反应**，claude code 的却能滚。看起来像两个 CLI 的差别——**不是**，那是巧合，真因在 tmux 客户端这一层。抓真实会话的字节逐层验出来的因果链：
+
+1. `tmux attach` 把客户端（xterm.js）切进**备用屏**——`ESC[?1049h`，**两个 CLI 都有**（那是 tmux 发的，不是应用发的）；
+2. 备用屏里没有回滚缓冲，xterm.js 于是把滚轮**翻译成方向键**——实测 **一格滚轮 = `ESC[A` × 17**（向下同理 `ESC[B`）；
+3. 那串方向键**原样送进 pane 里的 agent**。Claude Code 的 TUI 把 Up/Down 当作滚动自己的记录，于是"看起来能滚"；codex 不这么映射，于是"完全没反应"。
+
+⚠️ **所以这个 bug 不止是"滚不动"**：每一次滚轮都在往 agent 里灌 17 个方向键。在别的 TUI 上那足以移动选中项、翻历史、误触菜单——**比没反应更糟**。修它的理由是这一条，不是体验。
+
+**修法在平台侧，不在前端**：每个 tmux 入口前置 `set -g mouse on`（后端 04 §3 ★2c）。开了 mouse 之后，tmux 3.3a 的默认绑定会在"应用自己没要鼠标"时把滚轮变成 `copy-mode -e`，滚的是**沙箱内 tmux 的 `history-limit`**——也就是 §5.2 说的那个权威。前端**不需要、也不应该**为此加任何 addon 或 `onWheel` 拦截：xterm 只要把滚轮字节原样送出去就行。
+
+⛔ **别试图在前端"修"它**：拦 `wheel` 事件自己 `scrollLines()` 会滚 xterm 那份和屏幕内容对不上的缓存（§5.2 已说明它只是渲染缓存），而真正的历史在沙箱里；把滚轮翻译成 `PgUp`/`PgDn` 则又变成往 agent 灌按键——回到同一个坑。
+
+**代价（要写进用户可见文档）**：开鼠标后拖拽选择被 tmux 接管，不再是浏览器原生选区。出路是**按住 Shift 拖拽**——这条要在终端区的帮助文案里给出（P21-1）。
 
 ## 8. 会话语义边界：断线重连 ≠ 回收后重启（前端不做 replay 期待）
 
@@ -513,6 +529,8 @@ views/project-task-tree/TaskListItem.view#onClick()
 | `services/ws/ptySocket.ts` | service | resize 帧发送 |
 
 ### 11.5 切换标签 / 切换 Task（命中已有实例）
+
+⚠️ **下面这条链路只回答"切到哪个 session"；"切到哪个 sandbox"由 `selectedSandboxId` 单独回答，且它是唯一权威**（15 §3.1.1 ★）。本会话里刚创建的那个 Task 对象**不得**压过它——真机踩过：同时起 codex 与 claude 两个 Task，切换时右侧终端**完全不变**，因为 container 一直拿本地创建的那个 task 去取 runtime/名称。
 
 ```
 views/terminal/TerminalTabBar.view#onSelect(sessionId)
