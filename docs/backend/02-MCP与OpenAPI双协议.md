@@ -213,7 +213,7 @@ export class SandboxMcpTools {
 
 ```
 event: start
-data: {"checks":[{"id":"container-runtime","label":"容器运行时可达"}, … 共 8 项],"timeoutMs":5000}
+data: {"checks":[{"id":"container-runtime","label":"容器运行时可达"}, … 共 8 项],"timeoutMs":10000}
 
 event: check
 data: {"id":"container-runtime","label":"容器运行时可达","status":"ok","summary":"容器运行时可达（/var/run/docker.sock，7ms）","durationMs":8}
