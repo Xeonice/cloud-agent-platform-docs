@@ -147,7 +147,31 @@ interface SandboxProvider {
 - **`attachPty` = `spawn({ tty:true })`**。两者只差一个 flag，拆成两个方法会让每个实现写两套几乎一样的进程创建代码，且极易出现"exec 支持 `env`/`cwd` 但 pty 不支持"这类实现间不一致——正是"无视各自实现保持统一"要防的。
 - **`healthCheck` 与 `inspect().health` 完全重复**（上一版两者都返回 `HealthStatus`），两个入口迟早给出两种答案。删掉方法，健康状态作为 `inspect` 的可选字段返回，平台只在一个地方读。
 
-结果：第三方需要实现的必须方法从 **9 个降到 6 个**，可选方法 2 个。
+结果：第三方需要实现的必须方法从 **9 个降到 6 个**，可选方法 **3 个**。
+
+> **★ 第三个可选方法 `stageImage`（2026-09-10 新增，minor）**
+>
+> `imageStaged?` 只**问**「镜像铺没铺」。而一个 `false` 之后平台没有任何一只手能动它 ⇒
+> 唯一剩下的动作是**把铺开后置到第一个任务**，也就是「第一个任务会自动铺开」那句话。
+>
+> ⚠️ **那句话的真实代价是实测出来的**（2026-09-10，boxlite 档 / 273 KB/s 到 ghcr /
+> 镜像压缩后 320MB）：用户写完指令点了发起，30 分钟后拿到 `IMAGE_PULL_FAILED`
+> ——210MB 那一层断在中途，拉了一半的字节被丢弃，且**没有断点续传**。
+> 后置的代价不只是"晚一点"：等待落在最差的时机，失败是一个**死掉的 Task**
+> 而不是一个能重试的向导步。
+>
+> ⇒ `stageImage?(image): Promise<void>` —— **把镜像铺进 provider 自己的库，不建实例**。
+> boxlite 实现是一行 `runtime.images.pull(pinnedImageRef(image))`。
+>
+> | | |
+> |---|---|
+> | **没有能力位** | 同 `imageStaged` 的理由：分支是 `typeof provider.stageImage === 'function'`，只有一个调用点 |
+> | **必须幂等** | 调用方可能没先问 `imageStaged`；两个向导会话也可能重叠 |
+> | **没有进度回调** | BoxLite 的 `images.pull()` 不给。⛔ **不发明一个** —— 那会逼每个实现去编数字。调用方报的是「已用时长 + manifest 里的压缩体积」，不是假百分比 |
+> | **reference 必须与 `create()` 用的同一个** | provider 的库按「递给它的那个字符串」逐字记账（`boxlite-image-store.ts` 实测）。拿 tag 去铺、拿 pinned ref 去问 ⇒「铺过了但查不到」 |
+>
+> 落点：`provision-plan.ts` 的**第五条路** `provider-stage`（前四条的终点都是 registry，
+> 而出厂机器缺的不是那个 —— P21-8 §2 ★第五条），以及向导第 3 步的**自动开始**。
 
 > 与文档 06 的衔接：06 §3 的 `PtyStream` 就是 `spawn({tty:true})` 返回的 `ProcessStream`，**不再单独定义**——以本节为准，06 只保留实现对照表。
 
