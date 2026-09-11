@@ -589,7 +589,17 @@ function collectErrorCodesFromSource() {
       for (const u of line.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)) add(u[1], rel);
     }
     // ④b 跨行闭集：`= \n  | 'A'\n  | 'B'` —— 类型名在上一行，联合项各占一行。
-    for (const m of src.matchAll(/(?:type|Code)\s*[:=][^;]{0,400}?;/gs)) {
+    // ⚠️ **`type` 与 `=` 之间允许有类型名**（2026-09 修）。上一版写的是
+    //    `(?:type|Code)\s*[:=]`，而 `export type WsHandshakeRejection =` 在 `type` 之后
+    //    还有一个标识符 ⇒ 这条分支**只在属性恰好叫 `code:` 或类型名以 `Code` 结尾时才命中**。
+    //    后果与它注释里写的意图正相反：一个跨行的闭集联合会**整组从源码侧集合里消失**，
+    //    A5 于是反过来报「文档表有、源码无」，而码明明就在源码里。
+    //    实际发作：`WsHandshakeRejection` 从单行改成跨行（多标签加第 4 个码）的那一刻。
+    //    ⛔ **只补 `type <名>` 这一支，不按后缀加宽**（试过 `|Rejection|Failure|Reason`：
+    //    源码侧集合一个码都没多，纯属替未来预判——门禁宁可下次红一次，也别现在放宽。）
+    for (const m of src.matchAll(
+      /(?:type\s+[A-Za-z_$][\w$]*|[A-Za-z_$][\w$]*Code)\s*[:=][^;]{0,400}?;/gs,
+    )) {
       if (!ERROR_CODE_CONTEXT.test(m[0])) continue;
       const items = [...m[0].matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)];
       if (items.length >= 2) for (const u of items) add(u[1], rel);

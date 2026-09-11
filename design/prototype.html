@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>云 Agent 管理平台 · 设计原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          background: 'hsl(var(--background))',
+          'background-elevated': 'hsl(var(--background-elevated))',
+          'background-subtle': 'hsl(var(--background-subtle))',
+          foreground: 'hsl(var(--foreground))',
+          'foreground-muted': 'hsl(var(--foreground-muted))',
+          'foreground-subtle': 'hsl(var(--foreground-subtle))',
+          border: 'hsl(var(--border))',
+          'border-strong': 'hsl(var(--border-strong))',
+          primary: 'hsl(var(--primary))',
+          'primary-foreground': 'hsl(var(--primary-foreground))',
+          accent: 'hsl(var(--accent))',
+          success: 'hsl(var(--success))',
+          warning: 'hsl(var(--warning))',
+          error: 'hsl(var(--error))',
+          info: 'hsl(var(--info))',
+          timeout: 'hsl(var(--timeout))',
+        },
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'SF Mono', 'Menlo', 'Consolas', 'monospace'],
+        },
+        borderRadius: {
+          sm: 'var(--radius-sm)',
+          md: 'var(--radius-md)',
+          lg: 'var(--radius-lg)',
+          xl: 'var(--radius-xl)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  /* ============ 设计 token（亮色默认，暗色见 [data-theme="dark"]） ============ */
+  :root {
+    --background: 0 0% 100%;
+    --background-elevated: 0 0% 98%;
+    --background-subtle: 0 0% 95%;
+    --foreground: 0 0% 4%;
+    --foreground-muted: 0 0% 32%;
+    --foreground-subtle: 0 0% 40%;
+    --border: 0 0% 90%;
+    --border-strong: 0 0% 83%;
+    --primary: 0 0% 4%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 212 100% 48%;
+    /* 语义色（亮色）：L 值下调过，逐色跑过 WCAG AA —— 详见 design-notes.md 的对比度实测表。
+       未调整前 ok/warn/fail 在浅色 pill 底与纯白页面底上的文字对比度都在 2.6–3.8:1，够不到 4.5:1。 */
+    --success: 142 76% 26%;
+    --warning: 32 95% 30%;
+    --error: 0 74% 44%;
+    --info: 201 96% 32%;
+    --timeout: 263 83% 56%;
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 10px;
+    --radius-xl: 16px;
+
+    --terminal-bg: #000000;
+    /* 终端仪表壳跟随主题（画布恒黑不变）：亮色下用浅灰壳，让黑色画布读作页面的一部分而不是贴上去的。 */
+    --terminal-chrome: #e7e7ea;
+    --terminal-chrome-border: #d3d3d7;
+    --terminal-fg: #e4e4e7;
+    --terminal-fg-dim: #8a8a90;
+
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.10);
+  }
+  [data-theme="dark"] {
+    --background: 0 0% 4%;
+    --background-elevated: 0 0% 7%;
+    --background-subtle: 0 0% 11%;
+    --foreground: 0 0% 93%;
+    --foreground-muted: 0 0% 63%;
+    --foreground-subtle: 0 0% 50%;
+    --border: 0 0% 16%;
+    --border-strong: 0 0% 24%;
+    --primary: 0 0% 93%;
+    --primary-foreground: 0 0% 4%;
+    --accent: 217 91% 63%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 55%;
+    --error: 0 84% 63%;
+    --info: 199 89% 62%;
+    --timeout: 258 90% 71%;
+    --shadow-pop: 0 8px 30px rgba(0, 0, 0, 0.45);
+    /* 暗色下终端仪表壳维持现状（这套深色壳本来就是照着这次要求定的）。 */
+    --terminal-chrome: #111214;
+    --terminal-chrome-border: #2a2b2e;
+    --terminal-fg-dim: #6b6b70;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif);
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  section[id] { scroll-margin-top: 88px; }
+  ::selection { background: hsl(var(--accent) / .25); }
+
+  .font-mono { font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace; }
+
+  /* ---------- 基础组件 ---------- */
+  .card {
+    background: hsl(var(--background-elevated));
+    border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-lg);
+  }
+  .kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 1px 5px;
+    border: 1px solid hsl(var(--border-strong));
+    border-radius: var(--radius-sm);
+    color: hsl(var(--foreground-muted));
+    background: hsl(var(--background-subtle));
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background-color .15s ease, border-color .15s ease, opacity .15s ease, color .15s ease;
+    cursor: pointer;
+    border: 1px solid transparent;
+    user-select: none;
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn:focus-visible { outline: 2px solid hsl(var(--accent)); outline-offset: 2px; }
+  .btn-sm { height: 26px; padding: 0 9px; font-size: 12px; }
+  .btn-primary { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+  .btn-primary:hover:not(:disabled) { opacity: .88; }
+  .btn-outline { background: transparent; color: hsl(var(--foreground)); border-color: hsl(var(--border-strong)); }
+  .btn-outline:hover:not(:disabled) { background: hsl(var(--background-subtle)); }
+  .btn-ghost { background: transparent; color: hsl(var(--foreground-muted)); }
+  .btn-ghost:hover:not(:disabled) { background: hsl(var(--background-subtle)); color: hsl(var(--foreground)); }
+
+  .icon { width: 14px; height: 14px; flex: none; }
+  .icon-lg { width: 18px; height: 18px; }
+
+  input[type="text"], input[type="datetime-local"], .field-input {
+    height: 34px;
+    width: 100%;
+    padding: 0 10px;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border-strong));
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    color: hsl(var(--foreground));
+    font-family: 'JetBrains Mono', monospace;
+  }
+  input[type="text"]:focus, input[type="datetime-local"]:focus {
+    outline: none; border-color: hsl(var(--accent)); box-shadow: 0 0 0 3px hsl(var(--accent) / .18);
+  }
+  select {
+    height: 28px; padding: 0 8px; background: hsl(var(--background)); border: 1px solid hsl(var(--border-strong));
+    border-radius: var(--radius-sm); font-size: 12px; color: hsl(var(--foreground));
+  }
+
+  /* ---------- 状态体系：图标 + 文字 + 颜色 三重线索 ---------- */
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 22px; padding: 0 8px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; border: 1px solid transparent; white-space: nowrap; line-height: 1;
+  }
+  .status-pill .icon { width: 12px; height: 12px; }
+  .status-pill[data-status="ok"]        { background: hsl(var(--success) / .12); color: hsl(var(--success)); border-color: hsl(var(--success) / .28); }
+  .status-pill[data-status="info"]      { background: hsl(var(--info) / .12);    color: hsl(var(--info));    border-color: hsl(var(--info) / .28); }
+  .status-pill[data-status="warn"]      { background: hsl(var(--warning) / .14); color: hsl(var(--warning)); border-color: hsl(var(--warning) / .3); }
+  .status-pill[data-status="fail"]      { background: hsl(var(--error) / .12);   color: hsl(var(--error));   border-color: hsl(var(--error) / .28); }
+  .status-pill[data-status="timeout"]   { background: hsl(var(--timeout) / .13); color: hsl(var(--timeout)); border-color: hsl(var(--timeout) / .3); }
+  .status-pill[data-status="pending"]   { background: hsl(var(--foreground) / .05); color: hsl(var(--foreground-muted)); border-color: hsl(var(--border)); }
+  .status-pill[data-status="pending"] .icon { animation: spin 1s linear infinite; }
+  .status-pill[data-status="skipped"]   { background: transparent; color: hsl(var(--warning)); border: 1px dashed hsl(var(--warning) / .55); }
+  .status-pill[data-status="unknown"]   { background: transparent; color: hsl(var(--foreground-subtle)); border: 1px dashed hsl(var(--foreground-subtle) / .65); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .dot { width: 7px; height: 7px; border-radius: 999px; flex: none; }
+  .dot[data-status="ok"] { background: hsl(var(--success)); }
+  .dot[data-status="warn"] { background: hsl(var(--warning)); }
+  .dot[data-status="fail"] { background: hsl(var(--error)); }
+  .dot[data-status="timeout"] { background: hsl(var(--timeout)); }
+  .dot[data-status="info"] { background: hsl(var(--info)); }
+  .dot[data-status="unknown"] { background: hsl(var(--border-strong)); }
+
+  /* ---------- 折叠行（诊断项 / 连通性 / 审计详情共用） ---------- */
+  .disclosure { border: 1px solid hsl(var(--border)); border-radius: var(--radius-md); background: hsl(var(--background)); overflow: hidden; }
+  .disclosure + .disclosure { margin-top: 6px; }
+  .disclosure-head {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    padding: 9px 10px; background: transparent; border: none; cursor: pointer; color: hsl(var(--foreground));
+  }
+  .disclosure-head:hover { background: hsl(var(--background-subtle)); }
+  .disclosure-chevron { width: 13px; height: 13px; color: hsl(var(--foreground-subtle)); transition: transform .15s ease; flex: none; }
+  .disclosure[data-open="true"] .disclosure-chevron { transform: rotate(180deg); }
+  .disclosure-body { padding: 0 10px 11px 33px; display: none; }
+  .disclosure[data-open="true"] .disclosure-body { display: block; }
+
+  /* ---------- 进度条 ---------- */
+  .progress-track { height: 6px; width: 100%; border-radius: 999px; background: hsl(var(--background-subtle)); overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 999px; transition: width .4s ease; }
+
+  /* ---------- 终端仪表壳（问题 4：黑底与周边 UI 的过渡） ---------- */
+  .terminal-shell {
+    background: var(--terminal-chrome);
+    border: 1px solid var(--terminal-chrome-border);
+    border-radius: var(--radius-lg);
+    padding: 8px;
+    display: flex; flex-direction: column; gap: 8px;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .terminal-canvas {
+    background: var(--terminal-bg);
+    border-radius: calc(var(--radius-lg) - 4px);
+    border: 1px solid rgba(255,255,255,.06);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.6), inset 0 12px 24px -18px rgba(0,0,0,.9);
+    color: var(--terminal-fg);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    padding: 14px 16px;
+    min-height: 300px;
+    white-space: pre-wrap;
+    overflow: auto;
+  }
+  .terminal-canvas .dim { color: var(--terminal-fg-dim); }
+  .terminal-canvas .accent-line { color: #7dd3fc; }
+  .terminal-canvas .wait-line { color: #fbbf24; background: rgba(251,191,36,.08); display: inline-block; padding: 1px 4px; border-radius: 3px; }
+  .terminal-caret { display: inline-block; width: 7px; height: 14px; background: var(--terminal-fg); vertical-align: -2px; animation: caret 1s step-end infinite; }
+  @keyframes caret { 50% { opacity: 0; } }
+
+  /* ---------- 顶部导航 ---------- */
+  .topnav { position: sticky; top: 0; z-index: 40; backdrop-filter: blur(10px); background: hsl(var(--background) / .82); border-bottom: 1px solid hsl(var(--border)); }
+  .nav-link { font-size: 13px; color: hsl(var(--foreground-muted)); padding: 6px 10px; border-radius: var(--radius-md); }
+  .nav-link:hover { color: hsl(var(--foreground)); background: hsl(var(--background-subtle)); }
+  .nav-link[data-active="true"] { color: hsl(var(--foreground)); background: hsl(var(--background-subtle)); }
+
+  /* ---------- 页面框（把三大块渲染成"一屏一屏"） ---------- */
+  .screen-frame { border: 1px solid hsl(var(--border)); border-radius: var(--radius-xl); overflow: hidden; background: hsl(var(--background)); }
+  .screen-bar {
+    display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 14px;
+    border-bottom: 1px solid hsl(var(--border)); background: hsl(var(--background-elevated));
+    font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: hsl(var(--foreground-subtle));
+  }
+
+  .switch-track {
+    width: 34px; height: 20px; border-radius: 999px; background: hsl(var(--background-subtle));
+    border: 1px solid hsl(var(--border-strong)); position: relative; cursor: pointer; flex: none; transition: background-color .15s;
+  }
+  .switch-track[data-on="true"] { background: hsl(var(--accent) / .9); border-color: transparent; }
+  .switch-thumb { position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 999px; background: white; transition: transform .15s ease; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+  .switch-track[data-on="true"] .switch-thumb { transform: translateX(14px); }
+
+  .segmented { display: inline-flex; padding: 2px; border: 1px solid hsl(var(--border)); border-radius: var(--radius-md); background: hsl(var(--background-subtle)); gap: 2px; }
+  .segmented button { border: none; background: transparent; font-size: 12px; padding: 5px 10px; border-radius: calc(var(--radius-md) - 2px); color: hsl(var(--foreground-muted)); cursor: pointer; }
+  .segmented button[data-active="true"] { background: hsl(var(--background-elevated)); color: hsl(var(--foreground)); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+
+  .banner { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 12.5px; border-bottom: 1px solid transparent; }
+  .banner-blocking { background: hsl(var(--error) / .12); color: hsl(var(--error)); border-color: hsl(var(--error) / .25); }
+  .banner-governance { background: hsl(var(--warning) / .12); color: hsl(var(--warning)); border-color: hsl(var(--warning) / .25); }
+  .banner-info { background: hsl(var(--info) / .1); color: hsl(var(--info)); border-color: hsl(var(--info) / .22); }
+
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(12px);
+    background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); font-size: 12.5px;
+    padding: 8px 14px; border-radius: var(--radius-md); box-shadow: var(--shadow-pop);
+    opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 100;
+    display: flex; align-items: center; gap: 6px;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* 常规可关闭弹层（任务 modal）—— 与向导壳体刻意不同姿态，见 HTML 里的说明注释。 */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 90;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-dialog {
+    width: 100%; max-width: 480px; max-height: 88vh; overflow: auto;
+    background: hsl(var(--background-elevated)); border: 1px solid hsl(var(--border));
+    border-radius: var(--radius-xl); box-shadow: var(--shadow-pop);
+  }
+  .modal-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 14px 16px; border-bottom: 1px solid hsl(var(--border));
+  }
+  .modal-close {
+    display: flex; align-items: center; justify-content: center; width: 26px; height: 26px;
+    border-radius: var(--radius-sm); color: hsl(var(--foreground-muted)); background: transparent; border: none; cursor: pointer;
+  }
+  .modal-close:hover { background: hsl(var(--background-subtle)); color: hsl(var(--foreground)); }
+  .modal-body { padding: 16px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  code.inline-cmd { font-family: 'JetBrains Mono', monospace; font-size: 11.5px; background: hsl(var(--background-subtle)); border: 1px solid hsl(var(--border)); padding: 3px 7px; border-radius: var(--radius-sm); word-break: break-all; }
+
+  /* 色卡描边故意不用 token 里的 border（暗色下 border 和 background 几乎同色，色卡会“隐身”）。
+     用固定的中灰半透明描边：它不属于任何一套主题色，无论色卡本身是浅是深都能露出边界。 */
+  .swatch { width: 100%; height: 44px; border-radius: var(--radius-md); border: 1px solid rgba(128,128,128,.5); box-shadow: inset 0 0 0 1px rgba(255,255,255,.05), inset 0 0 0 1px rgba(0,0,0,.05); }
+</style>
+</head>
+<body class="bg-background text-foreground">
+
+<!-- ============ 图标 sprite（lucide 风格，stroke=currentColor） ============ -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="16" x2="12" y2="11.5"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9.5" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></symbol>
+    <symbol id="i-loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9" /></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="8.5"/></symbol>
+    <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+    <symbol id="i-external" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><line x1="12" y1="2" x2="12" y2="4.2"/><line x1="12" y1="19.8" x2="12" y2="22"/><line x1="4.2" y1="4.2" x2="5.7" y2="5.7"/><line x1="18.3" y1="18.3" x2="19.8" y2="19.8"/><line x1="2" y1="12" x2="4.2" y2="12"/><line x1="19.8" y1="12" x2="22" y2="12"/><line x1="4.2" y1="19.8" x2="5.7" y2="18.3"/><line x1="18.3" y1="5.7" x2="19.8" y2="4.2"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7.5"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1Z"/></symbol>
+    <symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8"/><path d="M16.5 8a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============ 顶部导航 ============ -->
+<header class="topnav">
+  <div class="max-w-[1400px] mx-auto px-5 h-14 flex items-center gap-1">
+    <span class="font-semibold text-sm mr-3 flex items-center gap-2">
+      <span class="w-6 h-6 rounded-md bg-primary text-primary-foreground flex items-center justify-center"><svg class="icon" style="width:13px;height:13px"><use href="#i-terminal"/></svg></span>
+      云 Agent 管理平台
+    </span>
+    <span class="text-xs text-foreground-subtle mr-4 hidden sm:inline">设计原型 · Vercel / Geist 语言</span>
+    <nav class="flex items-center gap-1 flex-1" id="topTabs">
+      <a href="#spec" class="nav-link" data-nav>设计说明</a>
+      <a href="#wizard" class="nav-link" data-nav>初始化向导</a>
+      <a href="#workbench" class="nav-link" data-nav>工作台</a>
+      <a href="#system" class="nav-link" data-nav>系统状态</a>
+    </nav>
+    <button class="btn btn-outline btn-sm" id="themeToggle" aria-label="切换亮/暗主题">
+      <svg class="icon" id="themeIcon"><use href="#i-moon"/></svg>
+      <span id="themeLabel">暗色</span>
+    </button>
+  </div>
+</header>
+
+<main class="max-w-[1400px] mx-auto px-5 py-10 flex flex-col gap-20">
+
+  <!-- ============================================================ -->
+  <!-- 设计说明                                                       -->
+  <!-- ============================================================ -->
+  <section id="spec" class="flex flex-col gap-5">
+    <div class="flex items-end justify-between gap-4 flex-wrap">
+      <div>
+        <h1 class="text-xl font-semibold tracking-tight">设计说明</h1>
+        <p class="text-sm text-foreground-muted mt-1 max-w-2xl">色板 / 字阶 / 圆角 / 状态体系的取值一览，供实现时对照。完整 token 清单见 <code class="inline-cmd">design/design-notes.md</code>。</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="specToggle">
+        <span id="specToggleLabel">收起</span>
+        <svg class="icon" id="specToggleIcon"><use href="#i-chevron-down"/></svg>
+      </button>
+    </div>
+
+    <div id="specBody" class="flex flex-col lg:flex-row gap-4 items-start">
+      <!-- 色板 -->
+      <div class="card p-4 flex flex-col gap-3 w-full lg:flex-1">
+        <h2 class="text-xs font-medium text-foreground-subtle uppercase tracking-wide">色板</h2>
+        <div class="grid grid-cols-2 gap-2 text-[11px] font-mono">
+          <div><div class="swatch" style="background:hsl(var(--background))"></div><div class="mt-1 text-foreground-muted">background</div></div>
+          <div><div class="swatch" style="background:hsl(var(--background-elevated))"></div><div class="mt-1 text-foreground-muted">bg-elevated</div></div>
+          <div><div class="swatch" style="background:hsl(var(--foreground))"></div><div class="mt-1 text-foreground-muted">foreground</div></div>
+          <div><div class="swatch" style="background:hsl(var(--border))"></div><div class="mt-1 text-foreground-muted">border</div></div>
+          <div><div class="swatch" style="background:hsl(var(--accent))"></div><div class="mt-1 text-foreground-muted">accent</div></div>
+          <div><div class="swatch" style="background:#000"></div><div class="mt-1 text-foreground-muted">terminal（恒黑）</div></div>
+        </div>
+        <p class="text-[11px] text-foreground-subtle leading-relaxed">中性灰阶只用一个色相（灰度 0），强调色仅 accent 一处用于焦点环/链接；语义色（见右）独立于 accent，避免"警告也是蓝的"这种混淆。每块色卡都带一圈与自身颜色无关的中灰描边，靠它而不是色卡本身的边界来分隔——这样即便色卡颜色与页面背景相近（比如 background 本身），边界依然看得见。</p>
+      </div>
+
+      <!-- 状态体系 -->
+      <div class="card p-4 flex flex-col gap-2.5 w-full lg:flex-[2]">
+        <h2 class="text-xs font-medium text-foreground-subtle uppercase tracking-wide">状态体系（图标 + 文字 + 颜色，三重线索）</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="text-[10.5px] text-foreground-subtle">ok · 已确认通过</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="info"><svg class="icon"><use href="#i-info"/></svg>提示</span><span class="text-[10.5px] text-foreground-subtle">info · 不需要修</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="warn"><svg class="icon"><use href="#i-alert"/></svg>警告</span><span class="text-[10.5px] text-foreground-subtle">warn · 建议处理</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="fail"><svg class="icon"><use href="#i-x"/></svg>不可达/失败</span><span class="text-[10.5px] text-foreground-subtle">fail · 确定坏了</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="timeout"><svg class="icon"><use href="#i-clock"/></svg>超时未响应</span><span class="text-[10.5px] text-foreground-subtle">timeout ≠ fail，独立色相</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="pending"><svg class="icon"><use href="#i-loader"/></svg>检查中…</span><span class="text-[10.5px] text-foreground-subtle">pending · 进行中</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="skipped"><svg class="icon"><use href="#i-minus"/></svg>走过未达成</span><span class="text-[10.5px] text-foreground-subtle">skipped · 虚线区分于警告</span></div>
+          <div class="flex flex-col gap-1"><span class="status-pill" data-status="unknown"><svg class="icon"><use href="#i-circle"/></svg>无样本/未知</span><span class="text-[10.5px] text-foreground-subtle">unknown · 不是"好"也不是"坏"</span></div>
+        </div>
+      </div>
+
+      <!-- 字阶 + 圆角 -->
+      <div class="card p-4 flex flex-col gap-3 w-full lg:flex-1">
+        <h2 class="text-xs font-medium text-foreground-subtle uppercase tracking-wide">字阶 / 圆角</h2>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-baseline gap-2"><span class="text-xl font-semibold">Aa 28</span><span class="text-[11px] text-foreground-subtle font-mono">xl / 页面标题</span></div>
+          <div class="flex items-baseline gap-2"><span class="text-lg font-semibold">Aa 20</span><span class="text-[11px] text-foreground-subtle font-mono">lg / 卡片标题</span></div>
+          <div class="flex items-baseline gap-2"><span class="text-sm">Aa 14</span><span class="text-[11px] text-foreground-subtle font-mono">base / 正文</span></div>
+          <div class="flex items-baseline gap-2"><span class="text-xs">Aa 12</span><span class="text-[11px] text-foreground-subtle font-mono">xs / 元数据·时间戳</span></div>
+          <div class="flex items-baseline gap-2"><span class="text-xs font-mono">10:24:03.128</span><span class="text-[11px] text-foreground-subtle font-mono">mono / 数字·代码</span></div>
+        </div>
+        <div class="flex items-center gap-2 pt-1">
+          <div class="w-8 h-8 bg-background-subtle border border-border" style="border-radius:4px"></div>
+          <div class="w-8 h-8 bg-background-subtle border border-border" style="border-radius:6px"></div>
+          <div class="w-8 h-8 bg-background-subtle border border-border" style="border-radius:10px"></div>
+          <div class="w-8 h-8 bg-background-subtle border border-border" style="border-radius:16px"></div>
+          <span class="text-[10.5px] text-foreground-subtle font-mono ml-1">4·6·10·16</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 初始化向导                                                     -->
+  <!-- ============================================================ -->
+  <section id="wizard" class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">初始化向导</h2>
+      <p class="text-sm text-foreground-muted mt-1 max-w-2xl">5 步、阻塞性、无取消无 Esc（放行卡点，不是可关闭的弹层）。下面可以点着走完整个流程；联网检查处可以切换场景，观察「超时」与「不可达」如何在视觉上区分开。</p>
+    </div>
+
+    <!-- 外壳收窄到贴合卡片宽度（原先横跨整个 1400px 容器、卡片只有 672px，两侧空出一大截，
+         看起来像没加载完）：外壳最大宽度 = 卡片宽度 + 内边距，不再撑满页面容器。 -->
+    <div class="screen-frame mx-auto w-full" style="max-width:820px; background:hsl(var(--background-subtle))">
+      <div class="screen-bar"><span>/ 平台初始化</span></div>
+      <div class="flex items-center justify-center p-5 sm:p-8">
+        <div class="w-full max-w-2xl card p-6 flex flex-col gap-5" style="box-shadow:var(--shadow-pop)">
+          <header class="flex flex-col gap-3">
+            <h3 class="text-base font-semibold">平台初始化</h3>
+            <ol class="flex flex-wrap gap-2 text-xs" id="wizardSteps"></ol>
+            <div>
+              <h4 class="text-[15px] font-semibold" id="stepTitle"></h4>
+              <p class="text-[13px] text-foreground-muted mt-0.5" id="stepDesc"></p>
+            </div>
+          </header>
+
+          <div id="wizardPanels"></div>
+
+          <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <div class="text-xs text-foreground-subtle max-w-xs" id="footerNote"></div>
+            <div class="flex items-center gap-2">
+              <button class="btn btn-outline" id="wizardBack">上一步</button>
+              <button class="btn btn-primary" id="wizardNext">下一步</button>
+            </div>
+          </footer>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 工作台                                                        -->
+  <!-- ============================================================ -->
+  <section id="workbench" class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">工作台</h2>
+      <p class="text-sm text-foreground-muted mt-1 max-w-2xl">左侧按项目分组的任务树 + 右侧终端。点左侧任务切换终端内容；下面的演示控制条可以切换全局横幅优先级与终端连接态，观察黑底终端与周边 UI 的过渡处理。</p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-4 text-xs text-foreground-subtle">
+      <span class="font-medium text-foreground-muted">演示控制：</span>
+      <span class="flex items-center gap-1.5">横幅
+        <span class="segmented" id="bannerDemo">
+          <button data-value="none" data-active="true">无</button>
+          <button data-value="governance">治理类（可叠）</button>
+          <button data-value="blocking">阻断类（离线）</button>
+        </span>
+      </span>
+      <span class="flex items-center gap-1.5">终端连接态
+        <span class="segmented" id="connDemo">
+          <button data-value="open" data-active="true">正常</button>
+          <button data-value="reconnecting">重连中</button>
+          <button data-value="closed">已超时</button>
+        </span>
+      </span>
+    </div>
+
+    <div class="screen-frame" style="height:640px; display:flex; flex-direction:column">
+      <div id="bannerSlot"></div>
+      <header class="flex h-12 items-center gap-3 border-b border-border px-4 flex-none">
+        <span class="font-semibold text-sm">Agent 管理平台</span>
+        <!-- 后端健康提示：正常时整行不渲染（用户据此做不了任何决定，不该常驻占位）；
+             只有异常时才出现，样式参考下面的 #healthLabel（默认 hidden，异常演示见 design-notes）。 -->
+        <span class="text-xs" id="healthLabel" hidden style="color:hsl(var(--error))"></span>
+        <button class="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-foreground-muted hover:bg-background-subtle" id="projectIndicator">
+          <svg class="icon"><use href="#i-folder"/></svg>
+          <span id="projectIndicatorName">ProjectA</span>
+        </button>
+        <span class="kbd ml-1">⌘K</span>
+        <a href="#system" class="ml-auto flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-foreground-muted hover:bg-background-subtle hover:text-foreground">
+          <svg class="icon"><use href="#i-settings"/></svg>
+          设置 / 系统状态
+        </a>
+      </header>
+
+      <div class="flex min-h-0 flex-1">
+        <aside class="flex w-[280px] flex-col border-r border-border flex-none">
+          <div class="border-b border-border px-3 py-2 text-xs flex items-center gap-1.5" style="color:hsl(var(--warning))" id="waitingBanner">
+            <svg class="icon"><use href="#i-zap"/></svg>
+            2 个任务等待你输入
+          </div>
+          <div class="p-2 flex flex-col gap-2 border-b border-border">
+            <div class="relative">
+              <svg class="icon" style="position:absolute;left:8px;top:9px;color:hsl(var(--foreground-subtle))"><use href="#i-search"/></svg>
+              <input type="text" placeholder="搜索任务" style="padding-left:28px; font-family:inherit" />
+            </div>
+            <div class="flex flex-wrap gap-1 text-[11px]">
+              <span class="px-2 py-0.5 rounded-full bg-background-subtle text-foreground">全部</span>
+              <span class="px-2 py-0.5 rounded-full text-foreground-subtle">运行中</span>
+              <span class="px-2 py-0.5 rounded-full text-foreground-subtle">等待输入</span>
+              <span class="px-2 py-0.5 rounded-full text-foreground-subtle">已暂停</span>
+            </div>
+          </div>
+          <nav class="flex-1 overflow-auto p-2" id="taskTree" aria-label="项目分组任务树"></nav>
+          <div class="flex flex-col gap-2 border-t border-border p-2">
+            <button class="btn btn-primary w-full" onclick="openTaskModal()"><svg class="icon"><use href="#i-plus"/></svg>新任务</button>
+            <button class="btn btn-outline w-full">新建项目</button>
+          </div>
+        </aside>
+
+        <main class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div class="flex items-center gap-1 border-b border-border px-2 h-10 flex-none" id="terminalTabs"></div>
+          <div id="connStatusStrip"></div>
+          <div class="flex-1 min-h-0 p-2.5">
+            <div class="terminal-shell h-full">
+              <div class="flex items-center justify-between px-1">
+                <span class="text-[11px] font-mono text-foreground-subtle" id="terminalTitle"></span>
+                <div class="flex items-center gap-1">
+                  <button class="btn-ghost btn-sm btn" onclick="copyText('复制终端内容')"><svg class="icon"><use href="#i-copy"/></svg>复制</button>
+                  <button class="btn-ghost btn-sm btn">清屏</button>
+                  <button class="btn-ghost btn-sm btn">A- A+</button>
+                  <button class="btn-ghost btn-sm btn"><svg class="icon"><use href="#i-plus"/></svg>新标签</button>
+                </div>
+              </div>
+              <div class="terminal-canvas flex-1" id="terminalCanvas"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 系统状态                                                      -->
+  <!-- ============================================================ -->
+  <section id="system" class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">系统状态</h2>
+      <p class="text-sm text-foreground-muted mt-1 max-w-2xl">本机资源 / 沙箱环境 / 连接状态 / 诊断 / 审计流。诊断默认收起「正常」项、展开需要处理的项 —— 第一眼看结论，需要时才看细节。</p>
+    </div>
+
+    <div class="screen-frame p-5 sm:p-7">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <!-- 左列：本机资源 + 连接状态各自成一条 flex 列，不与右列强制等高 -->
+      <div class="flex flex-col gap-4">
+
+        <!-- 本机资源水位 -->
+        <div class="card p-4 flex flex-col gap-3">
+          <header class="flex items-center justify-between">
+            <h3 class="text-[15px] font-semibold">本机资源水位</h3>
+            <button class="btn btn-outline btn-sm"><svg class="icon"><use href="#i-refresh"/></svg>刷新</button>
+          </header>
+          <div class="flex flex-col gap-3">
+            <div>
+              <div class="flex items-center justify-between text-[13px] mb-1">
+                <span class="flex items-center gap-1.5"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">CPU</span></span>
+                <span class="text-foreground-subtle text-xs font-mono">4.2 / 10 核 · 42%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:42%; background:hsl(var(--success))"></div></div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between text-[13px] mb-1">
+                <span class="flex items-center gap-1.5"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">内存</span></span>
+                <span class="text-foreground-subtle text-xs font-mono">11.5 / 32 GB · 36%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:36%; background:hsl(var(--success))"></div></div>
+            </div>
+            <div>
+              <div class="flex items-center justify-between text-[13px] mb-1">
+                <span class="flex items-center gap-1.5"><span class="status-pill" data-status="warn"><svg class="icon"><use href="#i-alert"/></svg>警告</span><span class="font-medium">磁盘</span></span>
+                <span class="text-foreground-subtle text-xs font-mono">150 / 200 GB · 75%</span>
+              </div>
+              <div class="progress-track"><div class="progress-fill" style="width:75%; background:hsl(var(--warning))"></div></div>
+              <p class="text-[11.5px] text-warning mt-1">已使用超 75%，建议清理</p>
+            </div>
+          </div>
+          <p class="text-[12.5px] flex items-center gap-1.5"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>就绪</span><span class="text-foreground-muted">当前活跃 Task 5 · 调度预留 15%（分母仍是总容量）</span></p>
+          <div class="flex flex-wrap items-center gap-2 rounded-md border border-border bg-background-subtle px-3 py-2 text-xs">
+            <svg class="icon"><use href="#i-gift"/></svg>
+            <span>保留卷占用 45 GB（12 个 · 占数据目录 22%）</span>
+            <span class="text-foreground-subtle">最早的成果将在 6 天后清理</span>
+            <button class="btn btn-outline btn-sm ml-auto">清理保留卷</button>
+          </div>
+        </div>
+
+        <!-- 连接状态：同一列，紧跟在本机资源水位下面，不与右列的诊断卡强制等高 -->
+        <div class="card p-4 flex flex-col gap-3">
+          <h3 class="text-[15px] font-semibold">连接状态</h3>
+          <div class="flex flex-col gap-2 text-[13px]">
+            <div class="flex items-center gap-2"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">REST</span></div>
+            <div class="flex items-center gap-2"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">WS /events</span><span class="text-foreground-subtle font-mono text-xs">15ms</span></div>
+            <div class="flex items-center gap-2"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">终端</span><span class="text-foreground-subtle text-xs">2 个连接</span></div>
+          </div>
+          <p class="text-[11.5px] text-foreground-subtle">上次事件推送：1 秒前</p>
+        </div>
+      </div>
+
+      <!-- 右列：沙箱环境状态 + 诊断 -->
+      <div class="flex flex-col gap-4">
+
+        <!-- 沙箱环境状态（原「Provider 状态」—— provider 一词已从界面退休） -->
+        <div class="card p-4 flex flex-col gap-3">
+          <header class="flex items-center justify-between flex-wrap gap-1">
+            <h3 class="text-[15px] font-semibold">沙箱环境状态</h3>
+            <span class="text-[11px] text-foreground-subtle">窗口 1h · 阈值 &gt;1% 警告 · &gt;10% 故障</span>
+          </header>
+          <div class="flex flex-col gap-2">
+            <div class="rounded-md border border-border px-3 py-2 text-[13px] flex flex-col gap-0.5">
+              <span class="flex items-center gap-2"><span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>正常</span><span class="font-medium">aio</span><span class="text-[11px] px-1.5 py-0.5 rounded bg-background-subtle text-foreground-subtle">默认</span></span>
+              <span class="text-xs text-foreground-subtle">socket proxy 可达 · 最近 1h 失败率 0%</span>
+            </div>
+            <div class="rounded-md border border-border px-3 py-2 text-[13px] flex flex-col gap-0.5">
+              <span class="flex items-center gap-2"><span class="status-pill" data-status="unknown"><svg class="icon"><use href="#i-circle"/></svg>无样本</span><span class="font-medium">boxlite</span></span>
+              <span class="text-xs text-foreground-subtle">最近 1h 没有沙箱创建记录 —— 不是 0%，是没测到</span>
+            </div>
+            <div class="disclosure" data-open="false" id="providerLogDisclosure">
+              <button class="disclosure-head" onclick="toggleDisclosure('providerLogDisclosure')">
+                <svg class="disclosure-chevron"><use href="#i-chevron-down"/></svg>
+                <span class="flex items-center gap-2 flex-1 text-[13px]"><span class="status-pill" data-status="warn"><svg class="icon"><use href="#i-alert"/></svg>失败率偏高</span><span class="font-medium">custom-xx</span></span>
+                <span class="text-xs text-foreground-subtle">最近 1h 失败率 5%</span>
+              </button>
+              <div class="disclosure-body">
+                <pre class="text-[11px] font-mono bg-background-subtle rounded-md p-2.5 max-h-32 overflow-auto text-foreground-muted">14:41:02 ERROR provision timeout after 30000ms sandbox=c9x1
+14:38:47 ERROR provision timeout after 30000ms sandbox=c9x0
+14:20:11 INFO  provision ok sandbox=c8ff (3.8s)</pre>
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-col gap-1 pt-1 border-t border-border">
+            <h4 class="text-xs font-medium text-foreground-subtle">Agent</h4>
+            <div class="flex items-center gap-2 text-xs text-foreground-muted"><span class="status-pill" data-status="ok" style="height:18px"><svg class="icon" style="width:10px;height:10px"><use href="#i-check"/></svg></span>Codex（OpenAI）· 凭证已配置 · 授权方式 帐号授权 / API Key</div>
+            <div class="flex items-center gap-2 text-xs text-foreground-muted"><span class="status-pill" data-status="unknown" style="height:18px"><svg class="icon" style="width:10px;height:10px"><use href="#i-minus"/></svg></span>Claude Code（Anthropic）· 凭证未配置 · 授权方式 setup-token / API Key</div>
+          </div>
+        </div>
+
+        <!-- 诊断 -->
+        <div class="card p-4 flex flex-col gap-3">
+          <header class="flex items-center justify-between gap-2">
+            <h3 class="text-[15px] font-semibold">诊断</h3>
+            <span class="flex items-center gap-2">
+              <button class="btn btn-primary btn-sm" id="diagnoseBtn" onclick="runDiagnose()">重新诊断</button>
+              <button class="btn btn-outline btn-sm"><svg class="icon"><use href="#i-download"/></svg>导出日志</button>
+            </span>
+          </header>
+          <p class="text-[12px] text-foreground-subtle flex items-center gap-2 flex-wrap" id="diagnoseSummary"></p>
+          <div id="diagnosticsList"></div>
+        </div>
+      </div>
+
+        <!-- 审计流：跨两列，放在左右两条 flex 列之外 -->
+        <div class="card p-4 flex flex-col gap-3 lg:col-span-2">
+          <header class="flex items-center justify-between flex-wrap gap-2">
+            <h3 class="text-[15px] font-semibold">审计流</h3>
+          </header>
+          <div class="flex flex-wrap items-center gap-3 text-xs" role="group" aria-label="审计流筛选">
+            <label class="flex items-center gap-1"><span class="text-foreground-subtle">类别</span>
+              <select><option>全部</option><option>沙箱</option><option>项目</option><option>凭证</option><option>镜像</option><option>系统</option></select>
+            </label>
+            <label class="flex items-center gap-1.5"><span class="switch-track" data-on="false" onclick="this.dataset.on = this.dataset.on==='true'?'false':'true'"><span class="switch-thumb"></span></span>仅告警</label>
+            <label class="flex items-center gap-1"><span class="text-foreground-subtle">起</span><input type="datetime-local" style="width:auto" /></label>
+            <label class="flex items-center gap-1"><span class="text-foreground-subtle">止</span><input type="datetime-local" style="width:auto" /></label>
+          </div>
+          <div id="auditList" class="flex flex-col"></div>
+          <div class="flex justify-center pt-1 text-xs">
+            <button class="btn btn-ghost btn-sm">加载更早的记录</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="max-w-[1400px] mx-auto px-5 pb-14 pt-4 text-xs text-foreground-subtle border-t border-border mt-4">
+  设计原型 · 单文件、无构建依赖 · 内容取自现有 view 与产品文档（21-1 / 21-5 / 21-8），非编造数据。
+</footer>
+
+<div id="toast" role="status"></div>
+
+<!-- ============ 新建任务弹层 ============
+     与初始化向导的壳体刻意不同姿态：这是一个常规可关闭弹层（Esc / 点遮罩 / ✕ 都能关），
+     内容对照真实的 web/src/views/sandbox/NewSandboxPanel.view.tsx。
+     落地时这里应该用 shadcn `Dialog`（Radix），与向导壳体（同样用 Dialog，但在
+     onEscapeKeyDown / onInteractOutside 里 preventDefault 做成不可关）共用同一套弹层实现——
+     区别只在“要不要拦下关闭事件”，不是两套写法。见 design-notes.md 的组件选型一节。 -->
+<div class="modal-overlay" id="taskModalOverlay" hidden onclick="if(event.target===this) closeTaskModal()">
+  <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+    <header class="modal-header">
+      <h3 id="taskModalTitle" class="text-[15px] font-semibold">发起新任务</h3>
+      <button class="modal-close" aria-label="关闭" onclick="closeTaskModal()">
+        <svg class="icon"><use href="#i-x"/></svg>
+      </button>
+    </header>
+    <div class="modal-body" id="taskModalBody"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+ * 数据 & 渲染
+ * ============================================================ */
+const ICONS = {
+  ok: 'i-check', info: 'i-info', warn: 'i-alert', fail: 'i-x',
+  timeout: 'i-clock', pending: 'i-loader', skipped: 'i-minus', unknown: 'i-circle'
+};
+const STATUS_TEXT = {
+  ok: '正常', info: '提示', warn: '警告', fail: '不可达', timeout: '超时未响应',
+  pending: '检查中…', skipped: '走过未达成', unknown: '无样本'
+};
+function pill(status, label) {
+  const text = label !== undefined ? label : STATUS_TEXT[status];
+  return `<span class="status-pill" data-status="${status}"><svg class="icon"><use href="#${ICONS[status]}"/></svg>${text}</span>`;
+}
+function icon(name, cls) { return `<svg class="icon ${cls||''}"><use href="#${name}"/></svg>`; }
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.innerHTML = icon('i-check') + msg;
+  t.classList.add('show');
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function copyText(msg) {
+  try { navigator.clipboard && navigator.clipboard.writeText(msg); } catch (e) {}
+  showToast('已复制到剪贴板');
+}
+function toggleDisclosure(id) {
+  const el = document.getElementById(id);
+  el.dataset.open = el.dataset.open === 'true' ? 'false' : 'true';
+}
+
+/* ---------------- 主题切换 ---------------- */
+const root = document.documentElement;
+const themeToggle = document.getElementById('themeToggle');
+function applyTheme(mode) {
+  root.dataset.theme = mode;
+  document.getElementById('themeIcon').innerHTML = `<use href="#${mode === 'dark' ? 'i-moon' : 'i-sun'}"/>`;
+  document.getElementById('themeLabel').textContent = mode === 'dark' ? '暗色' : '亮色';
+  try { localStorage.setItem('proto-theme', mode); } catch (e) {}
+}
+themeToggle.addEventListener('click', () => applyTheme(root.dataset.theme === 'dark' ? 'light' : 'dark'));
+(function initTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem('proto-theme'); } catch (e) {}
+  applyTheme(saved === 'light' ? 'light' : 'dark');
+})();
+
+/* ---------------- 设计说明 折叠 ---------------- */
+document.getElementById('specToggle').addEventListener('click', () => {
+  const body = document.getElementById('specBody');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  document.getElementById('specToggleLabel').textContent = open ? '展开' : '收起';
+  document.getElementById('specToggleIcon').style.transform = open ? 'rotate(-90deg)' : '';
+});
+
+/* ---------------- 顶部导航 scrollspy ---------------- */
+const navLinks = Array.from(document.querySelectorAll('#topTabs a'));
+const navSections = ['spec', 'wizard', 'workbench', 'system'].map(id => document.getElementById(id));
+const io = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(l => l.removeAttribute('data-active'));
+      const link = navLinks.find(l => l.getAttribute('href') === '#' + e.target.id);
+      if (link) link.dataset.active = 'true';
+    }
+  });
+}, { rootMargin: '-40% 0px -55% 0px' });
+navSections.forEach(s => s && io.observe(s));
+
+/* ============================================================
+ * 初始化向导
+ * ============================================================ */
+const WIZARD_STEPS = [
+  { key: 1, label: '联网检查' },
+  { key: 2, label: '代理配置' },
+  { key: 3, label: '沙箱镜像' },
+  { key: 4, label: '模型帐号' },
+  { key: 5, label: '资源确认' },
+];
+const wizardState = { current: 1, status: { 1: 'untouched', 2: 'untouched', 3: 'untouched', 4: 'untouched', 5: 'untouched' } };
+let connScenario = 'all'; // all | partial | offline
+let offlineAcknowledged = false;
+let subExpanded = null;
+
+const CONNECTIVITY_DATA = {
+  all: {
+    verdict: 'online', verdictText: '联网检查通过：模型 API 与镜像下载源均可达。',
+    rows: [
+      { id: 'openai', target: 'api.openai.com', kind: '模型 API', status: 'ok', state: '响应 3197ms' },
+      { id: 'anthropic', target: 'api.anthropic.com', kind: '模型 API', status: 'ok', state: '响应 3610ms' },
+      { id: 'ghcr', target: 'ghcr.io', kind: '镜像下载源', status: 'ok', state: '响应 4843ms' },
+    ],
+  },
+  partial: {
+    verdict: 'partial', verdictText: '部分可达：至少一个模型 API 正常，Agent 仍可运行。',
+    rows: [
+      { id: 'openai', target: 'api.openai.com', kind: '模型 API', status: 'timeout', state: '超时未响应', hint: '已等待 10 秒（超时时限）仍未收到响应，可能是网络拥塞或代理配置不当 —— 超时不等于不可达，建议先重新检测一次。' },
+      { id: 'anthropic', target: 'api.anthropic.com', kind: '模型 API', status: 'ok', state: '响应 3610ms' },
+      { id: 'ghcr', target: 'ghcr.io', kind: '镜像下载源', status: 'fail', state: '连接被拒绝', hint: 'ECONNREFUSED —— 镜像下载源不可达不影响 Agent 运行，但拉取新镜像会失败，建议配置 HTTP_PROXY。' },
+    ],
+  },
+  offline: {
+    verdict: 'offline', verdictText: '当前为离线环境，Agent 将不可用（模型 API 均不可达）。',
+    rows: [
+      { id: 'openai', target: 'api.openai.com', kind: '模型 API', status: 'fail', state: '不可达', hint: 'ECONNREFUSED —— 未检测到联网能力。' },
+      { id: 'anthropic', target: 'api.anthropic.com', kind: '模型 API', status: 'fail', state: '不可达', hint: 'ECONNREFUSED —— 未检测到联网能力。' },
+      { id: 'ghcr', target: 'ghcr.io', kind: '镜像下载源', status: 'fail', state: '不可达', hint: 'ECONNREFUSED —— 无法拉取新镜像，可离线导入。' },
+    ],
+  },
+};
+
+function renderConnectivityRows() {
+  const data = CONNECTIVITY_DATA[connScenario];
+  const verdictColor = data.verdict === 'offline' ? 'text-error' : data.verdict === 'partial' ? 'text-warning' : 'text-foreground-muted';
+  let html = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+    <p class="text-sm ${verdictColor}">${data.verdictText}</p>
+    <button class="btn btn-outline btn-sm" onclick="recheckConnectivity(this)">重新检测</button>
+  </div><ul class="flex flex-col gap-2">`;
+  data.rows.forEach(row => {
+    html += `<li class="rounded-md border border-border px-3 py-2 text-sm flex flex-col gap-1">
+      <span class="flex flex-wrap items-center gap-2">
+        ${pill(row.status, row.state)}
+        <span class="font-medium">${row.target}</span>
+        <span class="rounded bg-background-subtle px-1.5 py-0.5 text-[11px] text-foreground-subtle">${row.kind}</span>
+      </span>
+      ${row.hint ? `<span class="text-xs text-foreground-subtle leading-relaxed pl-1">${row.hint}</span>` : ''}
+    </li>`;
+  });
+  html += `</ul><p class="text-xs text-foreground-subtle mt-2">上次检测：刚刚（本轮检测）</p>`;
+  const container = document.getElementById('connectivityRows');
+  if (container) container.innerHTML = html;
+
+  const offlinePanel = document.getElementById('offlinePanel');
+  if (offlinePanel) offlinePanel.style.display = data.verdict === 'offline' ? '' : 'none';
+  const skipBtn = document.getElementById('skipStep2Btn');
+  if (skipBtn) skipBtn.style.display = connScenario === 'all' ? '' : 'none';
+}
+function recheckConnectivity(btn) {
+  btn.disabled = true;
+  let s = 3;
+  const t = setInterval(() => {
+    if (s <= 0) { clearInterval(t); renderConnectivityRows(); return; }
+    btn.textContent = `重新检测（${s}s）`;
+    s--;
+  }, 1000);
+  btn.textContent = '检测中…';
+}
+function setScenario(name) {
+  connScenario = name;
+  document.querySelectorAll('#scenarioSwitch button').forEach(b => b.dataset.active = (b.dataset.value === name) ? 'true' : 'false');
+  renderConnectivityRows();
+}
+
+function panelStep1() {
+  return `<section class="flex flex-col gap-3">
+    <div class="flex items-center gap-1.5 text-xs mb-1">
+      <span class="text-foreground-subtle mr-1">模拟场景：</span>
+      <span class="segmented" id="scenarioSwitch">
+        <button data-value="all" data-active="true" onclick="setScenario('all')">全部可达</button>
+        <button data-value="partial" onclick="setScenario('partial')">部分异常</button>
+        <button data-value="offline" onclick="setScenario('offline')">完全离线</button>
+      </span>
+    </div>
+    <div id="connectivityRows"></div>
+    <div id="offlinePanel" style="display:none" class="flex flex-col gap-2 rounded-md border p-3 text-sm" style="border-color:hsl(var(--error)/.4); background:hsl(var(--error)/.06)">
+      <p class="font-medium text-error flex items-center gap-1.5">${icon('i-alert')}当前为离线环境，Agent 将不可用</p>
+      <p class="text-foreground-muted text-xs">网络恢复后无需重装，回系统状态页重新检测即可。</p>
+      ${offlineAcknowledged
+        ? `<p class="text-xs text-foreground-subtle">${icon('i-check')} 已确认以离线模式继续 —— 完成初始化后，工作台会常驻一条离线横幅，发起任务的入口会置灰（只置灰、不隐藏）。</p>`
+        : `<div class="flex items-center gap-2"><button class="btn btn-outline btn-sm" onclick="offlineAcknowledged=true; renderWizard();">我知道，继续</button><span class="text-xs text-foreground-subtle">确认在这台机器上 Agent 不可用，仍要完成初始化。</span></div>`}
+    </div>
+  </section>`;
+}
+
+function panelStep2() {
+  return `<form class="flex flex-col gap-3" onsubmit="return false">
+    <label class="flex flex-col gap-1 text-sm"><span class="font-medium text-xs">HTTP_PROXY</span><input type="text" placeholder="http://127.0.0.1:7890" /></label>
+    <label class="flex flex-col gap-1 text-sm"><span class="font-medium text-xs">HTTPS_PROXY</span><input type="text" placeholder="http://127.0.0.1:7890" /></label>
+    <label class="flex flex-col gap-1 text-sm"><span class="font-medium text-xs">NO_PROXY</span><input type="text" placeholder="localhost,127.0.0.1,.internal" /></label>
+    <p class="text-xs text-foreground-subtle leading-relaxed">三个都留空 = 清空代理配置。代理串里如果带用户名密码，会被存进平台配置 —— 审计日志只记 host。</p>
+    <div class="flex items-center gap-2 flex-wrap">
+      <button type="button" class="btn btn-primary" onclick="showToast('已保存并重新检测')">保存并重新检测</button>
+      <span class="text-xs text-foreground-subtle">只保存配置，不会结束初始化 —— 放行在最后一步。</span>
+      <button type="button" id="skipStep2Btn" class="btn btn-ghost ml-auto" onclick="goToStep(3,'skip2')">联网已全部正常，跳过此步 →</button>
+    </div>
+  </form>`;
+}
+
+const PRESET_STEPS = [
+  { ordinal: 1, label: '配置检查', state: 'pass', summary: 'SANDBOX_DEFAULT_IMAGE 已配置：ghcr.io/xeonice/agent-platform-sandbox:v2' },
+  { ordinal: 2, label: '镜像下载源校验', state: 'pass', summary: '镜像下载源中存在该镜像的清单（manifest）' },
+  { ordinal: 3, label: '来源校验', state: 'pass', summary: '确认为平台自建镜像（不是上游镜像），具备自动下载权限' },
+  { ordinal: 4, label: '注册校验', state: 'pass', summary: '已注册进本机沙箱环境（aio），状态校验通过' },
+  { ordinal: 5, label: '下载到本机', state: 'info', summary: '镜像已就绪，只是还没下载到本机 —— 首个任务前会自动下载，不影响其余步骤' },
+];
+function panelStep3() {
+  const STATE_TEXT = { pass: '通过', info: '提示', fail: '未通过', pending: '未检查' };
+  let rows = PRESET_STEPS.map(s => `<li class="rounded-md border border-border px-3 py-2 text-sm flex flex-col gap-1">
+    <span class="flex flex-wrap items-center gap-2">
+      ${pill(s.state === 'pass' ? 'ok' : s.state, STATE_TEXT[s.state])}
+      <span class="font-medium">镜像检查第 ${s.ordinal} 项 · ${s.label}</span>
+    </span>
+    <span class="text-xs text-foreground-subtle pl-1">${s.summary}</span>
+    ${s.ordinal === 5 ? `<div class="mt-1 rounded-md border p-3 flex flex-col gap-2" style="border-color:hsl(var(--info)/.3); background:hsl(var(--info)/.06)">
+      <div class="flex items-center justify-between text-xs text-foreground-subtle font-mono">
+        <span id="provisionByteText">已下载 245 MB / 约 320 MB</span>
+        <span id="provisionPctText">77%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill" id="provisionFill" style="width:77%; background:hsl(var(--info))"></div></div>
+      <div class="flex items-center justify-between text-[11px] text-foreground-subtle">
+        <span id="provisionElapsed">已用时 1 分 34 秒</span>
+        <span>期间数字没变不代表卡死，正在持续写入磁盘</span>
+      </div>
+    </div>` : ''}
+  </li>`).join('');
+  return `<section class="flex flex-col gap-3">
+    <ol class="flex flex-col gap-2">${rows}</ol>
+  </section>`;
+}
+
+const SUB_RUNTIMES = [
+  { id: 'codex', name: 'Codex（ChatGPT）', state: 'ready', masked: 'a***@gmail.com' },
+  { id: 'claude-code', name: 'Claude Code（Anthropic）', state: 'none' },
+];
+function panelStep4() {
+  const STATE_TEXT = { ready: '已配置', expired: '凭证已过期', none: '未配置' };
+  const STATUS_MAP = { ready: 'ok', expired: 'warn', none: 'unknown' };
+  let rows = SUB_RUNTIMES.map(r => {
+    const expanded = subExpanded === r.id;
+    return `<li class="rounded-md border border-border px-3 py-2 text-sm flex flex-col gap-2">
+      <span class="flex flex-wrap items-center gap-2">
+        ${pill(STATUS_MAP[r.state], STATE_TEXT[r.state])}
+        <span class="font-medium">${r.name}</span>
+        ${r.masked ? `<span class="text-xs text-foreground-subtle">· ${r.masked}</span>` : ''}
+        <span class="ml-auto">
+          ${r.state === 'ready' ? '' : expanded
+            ? `<button class="btn btn-ghost btn-sm" onclick="subExpanded=null; renderWizard();">收起</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="subExpanded='${r.id}'; renderWizard();">${r.state === 'expired' ? '重新授权' : '去配置'}</button>`}
+        </span>
+      </span>
+      ${expanded ? `<div class="rounded-md border border-border bg-background-subtle p-3 flex flex-col gap-2 text-xs">
+        <div class="flex items-center gap-2"><button class="btn btn-outline btn-sm" onclick="showToast('已打开授权页，码已复制')">① 打开授权页 ${icon('i-external')}</button><span class="text-foreground-subtle">新标签页 + 码已复制</span></div>
+        <div class="flex items-center gap-2">② 在新标签页粘贴这串码：<code class="inline-cmd">ABCD-2WXYZ</code><button class="btn btn-ghost btn-sm" onclick="copyText('ABCD-2WXYZ')">复制</button><span class="text-foreground-subtle">还剩 14:32</span></div>
+        <div class="flex items-center gap-2 text-foreground-subtle">${pill('pending','等待授权中…')}本页会自己变，不用回来点什么</div>
+      </div>` : ''}
+    </li>`;
+  }).join('');
+  return `<section class="flex flex-col gap-3">
+    <p class="text-sm text-foreground-muted">agent 用你自己的模型帐号跑。<span class="text-foreground">配好任意一个即可开始</span> —— 不必两个都配。</p>
+    <ul class="flex flex-col gap-2">${rows}</ul>
+  </section>`;
+}
+
+function panelStep5() {
+  const rows = [
+    { label: 'CPU', value: '10 核', note: undefined },
+    { label: '内存', value: '32 GB', note: undefined },
+    { label: '磁盘', value: '可用 343.2 GB / 总 926.3 GB', note: '按真实构成计：预制镜像约 13GB · 运行时 rootfs 缓存 · 每个任务一份工作区副本，三项持续增长' },
+  ];
+  return `<section class="flex flex-col gap-3">
+    <ul class="flex flex-col gap-2">
+      ${rows.map(r => `<li class="rounded-md border border-border px-3 py-2 text-sm flex flex-col gap-1">
+        <span class="flex flex-wrap items-center gap-2">${pill('ok','充足')}<span class="font-medium">${r.label}</span><span class="font-mono">${r.value}</span></span>
+        ${r.note ? `<span class="text-xs text-foreground-subtle pl-1">${r.note}</span>` : ''}
+      </li>`).join('')}
+    </ul>
+    <p class="text-xs text-foreground-subtle">调度预留 15% 的资源不计入可分配范围。</p>
+    <div class="flex flex-wrap items-center gap-2 pt-1">
+      <button class="btn btn-primary" id="finishBtn" onclick="finishWizard()">确认，开始使用</button>
+      <span class="text-xs text-foreground-subtle">点它才会写入初始化完成标记 —— 这是一次性操作，此后配置修改全部走「设置 → 系统状态」。</span>
+    </div>
+  </section>`;
+}
+
+const PANEL_RENDERERS = { 1: panelStep1, 2: panelStep2, 3: panelStep3, 4: panelStep4, 5: panelStep5 };
+const STEP_META = {
+  1: { title: 'Step 1 · 联网检查', desc: '自动运行，检测模型 API 与镜像下载源是否可达 —— 全部失败也不会挡住安装。' },
+  2: { title: 'Step 2 · 代理配置', desc: '联网检查失败时必经，全部通过时可跳过。' },
+  3: { title: 'Step 3 · 沙箱镜像就绪', desc: '镜像检查共 5 项，任一项未通过即止 —— 每项的修复动作都不同。' },
+  4: { title: 'Step 4 · 模型帐号', desc: '至少配好一个 Agent 即可开始，不必两个都配。' },
+  5: { title: 'Step 5 · 本机资源确认', desc: '资源偏低只是建议，不会挡住继续使用。' },
+};
+
+function renderWizard() {
+  const stepsHtml = WIZARD_STEPS.map(s => {
+    const st = wizardState.status[s.key];
+    const isCurrent = wizardState.current === s.key;
+    let cls = 'rounded border px-2 py-1 ';
+    let mark = '';
+    if (isCurrent) { cls += 'border-accent text-accent font-medium'; }
+    else if (st === 'done') { cls += 'border-success/40 text-success bg-success/10'; mark = icon('i-check') + ' '; }
+    else if (st === 'skipped') { cls += 'text-warning'; mark = icon('i-alert') + ' '; }
+    else { cls += 'border-border text-foreground-subtle'; }
+    return `<li class="${cls} flex items-center gap-1">${mark}${s.key}. ${s.label}${!isCurrent && st==='untouched' && s.key===2 ? '（可跳过）' : ''}</li>`;
+  }).join('');
+  document.getElementById('wizardSteps').innerHTML = stepsHtml;
+
+  const meta = STEP_META[wizardState.current];
+  document.getElementById('stepTitle').textContent = meta.title;
+  document.getElementById('stepDesc').textContent = meta.desc;
+  document.getElementById('wizardPanels').innerHTML = PANEL_RENDERERS[wizardState.current]();
+  if (wizardState.current === 1) renderConnectivityRows();
+
+  document.getElementById('wizardBack').style.visibility = wizardState.current === 1 ? 'hidden' : 'visible';
+  const nextBtn = document.getElementById('wizardNext');
+  if (wizardState.current === 5) { nextBtn.style.display = 'none'; }
+  else { nextBtn.style.display = ''; nextBtn.textContent = '下一步'; }
+
+  const footerNotes = {
+    1: '', 2: '', 3: '在此之前无法发起任何任务（第 5 项下载到本机完成前）。',
+    4: '在此之前无法发起任何任务。', 5: ''
+  };
+  document.getElementById('footerNote').textContent = footerNotes[wizardState.current] || '';
+}
+
+function goToStep(n, mode) {
+  if (mode === 'skip2') {
+    wizardState.status[2] = 'skipped';
+  } else {
+    for (let s = wizardState.current; s < n; s++) { wizardState.status[s] = 'done'; }
+  }
+  wizardState.current = n;
+  renderWizard();
+}
+document.getElementById('wizardNext').addEventListener('click', () => {
+  if (wizardState.current < 5) goToStep(wizardState.current + 1);
+});
+document.getElementById('wizardBack').addEventListener('click', () => {
+  if (wizardState.current > 1) { wizardState.current -= 1; renderWizard(); }
+});
+function finishWizard() {
+  wizardState.status[5] = 'done';
+  const btn = document.getElementById('finishBtn');
+  btn.textContent = '已完成 ✓';
+  btn.disabled = true;
+  showToast('初始化完成，写入 initialized = true');
+  renderWizard();
+}
+renderWizard();
+
+/* 镜像下载进度：持续跳动的数字 + 计时，证明"不是卡死" */
+let provisionMB = 245, provisionElapsedSec = 94;
+setInterval(() => {
+  const byteEl = document.getElementById('provisionByteText');
+  const pctEl = document.getElementById('provisionPctText');
+  const fillEl = document.getElementById('provisionFill');
+  const elapsedEl = document.getElementById('provisionElapsed');
+  if (!byteEl) return;
+  provisionElapsedSec += 1;
+  const mm = Math.floor(provisionElapsedSec / 60), ss = provisionElapsedSec % 60;
+  elapsedEl.textContent = `已用时 ${mm} 分 ${String(ss).padStart(2,'0')} 秒`;
+  if (provisionMB < 320) {
+    provisionMB = Math.min(320, provisionMB + 3);
+    const pct = Math.round((provisionMB / 320) * 100);
+    byteEl.textContent = `已下载 ${provisionMB} MB / 约 320 MB`;
+    pctEl.textContent = pct + '%';
+    fillEl.style.width = pct + '%';
+    if (provisionMB >= 320) {
+      pctEl.textContent = '100%';
+      setTimeout(() => {
+        const infoRow = fillEl.closest('li');
+        if (infoRow) {
+          infoRow.querySelector('.status-pill').outerHTML = pill('ok','通过');
+          const box = fillEl.closest('div.mt-1');
+          if (box) box.outerHTML = `<p class="text-xs mt-1" style="color:hsl(var(--success))">${icon('i-check')} 已下载到本机，可以立即发起任务</p>`;
+        }
+      }, 600);
+    }
+  }
+}, 1000);
+
+/* ============================================================
+ * 工作台
+ * ============================================================ */
+const TASKS = {
+  t1: {
+    project: 'ProjectA', name: 'Codex · 重构支付模块的类型定义', waiting: true, active: '3 分钟前',
+    transcript: `<span class="dim">$</span> codex "重构支付模块的类型定义，统一 PaymentMethod 联合类型"
+<span class="dim">›</span> 正在分析仓库结构…
+<span class="dim">›</span> 找到 12 处引用 PaymentMethod，其中 3 处使用了字符串字面量而非枚举
+<span class="dim">›</span> 建议：将 PaymentMethod 提升为 discriminated union，并在 src/types/payment.ts 中统一导出
+
+<span class="wait-line">⚡ 等待你的确认：是否按此方案继续？(y/n)</span><span class="terminal-caret"></span>`,
+  },
+  t2: {
+    project: 'ProjectA', name: 'Claude Code · 修复终端连接偶发断线', waiting: false, active: '1 小时前',
+    transcript: `<span class="dim">$</span> claude "排查终端 WebSocket 偶发断线的原因"
+<span class="accent-line">●</span> 已读取 src/hooks/useSandboxTerminalSocket.ts
+<span class="accent-line">●</span> 定位到问题：心跳间隔 30s，但网关空闲超时 25s，先于心跳触发断连
+<span class="accent-line">●</span> 修改心跳间隔为 20s，并在收到 pong 后重置计时器
+<span class="dim">✓</span> 变更已写入，等待你运行测试验证<span class="terminal-caret"></span>`,
+  },
+  t3: {
+    project: 'ProjectB', name: 'Codex · 分析用户增长数据的埋点缺口', waiting: true, active: '刚刚',
+    transcript: `<span class="dim">$</span> codex "分析用户增长数据的埋点缺口"
+<span class="dim">›</span> 正在扫描 src/lib/analytics 下的事件定义…
+<span class="dim">›</span> 发现 "task.created" 事件缺少 projectId 维度
+
+<span class="wait-line">⚡ 等待你的确认：是否按此方案继续？(y/n)</span><span class="terminal-caret"></span>`,
+  },
+  t4: {
+    project: 'DataPipeline', name: 'Codex · 重建 ETL 增量同步任务', waiting: false, active: '上周', retained: true,
+    transcript: `<span class="dim">$</span> codex "重建 ETL 增量同步任务"
+<span class="dim">›</span> 任务已完成并停止，工作区成果卷已保留
+<span class="dim">✓</span> exit code 0 · 共写出 3 个文件`,
+  },
+};
+const GROUPS = [
+  { id: 'ProjectA', tasks: ['t1', 't2'] },
+  { id: 'ProjectB', tasks: ['t3'], collapsedDefault: true },
+  { id: 'DataPipeline', tasks: ['t4'], badge: '克隆失败' },
+];
+let selectedTask = 't1';
+let selectedProject = 'ProjectA';
+
+function renderTaskTree() {
+  let html = '';
+  GROUPS.forEach(g => {
+    const collapsed = !!g.collapsedDefault;
+    html += `<section class="mb-1.5">
+      <div class="flex items-center gap-1.5 px-1.5 py-1.5 rounded-md text-sm cursor-pointer hover:bg-background-subtle ${selectedProject===g.id?'bg-background-subtle':''}" onclick="selectProject('${g.id}')">
+        <svg class="disclosure-chevron" style="transform:${collapsed?'rotate(-90deg)':''}"><use href="#i-chevron-down"/></svg>
+        <span class="font-medium flex-1">${g.id}</span>
+        <span class="text-xs text-foreground-subtle">${g.tasks.length}</span>
+        ${g.badge ? `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:hsl(var(--error)/.14); color:hsl(var(--error))">${g.badge}</span>` : ''}
+      </div>
+      ${collapsed ? '' : `<ul class="pl-1">${g.tasks.map(tid => {
+        const t = TASKS[tid];
+        const sel = selectedTask === tid;
+        return `<li><button class="w-full flex items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-background-subtle ${sel ? 'bg-background-subtle' : ''}" onclick="selectTask('${tid}')">
+          ${t.waiting ? `<span class="dot" data-status="warn"></span>` : t.retained ? `<span class="text-foreground-subtle">${icon('i-pause','icon')}</span>` : `<span class="dot" data-status="ok"></span>`}
+          <span class="flex-1 truncate">${t.name}</span>
+        </button>
+        <div class="pl-6 pr-2 -mt-0.5 pb-1 text-[11px] text-foreground-subtle flex items-center gap-1.5">
+          活跃于 ${t.active}
+          ${t.retained ? `<span class="flex items-center gap-1">${icon('i-gift')}卷保留中（还需 6 天）</span>` : ''}
+          ${t.waiting ? `<span style="color:hsl(var(--warning))">等待输入</span>` : ''}
+        </div></li>`;
+      }).join('')}</ul>`}
+    </section>`;
+  });
+  document.getElementById('taskTree').innerHTML = html;
+}
+function selectProject(id) { selectedProject = id; document.getElementById('projectIndicatorName').textContent = id; renderTaskTree(); }
+function selectTask(id) { selectedTask = id; selectedProject = TASKS[id].project; document.getElementById('projectIndicatorName').textContent = selectedProject; renderTaskTree(); renderTerminal(); }
+document.getElementById('projectIndicator').addEventListener('click', () => {
+  document.querySelector(`#taskTree`).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showToast('已在任务树中定位 ' + selectedProject);
+});
+
+function renderTerminal() {
+  const t = TASKS[selectedTask];
+  document.getElementById('terminalTitle').textContent = `${t.project} / ${t.name}`;
+  document.getElementById('terminalCanvas').innerHTML = t.transcript;
+  document.getElementById('terminalTabs').innerHTML = `
+    <span class="flex items-center gap-1.5 px-3 h-8 rounded-t-md bg-background-subtle text-xs border-b-2" style="border-color:hsl(var(--accent))">Term-1<button class="text-foreground-subtle hover:text-foreground">×</button></span>
+    <button class="btn btn-ghost btn-sm ml-1">${icon('i-plus')}新终端</button>
+    <span class="status-pill ml-2" data-status="unknown" title="TerminalTabBar / useTerminalSessions 在当前实现里是 0 个文件 —— 这是目标形态，不是现状">${icon('i-clock')}多标签 · 待实现</span>`;
+}
+
+/* 演示控制：横幅 */
+const BANNERS = {
+  none: '',
+  governance: `<div class="banner banner-governance">${icon('i-alert')}磁盘空间不足，建议清理 <button class="underline ml-1" onclick="showToast('已打开清理面板')">清理</button><span class="ml-auto text-[11px] opacity-70">还有 1 条 · 不自动收起</span></div>`,
+  blocking: `<div class="banner banner-blocking">${icon('i-alert')}当前为离线环境，Agent 将不可用 <button class="underline ml-1" onclick="location.hash='#wizard'">查看详情</button></div>`,
+};
+document.getElementById('bannerDemo').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#bannerDemo button').forEach(b => b.dataset.active = 'false');
+  btn.dataset.active = 'true';
+  document.getElementById('bannerSlot').innerHTML = BANNERS[btn.dataset.value];
+});
+
+/* 演示控制：终端连接态 */
+const CONN_STRIPS = {
+  open: '',
+  reconnecting: `<div class="flex items-center gap-2 px-3 py-1.5 text-xs" style="background:hsl(var(--warning)/.14); color:hsl(var(--warning))">${icon('i-loader','icon')}正在重连…（第 2 次）</div>`,
+  closed: `<div class="flex items-center gap-2 px-3 py-1.5 text-xs" style="background:hsl(var(--error)/.14); color:hsl(var(--error))">连接超时，已停止自动重连。<button class="underline" onclick="showToast('正在手动重连…')">手动重连</button></div>`,
+};
+document.getElementById('connDemo').addEventListener('click', (e) => {
+  const btn = e.target.closest('button'); if (!btn) return;
+  document.querySelectorAll('#connDemo button').forEach(b => b.dataset.active = 'false');
+  btn.dataset.active = 'true';
+  document.getElementById('connStatusStrip').innerHTML = CONN_STRIPS[btn.dataset.value];
+});
+
+renderTaskTree();
+renderTerminal();
+
+/* ============================================================
+ * 新建任务弹层（对照 web/src/views/sandbox/NewSandboxPanel.view.tsx 的真实字段：
+ * 选 Agent · 分支（可选） · 任务指令（可选） · 鉴权闸门在场时禁用发起）
+ * 常规可关闭弹层：Esc / 点遮罩 / ✕ 都能关 —— 与初始化向导刻意不同姿态。
+ * ============================================================ */
+const TASK_MODAL_AGENTS = [
+  { id: 'codex', displayName: 'Codex', vendor: 'OpenAI', credentialReady: true, identity: 'a***@gmail.com' },
+  { id: 'claude-code', displayName: 'Claude Code', vendor: 'Anthropic', credentialReady: false },
+];
+let taskModalAgent = 'codex';
+const PROMPT_MAX = 8000;
+
+function renderTaskModalBody() {
+  const selected = TASK_MODAL_AGENTS.find(a => a.id === taskModalAgent);
+  const authGateOn = !selected.credentialReady;
+  return `
+    <div class="flex flex-col gap-4 text-sm">
+      <p class="text-foreground-muted">在「<span class="text-foreground">ProjectA</span>」中发起一个任务，让 agent 去跑；填了任务指令，agent <strong class="text-foreground">启动时就开始执行</strong>，不必等你打开终端。</p>
+
+      <fieldset class="flex flex-col gap-2">
+        <legend class="text-xs text-foreground-subtle mb-1">Agent（runtime）· 必选</legend>
+        ${TASK_MODAL_AGENTS.map(a => `
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="radio" name="task-agent" value="${a.id}" ${a.id===taskModalAgent?'checked':''} onchange="taskModalAgent='${a.id}'; document.getElementById('taskModalBody').innerHTML = renderTaskModalBody();" />
+            <span class="font-mono text-xs">${a.id}</span>
+            <span class="text-foreground-subtle text-xs">— ${a.displayName}（${a.vendor}）</span>
+          </label>`).join('')}
+      </fieldset>
+
+      ${selected.credentialReady
+        ? `<p class="text-xs text-foreground-subtle">将以 ${selected.identity} 身份运行</p>`
+        : `<div class="rounded-md border p-3 text-xs flex flex-col gap-2" style="border-color:hsl(var(--warning)/.4); background:hsl(var(--warning)/.06)">
+            <p class="flex items-center gap-1.5 font-medium" style="color:hsl(var(--warning))">${icon('i-alert')}${selected.displayName} 还没有可用的登录</p>
+            <button class="btn btn-outline btn-sm w-fit" onclick="showToast('已打开 ' + '${selected.displayName}' + ' 登录页')">去登录 ${icon('i-external')}</button>
+          </div>
+          <p class="text-xs" style="color:hsl(var(--warning))">先完成上面的 ${selected.displayName} 登录，才能发起任务。</p>`}
+
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-foreground-subtle" for="task-branch">分支（可选）</label>
+        <select id="task-branch" class="w-full">
+          <option value="">跟随项目当前的分支（默认）</option>
+          <option>main</option>
+          <option>feature/payment-types</option>
+          <option>fix/terminal-reconnect</option>
+        </select>
+      </div>
+
+      <div class="flex flex-col gap-1">
+        <label class="text-xs text-foreground-subtle" for="task-prompt">任务指令（可选）</label>
+        <textarea id="task-prompt" rows="3" maxlength="${PROMPT_MAX}"
+          placeholder="分析这个仓库的架构并输出摘要…（可选；填了则 agent 启动时即执行）"
+          class="w-full resize-y rounded-md border px-3 py-2 text-sm"
+          style="border-color:hsl(var(--border-strong)); background:hsl(var(--background)); font-family:inherit"
+          oninput="document.getElementById('task-prompt-counter').textContent = this.value.length + '/${PROMPT_MAX}'"></textarea>
+        <p id="task-prompt-counter" class="text-xs text-foreground-subtle">0/${PROMPT_MAX}</p>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-1 border-t border-border">
+        <button class="btn btn-ghost" onclick="closeTaskModal()">取消</button>
+        <button class="btn btn-primary" ${authGateOn ? 'disabled' : ''} onclick="showToast('已发起任务，正在打开终端'); closeTaskModal();">发起任务并打开终端</button>
+      </div>
+    </div>`;
+}
+function openTaskModal() {
+  taskModalAgent = 'codex';
+  document.getElementById('taskModalBody').innerHTML = renderTaskModalBody();
+  document.getElementById('taskModalOverlay').hidden = false;
+}
+function closeTaskModal() {
+  document.getElementById('taskModalOverlay').hidden = true;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !document.getElementById('taskModalOverlay').hidden) closeTaskModal();
+});
+
+/* ============================================================
+ * 系统状态：诊断 8 项 + 审计流
+ * ============================================================ */
+const DIAGNOSTICS = [
+  { id: 1, label: '容器运行时可达（aio）', status: 'ok', summary: 'socket proxy 已应答，版本 24.0.7', duration: '86ms' },
+  { id: 2, label: '微虚拟机沙箱（boxlite）', status: 'info', summary: '当前这台机器的沙箱环境默认运行 aio 容器，/dev/kvm 检测不适用于本沙箱环境', duration: '4ms' },
+  { id: 3, label: '磁盘余量', status: 'ok', summary: '可用 343.2 GB / 总 926.3 GB', duration: '12ms' },
+  { id: 4, label: '端口占用', status: 'warn', summary: '端口 3000（平台 HTTP/WS 服务）被 com.docke（pid 41235）占用', hint: 'lsof -i :3000 后 kill 对应进程，或修改平台监听端口', duration: '9ms' },
+  { id: 5, label: '联网检查（镜像下载源/模型帐号授权域名）', status: 'timeout', summary: '10s 超时时限内未收到应答 —— 超时不等于不可达，常见于慢链路，建议重新诊断一次', duration: '10000ms' },
+  { id: 6, label: 'WS 回环测试', status: 'ok', summary: '本地回环测试成功，延迟 4ms', duration: '4ms' },
+  { id: 7, label: '数据目录文件系统', status: 'warn', summary: '数据目录（DATA_ROOT）为 ext4，reflink 不支持（CoW 加速功能受限）', hint: '建议使用 Btrfs / XFS（支持 reflink）以获得加速', duration: '3ms' },
+  { id: 8, label: '预制镜像就绪', status: 'ok', summary: '镜像已注册且已下载到本机', duration: '2ms' },
+];
+function renderDiagnostics() {
+  const counts = DIAGNOSTICS.reduce((acc, d) => { acc[d.status] = (acc[d.status]||0)+1; return acc; }, {});
+  const order = ['ok','info','warn','timeout','fail'];
+  const summaryText = order.filter(k => counts[k]).map(k => `${counts[k]} 项${STATUS_TEXT[k]}`).join(' · ');
+  document.getElementById('diagnoseSummary').innerHTML = `${summaryText} · 上次诊断：刚刚（用时 4.2s）`;
+
+  const html = DIAGNOSTICS.map(d => {
+    const open = ['warn','fail','timeout'].includes(d.status);
+    return `<div class="disclosure" data-open="${open}" id="diag-${d.id}">
+      <button class="disclosure-head" onclick="toggleDisclosure('diag-${d.id}')">
+        <svg class="disclosure-chevron"><use href="#i-chevron-down"/></svg>
+        <span class="text-foreground-subtle text-xs font-mono w-4 flex-none">${'①②③④⑤⑥⑦⑧'[d.id-1]}</span>
+        ${pill(d.status)}
+        <span class="text-[13px] font-medium flex-1 truncate text-left">${d.label}</span>
+        <span class="text-[11px] text-foreground-subtle font-mono flex-none">${d.duration}</span>
+      </button>
+      <div class="disclosure-body flex flex-col gap-2">
+        <p class="text-[13px] leading-relaxed">${d.summary}</p>
+        ${d.hint ? `<div class="flex items-center gap-2"><code class="inline-cmd flex-1">${d.hint}</code><button class="btn btn-outline btn-sm" onclick="copyText('${d.hint.replace(/'/g,"\\'")}')">复制</button></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('diagnosticsList').innerHTML = html;
+}
+function runDiagnose() {
+  const btn = document.getElementById('diagnoseBtn');
+  btn.disabled = true; btn.textContent = '诊断中…';
+  setTimeout(() => { btn.disabled = false; btn.textContent = '重新诊断'; renderDiagnostics(); showToast('诊断完成'); }, 1200);
+}
+renderDiagnostics();
+
+const AUDIT_ROWS = [
+  { time: '14:22', severity: 'warn', summary: 'sandbox a3f2 探测失败 codex 未就绪', actor: 'system', link: '查看该沙箱完整时间线' },
+  { time: '14:21', severity: 'info', summary: 'sandbox a3f2 provision 完成', duration: '4.2s', outcome: '成功', actor: 'system' },
+  { time: '14:21', severity: 'info', summary: 'sandbox a3f2 工作区就绪 2 个条目', actor: 'system' },
+  { gapAfter: true },
+  { time: '14:05', severity: 'error', summary: 'credential claude-code 授权刷新失败', errorCode: 'AUTH_REFRESH_FAILED', actor: 'you@local', detail: '{\n  "runtime": "claude-code",\n  "reason": "refresh_token_expired",\n  "attempt": 2\n}' },
+];
+const SEVERITY_MAP = { info: 'info', warn: 'warn', error: 'fail' };
+function renderAudit() {
+  let html = '';
+  AUDIT_ROWS.forEach((row, i) => {
+    if (row.gapAfter) {
+      html += `<li class="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-xs my-1" style="border-color:hsl(var(--warning)/.5); background:hsl(var(--warning)/.06)">
+        <span class="flex items-center gap-2">${icon('i-alert')}此处有未加载的事件（seq 4831–4839 之间，条数未知）</span>
+        <button class="btn btn-outline btn-sm" onclick="showToast('已加载中间部分')">加载中间部分</button>
+      </li>`;
+      return;
+    }
+    const expandable = !!row.detail;
+    html += `<li class="border-b border-border/60 py-1.5">
+      <button class="flex items-center gap-2 w-full text-left rounded px-1 hover:bg-background-subtle" ${expandable ? `onclick="toggleAuditRow(${i})"` : 'style="cursor:default"'}>
+        <span class="w-3 text-foreground-subtle text-xs">${expandable ? '▸' : ''}</span>
+        <time class="font-mono text-[11px] text-foreground-subtle w-10 flex-none">${row.time}</time>
+        ${pill(SEVERITY_MAP[row.severity], {info:'信息',warn:'警告',error:'错误'}[row.severity])}
+        <span class="flex-1 truncate text-xs">${row.summary}</span>
+        ${row.duration ? `<span class="font-mono text-[11px] text-foreground-subtle">${row.duration}</span>` : ''}
+        ${row.outcome ? `<span class="text-[11px] text-foreground-subtle">${row.outcome}</span>` : ''}
+        ${row.errorCode ? `<code class="text-[11px] rounded px-1" style="background:hsl(var(--error)/.12); color:hsl(var(--error))">${row.errorCode}</code>` : ''}
+        <span class="text-[11px] text-foreground-subtle flex-none">${row.actor}</span>
+      </button>
+      ${row.link ? `<div class="pl-9"><button class="text-[11px] underline text-foreground-muted" onclick="showToast('打开时间线')">${row.link}</button></div>` : ''}
+      <div id="audit-detail-${i}" style="display:none" class="pl-9 pt-1"><pre class="text-[11px] font-mono bg-background-subtle rounded-md p-2.5 text-foreground-muted overflow-auto">${row.detail||''}</pre></div>
+    </li>`;
+  });
+  document.getElementById('auditList').innerHTML = `<ul class="flex flex-col">${html}</ul>`;
+}
+function toggleAuditRow(i) {
+  const el = document.getElementById('audit-detail-' + i);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+renderAudit();
+</script>
+</body>
+</html>
