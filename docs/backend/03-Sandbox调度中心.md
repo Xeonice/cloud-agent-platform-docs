@@ -227,7 +227,7 @@ creating  ─── ⓪ prepareRuntimeCredential → env 形态并入 SandboxPro
 starting ─┬─ ① provider.start(handle)
           ├─ ② 数据面就绪探测（aio=:8080 / boxlite=native）  ← §4 既有条款
           ├─ ③ ensureRuntimeInstalled(runtimeId, exec)        ← 装 CLI（T-3）
-          ├─ ④ injectCredential → recordRuntimeInjection      ← 文件/stdin 形态注入（05 §4.3）
+          ├─ ④ injectCredential × N → recordRuntimeInjection  ← **全部**已配置凭证（06 §5.6）
           ├─ ⑤ bootstrapAgentSession(sandboxId, initialTask)  ← 起 agent 会话（T-2）
           └─ running
 ```
@@ -253,6 +253,22 @@ starting ─┬─ ① provider.start(handle)
 
 1. **`injectCredential` 的位置没有变**——它仍然严格排在 `provider.start()` 之后，25 T-SBX-31 的断言语义不变（它断言的就是「`injectCredential` 在 `provider.start` 之后」）。挪到前面的只有 `prepareRuntimeCredential` 这一次**解密取值**。
 2. **只解密一次**：同一个 `InjectableRuntimeCredential` 对象横跨 `create` 与 ④，用完在 `finally` 里 `zeroize()`。解两次等于把明文在内存里多摊一份，没有任何收益。
+
+**⚠️ 2026-09：第 ④ 步从「一份」变成「全部」（用户裁决，产品需求见 06 §5.6）。**
+用户要能在终端里随手开 Codex / Claude Code / 纯终端。CLI 本来就预装在镜像里
+（两个内置镜像的 `supportedRuntimes` 都是 `['codex','claude-code']`），挡路的是凭证，
+而上面那条物理约束（env 形态只能在建实例时给）意味着**不可能**等用户点了再注入。
+⇒ provision 把**所有已配置且未过期**的凭证一次备齐、一起注入：
+
+- **候选集 = 镜像声明的 `supportedRuntimes`**（⛔ 不是注册表全集：往没装那个 CLI 的
+  镜像里注凭证，只会让下拉里多出一个点开必然失败的选项）。未声明 ⇒ 只试默认那一个，
+  与本切片之前一致。
+- **单个失败不拖垮整段 provision**，失败的那个**不进**记录 —— 记录里只有真的成功了的。
+- **注入成功的列表落库**（`sandboxes.injected_runtimes`）。⛔ 之后所有「这个沙箱能跑
+  哪几个」的判断都读它，绝不现推（理由见 10 §7.3 `availableRuntimes`）。
+- **凭证面扩大了**（一个 Codex 任务的沙箱里也会有 Claude 的令牌）——用户裁决接受，
+  但要求**落审计**：`sandbox.credentials.injected` 记 runtime id 列表，⛔ 不记材料。
+- **env 名撞车 fail-fast**，⛔ 不按注册顺序静默覆盖（两层拦截，见 06 §5.6 末节）。
 3. **per-call `env` 不是替代方案**：`ProcessSpec.env` 现在虽然生效了，但它会被 agent 物化成 `export K=V` 拼进命令串，**沙箱内 `ps` 可见**（04 §2.3★ 第 2 条）。所以 env 形态的凭证只能走沙箱创建时那一条通道。
 
 > **无凭证不算 provision 失败**（S5 实现裁定）：`prepareRuntimeCredential` 抛 `NO_CREDENTIAL` 时只记一条 WARN、照常继续起沙箱——用户完全可能先建任务再去授权，agent 自己会说「未登录」，这是可恢复状态，不该阻断创建。无头 Task 的「无凭证不触发」另由 §8.2 决策表第 2 条管。
