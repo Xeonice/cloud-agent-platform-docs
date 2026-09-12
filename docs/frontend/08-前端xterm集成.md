@@ -407,6 +407,8 @@ data 帧 → lib/writeBatcher.ts#push(bytes)
 |---|---|---|
 | `scrollback` | **5000 行** | 前端只是渲染缓存（权威在后端 tmux，§5.2）。⚠️ **注意它在 agent 终端里几乎用不上**：`tmux attach` 之后客户端处在备用屏，xterm 的这份回滚根本滚不到（§7.5）——留 5000 是为**非 tmux 场景**（将来若有直连 pty 的标签页）和内存兜底；再大则每实例内存显著上升，而 LRU 只允许 4–6 个实例并存 |
 | `theme` | 纯黑底（`background: #000`）+ 产品暗色主题的前景/选区色，常量放 `lib/terminalTheme.ts` | 产品规定"全局暗色，终端区纯黑底"（P21 §3）；集中成常量避免主题色散落 |
+
+⚠️ **画布恒黑，仪表壳跟随主题**（design-notes.md §1 问题 4 / §4 Phase 3 第 1 条）：`TerminalPaneView` 不再是一个裸 `bg-terminal` 的 div，外层套了 `components/ui/terminal-frame.tsx` 的 `TerminalFrame`——相框（边框/背景）读 `--terminal-chrome`/`--terminal-chrome-border` 两个随 `.dark` 切换的 CSS 变量（`globals.css`），暗色下维持深色，亮色下改浅灰；`ref` 转发到的**画布**节点（`data-slot="terminal-canvas"`）仍然读固定的 `--terminal-bg: #000000`，两套主题都不能碰——上面这行 `theme` 配置描述的正是这块恒黑画布，不受相框主题切换影响。`useTerminalInstance.attach()` 的挂载点因此没有变，只是外面多了一层随主题变化的边框。
 | `fontFamily` | `'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace` | 等宽栈逐级降级；**必须以 `monospace` 收尾**，否则某些系统回落到比例字体会导致列对不齐 |
 | `fontSize` | 默认 14，**persist**（uiSlice `terminalFontSize`，15 §3.5） | 产品要求字号记忆（P21-1 §6）；改动后必须补 fit（§4.2） |
 | `cursorBlink` | `true` | 让"终端还活着"有视觉信号；开销可忽略 |
