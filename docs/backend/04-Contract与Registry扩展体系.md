@@ -243,7 +243,7 @@ interface SandboxProvider {
 >
 > - **`ProcessSpec.user` 不支持** —— agent API 里没有这个参数。现在是**显式抛 `UNSUPPORTED_CAPABILITY`**（比静默丢弃好，但能力本身仍然没有）。要切用户只能改镜像/入口。
 > - **`tty:true` 的 `kill()` 是尽力而为** —— 先 ETX（真 SIGINT）、再 `exit\n`（顺带修掉"每断线泄漏一个 `bash -i`"）、最后关 socket。**忽略 SIGINT 的进程仍可能存活**；**唯一有保证的兜底是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以 03 §8.3 的"连带 destroy 实例"不是可选项。
-> - **`tty:true` 一侧 `spec.cmd` 仍然没传进去（⏳ 未解决）** —— provider 调的是 `client.openTerminal(cols, rows)`，终端固定起 agent 的默认 shell；**adapter 的 `buildAttachCommand()` 至今无处落地**（§3 契约里有、06 §3 与 P20 §3 的链路指望它）。这条**不在本次修复范围内**，随终端切片解决。
+> - **`tty:true` 一侧 `spec.cmd` 仍然没传进去（⏳ 未解决）** —— provider 调的是 `client.openTerminal(cols, rows)`，终端固定起 agent 的默认 shell；~~**adapter 的 `buildAttachCommand()` 至今无处落地**~~ **（2026-09 已落地：`kind=runtime` 的终端标签就跑它，06 §5.6。`tty:true` 一侧的 `spec.cmd` 现在由终端上下文拼好 tmux 命令后传下去。）**
 > - **没有用 `/v1/bash/write` 做 stdin** —— 它写得进字节但**发不出 EOF**，`codex login --with-access-token` 这类"读到 EOF 才动作"的命令会**挂死**。所以 stdin 走文件重定向（`< file` 有真 fd 0、有真 EOF），而不是这条上行通道。
 > - **`env` / `command` 在沙箱内的 `ps` 可见** —— 见上第 2 条。**per-call `env` 不是密钥通道**，这条不随本次修复改变。
 >
@@ -617,7 +617,7 @@ interface RuntimeAdapter {
 | `createCredentialFromSecret`（可选） | 把用户直接提交的 API key / access token 构造成可入库凭证（注入形态由 adapter 决定：env 变量或 config 文件） | `POST /api/runtimes/:rt/credentials/secret`（05 §3.1） | **不需要 sandbox 宿主**；可含轻量格式校验；同样只在内存流转、Vault 加密落库 |
 | `injectCredential` | 把 Vault 里已有的凭证物化进新 sandbox，实现"登录一次、后续复用" | **provision workflow `starting` 段的第 ④ 步**（03 §4.3）——**必须排在 `provider.start()` 之后**：`exec` 由 `spawn({tty:false})` 派生（§2.3），实例没跑起来根本没有 `exec`（此前 24 §1 / 26 §1 的顺序是错的，S5 已更正） | 用一次性 exec 即可，无需 tty。**收的 `cred` 是明文（`SecretMaterial` 承载）——这是被许可的 runtime 注入路径**：credential 上下文经门面 `prepareRuntimeCredential` 交出 `RuntimeCredential`，由 **sandbox 编排侧持 `exec`** 调本方法**一次性注入**（写 `auth.json`/env/喂 stdin），**用后 `zeroize()`、不落 argv/日志**（23 §8.2 放宽后的 I-CRD-2、05 §4）。**注入形态见 05 §4 / §1★★——本表刻意不复述优先级**（此处原先那份"access-token-only（stdin）> `0600` 文件 >（禁用）整份 env"**已被 05 §1★★ 的 S5 实测推翻**：stdin 档版本敏感、已降为可选，且在当前 exec 通道上还会被静默丢弃（§2.3★）。优先级只在 05 §4 存一份，本处只留指针——同一条规则两处各存一份正是这次自相矛盾的成因）。不变的硬红线：**绝不 `CODEX_AUTH_JSON` env 注入整份含真 refresh_token 的 auth.json**（P0-3，05 §4/§7 #3，adapter 契约固化） |
 | `buildStartCommand` | **两种用法共用一个方法**：① **交互式**（`headless:false`，S5 主路径）——provision 的 `bootstrapAgentSession` 用它把 `initialPrompt` 拼成"带指令启动 CLI"（03 §4.3 ⑤）；② **无头**（`headless:true`，MCP `run_agent_task`，02 §5）——**产品化不进 S5**（TASK-LAUNCH-DECISIONS T-4），执行通道见 §2.6 作业面 | ① provision `starting` 段第 ⑤ 步；② 后续切片 | 纯函数。**per-runtime 封装两件平台通用逻辑管不了的事**：① **关掉 CLI 自带的内层沙箱**（codex bwrap / claude permission 模型，形态完全不同，★2）；② 带上 CLI 自己的超时旗标作为第一道——但**真正兜底的是平台侧的强制 kill**（★3，03 §8.3） |
-| `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值） | 终端网关建会话时（06） | 纯函数 |
+| `buildAttachCommand` | 终端会话默认跑什么（`ProcessSpec.cmd` 缺省值）。**2026-09 起它是「用户自己开一个 CLI 标签」的入口**（06 §5.6）—— ⛔ 那条路不许用 `buildStartCommand`：带指令跑却不建 AgentTask，等于一个没人记账的任务 | 终端网关建会话时（06 §5.6） | 纯函数 |
 | `parseOutput` | 可选：把 CLI 原始输出解析成结构化 `RuntimeEvent`，供任务进度展示 | 无头任务流式输出时（喂给它的是 §2.6 `JobChunk.stdout`，**绝不喂 stderr**） | 不实现则平台只透传原始字节。**实测后已不再需要正则**——见 ★4 末段 |
 
 > **★1 install 策略：优先"镜像预装"，install-on-start 是兜底（S5 技术验证，2026-08 实测）**
@@ -898,6 +898,17 @@ type SandboxExecFn = (cmd: string[], opts?: Omit<ProcessSpec, 'cmd' | 'tty'>) =>
 > | `eligibleMethods`（哪些方法可刷新） | `credential.repository.impl.ts:73` = `'oauth-device'` | 声明被仓储过滤器否决(同上 ①) |
 > | `configDirEnvNames` | `host-auth-helper.ts:71` = `CLAUDE_CONFIG_DIR` / `CODEX_HOME` | 登录时凭证落进**后端进程的真 HOME**,`dispose()` 的 `rm -rf` 清不到,并发登录还会串 |
 > | `reservedEnvNames` | `shared-kernel/domain/reserved-env.ts` 静态表 | 第三方的**重定向类**变量无保护(05 §4.1 ★4.1a) |
+
+**⚠️ 2026-09 新增一条硬约束：`reservedEnvNames.credential` 在所有已注册 adapter 之间
+必须互不相交，撞了平台就起不来**（`ReservedEnvNameRegistrar`）。
+
+理由是多 runtime 注入（03 §4.3 ④ / 06 §5.6）：一个沙箱现在会把多份凭证合进**同一张**
+env 表，两个 adapter 声明同一个名字就意味着其中一个 CLI 会读到另一家的令牌 —— 它不报错，
+只是"登录不上"，或者更糟：用另一个账号干活。
+⛔ **不按注册顺序静默覆盖**：注册顺序是模块加载次序，不表达任何意图。既有的
+「凭证永远赢，靠顺序而非黑名单」（05 §4.1）说的是**凭证 vs 用户变量**，那里"谁赢"有明确
+答案；**凭证 vs 凭证**没有。第三方 adapter 因此有了一条新的注册期义务：给自己的 env 名
+挑一个不会与别人撞的前缀。
 > | `apiKeyPrefix` | 前端 `web/src/lib/credential/authFlow.ts:187` | 有效的 key 被标红——这是全仓**唯一**一处 `runtimeId === '<id>'` 字面量比较 |
 > | `connectivityTargets` | `connectivity.probe.ts:101,107` = 两家域名 | 只探 anthropic/openai;`offline` 判据是 `modelApis.every(!ok)`,第三方装机被一个它不用的端点判成离线 |
 > | `tokenRedactPatterns` | `log-redactor.ts` + `secret-redactor.ts` 两份复制 | 第三方 token 原样进日志(05 §7.1 ③b) |

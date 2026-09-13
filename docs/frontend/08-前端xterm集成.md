@@ -193,7 +193,59 @@ MVP 过渡策略：可先用 addon-attach 跑通链路，但 `ptySocket.ts` 从�
 
 ### 5.1 registry 的键是 sessionId，不是 sandboxId
 
-产品要求同一个 Task 可开**多个终端标签**（P21-1 §6：标签切换 / [×] / [新标签]，后端多路复用见 06 §5）。因此实例注册表必须**以会话为粒度**：
+产品要求同一个 Task 可开**多个终端标签**（P21-1 §6：标签切换 / [×] / [+ 新终端]，后端多路复用见 06 §5）。因此实例注册表必须**以会话为粒度**：
+
+> **⚠️ 2026-09-11 落地补记（在此之前本节描述的东西是 0 个文件）。** `TerminalTabBar` 与
+> `useTerminalSessions` 现在都存在了，但落地时发现**光补前端是做不出多标签的**：后端
+> `openSession()` 的三条路全部 attach `platform-agent`，而 tmux 的 pane 属于 session 不属于
+> client ⇒ 第二条连接只是同一块屏幕的镜像（实测见 06 §5.1）。⇒ 第 N 个标签走
+> `kind=shell` 握手、连一个独立的 `platform-shell-<shellId>` 会话。
+>
+> **两张表，不是一张**：
+> - `createTerminalRegistrySlice`（本节下方那份）是**实例**注册表——一条 entry 持有活着的
+>   Terminal + socket 句柄，被 LRU 淘汰就没了；
+> - `createTerminalTabsSlice` 是**标签**表（哪几个标签、各自的后端 `shellId`）。它必须
+>   **比实例活得久**：被淘汰的标签仍然要留在标签栏上（§5.2/§5.3）。⛔ 合并这两张表 ⇒
+>   "淘汰"就等于"标签消失"，正是 §5.2 明说不许发生的事。
+> - Agent 那个标签**不进标签表**，由 sandboxId 直接派生（仍是 `<sandboxId>:0`）——
+>   存进一张可增删的表就意味着它能被删掉，而它必须永远在、永远没有 [×]。
+> - `shellId` ⛔ 不 persist（它是后端会话凭据，与 `socketSessionKey` 同类，15 §3.5）。
+>
+> **⭐ 刷新之后标签怎么回来（2026-09-11 第二轮补）。** 上一版这里写的是「刷新后标签回到
+> 只剩 Agent 一个，是**有意的**」—— 那句话是错的，已推翻：刷新之后那些 tmux 会话**还
+> 活着**，只是界面上没有了，成了只能等沙箱回收的孤儿。而「看不见但还活着比关掉更糟」
+> 正是 §5.2 判「关标签要销毁后端会话」时的立论，不能在刷新这条路上走进同一个坏状态。
+>
+> ⇒ 后端在 **Agent 那条连接**上推一帧 `shells{shells}`（06 §5.5），标签栏据此重建：
+> - **只加不减**：按 `shellId` 补进前端不认识的，⛔ **永不据此删除**已有标签。清单在每次
+>   Agent 连接（含重连）后都会再来一次，而一个刚点了 [+ 新终端]、`session` 首帧还没回来的
+>   标签**不在服务端清单里** —— 拿它做全量 reconcile 会让用户眼睁睁看着自己刚开的终端消失。
+> - **三态一路保到 UI**：`[...]` 有 / `[]` 确认没有 / `null` **问不出来**。第三态在标签栏
+>   就地说「这个任务下是否还有别的终端，现在查不到」。⛔ 绝不渲染成「你没有开过终端」——
+>   那是把「不知道」说成「没有」，而用户的下一步完全不同。
+> - **编号按创建顺序重编 1..n**，⚠️ 因此刷新后编号可能**位移**（刷新前「终端 1 / 终端 3」
+>   → 刷新后「终端 1 / 终端 2」）。**这是已知代价，不是 bug**：序号藏在 `sessionId` 里、
+>   不 persist，而唯一能跨刷新稳定的事实只有 tmux 的创建时间；要不位移就得把
+>   `shellId → 序号` 落盘，而 `shellId` 是会话凭据（15 §3.5 明令不许）。
+> - **会话属于 Task，不属于浏览器**（06 §5.5 决策）：换台机器 / 换个浏览器打开同一个任务，
+>   这些终端照样列得出来。后端**不**按「谁连着」过滤，去重整个落在前端。
+> - ⚠️ 唯一的竞态：清单在路上时用户点了 [+ 新终端]，清单可能把那个刚建好的会话也带回来 ⇒
+>   两个标签背后同一个 tmux 会话（同一块屏幕的镜像）。`adoptShellId` 据**身份撞了**合并成
+>   一个（⚠️ 这不是"按清单删标签"：判据是两个标签证明自己是同一个会话）。
+>
+> **⭐ 标签能选跑什么（2026-09 第三轮，06 §5.6）。** [+ 新终端] 从一个按钮变成一个下拉：
+> Codex / Claude Code / 终端。
+> - **下拉的数据源是 `SandboxDto.availableRuntimes`**（从沙箱 DTO 一路传到
+>   `TerminalTabsContainer`）。⛔ **不是 `/api/runtimes` 全集**：没注入进这个盒子的 CLI
+>   列出来就是一个点开必然失败的选项，而「点了再报错」正是这一版要消灭的形状。
+>   `/api/runtimes` 只用来把 `codex` 译成「Codex」—— 取不到名字不阻断（标签回落
+>   「终端 N」、下拉回落显示 id）。
+> - **标签名要分得开**：`Agent`（任务自己的会话，关不掉）/ `Codex 1`（用户开的 CLI，可关）/
+>   `终端 1`（纯终端）。一个 Codex 沙箱里前两者跑的是**同一个 CLI**，只靠序号区分不了。
+> - **刷新之后名字还对**：后端把 runtime 记在 tmux 会话的用户选项上，随清单一起回来
+>   （`shells` 元素成了 `{shellId, runtimeId?}`）。读不到 ⇒ 回落「终端 N」，不更坏。
+> - ⛔ **纯终端标签的 `runtimeId` 缺席不许被猜成沙箱的默认 runtime**：那会让一个用户
+>   想要 shell 的标签顶着「Codex」的名字。
 
 ```typescript
 // stores/createTerminalRegistrySlice.ts（结构，文档 15 §3.2）
@@ -225,10 +277,27 @@ interface TerminalRegistrySlice {
 
 - 切换会话：
   - 已有实例 → 用 **CSS `display:none` 隐藏未选中容器**而不销毁。不要反复 `open()`/`dispose()`——会丢 WebGL 渲染上下文且有性能开销；xterm 支持多个隐藏容器各持有自己的 Terminal 实例。
+    - ⚠️ **切回来要补一次 `fit()`**：隐藏期间容器宽度是 0，`doFit` 按 §4.1 纪律 1 直接跳过。
+      不补的话 xterm 停在隐藏前的行列数，而 tmux 用绝对定位画状态栏 ⇒ 屏幕上是一串错位的
+      重复状态栏（接线在 `TerminalMount` 的 `active` prop）。
+    - ⛔ **不要换成条件渲染**：那等于卸载 = `dispose()`，也就是"每切一次标签销毁重建一次"。
+      也不要用 `visibility:hidden` / `opacity:0`——那些仍然占布局，两个终端会互相挤掉高度。
   - 未打开过 → 新建 Terminal + 新 WS 连接。
+- **关标签（[×]）≠ 切走**：它要**销毁后端那个 tmux 会话**（发 `close_shell{shellId}`，
+  10 §7.4 / 06 §5.4）。⛔ 而断连（刷新、抖动、**LRU 淘汰**）一律不销毁，只 detach。
+  - ⚠️ 被淘汰的标签**没有连接**，而用户照样会点它的 [×] ⇒ 那一帧从**当前标签**那条连接
+    代发（帧里带 shellId，所以任意一条连到同一沙箱的连接都行；当前标签永不被淘汰，§5.3）。
+    少了这一手，淘汰过的标签点 [×] 只会让它从界面上消失，而沙箱里那个会话成了看不见也
+    关不掉的孤儿。
+  - **Agent 那个标签没有 [×]**：关掉它并不会停下任务（后端只会 detach），那个按钮唯一
+    能做到的就是让人以为按了就停了。
 - **LRU 淘汰**：并发实例超上限（**默认 4–6 个**）时，对最久未激活者 `terminal.dispose()` + 关 WS；可保留"最后一屏文本快照"作再次打开时的占位，真实内容依赖后端 replay。
   - **为什么是 4–6 而不是 8–10**（审计 P2-11）：每个启用 WebGL renderer 的 Terminal 各占一个 **WebGL 上下文**，而浏览器对同源页面的并发上下文数有硬上限（Chrome/Safari 量级在 **8–16**），**接近上限时最早的上下文会被浏览器主动回收**——表现为"切回某个旧终端，画面是黑的/花的，但没有任何报错"。把默认压到 4–6 是给上下文预算留安全余量，代价只是多一次 tmux re-attach（几百毫秒，且用户无感——见 §8 第一类场景，静默重建不提示）。
-  - 上限做成**可配常量**而非硬编码；WebGL 不可用而降级到 canvas renderer 时可放宽到 8–10（无上下文约束），由 `useTerminalInstance` 按实际 renderer 决定。
+  - 上限做成**可配常量**而非硬编码（落地：`lib/terminal/terminalTabs.ts` 的
+    `TERMINAL_INSTANCE_LIMIT`，当前 6）；WebGL 不可用而降级到 canvas renderer 时可放宽到
+    8–10（无上下文约束），由 `useTerminalInstance` 按实际 renderer 决定。
+    ⏳ **放宽这一半还没做**：renderer 要等实例建出来才知道，也就是上限要在"已经建了"之后
+    才算得出来。当前是一个常量，⛔ 不要把这个数字抄到别处（那会变成第二个知情者）。
 - **scrollback 权威在后端的 tmux session**（文档 06 §6；~~网关 ring buffer 降级~~ 已取消，06 §6.3）：前端实例保留只是渲染缓存。注意 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端 tmux 的 `history-limit` 决定。⚠️ **"权威在后端"不只是个归属声明，它决定了滚轮往哪去**：attach 之后前端那份 scrollback 是滚不到的，滚轮必须落到 tmux 的 copy-mode 上才有效——见 §7.5。
 
 为什么不销毁重建：每次切换都会"清空→重连→重渲染 scrollback"闪烁 + 网络开销；后端若不支持 replay 则历史输出直接丢失。
@@ -237,6 +306,18 @@ interface TerminalRegistrySlice {
 
 - **活跃会话永不淘汰**：LRU 候选集排除当前可见的 session，否则在上限边缘会出现"刚切过去就被自己挤掉"。
 - **淘汰顺序按 `lastActiveAt`，`touch()` 只在真正激活时调**——不要在每次 `write()` 时 touch，否则一个刷屏的后台会话会把自己顶成"最近使用"，挤掉用户真正在看的那个。
+  - ⚠️ 落地用的是**自增序号**而不是 `Date.now()`：同一毫秒内连开两个标签会撞成相同时间戳，
+    那时"最久未用"可能淘汰掉刚开的那个。
+- **被淘汰的标签重新点击 ⇒ 静默重建，⛔ 不提示不确认**（§8 第一类场景）。代价只是一次
+  tmux re-attach（几百毫秒），而 scrollback 的权威一直在后端的 tmux 里。
+- ⚠️ **Agent 标签目前也会被淘汰**：淘汰本身只关掉那条看屏幕的 WS，`platform-agent`
+  会话与里面的 agent 照旧活着（06 §6.2），点一下就静默回来。⏳ **但"它往往第一个出局"
+  这件事还没定论**：Agent 标签没有激活记录，`?? 0` 让它在排序里恒垫底，于是标签一超过
+  上限它总是先走——而它恰恰是用户最可能想让它一直连着的那个。**这条正在裁决中，别把
+  当前行为当成已确认的设计**；`shells` 恢复落地后标签数更容易超上限，它会更容易发作。
+- ⏳ **恢复出来的标签会立刻被挂载**（只要没超上限）：一次刷新可能同时建起 N 条 WS +
+  N 次 tmux attach。这是上一条同一个口子的另一面（"该挂载谁"目前只由 LRU 上限决定，
+  没有"用户这次还没点过它"这个维度），与它一并裁决。
 
 ## 6. 性能
 
@@ -270,7 +351,7 @@ data 帧 → lib/writeBatcher.ts#push(bytes)
 | 层 | 文件 | 职责 |
 |---|---|---|
 | view | `views/terminal/TerminalPane.view.tsx` | 只持有 `<div ref>` 容器 + toolbar 事件转发 |
-| view | `views/terminal/TerminalTabBar.view.tsx` | 会话标签条：切换 / [×] / [新标签]（props 驱动） |
+| view | `views/terminal/TerminalTabBar.view.tsx` | 会话标签条：切换 / [×] / **[+ 新终端]**（props 驱动）。⚠️ 按钮文案不是「+ 新建」——左下 [＋ 新任务] 才是发起新 Task |
 | view | `views/terminal/TerminalToolbar.view.tsx` | 复制 / 清屏 / 字号 |
 | view | `views/terminal/ConnectionStatus.view.tsx` | 终端顶部内嵌条（重连黄条 / 连接超时） |
 | container | `containers/TerminalContainer.tsx` | 'use client' + next/dynamic 装配；连接 hooks 与 view |
@@ -454,7 +535,7 @@ views/project-task-tree/TaskListItem.view#onClick()
 |---|---|---|---|
 | `views/terminal/TerminalPane.view.tsx` | view | 持 `<div ref>`，零副作用 | 07 §3 规则 1–2 |
 | `containers/TerminalContainer.tsx` | container | dynamic 装配 + hooks↔view 粘合 | 07 §2 |
-| `hooks/useTerminalSessions.ts` | hook | 标签集合的增删与激活（新增文件） | §5.1 |
+| `hooks/terminal/useTerminalSessions.ts` | hook | 标签集合的增删与激活、LRU 挂载集合、每标签的连接描述、后端清单的接收与三态（已落地） | §5.1 |
 | `hooks/useTerminalInstance.ts` | hook | 实例创建/挂载/addon/配置 | §7.1 |
 | `hooks/useSandboxTerminalSocket.ts` | hook | WS 生命周期 | §3.1 |
 | `services/ws/ptySocket.ts` | service | 唯一 WS 触点 | 07 §3 规则 5 |

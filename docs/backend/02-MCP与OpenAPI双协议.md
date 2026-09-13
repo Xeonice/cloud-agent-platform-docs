@@ -216,19 +216,19 @@ event: start
 data: {"checks":[{"id":"container-runtime","label":"容器运行时可达"}, … 共 8 项],"timeoutMs":10000}
 
 event: check
-data: {"id":"container-runtime","label":"容器运行时可达","status":"ok","summary":"容器运行时可达（/var/run/docker.sock，7ms）","durationMs":8}
+data: {"id":"container-runtime","label":"容器服务可达","status":"ok","headline":"容器服务可达","detailText":"/var/run/docker.sock，7ms · Docker/29.5.3 (linux)。","durationMs":8}
 
 event: check
-data: {"id":"port-conflict","label":"端口占用","status":"fail","summary":"端口 3000（平台 HTTP/WS 服务…）被 com.docke (pid 41235) 占用","hint":"先确认它是什么：lsof -nP -iTCP:3000 -sTCP:LISTEN；…","detail":{…},"durationMs":31}
+data: {"id":"port-conflict","label":"端口占用","status":"fail","headline":"端口 3000 被占用，平台起不来","detailText":"端口 3000（平台 HTTP/WS 服务…）被 com.docke (pid 41235) 占用。","nextStep":"先确认它是什么，确实该让路就停掉它；否则给平台换一个端口后重启平台。","command":"lsof -nP -iTCP:3000 -sTCP:LISTEN","detail":{…},"durationMs":31}
 
 event: check
-data: {"id":"preset-image","label":"预制镜像就绪","status":"info","step":"staged","summary":"预制镜像已就绪，但尚未在本机铺开 —— 首个任务需要数分钟准备镜像","durationMs":12}
+data: {"id":"preset-image","label":"预制镜像就绪","status":"info","step":"staged","headline":"镜像还没下载到本机","detailText":"镜像本身没问题，只是这台机器上还没有它的副本（镜像压缩后约 0.3GB，通常十几秒到一分钟）。","nextStep":"不需要做任何事，第一个任务会自动下载。","durationMs":12}
 
 event: done
 data: {"okCount":6,"infoCount":1,"warnCount":0,"failCount":1,"totalMs":312}
 ```
 
-**三处与本节初稿不同，都是落地时定死的**：
+**四处与本节初稿不同，都是落地时定死的**：
 
 1. **多了 `start` 首帧。** 它在任何一项跑完之前发出，页面据它画出八个 ⏳ 占位。没有它，
    前端要么自己硬抄一份八项清单（= 又一份手抄），要么「收到一项画一项」—— 而并行执行下
@@ -242,11 +242,34 @@ data: {"okCount":6,"infoCount":1,"warnCount":0,"failCount":1,"totalMs":312}
    **是示意不是契约** —— `NETWORK` 从来不在 §6.8 码表里，实现也不产出它。其余七项刻意不发码：
    它们的结论天然带着这一次实测出来的具体数字（哪个端口、被谁占、还剩多少 GB），
    按码查一句固定文案反而更差。
-4. `check` 帧另有 **`summary`**（一行人话，直接上 UI）与 **`step`**（仅预制镜像链）。
-   `id` 与展示顺序由契约常量 `DIAGNOSE_CHECK_IDS` 钉死，装配对不上时**开机即抛**
-   —— 少发一帧的后果是前端那一格永远停在 ⏳，一个看起来像「还在跑」的永久状态。
+4. **文案是三层四字段，不是两个大字段**（2026-09-11 拆的）：
 
-- 单项超时 5s 由服务端保证，超时即发 `status:"timeout"` 帧继续下一项——**一项卡住不阻塞整轮**。
+   | 字段 | 内容 | 界面 |
+   |---|---|---|
+   | `headline` | 一句结论，**≤ 20 字、不换行**：这一项好不好 + 挡不挡我干活 | 恒可见，图标同一行 |
+   | `detailText?` | 证据、例外条款、为什么 | 收进展开层 |
+   | `nextStep?` | 下一步，**人话** | 展开层，普通字体，⛔ 无复制按钮 |
+   | `command?` | 真正可粘贴执行的命令 / 配置项 | 展开层，等宽 + [复制] |
+
+   ⛔ **旧的 `summary` 既当标题又装证据**，于是长成三行散文，而它渲染在图标同一行 ——
+   用户要读完一整段才知道这一项到底好不好。⛔ **旧的 `hint` 既装散文又装命令**，
+   而界面把整个 `hint` 塞进等宽框顶着一个 [复制] 按钮 —— 于是「重跑一次看稳不稳定」
+   这种句子被渲染成了一条可以复制的命令，复制下来也没地方粘。
+   ⛔ **没有命令就不要编一个**：一条执行不了的命令比不给命令更贵（mac 上的
+   `apt-get install lsof` 是踩过的那次）。
+
+   ⛔ **上屏文案里一个 markdown 标记都不许有。** 全链路是纯文本渲染，没有 markdown
+   渲染器 —— 后端写下的 `**…**` 会**原样上屏**，用户读到的是带星号的源代码。
+   要强调就改句序，把重点放句首。装饰性反引号同理；真命令归 `command`，那里的等宽是对的。
+
+   `detailText` 与结构化的 `detail`（pid、字节数、digest）是**两个字段**：前者给人读，
+   后者给日志与前端分支用。`id` 与展示顺序由契约常量 `DIAGNOSE_CHECK_IDS` 钉死，
+   装配对不上时**开机即抛** —— 少发一帧的后果是前端那一格永远停在 ⏳，
+   一个看起来像「还在跑」的永久状态。
+
+- 单项超时由服务端保证（当前 `DIAGNOSE_TIMEOUT_MS = 10s`，首帧 `start.timeoutMs` 下发；
+  ⛔ 前端不要把这个数字抄进文案 —— 抄一份就会漂一份），超时即发 `status:"timeout"` 帧
+  继续下一项——**一项卡住不阻塞整轮**。
 - 断连即中止剩余检查（无副作用，诊断是只读的）。
 - OpenAPI 里以 `text/event-stream` 响应声明（`openapi-typescript` 只生成响应类型，流的消费由前端手写 —— 10 §6 已标注）。
   ⚠️ **只写 `@ApiProduces` 产不出那一节**：实测那样得到的是 `"200": {"description": ""}`，
