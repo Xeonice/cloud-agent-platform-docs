@@ -354,6 +354,10 @@
     <symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8"/><path d="M16.5 8a2.5 2.5 0 0 0 0-5C13 3 12 8 12 8"/></symbol>
     <symbol id="i-zap" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
     <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h5l2 3h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></symbol>
+    <!-- 凭证 / 镜像两页新增（与代码里 lucide 的 KeyRound / Package / Trash2 同源） -->
+    <symbol id="i-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 21 2"/><path d="m16 7 3 3"/><path d="m19 4 3 3"/></symbol>
+    <symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></symbol>
     <symbol id="i-pause" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
   </defs>
 </svg>
@@ -370,6 +374,8 @@
       <a href="#spec" class="nav-link" data-nav>设计说明</a>
       <a href="#wizard" class="nav-link" data-nav>初始化向导</a>
       <a href="#workbench" class="nav-link" data-nav>工作台</a>
+      <a href="#credentials" class="nav-link" data-nav>凭证管理</a>
+      <a href="#images" class="nav-link" data-nav>镜像管理</a>
       <a href="#system" class="nav-link" data-nav>系统状态</a>
     </nav>
     <button class="btn btn-outline btn-sm" id="themeToggle" aria-label="切换亮/暗主题">
@@ -580,6 +586,275 @@
   <!-- ============================================================ -->
   <!-- 系统状态                                                      -->
   <!-- ============================================================ -->
+  <!-- ============================================================
+       凭证管理（F21-3）—— 2026-09-15 新增。此前原型没有这一页，
+       实现是直接照产品文档做的,于是状态标记退回成纯文字,与本原型
+       确立的 status-pill 八态体系脱节。这一节把设计目标补上。
+       ============================================================ -->
+  <section id="credentials" class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">凭证管理</h2>
+      <p class="text-sm text-foreground-muted mt-1 max-w-2xl">
+        Agent 帐号（这台机器上通用）+ Git 凭证（克隆私有仓库）。两块<strong class="text-foreground">互不相干</strong>，
+        刻意分成两段而不是混在一个列表里 —— 前者决定 agent 能不能跑，后者决定代码拉不拉得下来。
+      </p>
+    </div>
+
+    <div class="screen-frame p-5 sm:p-7">
+      <div class="flex gap-0">
+        <!-- 左侧设置菜单（三子页共享） -->
+        <aside class="w-44 flex-none border-r border-border pr-3 flex flex-col gap-1">
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-chevron-down"/></svg>返回工作台</button>
+          <div class="h-2"></div>
+          <button class="btn btn-sm justify-start w-full" style="background:hsl(var(--background-subtle));color:hsl(var(--foreground))"><svg class="icon"><use href="#i-key"/></svg>凭证管理</button>
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-package"/></svg>镜像管理</button>
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-settings"/></svg>系统状态</button>
+        </aside>
+
+        <div class="flex-1 min-w-0 pl-6 flex flex-col gap-6" style="max-width:820px">
+
+          <!-- ── Agent 帐号 ─────────────────────────────── -->
+          <div class="flex flex-col gap-3">
+            <div>
+              <h3 class="text-[15px] font-semibold flex items-center gap-2"><svg class="icon icon-lg text-foreground-muted"><use href="#i-key"/></svg>Agent 帐号（这台机器上通用）</h3>
+              <p class="text-[12.5px] text-foreground-muted mt-1">帐号登录 / API Key 二选一，这台机器上的所有任务都用它；两样可以同时留着，切换只改现在用哪个。</p>
+              <p class="text-[12.5px] text-foreground-subtle">凭证加密存在这台机器上，平台不会上传，也读不回明文。</p>
+            </div>
+            <div class="relative">
+              <svg class="icon absolute left-3 top-1/2 -translate-y-1/2 text-foreground-subtle"><use href="#i-search"/></svg>
+              <input type="text" placeholder="搜索 Agent 名字或帐号尾号…" style="padding-left:32px; font-family:inherit" />
+            </div>
+
+            <!-- Codex：已配置 + 即将过期 -->
+            <div class="card overflow-hidden">
+              <header class="flex items-start justify-between gap-3 p-4 pb-3">
+                <div>
+                  <div class="text-[14px] font-semibold">Codex</div>
+                  <div class="text-[12px] text-foreground-subtle">OpenAI</div>
+                </div>
+                <!-- ⭐ 状态用 status-pill，⛔ 不是纯文字：与系统状态页、诊断、审计流同一套八态体系 -->
+                <span class="status-pill" data-status="warn"><svg class="icon"><use href="#i-alert"/></svg>即将过期</span>
+              </header>
+              <!-- ⭐ 两法用<strong class="text-foreground">分隔线</strong>而不是卡中卡：外层已经是一张卡，再套一层边框会让
+                   「哪个是一张卡」变得含糊（现实现是 card > bordered-row 两层边框） -->
+              <div class="border-t border-border divide-y" style="border-color:hsl(var(--border))">
+                <label class="flex gap-3 p-4 cursor-pointer" style="border-color:hsl(var(--border))">
+                  <input type="radio" name="proto-codex" checked class="mt-1" />
+                  <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="text-[13.5px] font-medium">帐号登录</span>
+                      <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>当前使用</span>
+                      <span class="ml-auto text-[12px] text-warning font-mono">剩 &lt; 1 天</span>
+                    </div>
+                    <p class="text-[12px] text-foreground-muted">建议在它到期前重新登录一次，免得任务跑到一半断掉。</p>
+                    <code class="text-[11.5px] text-foreground-subtle font-mono">codex:…dfe5</code>
+                    <div class="flex gap-2 mt-1">
+                      <button class="btn btn-outline btn-sm">重新登录</button>
+                      <button class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-trash"/></svg>删除</button>
+                    </div>
+                  </div>
+                </label>
+                <label class="flex gap-3 p-4 cursor-pointer" style="border-color:hsl(var(--border))">
+                  <input type="radio" name="proto-codex" class="mt-1" />
+                  <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                    <div class="flex items-center gap-2">
+                      <span class="text-[13.5px] font-medium">API Key</span>
+                      <!-- ⭐「未配置」= skipped（虚线框）：它不是错误，是"这一路没走" -->
+                      <span class="status-pill" data-status="skipped"><svg class="icon"><use href="#i-minus"/></svg>未配置</span>
+                    </div>
+                    <div class="flex gap-2 mt-1"><button class="btn btn-outline btn-sm"><svg class="icon"><use href="#i-plus"/></svg>添加 API Key</button></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Claude Code：整张未配置 -->
+            <div class="card overflow-hidden">
+              <header class="flex items-start justify-between gap-3 p-4 pb-3">
+                <div>
+                  <div class="text-[14px] font-semibold">Claude Code</div>
+                  <div class="text-[12px] text-foreground-subtle">Anthropic</div>
+                </div>
+                <span class="status-pill" data-status="skipped"><svg class="icon"><use href="#i-minus"/></svg>未配置</span>
+              </header>
+              <div class="border-t border-border divide-y" style="border-color:hsl(var(--border))">
+                <label class="flex gap-3 p-4 cursor-pointer"><input type="radio" name="proto-claude" class="mt-1" />
+                  <div class="flex-1 flex items-center gap-3"><span class="text-[13.5px] font-medium">帐号登录</span>
+                    <button class="btn btn-outline btn-sm ml-auto">登录帐号</button></div></label>
+                <label class="flex gap-3 p-4 cursor-pointer"><input type="radio" name="proto-claude" class="mt-1" />
+                  <div class="flex-1 flex items-center gap-3"><span class="text-[13.5px] font-medium">API Key</span>
+                    <button class="btn btn-outline btn-sm ml-auto"><svg class="icon"><use href="#i-plus"/></svg>添加 API Key</button></div></label>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Git 凭证 ─────────────────────────────── -->
+          <div class="flex flex-col gap-3">
+            <div>
+              <h3 class="text-[15px] font-semibold flex items-center gap-2"><svg class="icon icon-lg text-foreground-muted"><use href="#i-folder"/></svg>Git 凭证（私有仓库访问）</h3>
+              <p class="text-[12.5px] text-foreground-muted mt-1">GitHub / GitLab SaaS → HTTPS Token；公司自建 Git（SSH 接入）→ SSH 密钥。</p>
+              <p class="text-[12.5px] text-foreground-subtle">Git 凭证用于克隆私有仓库，与 Agent 的 Runtime 凭证无关。</p>
+            </div>
+            <div class="card p-4 flex flex-col gap-3">
+              <div class="flex items-center gap-2">
+                <span class="text-[13.5px] font-medium">HTTPS Token</span>
+                <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>已配置</span>
+                <span class="ml-auto text-[12px] text-foreground-subtle font-mono">github.com · ghp_…8f2a</span>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button class="btn btn-outline btn-sm">更换</button>
+                <button class="btn btn-outline btn-sm">测试连接</button>
+                <button class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-trash"/></svg>删除</button>
+              </div>
+              <!-- 测试连接的结论也走 pill -->
+              <div class="flex items-center gap-2 text-[12.5px] rounded-md p-2.5" style="background:hsl(var(--success) / .07)">
+                <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>连通</span>
+                <span class="text-foreground-muted">能读到 github.com 上的私有仓库列表（2 秒前测的）</span>
+              </div>
+            </div>
+            <div class="card p-4 flex items-center gap-3">
+              <span class="text-[13.5px] font-medium">SSH 密钥</span>
+              <span class="status-pill" data-status="skipped"><svg class="icon"><use href="#i-minus"/></svg>未配置</span>
+              <button class="btn btn-outline btn-sm ml-auto">配置 SSH 密钥</button>
+            </div>
+            <p class="text-[11.5px] text-foreground-subtle flex items-start gap-1.5">
+              <svg class="icon mt-0.5"><use href="#i-info"/></svg>
+              私钥与 token 的明文<strong class="text-foreground">永不回显</strong>：这里只显示尾号。清空输入框不等于删除 —— 删除要点 [删除]。
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ============================================================
+       镜像管理（F21-4）—— 2026-09-15 新增。同样是此前没有原型的一页。
+       ⚠️ 它是<strong class="text-foreground">列表看板不是表单页</strong>（注册表单在弹层里），所以内容区走满宽,
+       ⛔ 不套 max-w-3xl —— 现实现按"表单页"给了 720px,左右各空 250px,
+       而卡里的 sha256 摘要与运行参数反倒挤在一起。
+       ============================================================ -->
+  <section id="images" class="flex flex-col gap-4">
+    <div>
+      <h2 class="text-xl font-semibold tracking-tight">镜像管理</h2>
+      <p class="text-sm text-foreground-muted mt-1 max-w-2xl">
+        已注册的 OCI 镜像。每张卡回答三件事：<strong class="text-foreground">能不能用</strong>（验证结论）、<strong class="text-foreground">跑的是哪一版</strong>（摘要）、<strong class="text-foreground">谁在用它</strong>（适用 Agent）。
+      </p>
+    </div>
+
+    <div class="screen-frame p-5 sm:p-7">
+      <div class="flex gap-0">
+        <aside class="w-44 flex-none border-r border-border pr-3 flex flex-col gap-1">
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-chevron-down"/></svg>返回工作台</button>
+          <div class="h-2"></div>
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-key"/></svg>凭证管理</button>
+          <button class="btn btn-sm justify-start w-full" style="background:hsl(var(--background-subtle));color:hsl(var(--foreground))"><svg class="icon"><use href="#i-package"/></svg>镜像管理</button>
+          <button class="btn btn-ghost btn-sm justify-start w-full"><svg class="icon"><use href="#i-settings"/></svg>系统状态</button>
+        </aside>
+
+        <!-- ⭐ 满宽：这一页是列表，不是表单 -->
+        <div class="flex-1 min-w-0 pl-6 flex flex-col gap-4">
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="relative flex-1" style="min-width:220px;max-width:340px">
+              <svg class="icon absolute left-3 top-1/2 -translate-y-1/2 text-foreground-subtle"><use href="#i-search"/></svg>
+              <input type="text" placeholder="按名称或坐标搜索" style="padding-left:32px; font-family:inherit" />
+            </div>
+            <!-- 筛选：与工作台任务筛选同一套 chip 造型 -->
+            <div class="flex items-center gap-1">
+              <button class="btn btn-sm" style="background:hsl(var(--background-subtle));color:hsl(var(--foreground))">全部 3</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon text-success"><use href="#i-check"/></svg>有效 2</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon text-warning"><use href="#i-alert"/></svg>警告 1</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon text-error"><use href="#i-x"/></svg>无效 0</button>
+            </div>
+            <button class="btn btn-primary btn-sm ml-auto"><svg class="icon"><use href="#i-plus"/></svg>注册新镜像</button>
+          </div>
+
+          <!-- 镜像卡 ①：预置 · 有效 -->
+          <div class="card p-4 flex flex-col gap-3">
+            <header class="flex items-start justify-between gap-3 flex-wrap">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-[14px] font-semibold font-mono">ghcr.io/xeonice/agent-platform-boxlite</span>
+                  <span class="kbd">预置</span>
+                </div>
+                <div class="text-[12px] text-foreground-subtle font-mono mt-0.5">ghcr.io/xeonice/agent-platform-boxlite:latest</div>
+              </div>
+              <!-- ⭐「已启用」也走 pill，⛔ 不是小圆点 + 文字（那是第三套写法） -->
+              <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>已启用</span>
+            </header>
+
+            <!-- 验证结论：一行 pill + 一句话，⛔ 不再是自制的带边框条 -->
+            <div class="flex items-center gap-2 text-[12.5px]">
+              <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>验证通过</span>
+              <span class="text-foreground-muted">镜像可用 · 1 天前解析</span>
+            </div>
+
+            <!-- 三行 kv：满宽之后一行放得下，⛔ 不再各占一整行 -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-[12.5px]">
+              <div><span class="text-foreground-subtle">适用</span><div class="font-mono mt-0.5">codex、claude-code</div></div>
+              <div><span class="text-foreground-subtle">运行的版本</span>
+                <div class="font-mono mt-0.5 flex items-center gap-2">sha256:2af8d…e94
+                  <button class="btn btn-ghost btn-sm" style="height:20px;padding:0 6px"><svg class="icon"><use href="#i-copy"/></svg></button>
+                </div></div>
+              <div><span class="text-foreground-subtle">来源</span><div class="mt-0.5">平台预制镜像</div></div>
+            </div>
+
+            <div class="rounded-md p-3 flex items-center justify-between gap-3" style="background:hsl(var(--background-subtle))">
+              <div class="text-[12.5px]"><span class="text-foreground-subtle flex items-center gap-1.5"><svg class="icon"><use href="#i-settings"/></svg>运行参数</span>
+                <div class="mt-0.5 font-mono text-foreground-muted">环境变量：（未配置）</div></div>
+              <button class="btn btn-ghost btn-sm">编辑环境变量</button>
+            </div>
+
+            <div class="flex flex-wrap gap-2">
+              <button class="btn btn-outline btn-sm"><svg class="icon"><use href="#i-refresh"/></svg>检查更新</button>
+              <button class="btn btn-outline btn-sm">重新验证</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-pause"/></svg>禁用</button>
+            </div>
+          </div>
+
+          <!-- 镜像卡 ②：自定义 · 警告（⭐ 原型里必须有一张非绿的，否则"警告长什么样"没人知道） -->
+          <div class="card p-4 flex flex-col gap-3">
+            <header class="flex items-start justify-between gap-3 flex-wrap">
+              <div class="min-w-0">
+                <span class="text-[14px] font-semibold font-mono">registry.internal/team/agent-cuda</span>
+                <div class="text-[12px] text-foreground-subtle font-mono mt-0.5">registry.internal/team/agent-cuda:v3</div>
+              </div>
+              <span class="status-pill" data-status="ok"><svg class="icon"><use href="#i-check"/></svg>已启用</span>
+            </header>
+            <div class="flex items-start gap-2 text-[12.5px]">
+              <span class="status-pill" data-status="warn"><svg class="icon"><use href="#i-alert"/></svg>有警告</span>
+              <span class="text-foreground-muted">能拉到，但<strong class="text-foreground">没有声明 supportedRuntimes</strong> —— 建新任务时它不会出现在 Agent 下拉里。</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-2 text-[12.5px]">
+              <div><span class="text-foreground-subtle">适用</span><div class="font-mono mt-0.5 text-warning">（未声明）</div></div>
+              <div><span class="text-foreground-subtle">运行的版本</span><div class="font-mono mt-0.5">sha256:91b4c…7de</div></div>
+              <div><span class="text-foreground-subtle">来源</span><div class="mt-0.5">自建 registry</div></div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn btn-outline btn-sm">重新验证</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-pause"/></svg>禁用</button>
+              <button class="btn btn-ghost btn-sm"><svg class="icon"><use href="#i-trash"/></svg>删除</button>
+            </div>
+          </div>
+
+          <!-- 镜像卡 ③：已禁用（灰态，⭐ 也要有，它与"无效"是两回事） -->
+          <div class="card p-4 flex items-center justify-between gap-3" style="opacity:.62">
+            <div class="min-w-0">
+              <span class="text-[14px] font-semibold font-mono">ghcr.io/xeonice/agent-platform-sandbox</span>
+              <div class="text-[12px] text-foreground-subtle mt-0.5">已禁用的镜像<strong class="text-foreground">不参与</strong>新任务的 Agent 下拉，但已经在跑的任务不受影响。</div>
+            </div>
+            <div class="flex items-center gap-2 flex-none">
+              <span class="status-pill" data-status="pending"><svg class="icon"><use href="#i-circle"/></svg>已禁用</span>
+              <button class="btn btn-outline btn-sm">启用</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
   <section id="system" class="flex flex-col gap-4">
     <div>
       <h2 class="text-xl font-semibold tracking-tight">系统状态</h2>
@@ -680,8 +955,39 @@
           </div>
         </div>
 
-        <!-- 诊断 -->
+        <!-- 出网代理（F21-5 §3，2026-09-15 补进原型）——
+             ⚠️ 这张卡原型里一直没有,实现先做了出来,于是"它该放哪一列"无从对照。
+             放右列：它是**高度稳定**的表单卡,与沙箱环境状态配成一列正好。 -->
         <div class="card p-4 flex flex-col gap-3">
+          <header><h3 class="text-[15px] font-semibold">出网代理</h3></header>
+          <p class="text-[12px] text-foreground-muted">拉取沙箱镜像、访问模型接口都走这里。</p>
+          <div class="flex flex-col gap-2.5">
+            <div><label class="text-[12px] text-foreground-subtle">HTTP_PROXY</label>
+              <input type="text" value="http://127.0.0.1:7893" class="mt-1" /></div>
+            <div><label class="text-[12px] text-foreground-subtle">HTTPS_PROXY</label>
+              <input type="text" value="http://127.0.0.1:7890" class="mt-1" /></div>
+            <div><label class="text-[12px] text-foreground-subtle">NO_PROXY</label>
+              <input type="text" value="localhost,127.0.0.1,.internal" class="mt-1" /></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button class="btn btn-primary btn-sm">保存</button>
+            <span class="text-[11.5px] text-foreground-subtle">三个都留空 = 清空代理配置</span>
+          </div>
+          <!-- ⭐ 这一句是这张卡存在的理由之一：联网检查只答得出"能不能连上" -->
+          <p class="text-[11.5px] text-foreground-subtle flex items-start gap-1.5">
+            <svg class="icon mt-0.5"><use href="#i-info"/></svg>
+            连得上但很慢（镜像下载中途断掉）也该配一个 —— 联网检查只测得出「能不能连上」，测不出带宽。
+          </p>
+        </div>
+      </div>
+
+      <!-- ⭐ 诊断改成**整行**（2026-09-15 重排）：
+           它的高度在「未跑」98px 与「跑完八项」789px 之间变，把一张高度随状态跳变的卡
+           固定指派给某一列，另一列必然一会儿空一会儿挤 —— 两栏怎么分都平不了。
+           挪成整行之后左右两列只剩高度稳定的卡（左 483 / 右 620，实测），
+           而且它那些可复制的命令行本来就最需要宽度。
+           ⛔ 不要再把它塞回某一列去"配平"。 -->
+      <div class="card p-4 flex flex-col gap-3 lg:col-span-2">
           <header class="flex items-center justify-between gap-2">
             <h3 class="text-[15px] font-semibold">诊断</h3>
             <span class="flex items-center gap-2">
@@ -692,7 +998,6 @@
           <p class="text-[12px] text-foreground-subtle flex items-center gap-2 flex-wrap" id="diagnoseSummary"></p>
           <div id="diagnosticsList"></div>
         </div>
-      </div>
 
         <!-- 审计流：跨两列，放在左右两条 flex 列之外 -->
         <div class="card p-4 flex flex-col gap-3 lg:col-span-2">
@@ -804,7 +1109,7 @@ document.getElementById('specToggle').addEventListener('click', () => {
 
 /* ---------------- 顶部导航 scrollspy ---------------- */
 const navLinks = Array.from(document.querySelectorAll('#topTabs a'));
-const navSections = ['spec', 'wizard', 'workbench', 'system'].map(id => document.getElementById(id));
+const navSections = ['spec', 'wizard', 'workbench', 'credentials', 'images', 'system'].map(id => document.getElementById(id));
 const io = new IntersectionObserver((entries) => {
   entries.forEach(e => {
     if (e.isIntersecting) {
