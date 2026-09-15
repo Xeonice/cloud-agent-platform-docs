@@ -246,6 +246,16 @@ MVP 过渡策略：可先用 addon-attach 跑通链路，但 `ptySocket.ts` 从�
 >   （`shells` 元素成了 `{shellId, runtimeId?}`）。读不到 ⇒ 回落「终端 N」，不更坏。
 > - ⛔ **纯终端标签的 `runtimeId` 缺席不许被猜成沙箱的默认 runtime**：那会让一个用户
 >   想要 shell 的标签顶着「Codex」的名字。
+> - ⚠️ **2026-09-15：这个下拉从手写 `role="menu"` 换成 shadcn `DropdownMenu`。** 手写那版
+>   自持 `menuOpen` 状态，且只做了 `role` 与 `aria-haspopup` 两个属性 —— 键盘操作（方向键
+>   在项间移动、Esc 收起、关闭后焦点归位）、点外部收起、Portal 定位全都没有。换成 Radix
+>   之后这些由 primitive 承担，`TerminalTabBar.view` 回到**零状态**。
+>   - ⚠️ **只有一项（纯终端）时仍然不出下拉**，[+ 新终端] 退回成一个直接建纯终端的普通
+>     按钮 —— 这**不是样式差异是语义差异**：那时它根本不是菜单触发器，⛔ 不许挂
+>     `aria-haspopup`。给一个只有一项的菜单等于凭空多要一次点击。
+>     story `LaunchMenuShellOnly` 连 `not.toHaveAttribute('aria-haspopup')` 一起钉着。
+>   - ⚠️ 菜单内容挂在 Radix `Portal` 上 ⇒ 断言走 `within(document.body)`，⛔ 不在
+>     `canvasElement` 里（触发器还在）。与设置菜单、项目菜单同一条纪律。
 
 ```typescript
 // stores/createTerminalRegistrySlice.ts（结构，文档 15 §3.2）
@@ -296,8 +306,17 @@ interface TerminalRegistrySlice {
   - 上限做成**可配常量**而非硬编码（落地：`lib/terminal/terminalTabs.ts` 的
     `TERMINAL_INSTANCE_LIMIT`，当前 6）；WebGL 不可用而降级到 canvas renderer 时可放宽到
     8–10（无上下文约束），由 `useTerminalInstance` 按实际 renderer 决定。
-    ⏳ **放宽这一半还没做**：renderer 要等实例建出来才知道，也就是上限要在"已经建了"之后
-    才算得出来。当前是一个常量，⛔ 不要把这个数字抄到别处（那会变成第二个知情者）。
+    ⏸️ **放宽这一半评估过，结论是先不做**（2026-09-15）。⚠️ 上面那句"由
+    `useTerminalInstance` 按实际 renderer 决定"**前提不成立**：`useTerminalInstance`
+    内部是 `useRef(new Map())`，**每个挂载点各持一份注册表**，`getRenderer(sessionId)`
+    只看得到它自己那一个实例，没有全局 renderer 视图。要做得加三样：每个挂载点把
+    renderer 回传、在某处聚合、据此推导上限 —— 而 `createTerminalRegistrySlice` 头一行
+    就写着「store 只做记账 action，不做业务判断」。
+    另有**振荡风险**：上限变大 → 多挂几个 → 万一其中一个落到 webgl → 上限缩回 →
+    卸掉几个 → 又全是 canvas → 再变大。要避开得加一个单向闩锁（一旦观察到 webgl 就
+    永不再放宽）。
+    ⇒ 这是**性能优化不是缺陷**，而代价是碰架构边界 + 一个需要仔细设计的闩锁。
+    当前是一个常量，⛔ 不要把这个数字抄到别处（那会变成第二个知情者）。
 - **scrollback 权威在后端的 tmux session**（文档 06 §6；~~网关 ring buffer 降级~~ 已取消，06 §6.3）：前端实例保留只是渲染缓存。注意 re-attach 默认只重绘**当前屏**，完整历史依赖 tmux `history-limit` + `capture-pane` replay（后端实现细节）；用户刷新页面后能恢复多少历史由后端 tmux 的 `history-limit` 决定。⚠️ **"权威在后端"不只是个归属声明，它决定了滚轮往哪去**：attach 之后前端那份 scrollback 是滚不到的，滚轮必须落到 tmux 的 copy-mode 上才有效——见 §7.5。
 
 为什么不销毁重建：每次切换都会"清空→重连→重渲染 scrollback"闪烁 + 网络开销；后端若不支持 replay 则历史输出直接丢失。
@@ -310,14 +329,33 @@ interface TerminalRegistrySlice {
     那时"最久未用"可能淘汰掉刚开的那个。
 - **被淘汰的标签重新点击 ⇒ 静默重建，⛔ 不提示不确认**（§8 第一类场景）。代价只是一次
   tmux re-attach（几百毫秒），而 scrollback 的权威一直在后端的 tmux 里。
-- ⚠️ **Agent 标签目前也会被淘汰**：淘汰本身只关掉那条看屏幕的 WS，`platform-agent`
-  会话与里面的 agent 照旧活着（06 §6.2），点一下就静默回来。⏳ **但"它往往第一个出局"
-  这件事还没定论**：Agent 标签没有激活记录，`?? 0` 让它在排序里恒垫底，于是标签一超过
-  上限它总是先走——而它恰恰是用户最可能想让它一直连着的那个。**这条正在裁决中，别把
-  当前行为当成已确认的设计**；`shells` 恢复落地后标签数更容易超上限，它会更容易发作。
-- ⏳ **恢复出来的标签会立刻被挂载**（只要没超上限）：一次刷新可能同时建起 N 条 WS +
-  N 次 tmux attach。这是上一条同一个口子的另一面（"该挂载谁"目前只由 LRU 上限决定，
-  没有"用户这次还没点过它"这个维度），与它一并裁决。
+- ⚠️ **Agent 标签也会被淘汰**：淘汰本身只关掉那条看屏幕的 WS，`platform-agent`
+  会话与里面的 agent 照旧活着（06 §6.2），点一下就静默回来。
+- ✅ **"它往往第一个出局"已裁决并修掉**（2026-09-15）。**根因不是 LRU 算法错，是它从来
+  没进过 `activatedAt`**：Agent 标签不在 `shellTabsOf` 里（由 `useTerminalSessions` 的
+  `tabs` memo 合成），`openShellTab` 那条写入路径碰不到它；而首次打开沙箱时它是**默认
+  选中**的（`activeSessionId` 的回落分支），也不经过 `selectTab`。于是排序时 `?? 0` 让它
+  恒垫底 —— 实测：超上限时它第一个出局，**连 tick=1 的最老终端都活着**。
+  - **修法：补上那条本就该有的记录**，⛔ 不给 LRU 加"Agent 特例"。`useTerminalSessions`
+    里一条 effect：`if (!activatedAt.has(activeSessionId)) markTabActivated(activeSessionId)`。
+  - ⚠️ 判据是 `!has(活跃会话)` 而**不是**"是不是 Agent 标签"：这条规则说的是"活跃的会话
+    必然被激活过"，与是谁无关。⛔ 写成认 Agent 的话，将来任何一个绕开 `selectTab` 成为
+    活跃的标签都会再犯同一个病。
+  - 补完之后 LRU 语义保持干净：**长期不看它，它照样会被淘汰**，这是对的。
+- ✅ **"恢复出来的标签会立刻被挂载"已裁决并修掉**（2026-09-15）。病根是
+  `selectMountedSessions` 开头那行 `if (order.length <= limit) return [...order]` ——
+  它让"该挂载谁"**只由上限决定**，没有"用户这次点过它没有"这个维度。后果：刷新一次，
+  `recordShellInventory` 恢复出来的 N 个标签只要没超上限就全都挂起来，N 条 WS +
+  N 次 tmux attach 同时发生，而用户只看其中一个。
+  - ⚠️ store 那边**本来就刻意不给恢复出来的标签发激活记录**（`recordShellInventory`
+    的注释写着理由），但意图被这行短路吃掉了：记录有没有，在没超上限时根本不影响结果。
+  - **修法：把"有激活记录"变成挂载的准入条件**（`activatedAt.has(id)` 而不是 `?? 0`）。
+    没记录 = **没资格**，不是"排在最后"。⛔ 不要为了省那一次 re-attach 把短路加回来：
+    那等于让刷新去赌标签数没超上限。
+  - 代价是首次点一个恢复出来的标签多一次 tmux re-attach（几百毫秒，静默，见上一条）。
+- ⚠️⚠️ **上面两条是耦合的，⛔ 不许只做一条**：注入验证时把补记录的 effect 删掉（只留
+  准入条件），红的不止新用例，还有两条**既有**用例 —— 因为 Agent 标签没有记录就不再入选，
+  切走之后它的实例会被卸掉。先做哪一条都会让 Agent 标签的常驻坏掉一阵子。
 
 ## 6. 性能
 
