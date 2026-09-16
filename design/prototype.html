@@ -659,8 +659,12 @@
                   <div class="flex-1 min-w-0 flex flex-col gap-1.5">
                     <div class="flex items-center gap-2">
                       <span class="text-[13.5px] font-medium">API Key</span>
-                      <!-- ⭐「未配置」= skipped（虚线框）：它不是错误，是"这一路没走" -->
-                      <span class="status-pill" data-status="skipped"><svg class="icon"><use href="#i-minus"/></svg>未配置</span>
+                      <!-- ⛔ **行上不挂「未配置」标记**（2026-09-16 裁决）：
+                             ① 按钮文案已经分得开（未配置「添加 API Key」vs 已配置「更换」）；
+                             ② 卡头已经说过一次 —— 本原型此前 Codex 行有、Claude Code 行没有，
+                                规则不自洽，实现于是统一加上，一屏冒出 4 个橙框；
+                             ③ ⭐ `skipped` 是 warning 橙，而「二选一没选的那一路」是**正常**的，
+                                给它橙色等于误报。橙色留给真的用不了的那一个：整张卡未配置。 -->
                     </div>
                     <div class="flex gap-2 mt-1"><button class="btn btn-outline btn-sm"><svg class="icon"><use href="#i-plus"/></svg>添加 API Key</button></div>
                   </div>
