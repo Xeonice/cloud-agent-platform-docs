@@ -1,0 +1,94 @@
+# 云 Agent 管理平台 —— 部署入口（11 §1）
+#
+# ⚠️⚠️ **部署要在【仓库根目录】跑 `docker compose up --build`，不是在 `api/` 里。**
+#
+# ── 为什么这份在主仓根目录，而不是把 web 加进 api/docker-compose.yml ──────────
+# `api/` 是一个独立仓库（本仓的 submodule）。它自己那份 compose 引用不到 `../web`
+# —— 单独 clone api 仓的人那里根本没有那个目录。⇒ 只有主仓能同时看见两侧，
+# 也只有它钉得住一份完整可复现的部署状态（两个 submodule 指针）。
+# 这与「只有主仓打 tag」是同一条理由（见 CHANGELOG 抬头）。
+#
+# ── 为什么用 include 而不是抄一份 ─────────────────────────────────────────────
+# api 那份里有十几项非抄不可的配置（DOCKER_HOST、SANDBOX_DOCKER_NETWORK、同名挂载、
+# docker-proxy 的白名单……），每一项都是踩过坑换来的。复制 = 两个真相源，而其中一份
+# 还管着安全边界。⇒ `include` 复用，本文件只写「多出来的那一层」。
+#
+# ⚠️ `include` 的路径是相对**被包含文件**解析的,所以 api 那份里的 `build: .`
+#    仍然正确指向 `api/`,不需要改它一个字。
+include:
+  - path: api/docker-compose.yml
+
+services:
+  # ── 前端:用户实际访问的就是它 ──────────────────────────────────────────────
+  web:
+    build:
+      context: ./web
+      args:
+        # ⚠️⚠️ **`API_ORIGIN` 是【构建期】旋钮,运行期传它没有任何效果。**
+        # Next 在 `next build` 时就把 rewrites 的 destination 烤进
+        # `.next/routes-manifest.json`,standalone 的 server.js 只读那份清单、
+        # 永不重跑 `next.config.mjs` 的 `rewrites()`。
+        # 实测(2026-09-18):用 `-e API_ORIGIN=http://this-host-does-not-exist:9999`
+        # 起同一个镜像,转发目标**纹丝不动**,仍是烤进去的 `http://api:3000`。
+        # ⇒ ⛔ 不要把它挪到 `environment:` 下,那会造出一个「看起来可配、实际无效」的开关。
+        #
+        # 固化它是**安全**的,而这正是它与下面那两个 NEXT_PUBLIC_* 的分界:
+        # `api` 是 compose 内部的 service DNS 名,**每台机器上都一样** —— 不随宿主、
+        # 域名、端口变化。构建期常量完全回答得了它。
+        API_ORIGIN: http://api:3000
+    # ⚠️ **整套部署只发布这一个端口。** 浏览器的 HTTP 与 WebSocket 都经 web 同源转发
+    #    给容器内的 api(next.config.mjs 的 /api/* 与三条 /socket.io rewrite)。
+    #    ⇒ api 不必对外暴露,少一个暴露面(审计 P0-3 同向)。
+    ports:
+      - '127.0.0.1:3000:3000' # ★ 默认只监听回环;改 0.0.0.0 之前请先开访问口令(README §5)
+    # ⛔ **不要在这里设 `NEXT_PUBLIC_WS_BASE_URL` 或 `NEXT_PUBLIC_API_BASE_URL`。**
+    #    两个都必须留空走同源。它们的正确值取决于**运行时访问者浏览器用的 host**,
+    #    而 NEXT_PUBLIC_* 是构建期内联进 bundle 的 —— 一个构建期常量回答不了这个问题。
+    #    写死 `ws://localhost:3000`,同事从局域网打开时它会去连**同事自己机器**的 3000。
+    #    (此前真出过这个 bug:`ws://localhost:3001` 被烤进了生产 bundle。)
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      # ⚠️ runtime 阶段是 node slim,**没有 curl/wget** ⇒ 用 node 自己探。
+      test: ['CMD', 'node', '-e', "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+
+  # ── 后端:被 include 进来,这里只改「因为前面多了一层 web」而必须改的两处 ──────
+  api:
+    # ⚠️ `!reset` 清掉 api 自己那份里的 `ports:` —— **api 不再对外发布任何端口**。
+    #    ⛔ 不是「换个端口」而是「不发布」:它只需要被同网络内的 web 访问到。
+    #    (⚠️ 用 `!reset` 而不是 `!override []`:后者在部分 compose 版本上会留下一个空列表
+    #     而非删除该键,语义更含糊。)
+    ports: !reset null
+    # ⚠️⚠️ **把 DATA_ROOT 钉在【本文件】的插值上下文里 —— 这不是多余的重复。**
+    #
+    # `include` 会加载**被包含文件所在目录**的 `.env`,也就是 `api/.env`。而
+    # `docs/shared/11 §1.3`(裸跑开发流程)**明确教人建那份文件**,里面往往留着
+    # 一个开发期的 `DATA_ROOT`。于是在只有 `api/.env`、没有根 `.env` 的机器上:
+    #   · 那个值是相对路径(如历史模板的 `./data`)⇒ 容器侧挂载点变成相对路径,
+    #     `docker compose up` 直接报 `invalid mount path: 'data'`;
+    #   · ⚠️ 那个值是绝对路径 ⇒ **能起来,但悄悄把"生产"部署指向了开发数据目录** ——
+    #     这种更糟,因为它不报错。
+    # 实测(2026-09-18):移走 `api/.env` 前 target 解析成 `data`(无效),移走后
+    # 才是 `/srv/agent-platform/data`。
+    #
+    # ⇒ 下面三行用**根目录**的插值上下文重新算一遍,把 `api/.env` 挤出决策链。
+    #   根 `.env` 仍然生效(实测能压过 `api/.env`),这正是 README §3 让 macOS 用户
+    #   建根 `.env` 的那条指令所依赖的。
+    # ⛔ 三处必须用**同一个**兜底值 —— 它们被 api 侧的「同名挂载」硬约束绑在一起
+    #   (宿主路径 = 容器路径),分裂任何一处都会让平台写下对另一边无意义的绝对路径。
+    volumes: !override
+      - ${DATA_ROOT:-/srv/agent-platform/data}:${DATA_ROOT:-/srv/agent-platform/data}
+    environment:
+      DATA_ROOT: ${DATA_ROOT:-/srv/agent-platform/data}
+      DATABASE_URL: ${DATA_ROOT:-/srv/agent-platform/data}/platform.db
+      # ⚠️ api 那份里这行的兜底写的是「compose ports: 127.0.0.1:3000:3000」——
+      #    在本形态下那句话已经不成立(api 不再发布端口)。这个变量是**给人读的审计声明**
+      #    (见 api/apps/api/src/platform/config/env.ts 里 `bindExposure` 的长注释):
+      #    它会被原样打进日志,所以必须说实话,否则审计日志里留下的是一句假话。
+      HTTP_BIND_GATED_BY: 'no published port; reachable only via the web service on the compose network'

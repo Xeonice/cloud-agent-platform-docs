@@ -44,6 +44,11 @@ const WEB_RESERVED_ENV = path.join(WEB_ROOT, 'src', 'lib', 'image', 'validateEnv
 const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
 const WEB_SSE_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'sse-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
+/** 部署形态的两份 compose：主仓根那份是部署入口，api 那份被它 include */
+const ROOT_COMPOSE = path.join(ROOT, 'docker-compose.yml');
+const API_COMPOSE = path.join(API_ROOT, 'docker-compose.yml');
+/** 文档里那份 compose 骨架所在的篇目（§1.1） */
+const DEPLOY_DOC = path.join(DOCS, 'shared', '11-部署与扩展预留.md');
 
 const VERBOSE = process.argv.includes('--verbose');
 
@@ -100,6 +105,21 @@ function stripCode(text) {
 }
 
 const MD_FILES = walkMd(DOCS);
+
+/**
+ * A1（链接可达）**额外**要扫的根目录文档。
+ *
+ * ⚠️⚠️ **它是独立的一份，不能并进 `MD_FILES`。** `MD_FILES` 同时是 A3「README 清单完整」
+ * 的清点面 —— 把根目录那两份混进去，A3 会立刻要求把 `README.md` / `CHANGELOG.md`
+ * 收进 `docs/README.md` 的索引里，而它们**不是设计文档**，不归那份索引管。
+ * （这个连锁反应是实测撞出来的：并进去的那一版 A1 变绿、A3 当场红。）
+ *
+ * ⚠️ 为什么非扫不可：`README.md` 是新人打开仓库看的**第一份**东西，此前它的链接
+ * 一条都没人校验 —— v0.1.0 之前根目录压根没有 README，这个盲区不显形。
+ */
+const ROOT_MD_FILES = ['README.md', 'CHANGELOG.md']
+  .map((f) => path.join(ROOT, f))
+  .filter((f) => fs.existsSync(f));
 const readCache = new Map();
 const read = (f) => {
   if (!readCache.has(f)) readCache.set(f, fs.readFileSync(f, 'utf8'));
@@ -112,7 +132,7 @@ const read = (f) => {
 function checkLinks() {
   let total = 0;
   const broken = [];
-  for (const f of MD_FILES) {
+  for (const f of [...ROOT_MD_FILES, ...MD_FILES]) {
     stripCode(read(f)).forEach((line, i) => {
       for (const m of line.matchAll(/\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
         const target = m[1];
@@ -1131,6 +1151,7 @@ checkOpenapiCrossRepo();
 checkWsProtocolCrossRepo();
 checkSseProtocolCrossRepo();
 checkReservedEnvCrossRepo();
+checkComposeSkeletonParity();
 
 // ---------------------------------------------------------------------------
 // B3 openapi 跨仓一致：api/openapi.json 与 web/openapi.json 必须逐字节相同
@@ -1270,6 +1291,7 @@ const padName = (s) => s + ' '.repeat(Math.max(0, NAME_COL - width(s)));
 const GROUPS = [
   ['A', 'A. 文档内部检查（不依赖 submodule，始终跑）'],
   ['B', 'B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）'],
+  ['C', 'C. 文档 ↔ 部署产物对账（compose；缺失即 skip，不判失败）'],
   // ⚠️ A5 的编号是 A，分组却在 B —— 编号按「加进来的顺序」，分组按「依赖什么」。
   //    它的对账基准（10 §6.8 码表）确实只读 docs，但另一半要扫 api 源码，
   //    submodule 缺席时只能 skip。挂在「始终跑」那组下会让读输出的人以为它把过关了。
@@ -1388,4 +1410,155 @@ function checkReservedEnvCrossRepo() {
   } else {
     record('B', ID, NAME, 'fail', `${scale}，${details.length} 项前端没拦`, details);
   }
+}
+
+// ---------------------------------------------------------------------------
+// C1 compose 骨架对账：docs/shared/11 §1.1 的骨架 ↔ 仓库里真的那两份 compose
+//
+// ── 它修的是什么 ────────────────────────────────────────────────────────────
+// v0.1.0 打出去之后做换机部署审查，发现三条阻塞里有两条的根因是同一件事：
+// **「文档 ↔ 部署产物」这一层从来没有门守着**。骨架里写着 `web:` 服务、写着
+// `SANDBOX_DEFAULT_IMAGE` 的一个兜底坐标，而真 compose 里前者不存在、后者被
+// 刻意留空（留空才能让 `builtinImageRefFor` 按宿主档位自动选，填死就永久失效）。
+// 两条都活到了 tag 上，而 `docs:check` 那时 12 项全绿 —— 因为它一眼都不看 compose。
+//
+// ⚠️ 这不是「文档不准」那类小事：骨架是新人照着理解部署形态的唯一一张图。它多画一个
+// `web:` 服务，读的人就以为 `docker compose up` 会给他一个界面 —— 而那正是本轮 R2。
+//
+// ── 判据（两条，都按既有 idiom）────────────────────────────────────────────
+// ① 服务集合相等，⏳ 除外 —— 与 B6「未实现端点已标注」同款：骨架里标了 ⏳ 的服务
+//    **必须不在**真 compose 里（实现了就把 ⏳ 摘掉），没标 ⏳ 的**必须在**。
+//    于是「文档先行」是允许的，但必须显式声明"这条还没做"，而不是默默画上去。
+// ② `${VAR:-default}` 的默认值必须一致 —— 骨架里给 VAR 写的兜底，真 compose 里必须
+//    是同一个。抓的正是 `SANDBOX_DEFAULT_IMAGE` 那种「文档给了个已被推翻的兜底」。
+//
+// ── ⛔ 为什么解析不到要判 fail 而不是 pass ────────────────────────────────
+// 这是本仓踩过两次的形状（零尺寸 a11y 探针、装了但一条都不判的 addon）：
+// **一个什么都没找到的检查看起来和一个全部通过的检查一模一样。**
+// 所以下面每一步「找不到」都显式 fail 并说清是门坏了，而不是安静地放行。
+// ⛔ 谁把这些 fail 改成 return / skip，这道门就回到假绿状态。
+// ---------------------------------------------------------------------------
+
+/** 从一份 compose YAML 里取顶层 `services:` 下的服务名（窄解析：这两份文件是我们自己的） */
+function composeServiceNames(text) {
+  const lines = text.split('\n');
+  const start = lines.findIndex((l) => /^services:\s*$/.test(l));
+  if (start === -1) return null; // ⇒ 调用方判 fail，不是空集
+  const names = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\S/.test(line)) break; // 回到顶层缩进 ⇒ services 块结束
+    const m = /^ {2}([A-Za-z0-9][A-Za-z0-9_.-]*):\s*(?:#.*)?$/.exec(line);
+    if (m) names.push(m[1]);
+  }
+  return names;
+}
+
+/** 收集 `${VAR:-default}` → default（同名多处必须同值，不同值即刻算冲突） */
+function interpolationDefaults(text) {
+  const out = new Map();
+  const conflicts = [];
+  for (const m of text.matchAll(/\$\{([A-Z0-9_]+):-([^}]*)\}/g)) {
+    const [, key, val] = m;
+    if (out.has(key) && out.get(key) !== val) conflicts.push(`${key}（${out.get(key)} ≠ ${val}）`);
+    else out.set(key, val);
+  }
+  return { defaults: out, conflicts };
+}
+
+function checkComposeSkeletonParity() {
+  const NAME = 'compose 骨架对账';
+  const fail = (summary, details) => record('C', 'C1', NAME, 'fail', summary, details);
+
+  const composeFiles = [ROOT_COMPOSE, API_COMPOSE].filter((f) => fs.existsSync(f));
+  if (composeFiles.length === 0) {
+    record('C', 'C1', NAME, 'skip', `SKIP —— 找不到 ${rel(ROOT_COMPOSE)} 与 ${rel(API_COMPOSE)}`,
+      ['submodule 未 checkout ⇒ 本轮没有人在把关「文档画的部署形态与真 compose 对不上」这条漂移',
+       '  本地：git submodule update --init api web']);
+    return;
+  }
+  if (!fs.existsSync(DEPLOY_DOC)) {
+    fail(`找不到 ${rel(DEPLOY_DOC)}`, ['骨架所在的篇目被改名或删除了 ⇒ 这道门失去了比对基准，先把常量 DEPLOY_DOC 指对。']);
+    return;
+  }
+
+  // ── 真 compose 侧 ────────────────────────────────────────────────────────
+  const real = new Set();
+  const realDefaults = new Map();
+  for (const f of composeFiles) {
+    const text = read(f);
+    const names = composeServiceNames(text);
+    if (names === null) {
+      fail(`${rel(f)} 里找不到顶层 services: 块`,
+        ['⛔ 这是「门本身坏了」，不是「没有不一致」—— compose 换了写法（比如全用 include），解析器就得跟着改。']);
+      return;
+    }
+    for (const n of names) real.add(n);
+    const { defaults, conflicts } = interpolationDefaults(text);
+    if (conflicts.length > 0) {
+      fail(`${rel(f)} 内部同名插值给了两个不同默认值：${conflicts.join('、')}`,
+        ['同一个变量在同一份 compose 里有两个兜底 ⇒ 取哪个取决于哪一行先被用到，这本身就是缺陷。']);
+      return;
+    }
+    for (const [k, v] of defaults) if (!realDefaults.has(k)) realDefaults.set(k, v);
+  }
+
+  // ── 文档骨架侧：§1.1 那个围栏块里以 `docker-compose:` 起头的一段 ──────────
+  const doc = read(DEPLOY_DOC);
+  const skeleton = /\n\s*docker-compose:\s*\n([\s\S]*?)\n\s*```/.exec(doc);
+  if (skeleton === null) {
+    fail(`${rel(DEPLOY_DOC)} 里找不到 \`docker-compose:\` 骨架块`,
+      ['⛔ 同上，是门坏了不是没问题 —— 骨架被挪走或改了写法，这道门就没有基准可比。']);
+    return;
+  }
+  const body = skeleton[1];
+  //  骨架比真 compose 浅一层（顶层直接是服务名，没有 services:），故匹配 2 空格缩进
+  const documented = new Map(); // name → 是否标了 ⏳
+  for (const line of body.split('\n')) {
+    if (/^\S/.test(line)) break;
+    const m = /^ {2}([a-z0-9][a-z0-9_.-]*):\s*(?:#(.*))?$/.exec(line);
+    if (m) documented.set(m[1], /⏳/.test(m[2] ?? ''));
+  }
+  if (documented.size === 0) {
+    fail(`${rel(DEPLOY_DOC)} 的骨架里一个服务都没解析到`,
+      ['⛔ 找不到 ≠ 没问题。骨架的缩进或写法变了 ⇒ 先修解析，别把这条改成 skip。']);
+    return;
+  }
+
+  // ── 判据 ① 服务集合 ──────────────────────────────────────────────────────
+  const problems = [];
+  const planned = [...documented].filter(([, p]) => p).map(([n]) => n);
+  const promised = [...documented].filter(([, p]) => !p).map(([n]) => n);
+
+  const missing = promised.filter((n) => !real.has(n));
+  if (missing.length > 0)
+    problems.push(`骨架画了但真 compose 没有：${missing.join('、')} —— 读的人会以为 \`docker compose up\` 就能得到它。` +
+      `真没做就在骨架里给它标 ⏳（与 B6「未实现端点已标注」同款），别默默画上去`);
+
+  const shipped = planned.filter((n) => real.has(n));
+  if (shipped.length > 0)
+    problems.push(`骨架还标着 ⏳ 但真 compose 里已经有了：${shipped.join('、')} —— 摘掉 ⏳`);
+
+  const undocumented = [...real].filter((n) => !documented.has(n));
+  if (undocumented.length > 0)
+    problems.push(`真 compose 有但骨架没画：${undocumented.join('、')} —— 骨架是新人理解部署形态的唯一一张图，漏一个服务就是漏一块拓扑`);
+
+  // ── 判据 ② 插值默认值 ────────────────────────────────────────────────────
+  const { defaults: docDefaults, conflicts: docConflicts } = interpolationDefaults(body);
+  if (docConflicts.length > 0)
+    problems.push(`骨架内部同名插值给了两个不同默认值：${docConflicts.join('、')}`);
+  for (const [k, v] of docDefaults) {
+    if (!realDefaults.has(k)) {
+      problems.push(`骨架给 \`${k}\` 写了兜底 \`${v}\`，但真 compose 里这个变量没有插值默认值`);
+    } else if (realDefaults.get(k) !== v) {
+      problems.push(`\`${k}\` 的兜底对不上：骨架 \`${v}\` ≠ 真 compose \`${realDefaults.get(k)}\` —— ` +
+        `⚠️ 这正是 v0.1.0 审查抓到的形状（骨架给了个已被推翻的 SANDBOX_DEFAULT_IMAGE 坐标）`);
+    }
+  }
+
+  const scope = `骨架 ${documented.size} 个服务（${planned.length} 个 ⏳）/ 真 compose ${real.size} 个，插值默认值 ${docDefaults.size} 条`;
+  if (problems.length > 0) {
+    fail(`骨架与真 compose 对不上（${problems.length} 处）`, problems);
+    return;
+  }
+  record('C', 'C1', NAME, 'ok', `${scope}，服务集合与插值默认值均一致`);
 }
