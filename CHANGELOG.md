@@ -11,7 +11,13 @@
 
 ---
 
-## [Unreleased]
+## [0.2.0] - 2026-09-22
+
+**这一版的主题是：让它在一台【别人的】机器上真的装得起来。**
+
+v0.1.0 打出去之后做了一次换机部署审查,随后在一台真 mac（macOS 26.5.2 / arm64）上
+从零走通 —— 从 `git clone` 一路到工作台、建项目、发起任务的对话框。
+过程中撞出的每一条都记在下面,**包括三次「本地全绿、真机才炸」**。
 
 ### 换机部署：三条阻塞
 
@@ -306,4 +312,5 @@ clone 前 · workspace 复制前 · tar 解包前 · **调度器容量探测**�
 - 本机跑起来才发现的若干项见 `docs/LIVE-RUN-FINDINGS.md`（其中浅仓迁移仍 ⏳）
 - `smoke.spec.ts:110` 在本机红、CI 绿 —— 本机环境问题，非回归
 
+[0.2.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.1.0
