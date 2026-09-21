@@ -1,6 +1,6 @@
 {
   "name": "cloud-agent-platform-docs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "云 Agent 管理平台 · 文档主仓（docs/ + api/web 两个 submodule）。只承载文档一致性门禁，不发布、不构建产物。",
   "type": "module",
