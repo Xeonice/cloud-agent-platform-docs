@@ -11,6 +11,43 @@
 
 ---
 
+## [0.2.2] - 2026-09-23
+
+### 🔴 开机预热与 ImageSeeder 赛跑，输了就永久放弃
+
+v0.2.1 部署后诊断第 ⑨ 项报「帐号登录暂不可用」，而 helper 容器明明 `healthy`。
+日志时间戳就是证据 —— 同一秒内，预热跑在 seeder 之前：
+
+```
+17:17:11 WARN HelperContainerSession 预热失败：镜像还没注册进平台
+17:17:11 LOG  ImageSeeder            seeded built-in image …sandbox   ← 在我之后
+```
+
+Nest 的 `onApplicationBootstrap` **不保证跨模块顺序**，而 `resolveImage` 要查的正是
+seeder 刚登记的那一行。
+
+⚠️⚠️ **后果不是「慢一点」，是诊断开始撒谎**：它报「不可用」，而用户真去点登录时
+`require()` 会重试并成功 —— **一个「说不可用但其实可用」的诊断，比没有这一项更坏**，
+而这一项存在的全部理由就是「不要等用户点登录才发现」。
+
+⇒ 开机预热带重试（5 次 / 3 秒）。
+⛔ 不调大：真缺镜像的机器不该被无限重试掩盖成「一直在准备中」。
+⚠️ **只重试预热这一条**；用户点登录走的 `require()` 仍一次定生死 —— 那时人在等，
+快速失败并说清原因，好过静默重试一分钟。
+⛔ 也不靠「让 runtime 模块依赖 image 模块」来排序 —— 那是为了一次预热去造一条
+真实的模块依赖。
+
+### 🟠 顺带：`require()` 的错误会穿透，上层拿不到 PROVIDER_UNAVAILABLE
+
+写「require 不重试」那条用例时，它**没按预期抛出统一文案** —— 查出 `require()` 里是
+裸 `await this.ensure()`，底层原始错误直接穿透，下面那句「auth helper 容器不可用」
+根本到不了。而上层 `beginAuth` 认的正是那一句才包成 `PROVIDER_UNAVAILABLE`，
+穿透的会变成**哑巴 500**。
+
+⭐ 这条是**测试自己挖出来的**，不是先想到再写的用例。
+
+3 条新用例 + 两次变异验证。unit **1751** · contract 43 · e2e 229。
+
 ## [0.2.1] - 2026-09-23
 
 ### 🔴 帐号登录：凭证要从会话【那一侧】读回来
@@ -354,6 +391,7 @@ clone 前 · workspace 复制前 · tar 解包前 · **调度器容量探测**�
 - 本机跑起来才发现的若干项见 `docs/LIVE-RUN-FINDINGS.md`（其中浅仓迁移仍 ⏳）
 - `smoke.spec.ts:110` 在本机红、CI 绿 —— 本机环境问题，非回归
 
+[0.2.2]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.1.0
