@@ -11,6 +11,48 @@
 
 ---
 
+## [0.2.1] - 2026-09-23
+
+### 🔴 帐号登录：凭证要从会话【那一侧】读回来
+
+真机报「登录没能完成：对方拒绝了这次登录，或者本机的登录程序出了问题」。
+日志里的真相完全是另一回事：
+
+```
+device login … failed: ENOENT: no such file or directory,
+open '/tmp/auth-helper.6iPgbZSh/auth.json'
+```
+
+**登录其实成功了** —— codex 走完了 device flow、也确实把 `auth.json` 写了出来。
+是平台读不到它。
+
+**根因**：`codex.adapter.ts` 用 node 的 `readFile(join(ctx.homeDir, 'auth.json'))`，
+而 `homeDir` 是**会话所在那一侧**的路径 —— 宿主形态下两者是同一个文件系统，
+**容器形态下它在 helper 容器里**，后端进程 `open()` 必然 ENOENT。
+
+⚠️⚠️ **这是 v0.2.0 实现容器形态时漏掉的对称一半**：种子文件（`HelperSeedFile`）
+早就经 helper **写进**会话那一侧了（还专门写了「必须走 stdin 不能进 argv」），
+**读回来却还走宿主 fs** —— 同一件事的两半走了两条路。
+⚠️ `credential-refresh.scanner` 有**完全相同的形状**，只是还没人触发到，一并修了。
+
+⚠️ **那句报错本身也误导**，把用户指向完全错误的方向。这已经是这条链路上第二次：
+上一次是 `CLI_EXITED_EARLY` 说「没能正常启动」，而真相是 CLI 压根没装。
+⇒ 两次的共同点：**报错描述的是「平台这一侧观察到的现象」，而不是「实际发生了什么」**。
+
+⇒ `AuthSessionContext` / `AuthHelperSession` 各加 `readFile(relPath)`，
+两个形态各自实现（宿主 = node fs；容器 = 容器内 `cat`）。
+
+⭐ **一个自我验证的信号**：改完之后那两个文件里的 `readFile` / `join` import
+**完全没人用了** —— TypeScript 的「declared but never read」正好证明宿主 fs 那条路
+被**彻底**清掉，而不是漏改了某一处。
+
+⚠️ 测试替身一律给**会抛的** `readFile`，⛔ 不给空串：默默返回 `''` 会让
+「adapter 忘了读凭证文件」这类缺陷悄悄通过。
+
+新增 2 条用例 + 变异验证（换回返回空串 ⇒ 立刻红）。
+unit **1748** · contract **43** · **e2e 229** —— ⚠️ 这轮连续三次栽在
+「本地单测全绿、CI/真机才炸」，从这一版起提交前跑全套而不只是单测。
+
 ## [0.2.0] - 2026-09-22
 
 **这一版的主题是：让它在一台【别人的】机器上真的装得起来。**
@@ -312,5 +354,6 @@ clone 前 · workspace 复制前 · tar 解包前 · **调度器容量探测**�
 - 本机跑起来才发现的若干项见 `docs/LIVE-RUN-FINDINGS.md`（其中浅仓迁移仍 ⏳）
 - `smoke.spec.ts:110` 在本机红、CI 绿 —— 本机环境问题，非回归
 
+[0.2.1]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.1.0
