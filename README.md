@@ -20,7 +20,13 @@ cd cloud-agent-platform-docs
 
 > 📌 **用 https 而不是 `git@github.com:`** —— 三个仓都是公开的，https 形式**一份凭证都不需要**。
 > SSH 形式即便对公开仓也要求先配好 SSH key，那是给要往回推代码的人用的，不该成为
-> 「装一个实例」的前置。（2026-09-18 在一台全新 mac 上实测：https 零凭证 clone 成功。）
+> 「装一个实例」的前置。
+>
+> ⚠️ **`.gitmodules` 里的两个 submodule 也必须是 https，这一条 2026-09-23 才补上。**
+> 在那之前主仓能 https clone、两个 submodule 却写着 `git@github.com:` ⇒ 一台没有
+> GitHub SSH key 的机器上 `--recursive` **必然失败**（`Host key verification failed`），
+> 而上面这句「一份凭证都不需要」只对主仓成立。
+> ⛔ 这个坑在有 key 的机器上永远看不见 —— 它是在**第二台干净机器**上装的时候才现形的。
 
 > ⛔⛔ **`--recursive` 不能省。** 后端与前端是两个 submodule（`api/` `web/`），漏了这个参数
 > 拿到的是**两个空目录** —— 没有 `Dockerfile`、没有 compose 文件，而失败的样子像"仓库不全"
