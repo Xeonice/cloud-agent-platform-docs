@@ -11,6 +11,28 @@
 
 ---
 
+## [0.2.3] - 2026-09-23
+
+### 🔴 清残留 helper 那句 destroy 从来没生效过
+
+api 重启后预热 5 次全部撞 `409 Conflict: container name "/platform-aio-auth-helper"
+is already in use`。
+
+**根因**：传的是 `destroy({ providerSandboxId: 'auth-helper' })`，而 aio/docker 的
+`providerSandboxId` 是**容器 ID**，容器名却是 `platform-aio-auth-helper` ——
+destroy 404 被吞掉，create 撞 409。
+
+⛔ **第一次部署能成只是因为当时没有残留**；只要 api 重启而 helper 还活着就必然复现，
+而 v0.2.2 刚加的 5 次重试**全部撞同一堵墙**（重试让症状更明显，但挡不住它）。
+
+⇒ 契约新增可选的 `destroyBySandboxId(sandboxId)`，命名规则**留在 provider 家里**。
+⛔ 不在 runtime 模块里拼 `platform-<provider>-<sandboxId>` —— 那是 provider 的私有
+知识，抄一份出来就是这个仓反复警告的「两处各有一份真相」。
+顺带把那行模板串抽成 provider 里唯一的一处（`instanceNameOf`）。
+
+2 条新用例 + 变异验证（改回原写法 ⇒ 3 条立刻红）。
+unit **1753** · contract 43 · e2e 229。
+
 ## [0.2.2] - 2026-09-23
 
 ### 🔴 开机预热与 ImageSeeder 赛跑，输了就永久放弃
@@ -391,6 +413,7 @@ clone 前 · workspace 复制前 · tar 解包前 · **调度器容量探测**�
 - 本机跑起来才发现的若干项见 `docs/LIVE-RUN-FINDINGS.md`（其中浅仓迁移仍 ⏳）
 - `smoke.spec.ts:110` 在本机红、CI 绿 —— 本机环境问题，非回归
 
+[0.2.3]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.3
 [0.2.2]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.2.0
