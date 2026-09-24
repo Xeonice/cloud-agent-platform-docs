@@ -11,6 +11,69 @@
 
 ---
 
+## [0.2.4] - 2026-09-24
+
+### 🔴 tty 通道把 `ProcessSpec` 的 `env` / `cwd` 静默丢了（api#45）
+
+`ws /v1/shell/ws` 的上行帧只有 `input` / `resize`，**没有一处放得下环境变量与工作目录**，
+而 provider 就照着「传输层没有」把两个字段原样丢了 —— 契约声明了、调用方传了、进程也起来了，
+只是环境不是它要的。
+
+⚠️ 这是当初补 `cmd` 那次**漏掉的另外两项**：只补了 `cmd`，没回头问「同一条通道上还有谁也
+没位置」。
+
+**代价**：`ContainerAuthHelper` 靠 `env.HOME` / `env.<CLI>_HOME` 给每次登录开一次性隔离目录，
+丢掉之后 codex 把 `auth.json` 写进容器默认 HOME，平台在隔离目录里读不到 ⇒ 对用户报
+「**对方拒绝了这次登录**」。又一次「报错描述的是平台这一侧观察到的现象，而不是实际发生了
+什么」（这条链路第五次指错方向）。
+
+⇒ 由 provider 编成一行 shell：`cd '<cwd>' || exit 1; export K='V'; …; exec <argv>`。
+三处刻意选择：`|| exit 1` 而不是 `&&`（cd 失败要结束会话，不是留在错目录的 shell 里）；
+`export` 而不是 `env K=V`（后者把值放进 argv，沙箱内 `ps` 可见）；只用 `cd`/`export` 两个
+POSIX 特性，不用 `env -C`（要 coreutils ≥ 8.28）。
+
+另：容器形态的一次性 HOME 从 `/tmp` 挪到 `${HOME:-/tmp}` 下 —— codex 撞上会打
+`Refusing to create helper binaries under temporary dir "/tmp"`，而它**只是警告、照样往下跑**，
+所以不会当场失败，只会在更深的地方坏掉。
+
+### 🔴 任务侧「一选中 Agent 就自动发起登录」，点几下把 helper 打到 OOM（web#43）
+
+用户报「凭证管理里加授权正常，但任务里的授权卡死」。两边是同一套代码 —— 差别在**谁决定
+面板挂载**：凭证页与向导由用户点开，任务侧那份直接拿服务端的 `credentialStatus` 算。
+
+而面板**挂载即发起登录**（`AuthBranchSlot` 的 effect，三处共用、本身没错），后端 `beginAuth`
+又是每次都新开一个 CLI 会话、**既不去重也不取消上一个**。两者一叠加，「在下拉里选中一个没配
+凭证的 Agent」这种**纯浏览动作**就会在 auth helper 容器里真的拉起一个登录进程。
+
+真机实测（点三下单选框，全程没碰任何授权按钮）：
+
+| | |
+|---|---|
+| 会话数 | 1 → 2 → 3 |
+| 登录进程 | 两个 `claude setup-token` 并存 |
+| chrome | 6 → 35（`claude setup-token` 会 `xdg-open`，而预制镜像自带桌面） |
+| 内存 | 94.5MiB → 479.2MiB / 512MiB（**93.6%**） |
+
+再点几下整个 helper 就 OOM，届时连凭证刷新和别的 runtime 登录一起死。
+
+⇒ 展开态收进 `useRuntimeAuthPanel`，三处共用：**拦不拦由 `credentialStatus` 决定，面板在不在
+只由人决定**。成功后的三件事（刷新 + toast + 收起）也进同一份 —— 此前在凭证页与向导各写一遍，
+向导那份漏了两件。
+
+### 📋 查清但**未修**（据实登记）
+
+- **后端 `beginAuth` 仍不去重**：前端不再误触，但任何调用方重复发起照样堆会话。
+- **登录失败要等满超时**：CLI 几百毫秒就把错误打出来了（`Error logging in with device code: …`），
+  平台只做「有没有字节」的二分 ⇒ 网络失败被报成「多半是这个 CLI 换了版本」，而 helper 里
+  codex 自己写的 `codex-login.log` 从不读。前端轮询上限 10 分钟 < 后端 complete 超时 15 分钟。
+- **登录会话没禁掉容器内浏览器**：`claude setup-token` 在预制镜像里真的拉起一个 Chrome，
+  用户看不见，纯烧内存。
+- **环境侧**：该部署所在网络的出口对**跨 TCP 段的 ClientHello** 有约 10~20% 的概率性掐断
+  （TCP 连上、ClientHello 发出后对端直接 FIN，无 TLS alert）。codex 用 rustls，默认带
+  X25519MLKEM768（1216 字节 key_share），ClientHello 1546 字节必然跨段，因此必中；
+  curl/openssl 的 326 字节永远单段，全通。⚠️ 与后量子算法本身无关 —— 用 padding 把 326 字节
+  撑到同样 1546 字节（纯 x25519）失败率一样。这是网络环境问题，不在平台边界内。
+
 ## [0.2.3] - 2026-09-23
 
 ### 🔴 清残留 helper 那句 destroy 从来没生效过
