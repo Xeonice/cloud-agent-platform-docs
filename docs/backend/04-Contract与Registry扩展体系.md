@@ -244,6 +244,9 @@ interface SandboxProvider {
 > - **`ProcessSpec.user` 不支持** —— agent API 里没有这个参数。现在是**显式抛 `UNSUPPORTED_CAPABILITY`**（比静默丢弃好，但能力本身仍然没有）。要切用户只能改镜像/入口。
 > - **`tty:true` 的 `kill()` 是尽力而为** —— 先 ETX（真 SIGINT）、再 `exit\n`（顺带修掉"每断线泄漏一个 `bash -i`"）、最后关 socket。**忽略 SIGINT 的进程仍可能存活**；**唯一有保证的兜底是 `SandboxProvider.destroy()` / `stop()`**（整个实例连同里面的进程一起没）。所以 03 §8.3 的"连带 destroy 实例"不是可选项。
 > - **`tty:true` 一侧 `spec.cmd` 仍然没传进去（⏳ 未解决）** —— provider 调的是 `client.openTerminal(cols, rows)`，终端固定起 agent 的默认 shell；~~**adapter 的 `buildAttachCommand()` 至今无处落地**~~ **（2026-09 已落地：`kind=runtime` 的终端标签就跑它，06 §5.6。`tty:true` 一侧的 `spec.cmd` 现在由终端上下文拼好 tmux 命令后传下去。）**
+> - **`tty:true` 一侧的 `env` / `cwd` 曾被静默丢弃（2026-09-23 已修）** —— ws 上行帧只有 `input` / `resize`，**没有一处放得下环境变量或工作目录**，而 provider 就照着「传输层没有」把两个字段原样丢了。⚠️ **这是上面「`cmd` 被丢弃」的同一个坑漏掉的另外两项**：当时只补了 `cmd`，没有回头问「同一条通道上还有谁也没位置」。
+>   现在由 provider 编成**一行 shell**：`cd '<cwd>' || exit 1; export K='V'; …; exec <argv>`（`aio-guest-shell.ts` 的 `launchLine`）。三处刻意选择：① `|| exit 1` 而不是 `&&` —— cd 失败要**结束会话**，而不是把用户留在一个看起来正常的错目录 shell 里；② `export K=V` 而不是 `env K=V cmd` —— 后者把值放进 `env` 的 **argv**（沙箱内 `ps` 可见，即上文第 2 条那条暴露面），前者只进 shell 自己的 environ；③ 只用 `cd` / `export` 两个 POSIX 特性，**不用 `env -C`**（要 coreutils ≥ 8.28，换一张镜像就可能是 busybox）。env 名字**校验而不是转义**（`export` 左边不是词位置，引号在那儿没有意义），非法名字抛 `INVALID_STATE`，且**在开 socket 之前**就抛。
+>   ⚠️ **代价是这一跳的隔离全靠这一行**：真机上 `ContainerAuthHelper` 正是用 `env.HOME` / `env.<CLI>_HOME` 给每次登录开一次性目录，丢掉之后 codex 把 `auth.json` 写进容器默认 HOME，平台在隔离目录里读不到，于是对用户报「**对方拒绝了这次登录**」—— ⛔ 又一次「报错描述的是平台这一侧观察到的现象，而不是实际发生了什么」（05 §5.1 那串同源教训）。
 > - **没有用 `/v1/bash/write` 做 stdin** —— 它写得进字节但**发不出 EOF**，`codex login --with-access-token` 这类"读到 EOF 才动作"的命令会**挂死**。所以 stdin 走文件重定向（`< file` 有真 fd 0、有真 EOF），而不是这条上行通道。
 > - **`env` / `command` 在沙箱内的 `ps` 可见** —— 见上第 2 条。**per-call `env` 不是密钥通道**，这条不随本次修复改变。
 >
