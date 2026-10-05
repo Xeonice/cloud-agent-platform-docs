@@ -1,92 +1,106 @@
-# Mac mini 后端持续部署
+# Mac mini Jenkins 构建发布与服务维护
 
-本次部署将 Vercel 前端与 Mac mini 原生 API 分开运行。Mac 上使用固定的 launchd 轮询服务，只发布指定仓库和分支上已经通过 GitHub CI 的 commit。生产实例使用独立的 `3101` 端口、数据库、工作区和 BoxLite home；现有 `3100` 预览实例及其中的用户任务继续运行。
+Mac mini 负责三个仓库的服务发现、测试、原生构建、前端预构建、打包和上传。Jenkins 是 CI/CD 的调度入口；Vercel 托管 Mac 上传的前端产物，Cloudflare Tunnel 转发至 Mac 原生 API。生产使用 `3101` 和独立数据目录，`3100` 预览及既有任务保留。
 
-本文记录已核实的部署边界与本轮实施方案。服务是否已经安装、当前发布 SHA 和外部域名是否可访问，应以部署脚本的实际状态及执行记录为准；本文不把待配置的 Tunnel 或凭证视为已经完成。
+本文描述仓库中实现的 Jenkins 方案。当前已完成临时 Jenkins 的原生 API 构建、日志验收和独立 GHCR 镜像凭证验证；系统 LaunchDaemon 切换与完整项目首次 Jenkins Release 仍在实施，不能仅凭脚本存在认定已经上线。实际完成状态以 Jenkins 构建、`system-services-state.json`、线上版本与 GitHub Release 的校验记录为准。
 
-## 已核实的仓库与宿主
+## 发布入口与流水线
 
-2026 年 10 月 6 日通过 GitHub API 只读核对：`Xeonice/agent-platform-api` 是公开的个人仓库，默认分支为 `main`。当前开发与本次发布来源为 `feat/design-v2-migration`；该分支未受保护，只有具备 push 权限的可信维护者应向其提交发布代码。`main` 已要求 `build-test` 检查且管理员同样受约束，但这不自动保护另一个分支。
+管理入口为本机 [Jenkins](http://127.0.0.1:8080/)，仅监听 loopback，不增加公网管理域名。入口需要独立 Jenkins 管理员登录，与平台的访问口令不同。登录凭证保存在本机 `~/.local/share/agent-platform-jenkins-tools/admin-login.json`，管理员 API token 在同目录 `admin-api.json`；均为 `0600`，不要复制到仓库、构建参数或报告。
 
-API 的 [CI workflow](../api/.github/workflows/ci.yml) 名为 `CI`，触发事件是 `push` 与 `pull_request`，job/check 名为 `build-test`，运行在 `ubuntu-latest`。它已验证静态检查、fresh acceptance、构建和 OpenAPI 漂移，但没有生成可直接发布到 Darwin ARM64 的应用产物。Web 与根仓跨仓 workflow 也运行在 GitHub 托管 runner；它们的测试报告不等于 Mac 原生发布包。
-
-首次生产发布为 `134433f47912f7172faae50ea3285d010f6a3425`，其 [push CI run](https://github.com/Xeonice/agent-platform-api/actions/runs/37362932121) 为 `completed / success`。Mac mini controller 随后完成独立原生构建并在 2026-10-06 03:27（北京时间）激活生产 `3101`；原生 acceptance 通过 196 项。鉴权版本与 deployment readiness、HTTP Origin 和 WebSocket 握手已经在本机实际验证，现有 `3100` 预览任务仍运行。轮询服务每次重新核对当前分支 head，不将首次发布永久当作最新版本。
-
-宿主是 macOS ARM64，Node `22.23.3` 可用；API 包管理器声明为 pnpm `9.12.0`。Docker CLI 已安装，但只读探测时 daemon 不可用，因此本方案选择原生 Node 和 BoxLite，不依赖启动 Docker。既有 API 与 BoxLite 实例的运行状态不属于新服务的接管范围。
-
-## 持续部署服务
-
-采用本地安装的可信 controller，而不是将生产 Mac 注册为公开仓库的通用 GitHub runner。GitHub 官方指出，公开仓库的 PR 可将不可信 workflow 送到 self-hosted runner；环境审批不能给同一宿主提供执行隔离。[GitHub runner 安全说明](https://docs.github.com/en/actions/reference/security/secure-use)
-
-controller 只向 GitHub 发出查询，不需要公网 webhook、额外端口或 Cloudflare 路由。它固定以下白名单，不执行 GitHub 响应携带的 shell、PR 修改的 workflow 或任意仓库参数：
-
-| 项目 | 固定值或条件 |
+| Jenkins job | 职责与触发 |
 | --- | --- |
-| 仓库 | `Xeonice/agent-platform-api` |
-| 发布分支 | `feat/design-v2-migration` |
-| workflow | `.github/workflows/ci.yml`，API 查询可使用文件名 `ci.yml` |
-| 事件 | `push` |
-| SHA | 当前远端分支 head，与 workflow 的 `head_sha` 完全一致 |
-| CI 结果 | `status=completed` 且 `conclusion=success` |
-| 本地命令 | 安装时固定的构建、测试、发布命令 |
+| `agent-platform-ci-discovery` | 每两分钟发现三个固定仓库的分支和 PR；生产提交组合变化时触发统一发布 |
+| `agent-platform-native-ci` | API 非生产分支和 PR 的原生静态、acceptance、构建及协议门禁 |
+| `agent-platform-web` | 前端全部门禁、Storybook 交互、预构建和下载包；只生成产物 |
+| `agent-platform-contract` | 文档及浏览器到 Nest、fresh SQLite 的跨仓验收；每天北京时间 03:00 重验 main 的精确 gitlinks |
+| `agent-platform-api` | 固定可信生产分支原生 CI、空闲门禁、备份、切换和运行快照，由统一发布调用 |
+| `agent-platform-release` | 固定三个 SHA，验证上述子构建，上传并启用 Vercel 前端，再上传并发布 GitHub Release |
+| `agent-platform-service-monitor` | 每五分钟归档 API、Tunnel、发布状态与脱敏日志，并生成可读 HTML 报告 |
+| `agent-platform-mutation` | 北京时间 02:00 全量趋势；PR changed 模式报告，不阻断发布 |
+| `agent-platform-sandbox-images` | Dockerfile 变化检查；`sandbox-image-v*` 标签或手动参数发布两种 Linux 架构的 GHCR 镜像 |
 
-controller 校验 workflow 整体成功；当前 workflow 只有 `build-test` 一个 job。前文的 check 名与产出 app 是本次 GitHub API 实查事实，不能解释为 controller 还执行了额外的 check-runs 校验。它另要求候选继承配置中的最小发布 commit，并且 CI run 创建时间不早于发布通道的启用时间，防止将未包含本轮维护门禁的历史版本直接启用。
+源码入口为 [Jenkins pipelines](../deploy/jenkins/)。这些是维护者安装的固定流水线，不执行 PR 提供的 Jenkinsfile。Jenkins controller 的 executors 为零；`mac-ci` 与 `mac-deploy` 使用独立账户和工作目录。PR 只在无生产凭证的 CI 账户中执行；生产构建限于可信固定发布分支。
 
-GitHub 的 workflow runs 接口支持 `branch`、`event` 与 `head_sha` 过滤，公开资源允许匿名读取；使用独立的只读 token 时仅需相关仓库的 Actions read，并按分支查询需要提供 Contents read。只输出 run ID、SHA 和结果，不输出凭证或完整鉴权响应。[GitHub workflow runs API](https://docs.github.com/en/rest/actions/workflow-runs)
+发布通道为 root 的 `Xeonice/初始化一下项目开发` 与 API/Web 的 `feat/design-v2-migration`。每次发布固定 root、API、Web 的完整 SHA，并生成组合校验 key。分支在构建期间变化会使当前候选失效；运行中的用户任务或连接会使 API 发布暂缓，由 Jenkins discovery 后续重试。已验证的前端及跨仓子构建可复用，保留原构建编号和 hash，不把缓存标成重新构建。
 
-查询失败、分支 head 尚未通过 CI、本地构建失败或生产正在执行任务时，controller 保留现有版本并记录原因。一个发布锁覆盖查询后的构建和切换，避免自动轮询、手工重试与恢复同时操作生产实例。发布状态保存候选 SHA、CI run、构建结果和激活结果，已完成的 SHA 不重复构建。
+手动完整发布可在 `agent-platform-release` 中点击 Build with Parameters。`TAG` 为空时从 `v0.3.0` 起选择新的 patch 版本；也可指定尚未使用的不可变版本。`REQUEST_KEY` 为 discovery 的去重参数，手动运行保持为空。日常无需独立运行 API/Web 的发布命令。
 
-## launchd 生命周期
+## 本机产物与上传
 
-controller 是一次查询并退出的进程，采用 `RunAtLoad` 配合 `StartInterval=180`；间隔触发不承诺精确到每个时点。API runtime 是长期进程，使用另一个 label 和 `KeepAlive=true`。两者都使用绝对可执行路径，不依赖终端 shell 的 fnm 初始化、当前目录或交互式 PATH。
+API 用 Node 22、pnpm 锁文件和 Darwin ARM64 原生依赖构建，十二项门禁包括 fresh acceptance、provider fixtures、OpenAPI 漂移、SQLite 与 BoxLite 原生载入。激活目录与 CI 工作目录分开；每个成功原生 artifact 和 Jenkins receipt 都绑定 SHA、通道及门禁结果。
 
-| 服务 | launchd label |
+前端只在无 token 的 CI 账户中执行源码。可信部署账户先从固定 Vercel project 读取并筛选公开构建设置，CI 本地执行预构建。上传前校验三个 SHA、Jenkins 实际 SUCCESS、包大小/hash、项目身份和输出中的原生文件；包含不兼容的 Mach-O 服务端文件会阻止 Vercel 上传。Vercel 使用 `deploy --prebuilt --prod --skip-domain` 接收产物，API 的真实版本和 readiness 符合本轮固定 SHA 后才 promote 到域名。
+
+统一发布在 Jenkins 中制作 API 原生包、前端 prebuilt、Storybook、完整项目源码、发布 manifest 和 `SHA256SUMS` 等下载资产，再直接调用 GitHub Release/asset API 上传。资产必须完整上传、大小和服务器 digest 与本机校验一致，才将 draft 变为正式 release；已发布版本不覆盖。可以在 [GitHub Releases](https://github.com/Xeonice/cloud-agent-platform-docs/releases) 查看最终可下载内容。
+
+沙箱镜像另由本机专属 Colima/BuildKit 构建 `linux/amd64` 与 `linux/arm64`。GHCR 使用独立 classic PAT 的 `write:packages`，保存在私有 Jenkins tools 的 `ghcr-token`；Release 上传继续使用已有仓库写权限凭证。[GitHub GHCR 鉴权说明](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry#authenticating-to-the-container-registry)。`check` 不推送，报告不能表示发布成功；`publish` 必须验证 version/latest 两档匿名 OCI digest。默认镜像配置来自 [sandbox-publish.json](../api/config/sandbox-publish.json)。
+
+API、Web 和 root 的旧 GitHub Actions workflow 在 Jenkins 对应任务实际验证后归档并远端 disable；Web 同时关闭 Vercel Git 自动构建，避免两个系统同时发布。迁移过程中原生产版本保持可用，实施记录必须区分源配置已准备和远端已经切换。
+
+归档 `.github/workflows` 的 Git 推送需要现有 GitHub CLI OAuth 登录具备 `workflow` 权限。本机已补齐并推送 API/Web 迁移提交。专属 `Xeonice Agent Platform Jenkins` App（ID `5204009`，installation `168317369`）已实际验证，只允许三仓与 Contents read、Pull requests read、Commit statuses write，私钥保存在私有 tools 目录。
+
+三个仓库的 main 当前仍要求检查来自固定的 GitHub Actions App `15368`；普通 OAuth 写入同名 commit status 无法替代该来源。保护迁移在真实 Jenkins 状态验证后，将必需检查绑定到新 App 的 ID，同时保留 strict、review 和管理员约束，不改成允许任意 App。配置与轮换说明见 [GitHub App 设置](../deploy/jenkins/github-status-app.md)。[GitHub 必需状态检查 API](https://docs.github.com/en/rest/branches/branch-protection#update-status-check-protection)
+
+## Mac 常驻服务与首次切换
+
+系统安装器 [install-system-services.mjs](../deploy/macmini/install-system-services.mjs) 将以下任务安装至 `/Library/LaunchDaemons/`，使用固定绝对程序路径和 KeepAlive，不依赖 Orca 终端或用户 shell 初始化。Jenkins 和 CI 是隐藏、禁用交互登录的专属账户；API、Tunnel、可信部署 agent 和构建 Docker 保留现有数据 owner `douglasdong`。
+
+| launchd label 后缀（前缀 `com.douglasdong.agent-platform.`） | 运行账户与用途 |
 | --- | --- |
-| CI 轮询 | `com.douglasdong.agent-platform.cicd` |
-| 生产 API | `com.douglasdong.agent-platform.api` |
-| 专属 Tunnel | `com.douglasdong.agent-platform.tunnel` |
+| `jenkins` | `_agentplatformjenkins`；controller home `/Users/Shared/agent-platform-jenkins` |
+| `jenkins-ci-agent` | `_agentplatformci`；无生产凭证，home `/Users/Shared/agent-platform-ci` |
+| `jenkins-deploy-agent` | `douglasdong`；固定生产发布工具 |
+| `api` | `douglasdong`；唯一生产 API，端口 `3101` |
+| `tunnel` | `douglasdong`；现有专属 Cloudflare connector |
+| `build-docker` | `douglasdong`；专属 `agent-platform-build` Colima profile，不切换用户默认 Docker context |
 
-固定程序的仓库来源为 [controller.mjs](../deploy/macmini/controller.mjs)、[runtime.mjs](../deploy/macmini/runtime.mjs) 与 [lib.mjs](../deploy/macmini/lib.mjs)。安装时复制到服务目录，不在每次发布时从 API 候选源码替换 controller。配置文件与 `runtime.env` 使用 owner-only `0600` 文件。
+Node 固定为 `22.23.3`，Jenkins LTS 为 `2.580.1`，Java 为 OpenJDK 21。Node 22/bin 中安装 corepack 的 pnpm/pnpx 命令入口，使嵌套包脚本也使用正确工具链。公共 CI 工具、agent.jar 和固定 Vercel CLI `62.2.0` 安装到 root-owned `/Library/Application Support/AgentPlatform`；生产 secrets 与数据库不可被 CI 账户读取。插件版本记录见 [plugins.lock.json](../deploy/jenkins/plugins.lock.json)。
 
-本轮无需 sudo 的安装方式是用户级 LaunchAgent，plist 位于当前用户的 `~/Library/LaunchAgents/`。它随该用户登录加载，注销时会收到 SIGTERM；不能将它描述为冷启动后无人登录也持续工作的系统 daemon。需要无人登录运行时，可另行将已核对的同一套 wrapper 配置为 `/Library/LaunchDaemons/` 中的 LaunchDaemon，并指定服务用户；这一升级涉及系统安装，不是本轮用户级服务的隐含能力。[Apple launchd 说明](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)
+首次迁移先执行 `prepare.mjs` 生成禁用状态的固定 pipelines、私有 bootstrap 凭证与待审查 plist，再执行 system installer 的 `prepare <新目录> <system-extras.json>`。这一步只生成完整 hash review，不切换服务。维护者在本机 Terminal 用 Node 22 和 sudo 执行该 review 中的 `tools/install-system-services.mjs apply <同一review目录>`；密码仅在系统终端输入。
 
-controller、API runtime 与 Tunnel 各自具有独立 label 和日志。暂停发布只停止 controller；停止生产 API 不停止 `3100` 预览进程，也不停止整个宿主上的 BoxLite 进程。运行服务时不将 token、访问口令或主密钥放在命令行参数或 plist 中。
+apply 先只读核对生产 readiness、HTTP、授权会话与全部数据库 blockers，实际工作未结束时拒绝且不修改配置。通过后永久退役旧 `cicd` 轮询器并建立自身维护屏障。仅此次人工系统迁移允许停止已核对 plist 和身份的原专属 GUI Tunnel，释放其残留 WebSocket；API 此时仍运行。所有计数归零并持续十秒安静后，才备份 SQLite、再次核对屏障及空闲，再停止原 API、安装系统服务并验证健康。日常自动发布仍要求连接也先归零，不采用此断开步骤。
 
-## 安装与日常操作
+生产可能短暂中断。安装器拒绝强停用户任务，拒绝两个 API 同时使用生产库；失败时按实际阶段保留 trace 或恢复原受管 API/Tunnel，旧轮询器不恢复。bootstrap 临时 Jenkins 必须先退出，避免与系统服务争用 8080。`preflight <review目录>` 可在安装前只读显示 blocker 和本次人工切换条件。可复制的首次安装与凭证命令见[本机命令文档](../artifacts/jenkins-setup-commands.md)。
 
-使用已安装的 Node 22 执行 [install.mjs](../deploy/macmini/install.mjs)，并在仓库根目录运行以下首次安装命令。`init` 创建配置、受限 runtime 文件与两份 plist，但默认 `deployEnabled=false`；`start` 只加载 CI 轮询 LaunchAgent，不会直接启动 API 或激活旧候选。
+`status` 和切换记录提供实际安装证据；冷启动后加载属于 LaunchDaemon 配置能力，本轮不会为验证重启整台 Mac 打断预览任务。Mac 的休眠、关机和 FileVault 启动解锁仍影响机器可用性，应与宿主已有无人值守策略一起维护。
+
+## 状态、日志与日常维护
+
+在 Jenkins 每个构建可查看 Console Output、阶段结果、完整 SHA、门禁报告和 artifacts。`Service status and logs` HTML 提供健康、真实版本、部署 blockers、PID、launchd 状态与日志链接。监控的五分钟快照保留十四天，报告仅包含每种日志末尾的有限行数和已脱敏字段；本机完整原始日志仍在私有服务目录中，不把快照称为完整日志。
+
+| 内容 | 本机路径 |
+| --- | --- |
+| 原始 API、Tunnel、构建及部署 agent 日志 | `~/.local/share/agent-platform-deploy/logs/` |
+| 当前受管 PID/SHA | 同目录根的 `runtime-state.json` |
+| 最近发布结果 | 同目录根的 `status.json` |
+| 系统切换步骤、备份及恢复记录 | 同目录根的 `system-services-state.json` 和 `backups/launchd-cutover-*` |
+| Jenkins controller 日志、构建记录与 artifacts | `/Users/Shared/agent-platform-jenkins/`（controller 私有） |
+| 隔离 CI agent 日志 | `/Users/Shared/agent-platform-ci/agent.log` |
+| 统一发布资产和上传 receipt | 私有 deploy root 下的 `project-releases/`、`web-releases/`，实际路径以 manifest/receipt 为准 |
+
+使用 Node 22 查看状态或暂停发现器，不停止生产服务：
 
 ```sh
-node deploy/macmini/install.mjs init
-node deploy/macmini/install.mjs start
-node deploy/macmini/install.mjs status
+TASK_NODE22=/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node
+"$TASK_NODE22" deploy/macmini/install-system-services.mjs status
+"$TASK_NODE22" deploy/jenkins/manage.mjs status
+"$TASK_NODE22" deploy/jenkins/manage.mjs disable agent-platform-ci-discovery
+"$TASK_NODE22" deploy/jenkins/manage.mjs enable agent-platform-ci-discovery
 ```
 
-这组 `node` 必须解析为 Node 22，安装脚本还会拒绝非 Darwin ARM64 宿主。初始化记录 `channelStartedAt`；它之后的新可信 push 必须包含本轮维护与 readiness 实现。初始化之前的旧成功 CI，包括重新执行旧 run，不能绕过该时间条件。当前历史 `7dc3ae7b` 成功记录只作为已有 CI 的事实，不是直接上线授权。
+暂停发现器不会取消已排队或运行中的 release；维护前在 Jenkins 查看并等待相关构建结束。更新 trusted scripts 时先暂停并确认发布锁已经释放，审查新源码，再更新私有 snapshot 与公共 CI 工具。`manage.mjs sync-pipelines` 通过已鉴权的 Jenkins 管理 API 同步固定模板，`refresh` 应用 bootstrap job 定义；它们不从 PR 读取 pipeline。全部工具和凭证准备完成、对应原生流水线验证通过后，`activate` 才启用自动发现与定时任务。
 
-代码审查、本机检查与新 push CI 完成后，在本机使用已审查的完整 40 位 API commit 启用发布；尖括号是参数占位符，执行时替换为实际 SHA。
+正式系统模式下，只允许固定 root-owned helper 操作生产 API/Tunnel，以下入口无需给 CI 用户一般 sudo 权限：
 
 ```sh
-node deploy/macmini/install.mjs enable <full-api-commit-sha>
-node deploy/macmini/install.mjs status
+sudo /Library/PrivilegedHelperTools/com.douglasdong.agent-platform-service api status
+sudo /Library/PrivilegedHelperTools/com.douglasdong.agent-platform-service tunnel status
 ```
 
-`enable` 写入最小发布 commit；候选必须等于它或是它的后代，仍需匹配远端分支 head 和成功 CI。`disable` 使轮询保持只构建模式，controller 在构建完成后及切换开始前重新读取配置；禁用、发布通道或 runtime 配置发生变化时，不激活该轮候选。切换已经开始后先等待其完成或恢复，不能用改配置中断备份与恢复事务。`stop` 卸载轮询服务而保留 API。更新本机 controller 时先停止轮询，再使用最新仓库中的安装工具复制已核实的新工具并重新加载。
+日常应用发布由 Jenkins 完成。`api stop/restart` 会影响连接，只在已经持有维护屏障并完成空闲和备份核查的维护窗口使用。旧 `cicd` LaunchAgent 已退役，不重新启动旧轮询发布流程。
 
-```sh
-node deploy/macmini/install.mjs disable
-node deploy/macmini/install.mjs stop
-node deploy/macmini/install.mjs update-tools
-node deploy/macmini/install.mjs start
-```
-
-安装后日常 `start`、`stop`、`enable`、`disable` 与 `status` 也可使用 `/Users/douglasdong/.local/share/agent-platform-deploy/tools/install.mjs`，不需要保留当前 Orca 终端；`update-tools` 应执行新仓库版本的安装脚本，而非让已安装副本复制自身。`status` 只输出发布状态、SHA 与服务是否已加载；它不输出 `runtime.env`。`config.json`、`runtime.env` 和服务日志位于服务根目录，不能将文件完整内容复制到公开报告。
-
-`stop` 保留 LaunchAgent 的 plist；下一次用户登录仍会加载轮询服务。长期暂停自动发布应先 `disable` 再 `stop`，而不是只停止一次进程。手工维护使用人工标记；controller 仅恢复自身拥有的自动发布标记，并且禁用发布时不自动解除维护。
-
-如果状态为 `stale-lock-needs-recovery`，不要自动抢锁或直接删除目录。`controller.lock` 防止并行发布，`runtime.lock` 从 API 子进程启动前一直持有到其退出；wrapper 意外终止留下锁时，launchd 的重启不会再创建第二个 API。即使锁被意外删除，runtime 仍检查 `runtime-state.json` 中的旧 API PID，旧子进程存活就拒绝启动。
-
-恢复时先 `stop` 轮询；API runtime 的人工恢复须先通过 `launchctl bootout gui/<当前UID>/com.douglasdong.agent-platform.api` 卸载其服务，再核对旧 wrapper、API 子进程和编译子进程是否已退出、候选是否已经激活。当前安装工具的 `stop` 仅停止轮询，不提供 API 停止命令。确认没有残留受管进程后，仅恢复此服务自己的锁；不操作 `3100` 或其他 BoxLite 进程。controller 仅识别自身生成的 JSON 维护标记；部署仍获批准、当前受管 SHA 与实际 API 版本一致且鉴权 readiness 通过后，才自动清除。人工、旧格式、被替换或改写的标记保留，交由运维恢复。
+平台访问口令的维护入口是私有 `~/.local/share/agent-platform-deploy/runtime.env` 中的 `ACCESS_PASSCODE`；平台首页出现解锁界面时输入该口令。它与 Jenkins 管理员密码分开，不进入产物、GitHub 或 Vercel。改口令须在安全维护窗口重启 API，并核对 cookie 与已有会话行为；不要在构建参数中输入口令，也不要直接归档 runtime.env。
 
 ## 版本目录与持久数据
 
@@ -137,13 +151,9 @@ BoxLite 对同一个 home 使用独占目录锁。本仓每个 API 进程共享�
 
 ## 原生构建与缓存
 
-在当前 Mac 的 Darwin ARM64 和 Node 22 环境中安装锁定依赖并构建，以便 `better-sqlite3` 和 BoxLite 原生包与 runtime 一致。Linux CI 的 `node_modules`、Docker 镜像或另一个架构的二进制不能直接成为此原生服务的运行依赖。
+API 与前端依赖分别按 pnpm 锁文件安装，CI 账户的缓存与可信生产构建缓存分开。缓存仅包含依赖和不可变成功产物，不缓存数据库、运行配置、token、主密钥、工作区或 BoxLite home。每个候选先在独立目录完成真实检查；runtime 启动还会验证 Node 22、Darwin ARM64、release manifest 和固定数据路径。
 
-runtime 每次启动前都会核对 Node 22、Darwin ARM64、release manifest，以及 manifest 中 DATA、DB、BoxLite 三个固定路径与当前 runtime 配置一致；任一不符即拒绝启动 API，须先审查数据接管方案。这个检查同样约束 launchd 重启，不能仅依赖发布 controller 的切换前检查。
-
-本地 pnpm store 可重复使用；缓存至少区分 lockfile、Darwin ARM64 与 Node 主版本。每个 release 使用自己的依赖目录与构建产物，不缓存数据库、主密钥、运行配置、项目工作区或 BoxLite home。固定的本地检查执行 API 当前静态门禁、fresh acceptance 与构建；不将 GitHub CI 成功理解为外部 provider 已在此宿主实际创建成功。
-
-构建进程使用干净环境与独立临时数据路径，runtime 才读取生产口令和持久路径。本轮用户级安装若构建和 runtime 属于同一 macOS UID，这提供的是流程和目录分离，不能阻止恶意构建代码读取该用户可读的生产文件；因此只构建固定可信发布分支。需要执行不可信代码时，另设受限构建用户或干净 VM，不能扩展当前 controller 去接受 PR。
+production config 固定 `ciProvider=jenkins` 与 `jenkinsJob=agent-platform-api`。controller 不再读取 GitHub Actions 的绿色 run，而读取本机 owner-only、绑定 SHA/通道/检查结果的 Jenkins receipt；统一发布还核对 Jenkins 实际 SUCCESS 和完整三仓参数，不能仅凭包中的自述字段上线。
 
 ## 空闲门禁与切换
 
@@ -178,55 +188,19 @@ BoxLite sandbox 创建已设置 `detach: true` 与 `autoRemove: false`，headles
 
 ## 数据库迁移与回退
 
-API 在首次打开数据库时自动执行当前 release 的迁移。不能在旧 API 正在服务时启动另一 candidate 指向同一个生产库，只为做健康检查；它可能提前改变旧进程使用的 schema。验证 candidate 时使用独立临时库与独立 BoxLite home。[启动持久化装配](../api/apps/api/src/platform/persistence/platform.module.ts)
+API 首次打开数据库时会执行该 release 的迁移。candidate 必须用独立临时数据完成验收，不能先指向生产库启动第二个 API。切换前用 SQLite backup API 得到包含 WAL 状态的一致快照；BoxLite home、主密钥和项目工作区另行保留。
 
-生产切换前 controller 使用 SQLite backup API 取得包含 WAL 状态的一致快照，并保留固定数据目录中的主密钥；不能将运行中的主 `.db` 单文件复制当作完整备份。它比较完整迁移文件集合的 hash、BoxLite SDK 版本，以及 DATA、DB、BoxLite 三个绝对路径；任一变化都返回 `schema-or-data-change-needs-review`，不自动激活。
+controller 比较完整迁移文件 hash、BoxLite SDK 版本以及 DATA、DB、BoxLite 三个绝对路径。变化返回 `schema-or-data-change-needs-review`，不能用 enable 通道绕过。全部兼容且尚未开放 candidate 写入时，失败切换才能恢复原应用；未知兼容性或维护屏障所有权变化时，保持明确失败状态并人工恢复。已开始接收新业务写入后恢复旧数据库快照会丢失这些写入，不能作为无损回滚。
 
-这三个路径、迁移 hash 与 SDK 版本一致时，candidate 启动失败才允许恢复旧应用 release。这个门禁识别已提交迁移文件与持久目录的变化，不证明任意业务代码的数据格式变化兼容。BoxLite 当前依赖锁定为 `0.9.7`，其 home 另有 SDK 私有持久格式；未来升级 SDK 时，需要审查该格式的兼容性。迁移已经改变生产 schema 时，只有经过兼容性检查才能只回退代码；无法证明兼容就保持停机并进入明确的恢复流程，不盲目自动恢复旧数据库抹掉新版本已写入的数据。
-
-新版本尚未开放写入、数据库快照完整且活动门禁通过时，可按实际发布记录执行快照恢复。已接收新任务或新业务写入后，恢复发布前快照将丢失这些写入，不能作为无损回滚。BoxLite home 和项目工作区也不是数据库快照的一部分，恢复时需要核对它们与任务记录的对应关系。
-
-### 需要人工审查的升级
-
-`enable <sha>` 只批准发布通道，不放行 schema、BoxLite 或数据路径变更。`schema-or-data-change-needs-review` 的候选已经完成构建，但应由维护者确认迁移的前后兼容性、数据保留、BoxLite 格式以及恢复方案后，在维护窗口手工激活；当前工具没有“忽略差异并自动上线”的命令。
-
-1. 先 `disable`、再 `stop` controller。核对 `controller.lock/owner.json` 对应进程及其构建子进程均已退出；若仍有锁或维护文件，先按发布记录恢复，不覆盖它们。人工维护文件可写入 `manual\n`，使用 `0600` 权限且只在文件不存在时创建；自动控制器不会接管这种标记。
-2. 等待鉴权部署状态的 `ready=true`、`draining=true`、`idle=true`，持续观察安静窗口。保留当前 release SHA 和真实数据路径，使用当前 release 的 `better-sqlite3` backup API 生成包含 WAL 的备份。BoxLite home、主密钥和工作区需要各自的保留或快照方案。
-3. 卸载生产 API，并核对 `runtime-state.json` 的旧 API PID 已退出，`runtime.lock` 已由 wrapper 正常释放。下面的命令只停止受管生产服务，不操作预览实例：
-
-   ```sh
-   launchctl bootout "gui/$(id -u)/com.douglasdong.agent-platform.api"
-   ```
-
-4. 将 `AGENT_PLATFORM_RELEASE_SHA` 设为已审查且构建完成的完整 commit；确认其 manifest、固定数据路径和原生环境正确后，以临时 symlink 原子切换版本，再加载生产 wrapper：
-
-   ```sh
-   node --input-type=module <<'NODE'
-   import * as fs from 'node:fs/promises';
-   import { homedir } from 'node:os';
-   import { join } from 'node:path';
-   const root = join(homedir(), '.local/share/agent-platform-deploy');
-   const { readyManifest, assertNoLiveApi } = await import(join(root, 'tools/lib.mjs'));
-   const sha = process.env.AGENT_PLATFORM_RELEASE_SHA;
-   const release = join(root, 'releases', sha ?? '');
-   await readyManifest(release, sha);
-   assertNoLiveApi(JSON.parse(await fs.readFile(join(root, 'runtime-state.json'), 'utf8')));
-   await fs.symlink(release, join(root, 'current.manual-next'));
-   await fs.rename(join(root, 'current.manual-next'), join(root, 'current'));
-   NODE
-   launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.douglasdong.agent-platform.api.plist"
-   ```
-
-5. 保持人工维护屏障，确认健康、鉴权版本 SHA 和 readiness；核对实际数据迁移结果。失败时保持屏障并卸载候选 API，按已经审查的兼容回退或数据恢复方案处理，不直接启动旧 release。DATA、DB 或 BoxLite 路径变更还需要明确的数据接管；wrapper 会拒绝与 manifest 不一致的运行配置。
-6. 验收通过后由维护者显式移除自己的人工维护标记，记录发布与备份路径，再 `enable <新sha>`、`start` controller。锁故障恢复同样在确认旧进程全部退出后，恢复自己的锁并使用上述 `bootstrap` 命令加载已经核实的 `current`；只有版本与 readiness 验证成功，才恢复外部写入。
+人工恢复先暂停 Jenkins discovery 并等待 release/发布锁释放，再建立人工维护标记、确认 draining/idle、备份，使用固定 helper 停止唯一生产 API。核对旧 PID 和 runtime.lock 真正释放后，才审查并切换不可变 release。保持维护屏障验证候选真实 SHA/readiness；代码、数据库及 BoxLite 格式不兼容时另做明确的数据恢复方案。不删除未知锁或别人持有的维护标记。
 
 ## 前端域名与 Tunnel
 
 前端已使用 `https://agent.douglasdong.com`，API 为同一站点下的 `https://agent-api.douglasdong.com`。现有 `ap_session` 是 API 域的 host-only、HttpOnly、SameSite=Lax cookie；同站点的两个 origin 仍需要精确 CORS。不能直接把任意 `vercel.app` 预览域当成同站点生产前端，也不能只改 WebSocket 地址而让解锁请求留在 Web 域。
 
-前端通过 Vercel 的 Git integration 构建发布。项目的 production branch 为 `feat/design-v2-migration`，`web/vercel.json` 仅启用该分支自动构建；项目已开启生产 custom domain 自动分配，Preview 仍禁用。当前正式版本为 `1ab5b18c1e3d8c173ceef5728e690af8c605df88`，deployment 为 `dpl_5CTNChRCzUdoXM6p3dgmrjLgcmoX`，已确认域名 alias 指向该 deployment。
+Jenkins 对固定 Vercel project `agent-platform-web` 进行 prebuilt 上传，team 为 `xeonices-projects`。正式 rollout 后关闭 Git 自动构建；每轮 Jenkins receipt 记录 deployment id、三仓 SHA 和 promote 结果，线上 alias 的实际指向以 Vercel API 核验为准。
 
-Vercel 使用锁定 pnpm 与平台构建缓存；Mac 原生发布复用独立 pnpm store，每个 SHA 的成功 release 只构建一次。CLI 上传另由 `.vercelignore` 排除本地 Next acceptance 输出，实测输入从 350.06 MiB 减至 3.07 MiB；这不等同于压缩 Git integration 的干净 checkout。两次 CLI 发布受 commit-author 权限校验阻止，未运行构建；最终正式构建和发布来自已配置且获授权的 Git integration。
+本机复用受限 pnpm store、公开 Vercel cache 和已验证的不可变产物。Vercel OAuth 仅供可信 pull/upload/promote 使用，原私有 CLI 配置按正常流程刷新；CI 源码构建使用空 auth 配置和白名单环境。
 
 Vercel 构建时将 `NEXT_PUBLIC_API_BASE_URL` 与 `NEXT_PUBLIC_WS_BASE_URL` 同时设为生产 API HTTPS origin，REST、SSE、解锁与 Socket.IO 都直连 API。API 设置实际 Web HTTPS origin 的 `API_ALLOWED_ORIGINS`、`API_TRUST_PROXY=cloudflare-loopback`、`PASSCODE_COOKIE_SECURE=true`，且不启用 `ACCESS_PASSCODE_ALLOW_LOOPBACK`。这些 public base 在 Web build 时固化，改环境值后需要新构建。[Web 配置](../web/next.config.mjs) · [API 网络校验](../api/apps/api/src/platform/config/public-network.ts)
 
@@ -236,23 +210,14 @@ API hostname 的 Cache Rule 使用 bypass，避免缓存 API、SSE 与 `/socket.
 
 SSE 保持 `Content-Type: text/event-stream`，Cloudflare Tunnel 据此直接输出流，而非等完整响应后发送；不依赖旧的 Response Buffering Page Rule 开关。[Cloudflare Tunnel 流式响应说明](https://developers.cloudflare.com/tunnel/troubleshooting/)
 
-独立 Tunnel 已经通过 Cloudflare 控制台创建：`agent-platform-api` / `b59b8cc0-571a-46ec-bf21-1a01b78670a4`。对应 proxied DNS 和公开路由已生效，Mac connector 以专属 LaunchAgent 运行，远端状态正常；真实 HTTPS API 验证通过。实际 ingress 与 [配置示例](../deploy/macmini/cloudflare-ingress.example.json) 一致，指向 `3101` 并以 404 收尾。只读 Wrangler OAuth 未扩权；Tunnel token 仅由专属 connector 使用受限文件读取，不进入源码、release manifest、shell 历史或命令行。[Tunnel token 管理](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/)
+独立 Tunnel 已经通过 Cloudflare 控制台创建：`agent-platform-api` / `b59b8cc0-571a-46ec-bf21-1a01b78670a4`。对应 proxied DNS 和公开路由已生效，当前 connector 仍是原 GUI LaunchAgent；首次失败安装已恢复原服务，正式切换后才由专属 LaunchDaemon 运行。真实 HTTPS API 验证通过。实际 ingress 与 [配置示例](../deploy/macmini/cloudflare-ingress.example.json) 一致，指向 `3101` 并以 404 收尾。只读 Wrangler OAuth 未扩权；Tunnel token 仅由专属 connector 使用受限文件读取，不进入源码、release manifest、shell 历史或命令行。[Tunnel token 管理](https://developers.cloudflare.com/tunnel/reference/tunnel-tokens/)
 
-Cloudflare 配置完成后，将专属 Tunnel 的 token 安全保存到 `~/.local/share/agent-platform-deploy/cloudflared.token`，文件须由当前用户所有、权限为 `0600`。将 `AGENT_PLATFORM_TUNNEL_ID` 设为该新 Tunnel UUID，再从主仓使用 Node 22 执行：
+专属 token 保存在 `~/.local/share/agent-platform-deploy/cloudflared.token`，权限 `0600`。现有 Tunnel、DNS 和 Cache Rule 由本轮系统切换沿用，不重建远端资源；本机 helper 和 install-tunnel status 提供受管 connector 的入口，仍需用 HTTPS API 和流式/WebSocket 验证确认实际可达。
 
-```sh
-node deploy/macmini/install-tunnel.mjs install "$AGENT_PLATFORM_TUNNEL_ID"
-node deploy/macmini/install-tunnel.mjs status
-```
+## 验证记录
 
-[安装工具](../deploy/macmini/install-tunnel.mjs)校验 token 文件权限及所属账号、Tunnel UUID，使用 `--token-file` 启动用户级 LaunchAgent `com.douglasdong.agent-platform.tunnel`；它不创建远端 Tunnel、DNS 或 Cache Rule。`status` 只报告服务是否已加载、token 文件是否存在；加载成功仍需确认远端 connector 和真实 HTTPS 路由可达。需停止这个专属 connector 时执行 `node deploy/macmini/install-tunnel.mjs stop`，不会停止 API 服务；其登录依赖与其他用户级 LaunchAgent 相同。
+历史生产部署已有 API acceptance 196 项、Web acceptance 102 项、跨仓协议、真实 BoxLite 生命周期及公网 cookie/REST/SSE/WebSocket 验证，详见 [历史部署验证](../artifacts/deployment-preconfiguration/verification.json)。这些结果不等于新 Jenkins 全量 Release 已完成。
 
-## 验收范围
+本轮完整部署回归为 213 项，实际 Node 22/macOS ARM64 执行全部通过、没有跳过；覆盖 controller、系统迁移、monitor、公共工具、前端打包、API 可移植包、镜像、mutation、App 和 Release/discovery。文档 13 项门禁及九个 pipeline 的离线 Groovy 语法编译通过。API 可移植原生包已在不同目录解压并实际载入 SQLite 和 BoxLite SDK；临时 Jenkins 构建已通过原生门禁和脱敏运行报告。
 
-本轮 API acceptance 196 项、Web acceptance 102 项、Mac controller 47 项和主仓 13 项文档门禁均通过。公网协议 smoke 12 项通过，正式浏览器已完成口令解锁、初始化、重新进入后的受保护 REST 读取、101 WebSocket 握手和诊断 SSE；真实 `text/event-stream` 响应分五次接收，页面完成结果展示。实际解锁响应的 cookie 属性检查通过，但不记录 cookie 值。生产模型账号仍未配置，未调用真实 LLM。
-
-真实 BoxLite 任务生命周期 15 项通过，包括原生 VM running、guest 工具执行、工作区读写与挂载、任务和项目清理；常驻 auth-helper 与原 `3100` 预览保留。首次 guest HTTPS 验证发生 TLS 中断；后续独立 VM 中 OpenAI、Anthropic、GHCR 和 example.com 四个 HTTPS 端点均完成证书验证，未改代理或宿主网络。首次错误未再复现，具体触发原因未确定；当前网络可达性通过，不将它解释为模型帐号或 LLM 调用已经验收。详细阶段记录以 [验证文件](../artifacts/deployment-preconfiguration/verification.json) 为准。
-
-本地完成条件包括：固定 controller 可以识别成功 CI、失败 CI 与非白名单候选；同 SHA 不重复构建；原生构建和 fresh acceptance 通过；生产 `3101` 可达，预览 `3100` 及用户任务仍运行；发布锁和全部活动计数会暂缓切换；失败发布保留或恢复上一版本，并遵循数据库迁移边界。
-
-外部完成条件包括：真实前端子域名、API DNS 与 Tunnel 已生效；在前端 origin 完成解锁 cookie、REST、SSE 和 Socket.IO 实际验证；实际 BoxLite 任务创建与收尾正常。用户级 launchd 的登录依赖和同 UID 构建边界保留为明确运行条件，不计作已实现的无人值守系统 daemon 或不可信构建隔离。
+第二次人工系统切换遇到旧 Tunnel 在三十秒退出截止处释放端口的竞态，已恢复原服务；退出等待已修正为同时验证原 PID 和监听释放，最多九十秒，不强杀进程。[实际退出诊断](../artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json)、[源实现验证](../artifacts/jenkins-system-cutover-source-verification.json)及 [实际只读 preflight](../artifacts/jenkins-system-cutover-live-preflight.json)记录了修正边界。正式系统服务状态、完整项目 Jenkins build、线上 SHA 和 Release digest 在切换后补充实际证据；源回归和离线编译不是正式发布成功。

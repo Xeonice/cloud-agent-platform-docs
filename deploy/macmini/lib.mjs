@@ -14,13 +14,31 @@ import { parseEnv } from "node:util";
 export const REPOSITORY = "Xeonice/agent-platform-api";
 export const BRANCH = "feat/design-v2-migration";
 export const WORKFLOW = ".github/workflows/ci.yml";
+export const JENKINS_JOB = "agent-platform-api";
+export const SERVICE_CONTROL_HELPER =
+  "/Library/PrivilegedHelperTools/com.douglasdong.agent-platform-service";
+export const CI_CHECKS = Object.freeze([
+  "install",
+  "typecheck",
+  "lint",
+  "format",
+  "default-image",
+  "acceptance",
+  "provider-fixtures",
+  "build",
+  "openapi",
+  "openapi-drift",
+  "sqlite-native",
+  "boxlite-native",
+]);
 export const SHA = /^[a-f0-9]{40}$/;
 
 export function validateConfig(config) {
   if (
     config.repository !== REPOSITORY ||
     config.branch !== BRANCH ||
-    config.workflow !== WORKFLOW
+    config.ciProvider !== "jenkins" ||
+    config.jenkinsJob !== JENKINS_JOB
   )
     throw new Error(
       "This installed controller only accepts the configured production channel",
@@ -37,6 +55,14 @@ export function validateConfig(config) {
   }
   if (config.root === "/" || !Number.isInteger(config.uid) || config.uid < 0)
     throw new Error("Invalid service identity");
+  if (
+    !["system", `gui/${config.uid}`].includes(config.launchdDomain) ||
+    (config.launchdDomain === "system" &&
+      (config.serviceHelper !== SERVICE_CONTROL_HELPER ||
+        config.runtimePlist !==
+          "/Library/LaunchDaemons/com.douglasdong.agent-platform.api.plist"))
+  )
+    throw new Error("Invalid launchd service control");
   if (!["boolean"].includes(typeof config.deployEnabled))
     throw new Error("Invalid deployEnabled");
   if (!Number.isFinite(Date.parse(config.channelStartedAt)))
@@ -46,18 +72,43 @@ export function validateConfig(config) {
   return config;
 }
 
-export function trustedRun(run, head, config) {
+export function jenkinsInvocation(config, action, sha, buildNumber, buildUrl) {
+  if (
+    !["build", "deploy"].includes(action) ||
+    !SHA.test(sha ?? "") ||
+    !/^[1-9]\d{0,9}$/.test(String(buildNumber ?? ""))
+  )
+    throw new Error("Use build|deploy <full SHA> <Jenkins build number>");
+  if (
+    buildUrl &&
+    ![
+      `http://127.0.0.1:8080/job/${config.jenkinsJob}/${buildNumber}/`,
+      `http://localhost:8080/job/${config.jenkinsJob}/${buildNumber}/`,
+    ].includes(buildUrl)
+  )
+    throw new Error("Invalid local Jenkins build URL");
+  return {
+    action,
+    sha,
+    buildNumber: Number(buildNumber),
+    buildUrl: buildUrl || null,
+  };
+}
+
+export function trustedRun(run, head, config, buildNumber) {
   return (
     SHA.test(head) &&
-    run?.head_sha === head &&
-    run.head_branch === config.branch &&
-    run.event === "push" &&
-    run.status === "completed" &&
-    run.conclusion === "success" &&
-    run.path === config.workflow &&
-    run.repository?.full_name === config.repository &&
-    run.head_repository?.full_name === config.repository &&
-    Date.parse(run.created_at) >= Date.parse(config.channelStartedAt)
+    run?.version === 1 &&
+    run.provider === "jenkins" &&
+    run.sha === head &&
+    run.branch === config.branch &&
+    run.repository === config.repository &&
+    run.job === config.jenkinsJob &&
+    Number.isInteger(buildNumber) &&
+    run.buildNumber === buildNumber &&
+    run.result === "success" &&
+    run.channelStartedAt === config.channelStartedAt &&
+    Date.parse(run.completedAt) >= Date.parse(config.channelStartedAt)
   );
 }
 
@@ -329,25 +380,206 @@ export async function readyManifest(path, sha) {
   return manifest;
 }
 
-// The deployment decision is shared by the launchd controller and deterministic tests.
-export async function runCycle(config, operations) {
+function contentHash(contents) {
+  return createHash("sha256").update(contents).digest("hex");
+}
+
+function artifactPath(config, path, sha) {
+  if (
+    ![
+      releasePath(config, sha),
+      join(config.root, "ci-workspaces", sha),
+    ].includes(path)
+  )
+    throw new Error("Invalid CI artifact path");
+  return path;
+}
+
+export function buildArtifactPath(config, sha, activeSha) {
+  if (!SHA.test(sha)) throw new Error("Invalid CI candidate SHA");
+  return activeSha === sha
+    ? join(config.root, "ci-workspaces", sha)
+    : releasePath(config, sha);
+}
+
+export function jenkinsReceiptPath(config, request) {
+  jenkinsInvocation(config, "deploy", request.sha, request.buildNumber);
+  return join(
+    config.root,
+    "jenkins-receipts",
+    `${request.sha}-${request.buildNumber}.json`,
+  );
+}
+
+export async function verifiedArtifact(config, path, sha) {
+  artifactPath(config, path, sha);
+  const manifest = await readyManifest(path, sha);
+  const manifestHash = contentHash(
+    await privateFile(join(path, ".macmini-release.json")),
+  );
+  const contents = await privateFile(join(path, ".macmini-ci.json"));
+  const proof = JSON.parse(contents);
+  if (
+    proof.version !== 1 ||
+    proof.provider !== "jenkins" ||
+    proof.job !== config.jenkinsJob ||
+    proof.repository !== config.repository ||
+    proof.branch !== config.branch ||
+    proof.sha !== sha ||
+    proof.channelStartedAt !== config.channelStartedAt ||
+    !(Date.parse(proof.completedAt) >= Date.parse(config.channelStartedAt)) ||
+    proof.manifestHash !== manifestHash ||
+    JSON.stringify(proof.checks) !== JSON.stringify(CI_CHECKS)
+  )
+    throw new Error("Artifact has no matching complete Jenkins verification");
+  return { ...manifest, path, proofHash: contentHash(contents) };
+}
+
+// Only the installed controller calls this after every allowlisted check succeeds.
+export async function attestArtifact(config, path, sha) {
+  artifactPath(config, path, sha);
+  await readyManifest(path, sha);
+  await atomicJson(join(path, ".macmini-ci.json"), {
+    version: 1,
+    provider: "jenkins",
+    job: config.jenkinsJob,
+    repository: config.repository,
+    branch: config.branch,
+    sha,
+    channelStartedAt: config.channelStartedAt,
+    completedAt: new Date().toISOString(),
+    manifestHash: contentHash(
+      await privateFile(join(path, ".macmini-release.json")),
+    ),
+    checks: CI_CHECKS,
+  });
+  return verifiedArtifact(config, path, sha);
+}
+
+export async function writeJenkinsReceipt(config, request, candidate) {
+  jenkinsInvocation(
+    config,
+    "build",
+    request.sha,
+    request.buildNumber,
+    request.buildUrl,
+  );
+  const verified = await verifiedArtifact(config, candidate.path, request.sha);
+  const receipt = {
+    version: 1,
+    provider: "jenkins",
+    repository: config.repository,
+    branch: config.branch,
+    job: config.jenkinsJob,
+    buildNumber: request.buildNumber,
+    buildUrl: request.buildUrl ?? null,
+    sha: request.sha,
+    result: "success",
+    channelStartedAt: config.channelStartedAt,
+    completedAt: new Date().toISOString(),
+    artifactPath: verified.path,
+    proofHash: verified.proofHash,
+  };
+  await atomicJson(jenkinsReceiptPath(config, request), receipt);
+  return receipt;
+}
+
+export async function readJenkinsReceipt(config, request) {
+  let receipt;
+  try {
+    receipt = JSON.parse(
+      await privateFile(jenkinsReceiptPath(config, request)),
+    );
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  if (!trustedRun(receipt, request.sha, config, request.buildNumber))
+    return null;
+  jenkinsInvocation(
+    config,
+    "deploy",
+    request.sha,
+    request.buildNumber,
+    receipt.buildUrl,
+  );
+  const candidate = await verifiedArtifact(
+    config,
+    receipt.artifactPath,
+    request.sha,
+  );
+  if (candidate.proofHash !== receipt.proofHash)
+    throw new Error("Jenkins verification changed after receipt was recorded");
+  return { ...receipt, candidate };
+}
+
+export async function runJenkinsBuild(config, operations) {
+  const request = operations.request;
+  jenkinsInvocation(
+    config,
+    "build",
+    request.sha,
+    request.buildNumber,
+    request.buildUrl,
+  );
   const head = await operations.head();
   if (!SHA.test(head)) throw new Error("Invalid remote head");
+  if (request.sha !== head) return { state: "superseded", sha: request.sha };
+  if (
+    config.minimumCommit &&
+    !(await operations.descendsFrom(head, config.minimumCommit))
+  )
+    return { state: "waiting-channel-commit", sha: head };
+  const candidate = await operations.build(head);
+  if ((await operations.head()) !== head)
+    return { state: "superseded", sha: head };
+  await operations.receipt(candidate);
+  return {
+    state: "ci-passed",
+    sha: head,
+    runId: request.buildNumber,
+    reused: candidate.reused === true,
+    artifactPath: candidate.path,
+    receiptPath: jenkinsReceiptPath(config, request),
+    logPath: candidate.logPath,
+    acceptanceReport: join(candidate.path, "acceptance/execution-report.json"),
+    acceptanceResults: [
+      join(candidate.path, "reports/acceptance/non-protocol.json"),
+      join(candidate.path, "reports/acceptance/protocol.json"),
+    ],
+  };
+}
+
+// The deployment decision is shared by the launchd controller and deterministic tests.
+export async function runCycle(config, operations) {
+  const request = operations.request;
+  jenkinsInvocation(
+    config,
+    "deploy",
+    request.sha,
+    request.buildNumber,
+    request.buildUrl,
+  );
+  const head = await operations.head();
+  if (!SHA.test(head)) throw new Error("Invalid remote head");
+  if (request.sha !== head) return { state: "superseded", sha: request.sha };
   const current = await operations.current();
-  if (current?.sha === head)
-    return {
-      state: (await operations.healthy(current))
-        ? "current"
-        : "unhealthy-current-needs-recovery",
-      sha: head,
-    };
   if (
     config.minimumCommit &&
     !(await operations.descendsFrom(head, config.minimumCommit))
   )
     return { state: "waiting-channel-commit", sha: head };
   const run = await operations.ci(head);
-  if (!trustedRun(run, head, config)) return { state: "waiting-ci", sha: head };
+  if (!trustedRun(run, head, config, request.buildNumber))
+    return { state: "waiting-ci", sha: head };
+  if (current?.sha === head)
+    return {
+      state: (await operations.healthy(current))
+        ? "current"
+        : "unhealthy-current-needs-recovery",
+      sha: head,
+      runId: run.buildNumber,
+    };
   const candidate = await operations.build(head);
   if ((await operations.head()) !== head)
     return { state: "superseded", sha: head };
@@ -355,12 +587,12 @@ export async function runCycle(config, operations) {
     !config.deployEnabled ||
     (operations.stillApproved && !(await operations.stillApproved()))
   )
-    return { state: "built", sha: head, runId: run.id };
+    return { state: "built", sha: head, runId: run.buildNumber };
   if (current && !canRollback(current, candidate))
     return {
       state: "schema-or-data-change-needs-review",
       sha: head,
-      runId: run.id,
+      runId: run.buildNumber,
     };
   if (current && !(await operations.idle()))
     return { state: "waiting-idle", sha: head };
@@ -372,11 +604,11 @@ export async function runCycle(config, operations) {
     if (current && !(await operations.idle(true)))
       return { state: "waiting-idle", sha: head };
     if (operations.stillApproved && !(await operations.stillApproved()))
-      return { state: "built", sha: head, runId: run.id };
+      return { state: "built", sha: head, runId: run.buildNumber };
     safeToResume = false;
     await operations.activate(candidate, current);
     safeToResume = true;
-    return { state: "deployed", sha: head, runId: run.id };
+    return { state: "deployed", sha: head, runId: run.buildNumber };
   } catch (error) {
     safeToResume ||= error.rollbackReady === true;
     throw error;

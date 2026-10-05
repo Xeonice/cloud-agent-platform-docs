@@ -6,12 +6,18 @@ import { setTimeout as pause } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import {
   atomicJson,
+  attestArtifact,
+  buildArtifactPath,
   buildEnvironment,
+  CI_CHECKS,
+  jenkinsInvocation,
   migrationsHash,
   privateFile,
   readyManifest,
   releasePath,
   runCycle,
+  runJenkinsBuild,
+  readJenkinsReceipt,
   validateConfig,
   withLock,
   activateRelease,
@@ -19,6 +25,9 @@ import {
   createMaintenanceBarrier,
   recoverMaintenanceBarrier,
   releaseMaintenanceBarrier,
+  SERVICE_CONTROL_HELPER,
+  verifiedArtifact,
+  writeJenkinsReceipt,
 } from "./lib.mjs";
 
 async function execute(
@@ -55,7 +64,12 @@ async function execute(
         if (code === 0) resolve(output.trim());
         else
           reject(
-            new Error(`${command.split("/").at(-1)} exited ${signal ?? code}`),
+            Object.assign(
+              new Error(
+                `${command.split("/").at(-1)} exited ${signal ?? code}`,
+              ),
+              { exitCode: code },
+            ),
           );
       });
     });
@@ -74,13 +88,118 @@ async function requestJson(url, options = {}) {
   return response.json();
 }
 
-export async function reconcile(config) {
+export async function runNativeChecks(
+  config,
+  path,
+  env,
+  log,
+  progress,
+  run = execute,
+) {
+  const pnpm = (args) => [config.node, [config.corepack, "pnpm", ...args]];
+  const commands = [
+    pnpm([
+      "install",
+      "--frozen-lockfile",
+      "--store-dir",
+      join(config.root, "pnpm-store"),
+    ]),
+    pnpm(["typecheck"]),
+    pnpm(["lint", "--max-warnings=0"]),
+    pnpm(["format:check"]),
+    pnpm(["check:default-image"]),
+    pnpm(["test:acceptance:report"]),
+    [config.node, ["scripts/check-fake-provider-caps.mjs"]],
+    pnpm(["build"]),
+    pnpm(["openapi:emit"]),
+    ["/usr/bin/git", ["diff", "--exit-code", "--", "openapi.json"]],
+    [
+      config.node,
+      [
+        "-e",
+        "const DB=require('better-sqlite3');const db=new DB(':memory:');db.prepare('select 1').get();db.close()",
+      ],
+    ],
+    [
+      config.node,
+      [
+        "-e",
+        "import('@boxlite-ai/boxlite').then(s=>{if(typeof s.JsBoxlite!=='function')process.exit(1)})",
+      ],
+    ],
+  ];
+  for (const [index, [command, args]] of commands.entries()) {
+    const stage = CI_CHECKS[index];
+    await progress(stage, "running");
+    try {
+      await run(command, args, {
+        cwd:
+          stage === "boxlite-native"
+            ? join(path, "packages/modules/sandbox")
+            : path,
+        env,
+        log,
+        timeout: 1_800_000,
+      });
+    } catch (error) {
+      await progress(stage, "failed");
+      throw Object.assign(error, { stage, artifactPath: path, logPath: log });
+    }
+    await progress(stage, "passed");
+  }
+}
+
+export function serviceCommand(config, action) {
+  if (!["start", "stop"].includes(action))
+    throw new Error("Invalid API service operation");
+  if (config.launchdDomain === "system")
+    return ["/usr/bin/sudo", ["-n", SERVICE_CONTROL_HELPER, "api", action]];
+  return [
+    "/bin/launchctl",
+    action === "start"
+      ? ["bootstrap", config.launchdDomain, config.runtimePlist]
+      : [
+          "bootout",
+          `${config.launchdDomain}/com.douglasdong.agent-platform.api`,
+        ],
+  ];
+}
+
+export async function remoteHead(config) {
+  const output = await execute(
+    "/usr/bin/git",
+    [
+      "ls-remote",
+      "--exit-code",
+      `https://github.com/${config.repository}.git`,
+      `refs/heads/${config.branch}`,
+    ],
+    { env: buildEnvironment(config.node) },
+  );
+  const sha = output.split(/\s/)[0];
+  if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error("Invalid remote head");
+  return {
+    state: "head",
+    sha,
+    repository: config.repository,
+    branch: config.branch,
+  };
+}
+
+export async function reconcile(config, request) {
   if (
     process.platform !== "darwin" ||
     process.arch !== "arm64" ||
     process.versions.node.split(".")[0] !== "22"
   )
     throw new Error("Native releases require macOS ARM64 and Node 22");
+  request = jenkinsInvocation(
+    config,
+    request?.action,
+    request?.sha,
+    request?.buildNumber,
+    request?.buildUrl,
+  );
   const env = buildEnvironment(config.node);
   const runtime = runtimeEnvironment(
     await privateFile(config.runtimeEnvFile),
@@ -116,84 +235,75 @@ export async function reconcile(config) {
       throw error;
     }
   }
-  async function prepareSource(sha) {
+  async function prepareSource(sha, history = false) {
     if (!(await fs.stat(mirror).catch(() => null)))
       await git(["init", "--bare", mirror]);
+    const shallow = await git([
+      "--git-dir",
+      mirror,
+      "rev-parse",
+      "--is-shallow-repository",
+    ]);
     await git([
       "--git-dir",
       mirror,
       "fetch",
-      "--depth=1",
+      ...(history && shallow === "true" ? ["--unshallow"] : []),
       remote,
       `refs/heads/${config.branch}`,
     ]);
     const fetched = await git(["--git-dir", mirror, "rev-parse", "FETCH_HEAD"]);
     if (fetched !== sha) throw new Error("Remote changed before checkout");
   }
+  const log = join(
+    config.root,
+    "logs",
+    `jenkins-${request.buildNumber}-${request.sha}.log`,
+  );
+  const progress = async (stage, stageStatus) => {
+    if (!["checkout", "cache", "receipt", ...CI_CHECKS].includes(stage))
+      throw new Error("Invalid build stage");
+    const value = {
+      state: "building",
+      stage,
+      stageStatus,
+      sha: request.sha,
+      runId: request.buildNumber,
+      logPath: log,
+      updatedAt: new Date().toISOString(),
+    };
+    await atomicJson(join(config.root, "status.json"), value);
+    await fs.mkdir(dirname(log), { recursive: true, mode: 0o700 });
+    await fs.appendFile(log, `${JSON.stringify(value)}\n`, { mode: 0o600 });
+    console.error(JSON.stringify(value));
+  };
   async function build(sha) {
-    const path = releasePath(config, sha);
+    const active = await current();
+    const path = buildArtifactPath(config, sha, active?.sha);
     try {
-      const manifest = await readyManifest(path, sha);
+      const manifest = await verifiedArtifact(config, path, sha);
       if (
         manifest.dataRoot !== identity.dataRoot ||
         manifest.databaseUrl !== identity.databaseUrl ||
         manifest.boxliteHome !== identity.boxliteHome
       )
         throw new Error("Cached release belongs to different persistent data");
-      return { ...manifest, path };
+      await progress("cache", "passed");
+      return { ...manifest, path, reused: true, logPath: log };
     } catch {
       /* A partial build is not a release. Retry only our own unactivated worktree. */
     }
-    if ((await current())?.sha === sha)
+    if (path === active?.path)
       throw new Error("Refusing to alter the active release");
+    await progress("checkout", "running");
     await prepareSource(sha);
     if (await fs.stat(path).catch(() => null))
       await git(["--git-dir", mirror, "worktree", "remove", "--force", path]);
     await git(["--git-dir", mirror, "worktree", "prune"]);
+    await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await git(["--git-dir", mirror, "worktree", "add", "--detach", path, sha]);
-    const log = join(config.root, "logs", `build-${sha}.log`);
-    await atomicJson(join(config.root, "status.json"), {
-      state: "building",
-      sha,
-      updatedAt: new Date().toISOString(),
-    });
-    const pnpm = (args) =>
-      execute(config.node, [config.corepack, "pnpm", ...args], {
-        cwd: path,
-        env,
-        log,
-        timeout: 1_800_000,
-      });
-    await pnpm([
-      "install",
-      "--frozen-lockfile",
-      "--store-dir",
-      join(config.root, "pnpm-store"),
-    ]);
-    await pnpm(["typecheck"]);
-    await pnpm(["lint", "--max-warnings=0"]);
-    await pnpm(["format:check"]);
-    await pnpm(["check:default-image"]);
-    await pnpm(["test:acceptance:report"]);
-    await pnpm(["build"]);
-    await pnpm(["openapi:emit"]);
-    await git(["diff", "--exit-code", "--", "openapi.json"], path);
-    await execute(
-      config.node,
-      [
-        "-e",
-        "const DB=require('better-sqlite3');const db=new DB(':memory:');db.prepare('select 1').get();db.close()",
-      ],
-      { cwd: path, env, log },
-    );
-    await execute(
-      config.node,
-      [
-        "-e",
-        "import('@boxlite-ai/boxlite').then(s=>{if(typeof s.JsBoxlite!=='function')process.exit(1)})",
-      ],
-      { cwd: join(path, "packages/modules/sandbox"), env, log },
-    );
+    await progress("checkout", "passed");
+    await runNativeChecks(config, path, env, log, progress);
     const manifest = {
       sha,
       builtAt: new Date().toISOString(),
@@ -210,8 +320,37 @@ export async function reconcile(config) {
       ...identity,
     };
     await atomicJson(join(path, ".macmini-release.json"), manifest);
-    return { ...manifest, path };
+    return { ...(await attestArtifact(config, path, sha)), logPath: log };
   }
+  const descendsFrom = async (sha, minimum) => {
+    if (sha === minimum) return true;
+    await prepareSource(sha, true);
+    try {
+      await git([
+        "--git-dir",
+        mirror,
+        "merge-base",
+        "--is-ancestor",
+        minimum,
+        sha,
+      ]);
+      return true;
+    } catch (error) {
+      if (error.exitCode === 1) return false;
+      throw error;
+    }
+  };
+  if (request.action === "build")
+    return runJenkinsBuild(config, {
+      request,
+      head,
+      descendsFrom,
+      build,
+      receipt: async (candidate) => {
+        await writeJenkinsReceipt(config, request, candidate);
+        await progress("receipt", "passed");
+      },
+    });
   const base = `http://127.0.0.1:${runtime.PORT}`;
   const auth = { authorization: `Bearer ${runtime.ACCESS_PASSCODE}` };
   const status = () =>
@@ -227,7 +366,7 @@ export async function reconcile(config) {
     }
     return true;
   }
-  const domain = `gui/${config.uid}`;
+  const domain = config.launchdDomain;
   async function stop() {
     let state;
     try {
@@ -245,12 +384,10 @@ export async function reconcile(config) {
       () => true,
       () => false,
     );
-    if (installed)
-      await execute(
-        "/bin/launchctl",
-        ["bootout", `${domain}/com.douglasdong.agent-platform.api`],
-        { env },
-      );
+    if (installed) {
+      const [command, args] = serviceCommand(config, "stop");
+      await execute(command, args, { env });
+    }
     if (!state) return;
     for (let attempt = 0; attempt < 60; attempt++) {
       try {
@@ -271,11 +408,8 @@ export async function reconcile(config) {
   }
   async function start(candidate) {
     await pointTo(candidate.path);
-    await execute(
-      "/bin/launchctl",
-      ["bootstrap", domain, config.runtimePlist],
-      { env },
-    );
+    const [command, args] = serviceCommand(config, "start");
+    await execute(command, args, { env });
     for (let attempt = 0; attempt < 90; attempt++) {
       try {
         const health = await requestJson(`${base}/api/health`);
@@ -339,30 +473,35 @@ export async function reconcile(config) {
     );
   }
   // Manual/unknown barriers and disabled channels are never automatically reopened.
-  const recovery = await recoverMaintenanceBarrier(
-    runtime.DEPLOYMENT_DRAIN_FILE,
-    {
-      deployEnabled: config.deployEnabled,
-      stillApproved,
-      isReady: async () => {
-        const managed = await current();
-        const version = await requestJson(`${base}/api/system/version`, {
-          headers: auth,
-        });
-        const deployment = await status();
-        return Boolean(
-          managed && version.commit === managed.sha && deployment.ready,
-        );
-      },
-    },
-  );
+  const receipt = await readJenkinsReceipt(config, request);
+  const recovery = receipt
+    ? await recoverMaintenanceBarrier(runtime.DEPLOYMENT_DRAIN_FILE, {
+        deployEnabled: config.deployEnabled,
+        stillApproved,
+        isReady: async () => {
+          const managed = await current();
+          const version = await requestJson(`${base}/api/system/version`, {
+            headers: auth,
+          });
+          const deployment = await status();
+          return Boolean(
+            managed && version.commit === managed.sha && deployment.ready,
+          );
+        },
+      })
+    : { state: "no-maintenance" };
   if (!["no-maintenance", "maintenance-recovered"].includes(recovery.state))
     return recovery;
   let heldBarrier = null;
   return runCycle(config, {
+    request,
     head,
     current,
-    build,
+    build: async () => {
+      const verified = await readJenkinsReceipt(config, request);
+      if (!verified) throw new Error("Jenkins receipt is no longer valid");
+      return verified.candidate;
+    },
     idle,
     activate: (candidate, previous) =>
       activateRelease(candidate, previous, { prepare, stop, start }),
@@ -378,32 +517,8 @@ export async function reconcile(config) {
       }
     },
     stillApproved,
-    descendsFrom: async (sha, minimum) => {
-      if (sha === minimum) return true;
-      const comparison = await requestJson(
-        `https://api.github.com/repos/${config.repository}/compare/${minimum}...${sha}`,
-        { headers: { accept: "application/vnd.github+json" } },
-      );
-      return comparison.status === "ahead";
-    },
-    ci: async (sha) => {
-      const query = new URLSearchParams({
-        branch: config.branch,
-        event: "push",
-        head_sha: sha,
-        per_page: "10",
-      });
-      const runs = await requestJson(
-        `https://api.github.com/repos/${config.repository}/actions/workflows/ci.yml/runs?${query}`,
-        {
-          headers: {
-            accept: "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28",
-          },
-        },
-      );
-      return runs.workflow_runs[0];
-    },
+    descendsFrom,
+    ci: () => readJenkinsReceipt(config, request),
     drain: async () => {
       heldBarrier = await createMaintenanceBarrier(
         runtime.DEPLOYMENT_DRAIN_FILE,
@@ -420,19 +535,38 @@ if (
 ) {
   const config = validateConfig(JSON.parse(await privateFile(process.argv[2])));
   try {
-    const result = await withLock(join(config.root, "controller.lock"), () =>
-      reconcile(config),
-    );
-    await atomicJson(join(config.root, "status.json"), {
-      ...result,
-      updatedAt: new Date().toISOString(),
-    });
-    console.log(JSON.stringify(result));
+    if (process.argv[3] === "head") {
+      console.log(JSON.stringify(await remoteHead(config)));
+    } else {
+      const request = jenkinsInvocation(
+        config,
+        process.argv[3],
+        process.argv[4],
+        process.argv[5],
+        process.env.BUILD_URL,
+      );
+      const result = await withLock(join(config.root, "controller.lock"), () =>
+        reconcile(config, request),
+      );
+      await atomicJson(join(config.root, "status.json"), {
+        ...result,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(JSON.stringify(result));
+    }
   } catch (error) {
     // Error messages originate from our own fixed operations; no environment or HTTP bodies.
     const result = {
       state: "error",
       error: error.message,
+      ...(error.stage
+        ? {
+            stage: error.stage,
+            artifactPath: error.artifactPath,
+            logPath: error.logPath,
+          }
+        : {}),
+      ...(error.rollbackReady ? { rollbackReady: true } : {}),
       updatedAt: new Date().toISOString(),
     };
     await atomicJson(join(config.root, "status.json"), result);

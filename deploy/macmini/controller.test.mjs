@@ -9,24 +9,47 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as pause } from "node:timers/promises";
 import {
   BRANCH,
+  CI_CHECKS,
+  JENKINS_JOB,
   REPOSITORY,
-  WORKFLOW,
+  SERVICE_CONTROL_HELPER,
   activateRelease,
+  attestArtifact,
+  atomicJson,
   assertNoLiveApi,
+  buildArtifactPath,
   buildEnvironment,
   canRollback,
   createMaintenanceBarrier,
   migrationsHash,
+  jenkinsInvocation,
+  jenkinsReceiptPath,
   privateFile,
   readyManifest,
+  readJenkinsReceipt,
   recoverMaintenanceBarrier,
   releaseMaintenanceBarrier,
   runCycle,
+  runJenkinsBuild,
   runtimeEnvironment,
   trustedRun,
   validateConfig,
+  verifiedArtifact,
+  writeJenkinsReceipt,
   withLock,
 } from "./lib.mjs";
+import { runNativeChecks, serviceCommand } from "./controller.mjs";
+import {
+  ACCOUNTS,
+  DEPLOY_ROOT,
+  SECRET_HANDOFFS,
+  assertNativeServiceIdentity,
+  serviceControlScript,
+  servicePlist,
+  serviceSudoers,
+  validateExtraPlist,
+  validateSecretHandoffs,
+} from "./system-services.mjs";
 
 const HEAD = "a".repeat(40);
 const PREVIOUS = "b".repeat(40);
@@ -48,7 +71,9 @@ function config(overrides = {}) {
   return {
     repository: REPOSITORY,
     branch: BRANCH,
-    workflow: WORKFLOW,
+    ciProvider: "jenkins",
+    jenkinsJob: JENKINS_JOB,
+    launchdDomain: `gui/${process.getuid()}`,
     root: "/service",
     node: process.execPath,
     corepack: "/service/tools/corepack.cjs",
@@ -63,17 +88,16 @@ function config(overrides = {}) {
 }
 function greenRun(overrides = {}) {
   return {
-    id: 17,
-    name: "CI",
-    head_sha: HEAD,
-    head_branch: BRANCH,
-    event: "push",
-    status: "completed",
-    conclusion: "success",
-    path: WORKFLOW,
-    repository: { full_name: REPOSITORY },
-    head_repository: { full_name: REPOSITORY },
-    created_at: "2026-10-06T00:00:00Z",
+    version: 1,
+    provider: "jenkins",
+    buildNumber: 17,
+    sha: HEAD,
+    branch: BRANCH,
+    job: JENKINS_JOB,
+    repository: REPOSITORY,
+    result: "success",
+    channelStartedAt: "2026-10-05T00:00:00Z",
+    completedAt: "2026-10-06T00:00:00Z",
     ...overrides,
   };
 }
@@ -103,6 +127,7 @@ function cycle(overrides = {}) {
   const previous = { sha: PREVIOUS, ...identity };
   const candidate = { sha: HEAD, ...identity };
   const operations = {
+    request: jenkinsInvocation(config(), "deploy", HEAD, "17"),
     head: async () => {
       calls.push("head");
       return HEAD;
@@ -439,12 +464,16 @@ setInterval(() => {}, 1000);
   return { root, path, manifest, starts, spawnWrapper, waitStarted };
 }
 
-test("only the configured repository, trusted branch and workflow form a production channel", () => {
+test("only the configured repository, branch and fixed Jenkins job form a production channel", () => {
   assert.equal(validateConfig(config()).branch, BRANCH);
   for (const changes of [
     { repository: "attacker/agent-platform-api" },
     { branch: "pull-request-branch" },
-    { workflow: ".github/workflows/other-ci.yml" },
+    { ciProvider: "github-actions" },
+    { jenkinsJob: "untrusted-pr" },
+    { launchdDomain: "gui/0" },
+    { launchdDomain: "user/501" },
+    { launchdDomain: "system", serviceHelper: "/tmp/arbitrary-helper" },
     { node: "./node" },
     { runtimeEnvFile: "./runtime.env" },
     { root: "/" },
@@ -456,35 +485,494 @@ test("only the configured repository, trusted branch and workflow form a product
     assert.throws(() => validateConfig(config(changes)));
 });
 
-test("CI must be successful push evidence for the exact candidate SHA, not a PR or unrelated green run", () => {
-  assert.equal(trustedRun(greenRun(), HEAD, config()), true);
+test("CI requires the controller's same-SHA same-build Jenkins receipt, never GitHub green evidence", () => {
+  assert.equal(trustedRun(greenRun(), HEAD, config(), 17), true);
   const rejected = [
-    ["pull request", { event: "pull_request" }],
-    ["pull request target", { event: "pull_request_target" }],
-    ["manual dispatch", { event: "workflow_dispatch" }],
-    ["old green SHA", { head_sha: PREVIOUS }],
-    ["wrong branch", { head_branch: "main" }],
-    [
-      "same name, wrong workflow",
-      { name: "CI", path: ".github/workflows/fake-ci.yml" },
-    ],
-    [
-      "wrong repository",
-      { repository: { full_name: "attacker/agent-platform-api" } },
-    ],
-    [
-      "fork head repository",
-      { head_repository: { full_name: "attacker/agent-platform-api" } },
-    ],
-    ["unfinished run", { status: "in_progress" }],
-    ["failed run", { conclusion: "failure" }],
-    ["cancelled run", { conclusion: "cancelled" }],
-    ["green predates channel", { created_at: "2026-10-04T23:59:59Z" }],
-    ["invalid evidence time", { created_at: "invalid-date" }],
+    ["GitHub provider", { provider: "github-actions" }],
+    ["old green SHA", { sha: PREVIOUS }],
+    ["wrong branch", { branch: "main" }],
+    ["wrong job", { job: "untrusted-pr" }],
+    ["wrong repository", { repository: "attacker/agent-platform-api" }],
+    ["wrong build", { buildNumber: 18 }],
+    ["unfinished run", { result: "running" }],
+    ["failed run", { result: "failure" }],
+    ["different channel", { channelStartedAt: "2026-10-04T00:00:00Z" }],
+    ["green predates channel", { completedAt: "2026-10-04T23:59:59Z" }],
+    ["invalid evidence time", { completedAt: "invalid-date" }],
   ];
   for (const [name, changes] of rejected)
-    assert.equal(trustedRun(greenRun(changes), HEAD, config()), false, name);
-  assert.equal(trustedRun(greenRun(), "HEAD", config()), false);
+    assert.equal(
+      trustedRun(greenRun(changes), HEAD, config(), 17),
+      false,
+      name,
+    );
+  assert.equal(trustedRun(greenRun(), "HEAD", config(), 17), false);
+  assert.equal(trustedRun(greenRun(), HEAD, config(), 18), false);
+  assert.equal(
+    trustedRun({ head_sha: HEAD, conclusion: "success" }, HEAD, config(), 17),
+    false,
+  );
+});
+
+async function jenkinsArtifact(t, activeSha) {
+  const root = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "jenkins-release-test-")),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const configuration = config({ root });
+  const path = buildArtifactPath(configuration, HEAD, activeSha);
+  await fs.mkdir(join(path, "drizzle"), { recursive: true });
+  await fs.mkdir(join(path, "apps/api/dist"), { recursive: true });
+  await fs.writeFile(
+    join(path, "drizzle/0001.sql"),
+    "CREATE TABLE tasks(id TEXT);\n",
+  );
+  await fs.writeFile(
+    join(path, "apps/api/dist/main.js"),
+    "// never executed\n",
+  );
+  const manifest = {
+    sha: HEAD,
+    platform: "darwin",
+    arch: "arm64",
+    nodeMajor: 22,
+    ...identity,
+    schemaHash: await migrationsHash(path),
+  };
+  await atomicJson(join(path, ".macmini-release.json"), manifest);
+  const request = jenkinsInvocation(
+    configuration,
+    "build",
+    HEAD,
+    "17",
+    `http://127.0.0.1:8080/job/${JENKINS_JOB}/17/`,
+  );
+  return { configuration, path, manifest, request };
+}
+
+test("the stage API pins full SHA, numeric build identity and local fixed-job links", () => {
+  assert.deepEqual(jenkinsInvocation(config(), "build", HEAD, "17"), {
+    action: "build",
+    sha: HEAD,
+    buildNumber: 17,
+    buildUrl: null,
+  });
+  for (const [action, sha, number, url] of [
+    ["reconcile", HEAD, "17"],
+    ["build", "HEAD", "17"],
+    ["deploy", HEAD, "../17"],
+    ["deploy", HEAD, "017"],
+    ["deploy", HEAD, "0"],
+    [
+      "deploy",
+      HEAD,
+      "17",
+      "https://attacker.example/job/agent-platform-api/17/",
+    ],
+    ["deploy", HEAD, "17", "http://127.0.0.1:8080/job/untrusted-pr/17/"],
+    ["deploy", HEAD, "17", "http://127.0.0.1:8080/job/agent-platform-api/18/"],
+  ])
+    assert.throws(() => jenkinsInvocation(config(), action, sha, number, url));
+});
+
+test("system service operations use only the fixed privileged helper while GUI operations retain their configured UID", () => {
+  const system = validateConfig(
+    config({
+      launchdDomain: "system",
+      serviceHelper: SERVICE_CONTROL_HELPER,
+      runtimePlist:
+        "/Library/LaunchDaemons/com.douglasdong.agent-platform.api.plist",
+    }),
+  );
+  assert.deepEqual(serviceCommand(system, "start"), [
+    "/usr/bin/sudo",
+    ["-n", SERVICE_CONTROL_HELPER, "api", "start"],
+  ]);
+  assert.deepEqual(serviceCommand(system, "stop"), [
+    "/usr/bin/sudo",
+    ["-n", SERVICE_CONTROL_HELPER, "api", "stop"],
+  ]);
+  assert.deepEqual(serviceCommand(config(), "start"), [
+    "/bin/launchctl",
+    ["bootstrap", `gui/${process.getuid()}`, "/service/runtime.plist"],
+  ]);
+  assert.throws(() => serviceCommand(system, "arbitrary-command"));
+  assert.throws(() =>
+    validateConfig({ ...system, runtimePlist: "/tmp/arbitrary.plist" }),
+  );
+});
+
+test("system installer identity accepts only the dedicated UID501 home and runtime config", () => {
+  const production = config({
+    uid: 501,
+    root: DEPLOY_ROOT,
+    runtimeEnvFile: join(DEPLOY_ROOT, "runtime.env"),
+  });
+  assert.doesNotThrow(() => assertNativeServiceIdentity(production));
+  for (const changes of [
+    { uid: 0 },
+    { root: "/tmp/staging" },
+    { runtimeEnvFile: "/tmp/runtime.env" },
+    { node: "node" },
+  ])
+    assert.throws(
+      () => assertNativeServiceIdentity({ ...production, ...changes }),
+      /dedicated.*installation/,
+    );
+});
+
+test("actual generated system plists declare non-root identity, fixed execution and persistent logs", async (t) => {
+  const folder = await fs.mkdtemp(join(tmpdir(), "system-plist-test-"));
+  t.after(() => fs.rm(folder, { recursive: true, force: true }));
+  const production = config({
+    uid: 501,
+    root: DEPLOY_ROOT,
+    runtimeEnvFile: join(DEPLOY_ROOT, "runtime.env"),
+  });
+  for (const kind of ["api", "tunnel"]) {
+    const path = join(folder, `${kind}.plist`);
+    await fs.writeFile(path, servicePlist(kind, production, { system: true }));
+    const child = spawn(
+      "/usr/bin/plutil",
+      ["-convert", "json", "-o", "-", path],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let output = "";
+    child.stdout.on("data", (chunk) => (output += chunk));
+    const [code] = await once(child, "exit");
+    assert.equal(code, 0);
+    const parsed = JSON.parse(output);
+    assert.equal(parsed.UserName, "douglasdong");
+    assert.equal(parsed.GroupName, "staff");
+    assert.equal(parsed.KeepAlive, true);
+    assert.equal(parsed.RunAtLoad, true);
+    assert.equal(parsed.EnvironmentVariables.HOME, "/Users/douglasdong");
+    assert.equal(parsed.StandardOutPath, join(DEPLOY_ROOT, `logs/${kind}.log`));
+    assert.equal(parsed.EnvironmentVariables.ACCESS_PASSCODE, undefined);
+    if (kind === "api")
+      assert.deepEqual(parsed.ProgramArguments, [
+        process.execPath,
+        join(DEPLOY_ROOT, "tools/runtime.mjs"),
+        join(DEPLOY_ROOT, "config.json"),
+      ]);
+    else assert.equal(parsed.ProgramArguments.at(-2), "--token-file");
+  }
+});
+
+test("isolated Jenkins CI plists reject production identity, leaked secrets and an outside working directory", () => {
+  const label = "com.douglasdong.agent-platform.jenkins-ci-agent";
+  const home = ACCOUNTS._agentplatformci;
+  const plist = {
+    Label: label,
+    UserName: "_agentplatformci",
+    GroupName: "staff",
+    RunAtLoad: true,
+    ProgramArguments: [
+      "/opt/homebrew/bin/java",
+      "-secret",
+      `@${home}/agent.secret`,
+    ],
+    WorkingDirectory: `${home}/agent`,
+    EnvironmentVariables: { HOME: home },
+    StandardOutPath: `${home}/logs/agent.log`,
+    StandardErrorPath: `${home}/logs/agent.log`,
+  };
+  assert.equal(validateExtraPlist(plist, label), plist);
+  for (const changes of [
+    { UserName: "root" },
+    { UserName: "douglasdong" },
+    { WorkingDirectory: DEPLOY_ROOT },
+    { EnvironmentVariables: { HOME: home, GH_TOKEN: "fixture-not-real" } },
+    {
+      ProgramArguments: ["/opt/homebrew/bin/java", "-secret", "literal-secret"],
+    },
+  ])
+    assert.throws(() => validateExtraPlist({ ...plist, ...changes }, label));
+});
+
+test("Jenkins secret handoff admits only fixed distinct source, destination and owner metadata", () => {
+  assert.equal(validateSecretHandoffs(SECRET_HANDOFFS), SECRET_HANDOFFS);
+  const first = SECRET_HANDOFFS[0];
+  for (const items of [
+    [{ ...first, source: "/tmp/arbitrary.secret" }],
+    [{ ...first, destination: "/etc/arbitrary.secret" }],
+    [{ ...first, owner: "root" }],
+    [first, first],
+  ])
+    assert.throws(
+      () => validateSecretHandoffs(items),
+      /fixed Jenkins-to-agent/,
+    );
+});
+
+test("the privileged helper is valid shell and sudoers grants fixed service commands without root Node or generic launchctl", async (t) => {
+  const folder = await fs.mkdtemp(join(tmpdir(), "service-helper-test-"));
+  t.after(() => fs.rm(folder, { recursive: true, force: true }));
+  const script = join(folder, "helper.sh");
+  await fs.writeFile(script, serviceControlScript());
+  const child = spawn("/bin/sh", ["-n", script]);
+  const [code] = await once(child, "exit");
+  assert.equal(code, 0);
+  const grants = serviceSudoers().split("NOPASSWD: ")[1].trim().split(", ");
+  assert.deepEqual(
+    grants,
+    ["api", "tunnel"].flatMap((kind) =>
+      ["start", "stop", "restart", "status"].map(
+        (action) => `${SERVICE_CONTROL_HELPER} ${kind} ${action}`,
+      ),
+    ),
+  );
+  assert(!grants.some((grant) => /launchctl|node|\*/.test(grant)));
+  assert.match(
+    serviceControlScript(),
+    /Only|Root-owned narrow launchd control/,
+  );
+});
+
+test("native CI executes every gate including fixture capability and native SDK checks without runtime secrets", async () => {
+  const calls = [];
+  const phases = [];
+  const env = buildEnvironment(process.execPath, {
+    HOME: "/fixture",
+    ACCESS_PASSCODE: "never-forward",
+    BUILD_URL: "never-forward",
+  });
+  await runNativeChecks(
+    config(),
+    "/ci/checkout",
+    env,
+    "/ci/build.log",
+    async (...phase) => phases.push(phase),
+    async (command, args, options) => calls.push({ command, args, options }),
+  );
+  assert.deepEqual(
+    phases,
+    CI_CHECKS.flatMap((stage) => [
+      [stage, "running"],
+      [stage, "passed"],
+    ]),
+  );
+  assert.deepEqual(calls[6].args, ["scripts/check-fake-provider-caps.mjs"]);
+  assert.equal(calls[9].command, "/usr/bin/git");
+  assert.match(calls[10].args[1], /better-sqlite3/);
+  assert.match(calls[11].args[1], /@boxlite-ai\/boxlite/);
+  assert.equal(calls[11].options.cwd, "/ci/checkout/packages/modules/sandbox");
+  assert.equal(calls.length, 12);
+  assert(
+    calls.every(
+      (call) =>
+        call.options.env === env &&
+        call.options.env.ACCESS_PASSCODE === undefined,
+    ),
+  );
+});
+
+test("a provider fixture failure aborts native CI before build or attestation", async () => {
+  const phases = [];
+  const calls = [];
+  await assert.rejects(
+    runNativeChecks(
+      config(),
+      "/ci/checkout",
+      {},
+      "/ci/build.log",
+      async (...phase) => phases.push(phase),
+      async (_command, args) => {
+        calls.push(args);
+        if (args[0] === "scripts/check-fake-provider-caps.mjs")
+          throw new Error("fixture capability mismatch");
+      },
+    ),
+    /fixture capability mismatch/,
+  );
+  assert.equal(calls.length, 7);
+  assert.deepEqual(phases.at(-1), ["provider-fixtures", "failed"]);
+  assert(!phases.some(([stage]) => stage === "build"));
+});
+
+test("successful CI writes an owner-only same-build receipt bound to the complete real artifact manifest", async (t) => {
+  const { configuration, path, request } = await jenkinsArtifact(t);
+  const operations = {
+    request,
+    head: async () => HEAD,
+    build: async () => attestArtifact(configuration, path, HEAD),
+    receipt: (candidate) =>
+      writeJenkinsReceipt(configuration, request, candidate),
+  };
+  const result = await runJenkinsBuild(configuration, operations);
+  assert.equal(result.state, "ci-passed");
+  assert.equal(result.artifactPath, path);
+  assert.equal(result.receiptPath, jenkinsReceiptPath(configuration, request));
+  assert.equal(
+    result.acceptanceReport,
+    join(path, "acceptance/execution-report.json"),
+  );
+  const record = await readJenkinsReceipt(configuration, request);
+  assert.equal(record.sha, HEAD);
+  assert.equal(record.buildNumber, 17);
+  assert.equal(record.candidate.path, path);
+  assert.equal((await fs.stat(result.receiptPath)).mode & 0o077, 0);
+  assert.equal((await fs.stat(join(path, ".macmini-ci.json"))).mode & 0o077, 0);
+  assert.equal(
+    await readJenkinsReceipt(configuration, { ...request, buildNumber: 18 }),
+    null,
+  );
+});
+
+test("a legacy ready artifact cannot issue a Jenkins success receipt without the new native CI attestation", async (t) => {
+  const { configuration, path, request } = await jenkinsArtifact(t);
+  await assert.rejects(writeJenkinsReceipt(configuration, request, { path }), {
+    code: "ENOENT",
+  });
+  assert.equal(await readJenkinsReceipt(configuration, request), null);
+  await assert.rejects(
+    runJenkinsBuild(configuration, {
+      request,
+      head: async () => HEAD,
+      build: async () => {
+        throw new Error("checks failed");
+      },
+      receipt: () => assert.fail("failed CI cannot issue a receipt"),
+    }),
+    /checks failed/,
+  );
+  assert.equal(await readJenkinsReceipt(configuration, request), null);
+});
+
+test("first Jenkins verification of the active SHA builds separately and leaves the active release bytes untouched", async (t) => {
+  const { configuration, path, request } = await jenkinsArtifact(t, HEAD);
+  const active = join(configuration.root, "releases", HEAD);
+  await fs.mkdir(active, { recursive: true });
+  await fs.writeFile(join(active, "active-sentinel"), "running user service\n");
+  assert.equal(path, join(configuration.root, "ci-workspaces", HEAD));
+  assert.notEqual(path, active);
+  const verified = await attestArtifact(configuration, path, HEAD);
+  await writeJenkinsReceipt(configuration, request, verified);
+  assert.equal(
+    await fs.readFile(join(active, "active-sentinel"), "utf8"),
+    "running user service\n",
+  );
+  assert.deepEqual(await fs.readdir(active), ["active-sentinel"]);
+  assert.equal(
+    (await readJenkinsReceipt(configuration, request)).candidate.path,
+    path,
+  );
+});
+
+test("an already-current SHA still needs matching Jenkins verification before deployment can report current", async () => {
+  const scenario = cycle({
+    current: async () => ({ sha: HEAD, ...identity }),
+    ci: async () => null,
+    healthy: () => assert.fail("no CI proof cannot become current"),
+  });
+  assert.equal(
+    (await runCycle(config(), scenario.operations)).state,
+    "waiting-ci",
+  );
+});
+
+test("a stale requested SHA or an advancing remote cannot issue CI evidence or change admission", async (t) => {
+  const { configuration, request } = await jenkinsArtifact(t);
+  const stale = { ...request, sha: PREVIOUS };
+  assert.equal(
+    (
+      await runJenkinsBuild(configuration, {
+        request: stale,
+        head: async () => HEAD,
+        build: () => assert.fail("stale request cannot build"),
+      })
+    ).state,
+    "superseded",
+  );
+  let reads = 0;
+  const result = await runJenkinsBuild(configuration, {
+    request,
+    head: async () => (++reads === 1 ? HEAD : NEW_HEAD),
+    build: async () => ({}),
+    receipt: () => assert.fail("superseded build cannot attest a run"),
+  });
+  assert.equal(result.state, "superseded");
+  assert.equal(await readJenkinsReceipt(configuration, request), null);
+  const deployment = cycle({
+    request: stale,
+    current: () =>
+      assert.fail("stale deployment cannot inspect or change active release"),
+  });
+  assert.equal(
+    (await runCycle(configuration, deployment.operations)).state,
+    "superseded",
+  );
+});
+
+test("changing verified metadata, checks, or the production channel invalidates cached Jenkins evidence", async (t) => {
+  const { configuration, path, request } = await jenkinsArtifact(t);
+  const verified = await attestArtifact(configuration, path, HEAD);
+  await writeJenkinsReceipt(configuration, request, verified);
+  assert.equal(
+    await readJenkinsReceipt(
+      { ...configuration, channelStartedAt: "2026-10-07T00:00:00Z" },
+      request,
+    ),
+    null,
+  );
+  const proof = JSON.parse(await privateFile(join(path, ".macmini-ci.json")));
+  await atomicJson(join(path, ".macmini-ci.json"), {
+    ...proof,
+    checks: CI_CHECKS.filter((stage) => stage !== "provider-fixtures"),
+  });
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /no matching complete Jenkins verification/,
+  );
+  await atomicJson(join(path, ".macmini-ci.json"), {
+    ...proof,
+    completedAt: "2099-01-01T00:00:00Z",
+  });
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /verification changed after receipt/,
+  );
+  await atomicJson(join(path, ".macmini-ci.json"), proof);
+  const manifest = JSON.parse(
+    await privateFile(join(path, ".macmini-release.json")),
+  );
+  await atomicJson(join(path, ".macmini-release.json"), {
+    ...manifest,
+    boxliteVersion: "different-version",
+  });
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /no matching complete Jenkins verification/,
+  );
+});
+
+test("receipts reject public files, symlinks and arbitrary artifact paths even with successful metadata", async (t) => {
+  const { configuration, path, request } = await jenkinsArtifact(t);
+  const verified = await attestArtifact(configuration, path, HEAD);
+  const record = await writeJenkinsReceipt(configuration, request, verified);
+  const receiptPath = jenkinsReceiptPath(configuration, request);
+  await fs.chmod(receiptPath, 0o644);
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /owner-only regular file/,
+  );
+  await fs.chmod(receiptPath, 0o600);
+  await atomicJson(receiptPath, {
+    ...record,
+    artifactPath: "/tmp/untrusted-output",
+  });
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /Invalid CI artifact path/,
+  );
+  const target = join(configuration.root, "receipt-target.json");
+  await atomicJson(target, record);
+  await fs.rm(receiptPath);
+  await fs.symlink(target, receiptPath);
+  await assert.rejects(
+    readJenkinsReceipt(configuration, request),
+    /owner-only regular file/,
+  );
 });
 
 test("approved same-SHA CI builds, checks quiet admission twice, and activates only after drain", async () => {
@@ -516,8 +1004,9 @@ test("an already-active SHA is a no-op only after authenticated readiness", asyn
   assert.deepEqual(await runCycle(config(), operations), {
     state: "current",
     sha: HEAD,
+    runId: 17,
   });
-  assert.deepEqual(calls, ["head", "healthy"]);
+  assert.deepEqual(calls, ["head", "ci", "healthy"]);
 });
 
 test("a failed first installation's same-SHA symlink cannot masquerade as an active release", async () => {
@@ -528,8 +1017,9 @@ test("a failed first installation's same-SHA symlink cannot masquerade as an act
   assert.deepEqual(await runCycle(config(), operations), {
     state: "unhealthy-current-needs-recovery",
     sha: HEAD,
+    runId: 17,
   });
-  assert.deepEqual(calls, ["head"]);
+  assert.deepEqual(calls, ["head", "ci"]);
 });
 
 test("channel minimum ancestry and rejected CI prevent all build or admission side effects", async () => {
@@ -545,8 +1035,8 @@ test("channel minimum ancestry and rejected CI prevent all build or admission si
   );
   assert.deepEqual(rejectedAncestor.calls, ["head", "current"]);
   for (const invalid of [
-    greenRun({ event: "pull_request" }),
-    greenRun({ head_sha: PREVIOUS }),
+    greenRun({ job: "untrusted-pr" }),
+    greenRun({ sha: PREVIOUS }),
   ]) {
     const scenario = cycle({ ci: async () => invalid });
     assert.equal(

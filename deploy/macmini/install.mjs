@@ -9,11 +9,16 @@ import {
   privateFile,
   REPOSITORY,
   BRANCH,
-  WORKFLOW,
+  JENKINS_JOB,
   SHA,
   validateConfig,
   runtimeEnvironment,
 } from "./lib.mjs";
+import {
+  assertNativeServiceIdentity,
+  servicePlist,
+  SERVICE_UID,
+} from "./system-services.mjs";
 
 const root = join(homedir(), ".local/share/agent-platform-deploy");
 const configPath = join(root, "config.json");
@@ -25,47 +30,43 @@ const labels = {
   cicd: "com.douglasdong.agent-platform.cicd",
   api: "com.douglasdong.agent-platform.api",
 };
+function compatibleConfig(value) {
+  return validateConfig({
+    ...value,
+    ciProvider: value.ciProvider ?? "jenkins",
+    jenkinsJob: value.jenkinsJob ?? JENKINS_JOB,
+    launchdDomain: value.launchdDomain ?? domain,
+  });
+}
 function launch(args, required = true) {
   const result = spawnSync("/bin/launchctl", args, { encoding: "utf8" });
   if (required && result.status !== 0)
     throw new Error(`launchctl ${args[0]} failed (${result.status})`);
   return result.status === 0;
 }
-function xml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-function plist(label, args, service) {
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>
-<key>Label</key><string>${xml(label)}</string>
-<key>ProgramArguments</key><array>${args.map((a) => `<string>${xml(a)}</string>`).join("")}</array>
-<key>WorkingDirectory</key><string>${xml(root)}</string>
-<key>RunAtLoad</key><true/>
-${service ? "<key>KeepAlive</key><true/><key>ExitTimeOut</key><integer>60</integer><key>AbandonProcessGroup</key><true/>" : "<key>StartInterval</key><integer>180</integer><key>Nice</key><integer>10</integer>"}
-<key>ThrottleInterval</key><integer>20</integer><key>Umask</key><integer>63</integer>
-<key>ProcessType</key><string>Background</string>
-<key>StandardOutPath</key><string>${xml(join(root, "logs", `${service ? "api" : "cicd"}.log`))}</string>
-<key>StandardErrorPath</key><string>${xml(join(root, "logs", `${service ? "api" : "cicd"}.log`))}</string>
-</dict></plist>\n`;
-}
-
 if (
   process.platform !== "darwin" ||
   process.arch !== "arm64" ||
-  process.versions.node.split(".")[0] !== "22"
+  process.versions.node.split(".")[0] !== "22" ||
+  uid !== SERVICE_UID
 )
   throw new Error("Use the installed Node 22 on the ARM64 Mac mini");
 
 if (command === "init" || command === "update-tools") {
+  if (
+    launch(["print", `${domain}/${labels.api}`], false) ||
+    launch(["print", `system/${labels.api}`], false)
+  )
+    throw new Error(
+      "Live API tools require reviewed idle/drain cutover, not in-place overwrite",
+    );
   for (const path of [
     root,
     join(root, "tools"),
     join(root, "logs"),
     join(root, "releases"),
     join(root, "backups"),
+    join(root, "tmp"),
   ]) {
     await fs.mkdir(path, { recursive: true, mode: 0o700 });
     await fs.chmod(path, 0o700);
@@ -84,6 +85,8 @@ if (command === "init" || command === "update-tools") {
     "lib.mjs",
     "install.mjs",
     "install-tunnel.mjs",
+    "system-services.mjs",
+    "install-system-services.mjs",
   ]) {
     await fs.copyFile(join(source, name), join(root, "tools", name));
     await fs.chmod(join(root, "tools", name), 0o600);
@@ -92,7 +95,7 @@ if (command === "init" || command === "update-tools") {
   const runtimePlist = join(agentFolder, `${labels.api}.plist`);
   let config;
   try {
-    config = validateConfig(JSON.parse(await privateFile(configPath)));
+    config = compatibleConfig(JSON.parse(await privateFile(configPath)));
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     const production = join(homedir(), "agent-platform/production");
@@ -102,7 +105,9 @@ if (command === "init" || command === "update-tools") {
     config = {
       repository: REPOSITORY,
       branch: BRANCH,
-      workflow: WORKFLOW,
+      ciProvider: "jenkins",
+      jenkinsJob: JENKINS_JOB,
+      launchdDomain: domain,
       root,
       uid,
       node: process.execPath,
@@ -143,25 +148,11 @@ if (command === "init" || command === "update-tools") {
     });
     await atomicJson(configPath, config);
   }
-  for (const [kind, label] of Object.entries(labels)) {
+  assertNativeServiceIdentity(config);
+  for (const [kind, label] of Object.entries({ api: labels.api })) {
+    if (config.launchdDomain === "system") continue;
     const path = join(agentFolder, `${label}.plist`);
-    await fs.writeFile(
-      path,
-      plist(
-        label,
-        [
-          config.node,
-          join(
-            root,
-            "tools",
-            `${kind === "api" ? "runtime" : "controller"}.mjs`,
-          ),
-          configPath,
-        ],
-        kind === "api",
-      ),
-      { mode: 0o600 },
-    );
+    await fs.writeFile(path, servicePlist(kind, config), { mode: 0o600 });
     const check = spawnSync("/usr/bin/plutil", ["-lint", path], {
       encoding: "utf8",
     });
@@ -173,17 +164,39 @@ if (command === "init" || command === "update-tools") {
       root,
       deployEnabled: config.deployEnabled,
       port: 3101,
+      ciProvider: "jenkins",
+      pollingInstalled: false,
     }),
   );
 } else if (command === "start") {
-  validateConfig(JSON.parse(await privateFile(configPath)));
-  if (!launch(["print", `${domain}/${labels.cicd}`], false))
-    launch(["bootstrap", domain, join(agentFolder, `${labels.cicd}.plist`)]);
-  console.log(JSON.stringify({ state: "cicd-loaded", label: labels.cicd }));
-} else if (command === "stop") {
+  throw new Error(
+    "Polling LaunchAgent is retired; start reviewed Jenkins/system services instead",
+  );
+} else if (command === "stop" || command === "retire-polling") {
+  const config = JSON.parse(await privateFile(configPath));
+  const oldPlist = join(agentFolder, `${labels.cicd}.plist`);
+  const exists = await fs.lstat(oldPlist).catch(() => null);
+  if (exists || launch(["print", `${domain}/${labels.cicd}`], false))
+    await atomicJson(configPath, { ...config, deployEnabled: false });
   if (launch(["print", `${domain}/${labels.cicd}`], false))
     launch(["bootout", `${domain}/${labels.cicd}`]);
-  console.log(JSON.stringify({ state: "cicd-unloaded", apiUnchanged: true }));
+  launch(["disable", `${domain}/${labels.cicd}`]);
+  let archived = null;
+  if (exists) {
+    await privateFile(oldPlist);
+    const folder = join(root, "retired-launchagents");
+    await fs.mkdir(folder, { recursive: true, mode: 0o700 });
+    archived = join(folder, `${labels.cicd}.${Date.now()}.plist`);
+    await fs.rename(oldPlist, archived);
+  }
+  console.log(
+    JSON.stringify({
+      state: "polling-retired",
+      archived,
+      disabled: true,
+      apiUnchanged: true,
+    }),
+  );
 } else if (command === "enable" || command === "disable") {
   const config = validateConfig(JSON.parse(await privateFile(configPath)));
   config.deployEnabled = command === "enable";
@@ -201,6 +214,7 @@ if (command === "init" || command === "update-tools") {
     }),
   );
 } else if (command === "status") {
+  const config = compatibleConfig(JSON.parse(await privateFile(configPath)));
   const status = JSON.parse(
     await fs
       .readFile(join(root, "status.json"), "utf8")
@@ -211,7 +225,14 @@ if (command === "init" || command === "update-tools") {
       {
         ...status,
         cicdLoaded: launch(["print", `${domain}/${labels.cicd}`], false),
-        apiLoaded: launch(["print", `${domain}/${labels.api}`], false),
+        apiLoaded: launch(
+          ["print", `${config.launchdDomain}/${labels.api}`],
+          false,
+        ),
+        runtimeDomain: config.launchdDomain,
+        ciProvider: config.ciProvider,
+        systemStatePath: join(root, "system-services-state.json"),
+        logs: join(root, "logs"),
       },
       null,
       2,
@@ -219,5 +240,5 @@ if (command === "init" || command === "update-tools") {
   );
 } else
   throw new Error(
-    "Commands: init, update-tools, start, stop, enable <full-api-sha>, disable, status",
+    "Commands: init, update-tools (offline), retire-polling, enable <full-api-sha>, disable, status",
   );

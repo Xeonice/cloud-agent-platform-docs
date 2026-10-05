@@ -1,0 +1,57 @@
+{
+  "status": "passed",
+  "verifiedAt": "2026-10-05T23:33:38.088Z",
+  "command": [
+    "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+    "deploy/macmini/install-system-services.mjs",
+    "preflight",
+    "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007d"
+  ],
+  "exitCode": 0,
+  "sourceSha256": "3f8ce7ddf30415b7d2851651505be76ebccb020495d818b3c62b96ee13d692d3",
+  "snapshot": {
+    "state": "preflight",
+    "ready": true,
+    "idle": false,
+    "draining": false,
+    "readiness": {
+      "database": true,
+      "provider": true,
+      "image": true
+    },
+    "activeWS": 2,
+    "inFlightHTTP": 0,
+    "credentialAuth": 0,
+    "blockers": {
+      "sandboxes": 0,
+      "agentTasks": 0,
+      "automationRuns": 0,
+      "enabledAutomations": 0,
+      "resourceAllocations": 0,
+      "cloningProjects": 0,
+      "projectCleanupJobs": 0
+    },
+    "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+    "dedicatedTunnelLoaded": true,
+    "dedicatedTunnelPid": 58098,
+    "dedicatedTunnelOwnership": {
+      "launchProgram": "/opt/homebrew/bin/cloudflared",
+      "process": {
+        "pid": 58098,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared"
+      },
+      "listeners": [
+        {
+          "pid": 58098,
+          "command": "cloudflared",
+          "uid": 501
+        }
+      ]
+    },
+    "operatorEligible": true,
+    "requiresTunnelDisconnect": true,
+    "previewUntouched": true
+  },
+  "sideEffects": "No review writes, no token-file reads and no service mutation."
+}

@@ -1,0 +1,42 @@
+{
+  "state": "source-and-review-verified",
+  "verifiedAt": "2026-10-05T23:35:49.348Z",
+  "node": "v22.23.3",
+  "platform": "darwin",
+  "arch": "arm64",
+  "deploymentRegression": {
+    "tests": 213,
+    "passed": 213,
+    "failed": 0,
+    "skipped": 0,
+    "command": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs"
+  },
+  "docs": {
+    "checks": 13,
+    "passed": true
+  },
+  "pipelines": {
+    "groovySyntax": 9,
+    "executed": false
+  },
+  "submodules": {
+    "api": "5a94ea9dc6bca7f584aaf4c8248c1541041f8b51",
+    "web": "0a7794b34fef53b564bc7216fd29ef03b0d360da",
+    "pushed": true
+  },
+  "review": {
+    "name": "system-review-20261007e",
+    "fixedFiles": 22,
+    "wholeVercelSnapshotVerified": true,
+    "readOnlyNativeOwnershipPreflight": true
+  },
+  "githubApp": {
+    "appId": 5204009,
+    "installationId": 168317369,
+    "effectiveRepositories": 3,
+    "verified": true,
+    "branchProtectionMigrated": false
+  },
+  "servicesInstalled": false,
+  "jenkinsReleasePublished": false
+}

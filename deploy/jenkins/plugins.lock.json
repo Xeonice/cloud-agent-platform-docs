@@ -1,0 +1,356 @@
+{
+  "jenkins": "2.580.1",
+  "javaMajor": 21,
+  "plugins": [
+    {
+      "name": "antisamy-markup-formatter",
+      "version": "173.v680e3a_b_69ff3",
+      "sha256": "29b4765797f26c44574a2732ddf9d7d98ea0283295352497dd9eef84aed0102f"
+    },
+    {
+      "name": "apache-httpcomponents-client-4-api",
+      "version": "4.5.14-269.vfa_2321039a_83",
+      "sha256": "cea2f61cc72890b962fd4b767c31778c6cb30015b4a8758b4c26b62e51ca9533"
+    },
+    {
+      "name": "asm-api",
+      "version": "9.10.1-216.va_9256d3b_844b_",
+      "sha256": "292c90d3dfff2e9242f8096707a3fa3d978cb57a6b6a6ce689c69dc21a381be6"
+    },
+    {
+      "name": "bootstrap5-api",
+      "version": "5.3.8-1048.va_c299057e35c",
+      "sha256": "4027b4cecbdb400c4cdf6beed351cb27a2e0ef4c39d27618e342fad76a4490df"
+    },
+    {
+      "name": "bouncycastle-api",
+      "version": "2.30.1.85.2-304.v4b_5b_62e59a_a_7",
+      "sha256": "301b5d495a2bf0adb1dc3c2cd375930f146bbc3545b80d50ba99145a5838e9a3"
+    },
+    {
+      "name": "branch-api",
+      "version": "2.1303.v9f3b_95dc329d",
+      "sha256": "6ecfc3d335cec791008a2d06ca933c6ccc97db1c14a4aee5030affebb97482e0"
+    },
+    {
+      "name": "caffeine-api",
+      "version": "3.2.4-208.v7e2da_a_7db_82b_",
+      "sha256": "40e254ba2f031a6582044e09529b43c9a031bbaf6563a04c3273e045553aaaf1"
+    },
+    {
+      "name": "checks-api",
+      "version": "422.vc7e8b_51488c6",
+      "sha256": "0225cfed99479f7b3ce20fbc534764ee31ce3b1accbd364cea62486868733bcc"
+    },
+    {
+      "name": "cloudbees-folder",
+      "version": "6.1106.v3a_d9a_6d2465e",
+      "sha256": "4ccfcfe145a1b36aef61f19187e8aa74eb3c90fdb9c9bfce865e09aa13c8a70a"
+    },
+    {
+      "name": "commons-compress-api",
+      "version": "1.28.0-95.vb_e5e24f83645",
+      "sha256": "12ec0a237626ec3fbd59f923983d4e181f9ba290303765431a060c993b90de7e"
+    },
+    {
+      "name": "commons-lang3-api",
+      "version": "3.21.0-122.v6a_ea_4fd34049",
+      "sha256": "4d6194f8d3b3f2b69264f0403fe5a51846236a41f4e363f6aae45f82f7761657"
+    },
+    {
+      "name": "commons-text-api",
+      "version": "1.15.0-218.va_61573470393",
+      "sha256": "ae2abdf957694f4aa39b9ba0b539edabc384f3da277551879e34ffb22fb13764"
+    },
+    {
+      "name": "credentials-binding",
+      "version": "728.v902a_273b_8947",
+      "sha256": "bd7d1a187e35c8e2b6619cd50f2f8c5d28aafc4ef8fd9de572fb2cfa464f466d"
+    },
+    {
+      "name": "credentials",
+      "version": "1511.v2e3cb_0008ef0",
+      "sha256": "79c29f779906610aa08ac396674740e411b28cbe400460737eeeaa4a99569acb"
+    },
+    {
+      "name": "display-url-api",
+      "version": "2.217.va_6b_de84cc74b_",
+      "sha256": "07eeaae738b451bade4756900b48561c6c493a42c7ba07a45b22a2dce71ac0ca"
+    },
+    {
+      "name": "durable-task",
+      "version": "686.v80ff80875b_82",
+      "sha256": "1f5bb92ee5784ee01a4e4e0307e806fa1e260db8aceba56fe8d277e939278dfa"
+    },
+    {
+      "name": "echarts-api",
+      "version": "6.1.0-1321.v86c4c5114494",
+      "sha256": "280663806fd6538a16284fc61668a42af4272b7e96b66f48ec82409975cff51b"
+    },
+    {
+      "name": "font-awesome-api",
+      "version": "7.3.1-1013.v0835a_879ec6d",
+      "sha256": "7ee382c678545f5fd5b022e5dbb75d129a97db2b0180fb42f17edcebdfdbbf5a"
+    },
+    {
+      "name": "htmlpublisher",
+      "version": "429",
+      "sha256": "5a8f0703ffdf62ab8e101d2024fbae979b36f90a1ce96062bb769dd626248f3c"
+    },
+    {
+      "name": "instance-identity",
+      "version": "203.v15e81a_1b_7a_38",
+      "sha256": "df2b3205a6177248f12b294650a60405f65ba2cd503ca9599b2dcb72c1de5018"
+    },
+    {
+      "name": "ionicons-api",
+      "version": "94.vcc3065403257",
+      "sha256": "95f3504375d628d887425ccdf32d5606a230261ee42dc683f13958d8e973ac3f"
+    },
+    {
+      "name": "jackson-annotations2-api",
+      "version": "2.22-19.v10a_a_582ea_26e",
+      "sha256": "f13d0a17af6f8c8939a6edd30952006b77dca4760b1f40e0289c363918b7d17d"
+    },
+    {
+      "name": "jackson2-api",
+      "version": "2.22.2-445.vdc613f1d8012",
+      "sha256": "4ad8556964d393cd0f693201cf5b12ed991c3510a58c4499a3759fece1f3be15"
+    },
+    {
+      "name": "jackson3-api",
+      "version": "3.2.3-101.v69fc84453a_8e",
+      "sha256": "76825ed0bfebe00eb9e83f25a7749bce408a1580e7a1fb5017e745f5486c98a6"
+    },
+    {
+      "name": "jakarta-activation-api",
+      "version": "2.1.4-1",
+      "sha256": "e62298341742f14b374045387ba641ad8a19376793c76bdafebb4a05b5099712"
+    },
+    {
+      "name": "jakarta-mail-api",
+      "version": "2.1.5-1",
+      "sha256": "244735ea85a51332c079d235a5713e70d3810bea62332894002acc39914ce11b"
+    },
+    {
+      "name": "jakarta-xml-bind-api",
+      "version": "4.0.9-19.v2b_a_5b_44d9a_1c",
+      "sha256": "2f59227936687ec00f7ea62b550e7a6e9c86cda3423f3567ffe66bbdf235ffb5"
+    },
+    {
+      "name": "javax-activation-api",
+      "version": "1.2.0-8",
+      "sha256": "e96e88c52edf07ba00fb45b26cc411a7a95fa3d4491aaa1a5d36637665880560"
+    },
+    {
+      "name": "jaxb",
+      "version": "2.3.9-143.v5979df3304e6",
+      "sha256": "38ddf4cf5db61a591044130c2f7ccb2b7aa9abebc8fcd8a6953f8da550d002ed"
+    },
+    {
+      "name": "joda-time-api",
+      "version": "2.15.0-208.v6b_084e7a_d9f0",
+      "sha256": "427513635d122f62fcd8e52af08cc895913b9a70568e7665a3ce8fc1a4871ddf"
+    },
+    {
+      "name": "jquery3-api",
+      "version": "3.7.1-687.v68d468e40b_30",
+      "sha256": "16716d59a3df872a3b8700337de9e8306b2d5104320e6916731aa7185d3de880"
+    },
+    {
+      "name": "json-api",
+      "version": "20260814-226.v20f9685d642c",
+      "sha256": "c5ac5ecfddd35c07087b3333ae05ec4167a70abae8bf0ebcb7338b6b54540889"
+    },
+    {
+      "name": "junit",
+      "version": "1432.v3f9a_b_73dd986",
+      "sha256": "666ee900c7e945bea6d633ce6bd1e708902153d1d13b41161a2bbb55f2f8b836"
+    },
+    {
+      "name": "mailer",
+      "version": "534.v1b_36f5864073",
+      "sha256": "5426a66a3f879d25fcb4baff678a28422afbabff22cd6e4f0f998fc67a3dc3fa"
+    },
+    {
+      "name": "matrix-auth",
+      "version": "3.3",
+      "sha256": "b8f7a916f1de0872d4c16264bcf9604fdb5b2da1827764745946c7ac5f613948"
+    },
+    {
+      "name": "pipeline-build-step",
+      "version": "601.v6d4c6d1a_9dc7",
+      "sha256": "1b61a1820844f3f72f9dfcd6d7eeab66fa0fbcee5e3923b912cd1ed10fbf63c5"
+    },
+    {
+      "name": "pipeline-graph-analysis",
+      "version": "254.v0f63a_a_447dca_",
+      "sha256": "8c89351cb13f694b9cc620501a75aed8bd4acdc0b9a6e6918b5dcb0543f08e7f"
+    },
+    {
+      "name": "pipeline-groovy-lib",
+      "version": "806.v408277b_33d1d",
+      "sha256": "88c967fcd3d99028e05ef67dd8c3d1331c5b4c00549c3d700e3b160265440934"
+    },
+    {
+      "name": "pipeline-input-step",
+      "version": "560.v56198a_642157",
+      "sha256": "7c61bb745ecd1e4e5c7864dc7c8352148d9b2281bcca5a48fd3a7cca7290a135"
+    },
+    {
+      "name": "pipeline-milestone-step",
+      "version": "152.v6e22b_8cfc66c",
+      "sha256": "cb3187809e219f01b42068f277058a818033f3cfd14da7ec59c86f028fc38386"
+    },
+    {
+      "name": "pipeline-model-api",
+      "version": "2.2293.v6e7193cec599",
+      "sha256": "cdd72a69bf2863a1683b282febd0256d5d266111134c3803a8c4a051b6b4c133"
+    },
+    {
+      "name": "pipeline-model-definition",
+      "version": "2.2293.v6e7193cec599",
+      "sha256": "9f4f62e0a13fefc9c5736a20ad5124af2a324357294fd8ea8d8f848b7c497f92"
+    },
+    {
+      "name": "pipeline-model-extensions",
+      "version": "2.2293.v6e7193cec599",
+      "sha256": "00fbf0938ef13f6aedaa0900ec4cd03fcc986e34b1820bf13f761c2f29831861"
+    },
+    {
+      "name": "pipeline-rest-api",
+      "version": "2.41",
+      "sha256": "6e463affa43f4013c4b0865d4c0442abd738440c54c8bb0cd70f0c1164743159"
+    },
+    {
+      "name": "pipeline-stage-step",
+      "version": "345.va_96187909426",
+      "sha256": "2eba433b28f2dfc90519e233b14264890f97b93b78e25c664d56607141fcd94b"
+    },
+    {
+      "name": "pipeline-stage-tags-metadata",
+      "version": "2.2293.v6e7193cec599",
+      "sha256": "032f011fc50cb273b300d44fb6c2800e3dbdf0d78548b15e0f192ba7cc95d178"
+    },
+    {
+      "name": "pipeline-stage-view",
+      "version": "2.41",
+      "sha256": "fbc9dd724278f69b8c7638907363a609a8484cfaaa59321169468ee6c908952f"
+    },
+    {
+      "name": "pipeline-utility-steps",
+      "version": "3.810.va_7672d206740",
+      "sha256": "e188b3272dd6dfb0250c7961b016a0e38527a0a2236f5e25fc8c50652582098c"
+    },
+    {
+      "name": "plain-credentials",
+      "version": "199.v9f8e1f741799",
+      "sha256": "b5e5e35cf93ad3b818a983916cbcdf3f7866699410a4df923e6a2968ecc3a448"
+    },
+    {
+      "name": "plugin-util-api",
+      "version": "7.1341.v039f146993d9",
+      "sha256": "6ed91e4b73cae55327b41ab919b53c33b39425727115d6c308f45ae7a6e47837"
+    },
+    {
+      "name": "prism-api",
+      "version": "1.30.0-741.v034eb_0b_0a_a_fa_",
+      "sha256": "2b7aa7809e0f656afce98c0b6a0a9b62885af6ae85ad90bed67a4f18f18e8354"
+    },
+    {
+      "name": "scm-api",
+      "version": "728.vc30dcf7a_0df5",
+      "sha256": "1336472987daa2fa912210aba00e1e37b739ce03f75c973a6794d1a0f55c0326"
+    },
+    {
+      "name": "script-security",
+      "version": "1429.v0810f1b_530f5",
+      "sha256": "dcea69952d8f4ec387637a75fa460394195449ebc18d5c7931361740fb600c37"
+    },
+    {
+      "name": "snakeyaml-api",
+      "version": "2.7-152.vc672728cf536",
+      "sha256": "bfa595a283634c8dd63aa8d1b039cf3d3f52e0952048058fc0b9a4826ca06508"
+    },
+    {
+      "name": "snakeyaml-engine-api",
+      "version": "3.2-18.v885ed7ff698f",
+      "sha256": "89c14c0ac2816c1efc192dd333b4b26d97ae58d2ab1d492e8b52feca406e220e"
+    },
+    {
+      "name": "ssh-credentials",
+      "version": "372.va_250881b_08cd",
+      "sha256": "7b4d035b05b331038f3dfa99ddfef0cabbacede8f0ad2a6ca9611fb0844108a9"
+    },
+    {
+      "name": "structs",
+      "version": "362.va_b_695ef4fdf9",
+      "sha256": "a0a5db44f2cb082a9ec6572c088340521f033fff8c351fc7eba9ef7f07dbbf8d"
+    },
+    {
+      "name": "timestamper",
+      "version": "1.30",
+      "sha256": "b4d6589e7a169f06b26bc7e15bc37ef2fb3986dc20b502cb91c2a9918eaf980b"
+    },
+    {
+      "name": "variant",
+      "version": "70.va_d9f17f859e0",
+      "sha256": "12e214ea694469a4461b55881ecb4074ae5dfb04797dbc0dad390f6f4bc75aaf"
+    },
+    {
+      "name": "woodstox-core-api",
+      "version": "7.3.0-16.v017f30ed004c",
+      "sha256": "fca0ce7cd19274833df226cd6746d71ce4025b784a81bd5b8512730f5d34a9df"
+    },
+    {
+      "name": "workflow-aggregator",
+      "version": "608.v67378e9d3db_1",
+      "sha256": "7b94227c1afa01bb262c14919ad4a333412f1b51d947c0f21909ec2daff357dc"
+    },
+    {
+      "name": "workflow-api",
+      "version": "1413.v2ff1a_5e720fa_",
+      "sha256": "f4adbd6b34a2a0b643a12b898110bd976350142eff6322efda21efacbccb6835"
+    },
+    {
+      "name": "workflow-basic-steps",
+      "version": "1098.v808b_fd7f8cf4",
+      "sha256": "93449eb494658d065d097e8c54f707c98c9ce3e54da2fb98281b0a0487154eaf"
+    },
+    {
+      "name": "workflow-cps",
+      "version": "4383.v04fa_a_3d67b_d9",
+      "sha256": "2bfbbf68dc87d8531450b0171689a530ad9a7de51187d95fc6f6c9ac357114b8"
+    },
+    {
+      "name": "workflow-durable-task-step",
+      "version": "1479.v56e587f413a_7",
+      "sha256": "a0f0f1464ce3592f76d0f0079ce9fc2d4272594f995bf3d1a7ede4cd5031452e"
+    },
+    {
+      "name": "workflow-job",
+      "version": "1602.v2a_70b_80a_2396",
+      "sha256": "75cc771d3473b219d8a2629c97e1ec244750f5f8133fdde7a34018115c6fd12a"
+    },
+    {
+      "name": "workflow-multibranch",
+      "version": "842.v3a_b_59b_57b_e6e",
+      "sha256": "af26afd93b5d730d203d8f58d1e104712ad1a7ddcf6837886d3272b1c0057e46"
+    },
+    {
+      "name": "workflow-scm-step",
+      "version": "487.v41313a_96b_65d",
+      "sha256": "532fc247cba83845df3c7fccaabfc3cb1f637729b145211728bcb974a3a67552"
+    },
+    {
+      "name": "workflow-step-api",
+      "version": "724.v538c2362b_dfb_",
+      "sha256": "887491de444174228471993b0b2db958db2e7fb577857c8516c58e9618049896"
+    },
+    {
+      "name": "workflow-support",
+      "version": "1015.v785e5a_b_b_8b_22",
+      "sha256": "914ee717ab8c1d60d0d3ea49a1af11e4ea65c1e74c0b44dc3522f9a2fe5b2a8e"
+    }
+  ]
+}

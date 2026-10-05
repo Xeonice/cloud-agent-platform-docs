@@ -11,8 +11,14 @@ import {
   withLock,
   assertNoLiveApi,
 } from "./lib.mjs";
+import {
+  assertRuntimeUser,
+  SERVICE_HOME,
+  SERVICE_USER,
+} from "./system-services.mjs";
 
 const config = validateConfig(JSON.parse(await privateFile(process.argv[2])));
+assertRuntimeUser(config);
 if (
   process.platform !== "darwin" ||
   process.arch !== "arm64" ||
@@ -52,6 +58,9 @@ const result = await withLock(join(config.root, "runtime.lock"), async () => {
     env: {
       ...buildEnvironment(config.node),
       ...runtime,
+      HOME: SERVICE_HOME,
+      USER: SERVICE_USER,
+      LOGNAME: SERVICE_USER,
       NODE_ENV: "production",
       MIGRATIONS_DIR: join(release, "drizzle"),
       APP_COMMIT: manifest.sha,

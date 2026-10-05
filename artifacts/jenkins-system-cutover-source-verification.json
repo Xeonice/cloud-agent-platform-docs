@@ -1,0 +1,65 @@
+{
+  "status": "passed",
+  "verifiedAt": "2026-10-05T23:33:38.088Z",
+  "runtime": {
+    "node": "v22.23.3",
+    "platform": "darwin",
+    "arch": "arm64"
+  },
+  "scope": "Source implementation and temporary filesystem regressions only; no installed services, private review, runtime secrets or production data were changed.",
+  "sourceHashes": {
+    "deploy/macmini/install-system-services.mjs": "3f8ce7ddf30415b7d2851651505be76ebccb020495d818b3c62b96ee13d692d3",
+    "deploy/macmini/install-system-services.test.mjs": "7527c009116fbb1b0dfabc717073759bd5bea5c2b375570191639757a51b3daa",
+    "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
+    "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
+    "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380"
+  },
+  "commands": {
+    "nodeTests": "node --test deploy/macmini/controller.test.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/package-api.test.mjs deploy/jenkins/mutation.test.mjs deploy/jenkins/sandbox-images.test.mjs deploy/jenkins/sandbox-publication-config.test.mjs",
+    "syntax": [
+      "node --check deploy/macmini/install-system-services.mjs",
+      "node --check deploy/macmini/public-build-tools.mjs"
+    ],
+    "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/mutation.test.mjs",
+    "whitespace": "git diff --check"
+  },
+  "execution": {
+    "files": 7,
+    "tests": 102,
+    "passed": 102,
+    "failed": 0,
+    "skipped": 0,
+    "exitCode": 0,
+    "log": "artifacts/jenkins-system-cutover-source-tests.log",
+    "newInstallerTests": 17,
+    "publicBuildToolsTests": 7,
+    "formatExitCode": 0,
+    "syntaxExitCode": 0,
+    "whitespaceExitCode": 0
+  },
+  "operatorCutover": {
+    "automaticControllerChanged": false,
+    "preflight": "Authenticated GET status/version only; exact seven blocker fields, all readiness true and all HTTP/auth/database work zero. Residual WS requires the validated dedicated GUI Tunnel.",
+    "order": [
+      "retire old polling",
+      "create and record exact-owner admission barrier",
+      "stop only the validated dedicated GUI Tunnel if originally loaded",
+      "strict ready/draining/all counters zero continuously sampled for ten seconds",
+      "SQLite backup",
+      "final strict idle and barrier ownership gate",
+      "stop original API",
+      "install/start system services",
+      "authenticated readiness and exact-owner barrier release"
+    ],
+    "earlyRecovery": "When API was never stopped, restore only the originally loaded and stopped GUI Tunnel; do not stop/restart API. Readiness precedes exact-owner admission release. Any failure or replaced manual marker preserves maintenance.",
+    "stoppedApiRecovery": "Existing full system-to-GUI rollback path retained; API stage determined by actual GUI loaded state after bootout. Ownership loss preserves live services for operator review.",
+    "preview3100Excluded": true,
+    "legacyGuiTunnelCompatibility": "Semantic fixed-field validation accepts the observed legacy GUI plist without EnvironmentVariables/ProcessType, or current exact explicit values. Fixed UUID b59b8cc0-571a-46ec-bf21-1a01b78670a4 / agent-api.douglasdong.com / http://127.0.0.1:3101 metadata required. Unknown launchd fields, alternate user/home/executable/token path/target refuse.",
+    "tunnelGracefulExit": "Capture fixed-label original PID, exact executable/UID501 and all metrics listener owners before bootout. Wait at most 90 seconds for both original process disappearance and metrics release; verify maintenance ownership every iteration and fail on unrelated owners or reloaded service. No signal/force-kill fallback. Recovery refuses duplicate Tunnel while the original still exits; system-to-GUI rollback uses the same exit guard."
+  },
+  "publicVercelReuse": "Existing fixed root-owned public CLI tree is reusable only when the same reviewed manifest matches all bytes, complete entry set, exact modes, contained links and ownership. Mismatch refuses without deleting existing tree.",
+  "mutationRegression": "Invalid pinned-request assertion is independent of the trusted deploy UID versus isolated CI UID; no skipped test or identity relaxation.",
+  "evidenceLimit": "Actual current read-only preflight validates launchctl program, ps PID/UID/executable and all lsof metrics listener owners with the same capture used before bootout. Ready=true, WS=2, all other blockers zero, operatorEligible=true. User operator reviewd failure/rollback diagnosed from trace and shutdown log, without service mutation by this agent. New graceful-exit branch tested with real temporary barriers and injected process/listener snapshots/clock; no new live shutdown was executed. Prepare a fresh reviewe from frozen source.",
+  "liveReadOnlyPreflight": "artifacts/jenkins-system-cutover-live-preflight.json",
+  "tunnelExitDiagnosis": "artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json"
+}
