@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "checkedAt": "2026-10-05T18:36:29.320Z",
+  "checkedAt": "2026-10-05T18:47:24.363Z",
   "topology": {
     "frontend": "https://agent.douglasdong.com",
     "api": "https://agent-api.douglasdong.com",
@@ -10,7 +10,7 @@
     "backendProxy": "Cloudflare Tunnel"
   },
   "vercel": {
-    "status": "preconfigured; no deployments",
+    "status": "preconfigured; production build READY/STAGED; custom domain not promoted",
     "team": "xeonices-projects",
     "projectId": "prj_XYIzK6r7LgRrV5NHCwWff489J73r",
     "projectName": "agent-platform-web",
@@ -65,13 +65,41 @@
         ]
       }
     ],
-    "deploymentCount": [],
+    "deploymentCount": 1,
     "domain": {
       "name": "agent.douglasdong.com",
       "verified": true,
       "dnsConfigured": true,
       "configuredBy": "CNAME",
       "recommendedCNAME": "3395830a2fd9acf4.vercel-dns-016.com."
+    },
+    "deployment": {
+      "id": "dpl_1egGo8ZyHcnjbXK6grd9UW7Hv6wg",
+      "url": "agent-platform-bu1dr3gb0-xeonices-projects.vercel.app",
+      "source": "git",
+      "readyState": "READY",
+      "readySubstate": "STAGED",
+      "sourceCommit": "2c70f86e6ad3d46e3926b74ac6c5a6b667f1a0b8",
+      "aliases": [
+        "agent-platform-web-xeonices-projects.vercel.app",
+        "agent-platform-web-git-feat-design-v2-58eaac-xeonices-projects.vercel.app"
+      ],
+      "customDomainAssigned": false
+    },
+    "gitDeploymentControl": {
+      "source": "web/vercel.json",
+      "git": {
+        "deploymentEnabled": false
+      },
+      "upstreamCommit": "5ad3833714336d6c96e793593b011243875dd081",
+      "projectGitHubDeploymentNotifications": "enabled",
+      "note": "gitProviderOptions.createDeployments controls GitHub notification objects, not Vercel automatic builds"
+    },
+    "deploymentHistory": {
+      "beforeFirstSourcePush": 0,
+      "afterNode22SourcePush": 1,
+      "afterRepositoryPausePush": 1,
+      "explicitSkippedEventObserved": false
     }
   },
   "cloudflare": {
@@ -173,25 +201,26 @@
     "Prepare native API release with fixed persistent data and BoxLite directories, single-instance launchd service and readiness check",
     "Create dedicated backend Tunnel and its DNS; start only after authenticated API verification",
     "Choose an isolated Preview frontend/API environment before enabling Preview deployments",
-    "Build and verify the production frontend before enabling Git deployments or assigning production traffic"
+    "Verify the staged frontend against the published, authenticated API before promoting it or enabling Git deployments"
   ],
   "validation": {
     "domainOwnershipVerified": true,
     "dnsConfigured": true,
     "vercelProjectChecks": {
       "correctProject": true,
-      "correctRepository": true,
-      "correctBranch": true,
       "node22": true,
-      "gitDeploymentsDisabled": true,
       "previewDisabled": true,
       "customDomainAutoAssignmentDisabled": true,
-      "noDeployments": true
+      "customDomainNotAssigned": true,
+      "stagedBuildReady": true,
+      "noCurrentProductionTarget": true,
+      "upstreamRepositoryPauseVerified": true,
+      "deploymentCountDidNotIncreaseAfterPause": true
     },
     "existingLocalApiAndTaskNotRestarted": true,
     "backendNotPublished": true
   },
-  "sourceWebCommit": "2c70f86",
+  "sourceWebCommit": "5ad3833714336d6c96e793593b011243875dd081",
   "evidence": {
     "cloudflareCache": "cloudflare-cache.jpg",
     "cloudflareDns": "cloudflare-dns.jpg"
