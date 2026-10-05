@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-05T18:36:29.320Z",
+  "topology": {
+    "frontend": "https://agent.douglasdong.com",
+    "api": "https://agent-api.douglasdong.com",
+    "backendOrigin": "http://127.0.0.1:3100",
+    "frontendProvider": "Vercel",
+    "backendRuntime": "Mac mini / Darwin ARM64 / Node 22",
+    "backendProxy": "Cloudflare Tunnel"
+  },
+  "vercel": {
+    "status": "preconfigured; no deployments",
+    "team": "xeonices-projects",
+    "projectId": "prj_XYIzK6r7LgRrV5NHCwWff489J73r",
+    "projectName": "agent-platform-web",
+    "gitRepository": "Xeonice/agent-platform-web",
+    "productionBranch": "feat/design-v2-migration",
+    "framework": "nextjs",
+    "nodeVersion": "22.x",
+    "rootDirectory": null,
+    "buildCommand": "pnpm build",
+    "installCommand": "pnpm install --frozen-lockfile",
+    "packageManager": "pnpm@9.15.0",
+    "gitAutomaticDeployments": false,
+    "previewDeployments": false,
+    "autoAssignCustomDomains": false,
+    "environment": [
+      {
+        "key": "ENABLE_EXPERIMENTAL_COREPACK",
+        "value": "1",
+        "target": [
+          "production",
+          "preview",
+          "development"
+        ]
+      },
+      {
+        "key": "NEXT_PUBLIC_API_MOCK",
+        "value": "0",
+        "target": [
+          "production",
+          "preview"
+        ]
+      },
+      {
+        "key": "NEXT_PUBLIC_API_BASE_URL",
+        "value": "https://agent-api.douglasdong.com",
+        "target": [
+          "production"
+        ]
+      },
+      {
+        "key": "NEXT_PUBLIC_WS_BASE_URL",
+        "value": "https://agent-api.douglasdong.com",
+        "target": [
+          "production"
+        ]
+      },
+      {
+        "key": "API_ORIGIN",
+        "value": "https://agent-api.douglasdong.com",
+        "target": [
+          "production"
+        ]
+      }
+    ],
+    "deploymentCount": [],
+    "domain": {
+      "name": "agent.douglasdong.com",
+      "verified": true,
+      "dnsConfigured": true,
+      "configuredBy": "CNAME",
+      "recommendedCNAME": "3395830a2fd9acf4.vercel-dns-016.com."
+    }
+  },
+  "cloudflare": {
+    "zone": "douglasdong.com",
+    "frontendDns": {
+      "type": "CNAME",
+      "name": "agent.douglasdong.com",
+      "content": "3395830a2fd9acf4.vercel-dns-016.com",
+      "proxied": false,
+      "ttl": "auto",
+      "status": "created and verified by Vercel"
+    },
+    "verificationDns": {
+      "type": "TXT",
+      "name": "_vercel.douglasdong.com",
+      "forDomain": "agent.douglasdong.com",
+      "status": "added without replacing existing TXT records"
+    },
+    "cacheRule": {
+      "id": "f5f377259b1844f9be10bdec3d582e47",
+      "name": "Agent Platform API — bypass cache",
+      "expression": "(http.host eq \"agent-api.douglasdong.com\")",
+      "action": "set_cache_settings",
+      "action_parameters": {
+        "cache": false
+      },
+      "enabled": true
+    },
+    "backendTunnel": {
+      "status": "not created or running",
+      "name": "agent-platform-api",
+      "plannedConfig": {
+        "config": {
+          "ingress": [
+            {
+              "hostname": "agent-api.douglasdong.com",
+              "service": "http://127.0.0.1:3100"
+            },
+            {
+              "service": "http_status:404"
+            }
+          ]
+        }
+      },
+      "plannedDns": {
+        "type": "CNAME",
+        "name": "agent-api.douglasdong.com",
+        "content": "<new-tunnel-uuid>.cfargotunnel.com",
+        "proxied": true,
+        "ttl": 1
+      },
+      "apiWritePermissionsIfUsingDedicatedToken": [
+        "Account: Cloudflare Tunnel Edit",
+        "Zone douglasdong.com: DNS Edit"
+      ]
+    }
+  },
+  "existingAssetsPreserved": {
+    "vercelProjects": [
+      "cap-www",
+      "cap-web",
+      "openspec-web",
+      "openspec-docs",
+      "personal-blog"
+    ],
+    "cloudflareTunnels": [
+      {
+        "name": "cap-api",
+        "observedStatus": "offline",
+        "routes": [
+          {
+            "hostname": "cap-api.douglasdong.com",
+            "service": "http://localhost:8080"
+          },
+          {
+            "hostname": "dokploy.douglasdong.com",
+            "service": "http://localhost:3000"
+          },
+          {
+            "hostname": "grafana.douglasdong.com",
+            "service": "http://localhost:3001"
+          },
+          {
+            "hostname": "netdata.douglasdong.com",
+            "service": "http://localhost:19999"
+          }
+        ]
+      },
+      {
+        "name": "sub2api",
+        "observedStatus": "offline"
+      }
+    ],
+    "worker": "cap-release-cache / releases.cap.douglasdong.com; unchanged; cache implementation not yet audited"
+  },
+  "remainingBeforePublishing": [
+    "Implement HTTP CORS with credential support, OPTIONS, X-Schema-Hash exposure and exact frontend Origin checks",
+    "Implement WebSocket handshake Origin allowlist and trusted local proxy client-IP handling",
+    "Prepare native API release with fixed persistent data and BoxLite directories, single-instance launchd service and readiness check",
+    "Create dedicated backend Tunnel and its DNS; start only after authenticated API verification",
+    "Choose an isolated Preview frontend/API environment before enabling Preview deployments",
+    "Build and verify the production frontend before enabling Git deployments or assigning production traffic"
+  ],
+  "validation": {
+    "domainOwnershipVerified": true,
+    "dnsConfigured": true,
+    "vercelProjectChecks": {
+      "correctProject": true,
+      "correctRepository": true,
+      "correctBranch": true,
+      "node22": true,
+      "gitDeploymentsDisabled": true,
+      "previewDisabled": true,
+      "customDomainAutoAssignmentDisabled": true,
+      "noDeployments": true
+    },
+    "existingLocalApiAndTaskNotRestarted": true,
+    "backendNotPublished": true
+  },
+  "sourceWebCommit": "2c70f86",
+  "evidence": {
+    "cloudflareCache": "cloudflare-cache.jpg",
+    "cloudflareDns": "cloudflare-dns.jpg"
+  }
+}
