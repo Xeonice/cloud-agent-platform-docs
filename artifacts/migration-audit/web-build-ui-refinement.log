@@ -1,0 +1,34 @@
+
+> agent-platform-web@0.1.0 build /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+> next build
+
+   ▲ Next.js 15.5.23
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.9s
+   Skipping linting
+   Checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    53.1 kB         326 kB
+├ ○ /_not-found                            123 B         103 kB
+├ ○ /settings/credentials                15.2 kB         208 kB
+├ ○ /settings/images                     14.6 kB         207 kB
+└ ○ /settings/system                     16.5 kB         224 kB
++ First Load JS shared by all             103 kB
+  ├ chunks/29dd14f1-cd3d51cbb4d3b809.js  54.2 kB
+  ├ chunks/513-d3c8355d8287c5b2.js       46.4 kB
+  └ other shared chunks (total)          2.63 kB
+
+
+○  (Static)  prerendered as static content
+

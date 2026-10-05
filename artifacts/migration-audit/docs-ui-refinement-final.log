@@ -1,0 +1,27 @@
+
+> cloud-agent-platform-docs@0.2.3 docs:check /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发
+> node scripts/docs-check.mjs
+
+▶ docs:check —— 文档一致性门禁（权威定义：docs/shared/09-工程化规范.md §2.4）
+  仓库：/Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发
+
+A. 文档内部检查（不依赖 submodule，始终跑）
+  ✔ A1 相对链接可达       1143 条站内链接全部命中
+  ✔ A2 章节引用存在       2655 条 §引用全部命中（逐级下探口径）
+  ✔ A3 README 清单完整    69 篇文档 / 4 份索引，双向一致
+  ✔ A4 能力目录对账       10 §6 = 68 个端点，27 §2–§9 = 68 个端点，集合相等
+
+B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）
+  ✔ A5 错误码对账         源码 89 个码，10 §6.8 表 89 行，集合相等
+  ✔ B1 端点集合覆盖       openapi 70 条 paths，排除传输层 3 条，余 67 条全部 ⊆ 10 §6
+  ✔ B2 MCP tool 面对账    代码注册 14 个 tool，02 §5.2 = 14 设计 / 14 已注册，集合相等（0 个 ⏳ 不参与判定），3 处计数句同源
+  ✔ B6 未实现端点已标注   10 §6 共 66 个端点，其中 1 个已标 ⏳，其余全部在 openapi 中
+  ✔ B3 openapi 跨仓一致   两份 openapi.json 逐字节相同（sha256 bf18ebd4ddb4…）
+  ✔ B4 WS 协议跨仓对账    两仓 canonical 一致（861 字符）
+  ✔ B5 SSE 协议跨仓对账   两仓 canonical 一致（833 字符）
+  ✔ B7 保留 env 跨仓对账  后端 12 名 + 2 前缀，前端全部覆盖
+
+C. 文档 ↔ 部署产物对账（compose；缺失即 skip，不判失败）
+  ✔ C1 compose 骨架对账   骨架 3 个服务（0 个 ⏳）/ 真 compose 3 个，插值默认值 2 条，服务集合与插值默认值均一致
+
+✔ docs:check 通过：13 项检查全绿。

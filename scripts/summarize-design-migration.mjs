@@ -49,8 +49,14 @@ const requirements = readdirSync(resolve(root, 'docs/design-v2/gap/product'))
 const manifestNames = ['shell-project-design-manifest', 'credential-access-design-manifest', 'image-system-design-manifest'];
 const frames = manifestNames.flatMap((name) => read(`artifacts/migration-audit/${name}.json`).frames);
 const api = read('api/acceptance/execution-report.json');
-const web = read('artifacts/migration-audit/web-acceptance-execution.json');
-const stories = read('artifacts/migration-audit/web-storybook-execution.json');
+const currentTestReport = (baselinePath, refinementPath) =>
+  existsSync(resolve(root, refinementPath)) ? refinementPath : baselinePath;
+const webPath = currentTestReport('artifacts/migration-audit/web-acceptance-execution.json',
+  'artifacts/migration-audit/web-acceptance-execution-ui-refinement.json');
+const storybookPath = currentTestReport('artifacts/migration-audit/web-storybook-execution.json',
+  'artifacts/migration-audit/web-storybook-execution-ui-refinement.json');
+const web = read(webPath);
+const stories = read(storybookPath);
 const crossPath = 'artifacts/migration-audit/cross-execution-report.json';
 const openRows = rows.filter((row) => !['closed', 'superseded', 'deferred'].includes(row.status));
 const unfinished = frames.filter((frame) => !['browser-passed', 'passed', 'non-ui-verified',
@@ -79,10 +85,10 @@ const summary = {
     api: { files: api.files, passed: api.passed, failed: api.failed, skipped: api.skipped,
       runtimeMatcherEvaluations: api.runtimeMatcherEvaluations, source: 'api/acceptance/execution-report.json' },
     web: { files: web.testResults.length, passed: web.numPassedTests, failed: web.numFailedTests,
-      skipped: web.numPendingTests, source: 'artifacts/migration-audit/web-acceptance-execution.json' },
+      skipped: web.numPendingTests, source: webPath },
     storybook: { files: stories.testResults.length, passed: stories.numPassedTests,
       failed: stories.numFailedTests, skipped: stories.numPendingTests,
-      source: 'artifacts/migration-audit/web-storybook-execution.json' },
+      source: storybookPath },
     cross: existsSync(resolve(root, crossPath)) ? { source: crossPath, report: read(crossPath) } : { status: 'report-pending' },
   },
   decisions: rows.filter((row) => ['superseded', 'deferred'].includes(row.status))

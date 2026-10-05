@@ -22,6 +22,12 @@
 !artifacts/design-shell-project-v2-v3-light1440/*.png
 !artifacts/design-shell-project-v2-v3-light390/*.png
 
+# Storybook 细节复核：真实原图、对照/叠加图和本轮生产状态证据。
+# initial 文件在各自报告中标为 debug-only，不计入最终验收。
+!artifacts/storybook-project-detail-review/*.png
+!artifacts/terminal-chrome-review/*.png
+!artifacts/design-ui-detail-refinement/*.png
+
 # 系统/编辑器
 .DS_Store
 

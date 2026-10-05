@@ -1,0 +1,61 @@
+
+ RUN  v3.2.7 /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+
+ ❯ |acceptance| src/acceptance/task-terminal-chrome.test.tsx (1 test | 1 failed) 136ms
+   × WB/TRM/SBX · running task terminal chrome > the terminal tabs start the task content without a duplicate menu strip; the header still shows the locked image and stops the task 135ms
+     → expected <div …(1)>…(2)</div> to be <main id="workbench-main" …(2)>…(2)</main> // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |acceptance| src/acceptance/task-terminal-chrome.test.tsx > WB/TRM/SBX · running task terminal chrome > the terminal tabs start the task content without a duplicate menu strip; the header still shows the locked image and stops the task
+AssertionError: expected <div …(1)>…(2)</div> to be <main id="workbench-main" …(2)>…(2)</main> // Object.is equality
+
+- Expected
++ Received
+
+@@ -1,20 +1,6 @@
+- <main
+-   aria-busy="false"
+-   class="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+-   id="workbench-main"
+- >
+-   <p
+-     class="sr-only"
+-     role="status"
+-   >
+-     已打开任务
+-   </p>
+  <div
+-     class="min-h-0 flex-1"
+-   >
+-     <div
+    class="flex h-full min-h-0 flex-col"
+  >
+    <div
+      class="flex h-[var(--v2-shell-termbar-h)] min-w-0 shrink-0 items-center gap-1 border-b border-[var(--v2-border-subtle)] bg-[var(--v2-canvas)] px-4"
+      data-testid="terminal-tab-bar"
+@@ -138,7 +124,5 @@
+          data-testid="pty-canvas-boundary"
+        />
+      </div>
+    </div>
+  </div>
+-   </div>
+- </main>
+
+ ❯ src/acceptance/task-terminal-chrome.test.tsx:49:47
+     47|     const main = screen.getByRole('main');
+     48|     expect(within(main).queryByRole('button', { name: '任务菜单' })).not.t…
+     49|     expect(tabs.parentElement?.parentElement).toBe(main);
+       |                                               ^
+     50| 
+     51|     const header = screen.getByTestId('new-task-entry').closest('heade…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:24:50
+   Duration  1.31s (transform 388ms, setup 146ms, collect 571ms, tests 136ms, environment 190ms, prepare 69ms)
+

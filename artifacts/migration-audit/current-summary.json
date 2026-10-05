@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T14:54:13.176Z",
+  "generatedAt": "2026-10-05T16:18:35.900Z",
   "scope": "Approved current design migration; implementation reviews and executed tests are distinct.",
   "requirements": 247,
   "acceptanceCriteria": 1016,
@@ -147,32 +147,32 @@
   },
   "tests": {
     "api": {
-      "files": 41,
-      "passed": 160,
+      "files": 42,
+      "passed": 166,
       "failed": 0,
       "skipped": 0,
-      "runtimeMatcherEvaluations": 674,
+      "runtimeMatcherEvaluations": 700,
       "source": "api/acceptance/execution-report.json"
     },
     "web": {
-      "files": 17,
-      "passed": 78,
+      "files": 20,
+      "passed": 97,
       "failed": 0,
       "skipped": 0,
-      "source": "artifacts/migration-audit/web-acceptance-execution.json"
+      "source": "artifacts/migration-audit/web-acceptance-execution-ui-refinement.json"
     },
     "storybook": {
       "files": 97,
-      "passed": 540,
+      "passed": 542,
       "failed": 0,
       "skipped": 0,
-      "source": "artifacts/migration-audit/web-storybook-execution.json"
+      "source": "artifacts/migration-audit/web-storybook-execution-ui-refinement.json"
     },
     "cross": {
       "source": "artifacts/migration-audit/cross-execution-report.json",
       "report": {
-        "startedAt": "2026-10-05T14:51:34.263Z",
-        "finishedAt": "2026-10-05T14:51:54.420Z",
+        "startedAt": "2026-10-05T15:54:58.332Z",
+        "finishedAt": "2026-10-05T15:55:19.858Z",
         "node": "v22.23.3",
         "status": "passed",
         "actualScenarios": 1,
@@ -354,7 +354,7 @@
               }
             ],
             "status": "passed",
-            "durationMs": 2099
+            "durationMs": 2391
           }
         ],
         "realBoundaries": [

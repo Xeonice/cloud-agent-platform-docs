@@ -1,0 +1,19 @@
+
+> cloud-agent-platform-docs@0.2.3 migration:check:complete /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发
+> node scripts/check-design-migration.mjs --require-complete
+
+{
+  "specificationRequirements": 247,
+  "requirementsWithoutACReviewed": 4,
+  "specificationACs": 1016,
+  "reviewedACs": 1016,
+  "missingACReviews": 0,
+  "openImplementationACs": 0,
+  "approvedDrafts": 172,
+  "ownedDrafts": 172,
+  "unfinishedDraftScenarios": 0,
+  "browserCombinationsVerified": 1020,
+  "importedFilesVerified": 211,
+  "missingLedgers": [],
+  "note": "Implementation review and actual test/visual execution are separate evidence categories."
+}

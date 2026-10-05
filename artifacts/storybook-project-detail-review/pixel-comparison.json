@@ -1,0 +1,1134 @@
+{
+  "phase": "final",
+  "purpose": "diagnostic-pixel-comparison",
+  "sourceManifestFile": "final-comparison.json",
+  "processedAt": "2026-10-05T16:05:49.900Z",
+  "method": "Decode original PNGs to RGB, without resize, registration, cropping or perceptual filtering. A pixel is changed when max(abs(RGB design - RGB Storybook)) > 12. Different sizes use the top-left aligned union canvas; non-shared pixels always count as changed. Overlay composites the original Storybook raster at 50% alpha over the original design raster. This is a diagnostic statistic, not a pixel-equivalence claim.",
+  "channelThreshold": 12,
+  "normalizedThreshold": 0.047058823529411764,
+  "comparisonOperator": ">",
+  "overlayAlpha": 0.5,
+  "pixelEquivalenceClaim": false,
+  "records": [
+    {
+      "id": "f-prj-create-01-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-01-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-01-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-01-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 520
+      },
+      "actual": {
+        "width": 512,
+        "height": 520
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 519
+        },
+        "actual": {
+          "width": 512,
+          "height": 519
+        }
+      },
+      "width": 512,
+      "height": 520,
+      "dimensionsMatch": true,
+      "totalPixels": 266240,
+      "changedPixels": 10470,
+      "changedFraction": 0.03932542067307692
+    },
+    {
+      "id": "f-prj-create-02-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-02-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-02-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-02-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 332
+      },
+      "actual": {
+        "width": 512,
+        "height": 332
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 331
+        },
+        "actual": {
+          "width": 512,
+          "height": 331
+        }
+      },
+      "width": 512,
+      "height": 332,
+      "dimensionsMatch": true,
+      "totalPixels": 169984,
+      "changedPixels": 4031,
+      "changedFraction": 0.023713996611445784
+    },
+    {
+      "id": "f-prj-create-03-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-03-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-03-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-03-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 574
+      },
+      "actual": {
+        "width": 512,
+        "height": 574
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 573
+        },
+        "actual": {
+          "width": 512,
+          "height": 573
+        }
+      },
+      "width": 512,
+      "height": 574,
+      "dimensionsMatch": true,
+      "totalPixels": 293888,
+      "changedPixels": 11560,
+      "changedFraction": 0.03933471254355401
+    },
+    {
+      "id": "f-prj-create-04-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-04-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-04-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-04-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 334
+      },
+      "actual": {
+        "width": 512,
+        "height": 334
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 334
+        },
+        "actual": {
+          "width": 512,
+          "height": 334
+        }
+      },
+      "width": 512,
+      "height": 334,
+      "dimensionsMatch": true,
+      "totalPixels": 171008,
+      "changedPixels": 1062,
+      "changedFraction": 0.0062102357784431135
+    },
+    {
+      "id": "f-prj-create-05-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-05-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-05-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-05-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 370
+      },
+      "actual": {
+        "width": 512,
+        "height": 370
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 370
+        },
+        "actual": {
+          "width": 512,
+          "height": 370
+        }
+      },
+      "width": 512,
+      "height": 370,
+      "dimensionsMatch": true,
+      "totalPixels": 189440,
+      "changedPixels": 1097,
+      "changedFraction": 0.0057907516891891895
+    },
+    {
+      "id": "f-prj-create-06-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-06-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-06-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-06-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 368
+      },
+      "actual": {
+        "width": 512,
+        "height": 368
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 368
+        },
+        "actual": {
+          "width": 512,
+          "height": 368
+        }
+      },
+      "width": 512,
+      "height": 368,
+      "dimensionsMatch": true,
+      "totalPixels": 188416,
+      "changedPixels": 1154,
+      "changedFraction": 0.006124745244565217
+    },
+    {
+      "id": "f-prj-create-07-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-07-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-07-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-07-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 390
+      },
+      "actual": {
+        "width": 512,
+        "height": 390
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 390
+        },
+        "actual": {
+          "width": 512,
+          "height": 390
+        }
+      },
+      "width": 512,
+      "height": 390,
+      "dimensionsMatch": true,
+      "totalPixels": 199680,
+      "changedPixels": 1155,
+      "changedFraction": 0.005784254807692308
+    },
+    {
+      "id": "f-prj-create-08-dark-1440-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-08-dark-1440-final-draft.png",
+      "actualFile": "f-prj-create-08-dark-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-08-dark-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 272
+      },
+      "actual": {
+        "width": 512,
+        "height": 272
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 272
+        },
+        "actual": {
+          "width": 512,
+          "height": 272
+        }
+      },
+      "width": 512,
+      "height": 272,
+      "dimensionsMatch": true,
+      "totalPixels": 139264,
+      "changedPixels": 75,
+      "changedFraction": 0.0005385454963235295
+    },
+    {
+      "id": "f-prj-create-01-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-01-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-01-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-01-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 538
+      },
+      "actual": {
+        "width": 342,
+        "height": 538
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 537
+        },
+        "actual": {
+          "width": 342,
+          "height": 537
+        }
+      },
+      "width": 342,
+      "height": 538,
+      "dimensionsMatch": true,
+      "totalPixels": 183996,
+      "changedPixels": 7581,
+      "changedFraction": 0.04120198265179678
+    },
+    {
+      "id": "f-prj-create-02-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-02-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-02-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-02-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 332
+      },
+      "actual": {
+        "width": 342,
+        "height": 332
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 331
+        },
+        "actual": {
+          "width": 342,
+          "height": 331
+        }
+      },
+      "width": 342,
+      "height": 332,
+      "dimensionsMatch": true,
+      "totalPixels": 113544,
+      "changedPixels": 2841,
+      "changedFraction": 0.02502113718030015
+    },
+    {
+      "id": "f-prj-create-03-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-03-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-03-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-03-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 592
+      },
+      "actual": {
+        "width": 342,
+        "height": 592
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 591
+        },
+        "actual": {
+          "width": 342,
+          "height": 591
+        }
+      },
+      "width": 342,
+      "height": 592,
+      "dimensionsMatch": true,
+      "totalPixels": 202464,
+      "changedPixels": 8344,
+      "changedFraction": 0.04121226489647542
+    },
+    {
+      "id": "f-prj-create-04-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-04-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-04-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-04-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 334
+      },
+      "actual": {
+        "width": 342,
+        "height": 334
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 334
+        },
+        "actual": {
+          "width": 342,
+          "height": 334
+        }
+      },
+      "width": 342,
+      "height": 334,
+      "dimensionsMatch": true,
+      "totalPixels": 114228,
+      "changedPixels": 1054,
+      "changedFraction": 0.009227159715656406
+    },
+    {
+      "id": "f-prj-create-05-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-05-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-05-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-05-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 370
+      },
+      "actual": {
+        "width": 342,
+        "height": 370
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 370
+        },
+        "actual": {
+          "width": 342,
+          "height": 370
+        }
+      },
+      "width": 342,
+      "height": 370,
+      "dimensionsMatch": true,
+      "totalPixels": 126540,
+      "changedPixels": 1096,
+      "changedFraction": 0.008661292871819187
+    },
+    {
+      "id": "f-prj-create-06-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-06-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-06-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-06-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 368
+      },
+      "actual": {
+        "width": 342,
+        "height": 368
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 368
+        },
+        "actual": {
+          "width": 342,
+          "height": 368
+        }
+      },
+      "width": 342,
+      "height": 368,
+      "dimensionsMatch": true,
+      "totalPixels": 125856,
+      "changedPixels": 1152,
+      "changedFraction": 0.009153318077803204
+    },
+    {
+      "id": "f-prj-create-07-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-07-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-07-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-07-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 434
+      },
+      "actual": {
+        "width": 342,
+        "height": 434
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 434
+        },
+        "actual": {
+          "width": 342,
+          "height": 434
+        }
+      },
+      "width": 342,
+      "height": 434,
+      "dimensionsMatch": true,
+      "totalPixels": 148428,
+      "changedPixels": 1171,
+      "changedFraction": 0.007889347023472661
+    },
+    {
+      "id": "f-prj-create-08-dark-390-final",
+      "theme": "dark",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-08-dark-390-final-draft.png",
+      "actualFile": "f-prj-create-08-dark-390-final-storybook.png",
+      "overlayFile": "f-prj-create-08-dark-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 272
+      },
+      "actual": {
+        "width": 342,
+        "height": 272
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 272
+        },
+        "actual": {
+          "width": 342,
+          "height": 272
+        }
+      },
+      "width": 342,
+      "height": 272,
+      "dimensionsMatch": true,
+      "totalPixels": 93024,
+      "changedPixels": 77,
+      "changedFraction": 0.0008277433780529756
+    },
+    {
+      "id": "f-prj-create-01-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-01-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-01-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-01-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 520
+      },
+      "actual": {
+        "width": 512,
+        "height": 520
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 519
+        },
+        "actual": {
+          "width": 512,
+          "height": 519
+        }
+      },
+      "width": 512,
+      "height": 520,
+      "dimensionsMatch": true,
+      "totalPixels": 266240,
+      "changedPixels": 6635,
+      "changedFraction": 0.024921123798076924
+    },
+    {
+      "id": "f-prj-create-02-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-02-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-02-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-02-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 332
+      },
+      "actual": {
+        "width": 512,
+        "height": 332
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 331
+        },
+        "actual": {
+          "width": 512,
+          "height": 331
+        }
+      },
+      "width": 512,
+      "height": 332,
+      "dimensionsMatch": true,
+      "totalPixels": 169984,
+      "changedPixels": 2146,
+      "changedFraction": 0.012624717620481929
+    },
+    {
+      "id": "f-prj-create-03-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-03-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-03-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-03-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 574
+      },
+      "actual": {
+        "width": 512,
+        "height": 574
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 573
+        },
+        "actual": {
+          "width": 512,
+          "height": 573
+        }
+      },
+      "width": 512,
+      "height": 574,
+      "dimensionsMatch": true,
+      "totalPixels": 293888,
+      "changedPixels": 5117,
+      "changedFraction": 0.01741139481707317
+    },
+    {
+      "id": "f-prj-create-04-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-04-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-04-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-04-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 334
+      },
+      "actual": {
+        "width": 512,
+        "height": 334
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 334
+        },
+        "actual": {
+          "width": 512,
+          "height": 334
+        }
+      },
+      "width": 512,
+      "height": 334,
+      "dimensionsMatch": true,
+      "totalPixels": 171008,
+      "changedPixels": 1147,
+      "changedFraction": 0.006707288547904191
+    },
+    {
+      "id": "f-prj-create-05-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-05-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-05-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-05-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 370
+      },
+      "actual": {
+        "width": 512,
+        "height": 370
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 370
+        },
+        "actual": {
+          "width": 512,
+          "height": 370
+        }
+      },
+      "width": 512,
+      "height": 370,
+      "dimensionsMatch": true,
+      "totalPixels": 189440,
+      "changedPixels": 1177,
+      "changedFraction": 0.006213048986486487
+    },
+    {
+      "id": "f-prj-create-06-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-06-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-06-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-06-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 368
+      },
+      "actual": {
+        "width": 512,
+        "height": 368
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 368
+        },
+        "actual": {
+          "width": 512,
+          "height": 368
+        }
+      },
+      "width": 512,
+      "height": 368,
+      "dimensionsMatch": true,
+      "totalPixels": 188416,
+      "changedPixels": 1275,
+      "changedFraction": 0.006766941236413043
+    },
+    {
+      "id": "f-prj-create-07-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-07-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-07-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-07-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 390
+      },
+      "actual": {
+        "width": 512,
+        "height": 390
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 390
+        },
+        "actual": {
+          "width": 512,
+          "height": 390
+        }
+      },
+      "width": 512,
+      "height": 390,
+      "dimensionsMatch": true,
+      "totalPixels": 199680,
+      "changedPixels": 1275,
+      "changedFraction": 0.006385216346153846
+    },
+    {
+      "id": "f-prj-create-08-light-1440-final",
+      "theme": "light",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-08-light-1440-final-draft.png",
+      "actualFile": "f-prj-create-08-light-1440-final-storybook.png",
+      "overlayFile": "f-prj-create-08-light-1440-final-overlay.png",
+      "reference": {
+        "width": 512,
+        "height": 272
+      },
+      "actual": {
+        "width": 512,
+        "height": 272
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 512,
+          "height": 272
+        },
+        "actual": {
+          "width": 512,
+          "height": 272
+        }
+      },
+      "width": 512,
+      "height": 272,
+      "dimensionsMatch": true,
+      "totalPixels": 139264,
+      "changedPixels": 232,
+      "changedFraction": 0.0016659007352941176
+    },
+    {
+      "id": "f-prj-create-01-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-01-light-390-final-draft.png",
+      "actualFile": "f-prj-create-01-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-01-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 538
+      },
+      "actual": {
+        "width": 342,
+        "height": 538
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 537
+        },
+        "actual": {
+          "width": 342,
+          "height": 537
+        }
+      },
+      "width": 342,
+      "height": 538,
+      "dimensionsMatch": true,
+      "totalPixels": 183996,
+      "changedPixels": 5054,
+      "changedFraction": 0.027467988434531184
+    },
+    {
+      "id": "f-prj-create-02-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-02-light-390-final-draft.png",
+      "actualFile": "f-prj-create-02-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-02-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 332
+      },
+      "actual": {
+        "width": 342,
+        "height": 332
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 331
+        },
+        "actual": {
+          "width": 342,
+          "height": 331
+        }
+      },
+      "width": 342,
+      "height": 332,
+      "dimensionsMatch": true,
+      "totalPixels": 113544,
+      "changedPixels": 1583,
+      "changedFraction": 0.013941731839639258
+    },
+    {
+      "id": "f-prj-create-03-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-03-light-390-final-draft.png",
+      "actualFile": "f-prj-create-03-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-03-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 592
+      },
+      "actual": {
+        "width": 342,
+        "height": 592
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 591
+        },
+        "actual": {
+          "width": 342,
+          "height": 591
+        }
+      },
+      "width": 342,
+      "height": 592,
+      "dimensionsMatch": true,
+      "totalPixels": 202464,
+      "changedPixels": 4223,
+      "changedFraction": 0.020858029081713293
+    },
+    {
+      "id": "f-prj-create-04-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-04-light-390-final-draft.png",
+      "actualFile": "f-prj-create-04-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-04-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 334
+      },
+      "actual": {
+        "width": 342,
+        "height": 334
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 334
+        },
+        "actual": {
+          "width": 342,
+          "height": 334
+        }
+      },
+      "width": 342,
+      "height": 334,
+      "dimensionsMatch": true,
+      "totalPixels": 114228,
+      "changedPixels": 1071,
+      "changedFraction": 0.009375984872360542
+    },
+    {
+      "id": "f-prj-create-05-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-05-light-390-final-draft.png",
+      "actualFile": "f-prj-create-05-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-05-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 370
+      },
+      "actual": {
+        "width": 342,
+        "height": 370
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 370
+        },
+        "actual": {
+          "width": 342,
+          "height": 370
+        }
+      },
+      "width": 342,
+      "height": 370,
+      "dimensionsMatch": true,
+      "totalPixels": 126540,
+      "changedPixels": 1100,
+      "changedFraction": 0.008692903429745534
+    },
+    {
+      "id": "f-prj-create-06-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-06-light-390-final-draft.png",
+      "actualFile": "f-prj-create-06-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-06-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 368
+      },
+      "actual": {
+        "width": 342,
+        "height": 368
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 368
+        },
+        "actual": {
+          "width": 342,
+          "height": 368
+        }
+      },
+      "width": 342,
+      "height": 368,
+      "dimensionsMatch": true,
+      "totalPixels": 125856,
+      "changedPixels": 1198,
+      "changedFraction": 0.009518815153826595
+    },
+    {
+      "id": "f-prj-create-07-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-07-light-390-final-draft.png",
+      "actualFile": "f-prj-create-07-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-07-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 434
+      },
+      "actual": {
+        "width": 342,
+        "height": 434
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 434
+        },
+        "actual": {
+          "width": 342,
+          "height": 434
+        }
+      },
+      "width": 342,
+      "height": 434,
+      "dimensionsMatch": true,
+      "totalPixels": 148428,
+      "changedPixels": 1223,
+      "changedFraction": 0.008239685234591856
+    },
+    {
+      "id": "f-prj-create-08-light-390-final",
+      "theme": "light",
+      "viewport": {
+        "width": 390,
+        "height": 900
+      },
+      "referenceFile": "f-prj-create-08-light-390-final-draft.png",
+      "actualFile": "f-prj-create-08-light-390-final-storybook.png",
+      "overlayFile": "f-prj-create-08-light-390-final-overlay.png",
+      "reference": {
+        "width": 342,
+        "height": 272
+      },
+      "actual": {
+        "width": 342,
+        "height": 272
+      },
+      "captureGeometry": {
+        "reference": {
+          "width": 342,
+          "height": 272
+        },
+        "actual": {
+          "width": 342,
+          "height": 272
+        }
+      },
+      "width": 342,
+      "height": 272,
+      "dimensionsMatch": true,
+      "totalPixels": 93024,
+      "changedPixels": 152,
+      "changedFraction": 0.0016339869281045752
+    }
+  ]
+}

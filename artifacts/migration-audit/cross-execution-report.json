@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-10-05T14:51:34.263Z",
-  "finishedAt": "2026-10-05T14:51:54.420Z",
+  "startedAt": "2026-10-05T15:54:58.332Z",
+  "finishedAt": "2026-10-05T15:55:19.858Z",
   "node": "v22.23.3",
   "status": "passed",
   "actualScenarios": 1,
@@ -182,7 +182,7 @@
         }
       ],
       "status": "passed",
-      "durationMs": 2099
+      "durationMs": 2391
     }
   ],
   "realBoundaries": [

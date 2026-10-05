@@ -1,0 +1,487 @@
+{
+  "capturedAt": "2026-10-05T15:50:31.749735+00:00",
+  "scope": "Running interactive task terminal tabs/tools/canvas; no project creation changes",
+  "authority": {
+    "draftId": "f-wb-live-01",
+    "url": "http://127.0.0.1:3001/gap/drafts/f-wb-live-01.html",
+    "portablePath": "docs/design-v2/gap/drafts/f-wb-live-01.html",
+    "componentSpec": "docs/design-v2/pilot/assets/components-v2.css:992"
+  },
+  "storyUrls": {
+    "composition": "http://localhost:6006/?path=/story/terminal-terminaltabbar--with-tools-and-canvas&globals=theme:dark",
+    "agentOnly": "http://localhost:6006/?path=/story/terminal-terminaltabbar--agent-only&globals=theme:dark",
+    "buttons": "http://localhost:6006/?path=/story/terminal-terminaltoolbar--default&globals=theme:dark",
+    "canvas": "http://localhost:6006/?path=/story/terminal-terminalpane--container-only&globals=theme:dark"
+  },
+  "matchedComparison": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "availableMainWidth": 1184,
+    "draft": "draft-dark-1440-full.png",
+    "storybook": "story-after-dark-1440-full.png",
+    "termbar": {
+      "draft": "draft-dark-1440-termbar.png",
+      "storybook": "story-after-dark-1440-termbar.png"
+    },
+    "canvas": {
+      "draft": "draft-dark-1440-canvas.png",
+      "storybook": "story-after-dark-1440-canvas.png"
+    },
+    "metrics": {
+      "draft": "draft-dark-1440-metrics.json",
+      "storybook": "story-after-dark-1440-metrics.json"
+    },
+    "checks": [
+      {
+        "component": "bar",
+        "property": "height",
+        "draft": 40,
+        "storybook": 40,
+        "matches": true
+      },
+      {
+        "component": "bar",
+        "property": "width",
+        "draft": 1184,
+        "storybook": 1184,
+        "matches": true
+      },
+      {
+        "component": "bar",
+        "property": "padding",
+        "draft": "0px 16px",
+        "storybook": "0px 16px",
+        "matches": true
+      },
+      {
+        "component": "bar",
+        "property": "gap",
+        "draft": "4px",
+        "storybook": "4px",
+        "matches": true
+      },
+      {
+        "component": "bar",
+        "property": "background",
+        "draft": "rgb(0, 0, 0)",
+        "storybook": "rgb(0, 0, 0)",
+        "matches": true
+      },
+      {
+        "component": "bar",
+        "property": "borderRadius",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "width",
+        "draft": 75.109375,
+        "storybook": 75.109375,
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "fontSize",
+        "draft": "14px",
+        "storybook": "14px",
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "fontWeight",
+        "draft": "500",
+        "storybook": "500",
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "padding",
+        "draft": "0px 8px",
+        "storybook": "0px 8px",
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "gap",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "tabs[0]",
+        "property": "color",
+        "draft": "rgb(237, 237, 237)",
+        "storybook": "rgb(237, 237, 237)",
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "width",
+        "draft": 73.4375,
+        "storybook": 73.4375,
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "fontSize",
+        "draft": "14px",
+        "storybook": "14px",
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "fontWeight",
+        "draft": "400",
+        "storybook": "400",
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "padding",
+        "draft": "0px 8px",
+        "storybook": "0px 8px",
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "gap",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "tabs[1]",
+        "property": "color",
+        "draft": "rgb(161, 161, 161)",
+        "storybook": "rgb(161, 161, 161)",
+        "matches": true
+      },
+      {
+        "component": "tools",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "tools",
+        "property": "width",
+        "draft": 133,
+        "storybook": 133,
+        "matches": true
+      },
+      {
+        "component": "tools",
+        "property": "gap",
+        "draft": "2px",
+        "storybook": "2px",
+        "matches": true
+      },
+      {
+        "component": "buttons[0]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[0]",
+        "property": "width",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[0]",
+        "property": "padding",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "buttons[0]",
+        "property": "borderRadius",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "buttons[0]",
+        "property": "color",
+        "draft": "rgb(161, 161, 161)",
+        "storybook": "rgb(161, 161, 161)",
+        "matches": true
+      },
+      {
+        "component": "buttons[1]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[1]",
+        "property": "width",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[1]",
+        "property": "padding",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "buttons[1]",
+        "property": "borderRadius",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "buttons[1]",
+        "property": "color",
+        "draft": "rgb(161, 161, 161)",
+        "storybook": "rgb(161, 161, 161)",
+        "matches": true
+      },
+      {
+        "component": "buttons[2]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[2]",
+        "property": "width",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[2]",
+        "property": "padding",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "buttons[2]",
+        "property": "borderRadius",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "buttons[2]",
+        "property": "color",
+        "draft": "rgb(161, 161, 161)",
+        "storybook": "rgb(161, 161, 161)",
+        "matches": true
+      },
+      {
+        "component": "buttons[3]",
+        "property": "height",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[3]",
+        "property": "width",
+        "draft": 28,
+        "storybook": 28,
+        "matches": true
+      },
+      {
+        "component": "buttons[3]",
+        "property": "padding",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "buttons[3]",
+        "property": "borderRadius",
+        "draft": "6px",
+        "storybook": "6px",
+        "matches": true
+      },
+      {
+        "component": "buttons[3]",
+        "property": "color",
+        "draft": "rgb(161, 161, 161)",
+        "storybook": "rgb(161, 161, 161)",
+        "matches": true
+      },
+      {
+        "component": "canvas",
+        "property": "width",
+        "draft": 1184,
+        "storybook": 1184,
+        "matches": true
+      },
+      {
+        "component": "canvas",
+        "property": "padding",
+        "draft": "12px 16px",
+        "storybook": "12px 16px",
+        "matches": true
+      },
+      {
+        "component": "canvas",
+        "property": "background",
+        "draft": "rgb(0, 0, 0)",
+        "storybook": "rgb(0, 0, 0)",
+        "matches": true
+      },
+      {
+        "component": "canvas",
+        "property": "borderRadius",
+        "draft": "0px",
+        "storybook": "0px",
+        "matches": true
+      },
+      {
+        "component": "tools",
+        "property": "right padding",
+        "draft": 16,
+        "storybook": 16,
+        "matches": true
+      }
+    ]
+  },
+  "beforeAfterComponentComparison": {
+    "viewport": {
+      "width": 1200,
+      "height": 873
+    },
+    "requestedTheme": "dark",
+    "actualThemeLimitation": "Before screenshots were captured before root fixed global Storybook theme propagation. The terminal bar and canvas themselves are black; surrounding preview was light. Keep this actual evidence, do not call it a pixel-identical deep-dark page before/after.",
+    "agentOnly": {
+      "before": "tabs-before.png",
+      "after": "tabs-after.png",
+      "beforeCrop": "story-before-dark-requested-1200-tabs-crop.png",
+      "afterCrop": "story-after-dark-1200-tabs-crop.png"
+    },
+    "buttons": {
+      "before": "toolbar-before.png",
+      "after": "toolbar-after.png",
+      "beforeCrop": "story-before-dark-requested-1200-toolbar-crop.png",
+      "afterCrop": "story-after-dark-1200-toolbar-crop.png"
+    },
+    "canvas": {
+      "before": "pane-before.png",
+      "after": "pane-after.png",
+      "beforeCrop": "story-before-dark-requested-1200-canvas-crop.png",
+      "afterCrop": "story-after-dark-1200-canvas-crop.png"
+    },
+    "draft": "draft-dark-1200-full.png",
+    "draftTermbar": "draft-dark-1200-termbar.png",
+    "draftCanvas": "draft-dark-1200-canvas.png",
+    "compositionAfter": "story-after-dark-1200-composition.png"
+  },
+  "productionBefore": {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "theme": "dark",
+    "source": "artifacts/design-shell-project-v2-v3-dark1440/f-wb-live-01-dark-1440-terminal-reconnecting.png",
+    "crop": "production-before-dark-1440-topstrip.png",
+    "cropRect": {
+      "x": 256,
+      "y": 106,
+      "width": 1184,
+      "height": 144
+    },
+    "notes": "Historical actual production fixture capture retained unchanged, showing blank menu row, old underline tabs, separate duplicated breadcrumb/tool row and framed canvas."
+  },
+  "limits": [
+    "Reference f-wb-live-01 has a 32px reconnect banner and demonstration Codex output. Connected component story intentionally has no reconnect strip and no simulated xterm text. Compare shared bar and canvas box metrics separately; no whole-page pixel-perfect or ANSI-output claim.",
+    "Canvas story decorator now supplies 320px height so the ref-only component is visible instead of its previous collapsed 20px preview. Production canvas sizing remains governed by the task layout.",
+    "Current-session callbacks/portal teardown are verified with actual containers and HTTP, scripting only the xterm engine and external socket boundary. Root separately runs the real cross-repository PTY scenario."
+  ],
+  "fixes": [
+    "Removed duplicate empty TaskActions menu strip from running interactive task content; shared header task menu retains image and stop actions.",
+    "Combined 14px rounded 28px Agent/session tabs and four 28px icon tools in one 40px terminal bar. New-terminal action is outside tablist.",
+    "Full-width black canvas, no old rounded frame or nested border; canvas internal padding 12px 16px.",
+    "Only active mounted session portals its copy/clear/font handlers into the shared tool host; switching preserves sessions, closing/unmounting disposes and remount attaches to the new host."
+  ],
+  "validation": {
+    "containerAcceptance": {
+      "report": "acceptance.json",
+      "cases": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "selectedStorybook": {
+      "report": "stories-final.json",
+      "files": 4,
+      "cases": 20,
+      "passed": 20,
+      "failed": 0
+    },
+    "static": {
+      "nodeVersion": 22,
+      "eslint": "passed; lint-final.log empty, command exit 0",
+      "typecheck": "passed; typecheck-final.log, command exit 0",
+      "diffCheck": "passed; scoped git diff --check exit 0"
+    }
+  },
+  "sourceHashes": {
+    "web/src/containers/sandbox/SandboxLifecycleContainer.tsx": "7f74cd0d574c1b0df93c5af5e992dd6775dc387997d1738820ad51523274a9ab",
+    "web/src/containers/sandbox/SandboxTerminalContainer.tsx": "ec4aabfd99d1822804b84ee23367452f216dd9d571c42734e4181c7cea4f705b",
+    "web/src/containers/terminal/TerminalContainer.tsx": "3e1e2831935ea3374620239e01aa0c9bb20b5510046b2159eab8036694447eb9",
+    "web/src/containers/terminal/TerminalMount.tsx": "26cc02a360bd6aca2d7bab86a3a9279602cd442992fe5697cf166ec1bdd02c23",
+    "web/src/containers/terminal/TerminalTabsContainer.tsx": "09decb407c9a0aaa7c86063142ec0304af667cd42becd282eb04b086db5d56e8",
+    "web/src/views/terminal/TerminalTabBar.view.tsx": "166c99c1752ba5c82a7a729f7890923b13f3f0bfcee771b032e2f8808df65fa8",
+    "web/src/views/terminal/TerminalToolbar.view.tsx": "750b3fe92c565593aea145aafa384baaf20da30516a4ed1094f5def85973b0cc",
+    "web/src/views/terminal/TerminalPane.view.tsx": "b3af0f591eccf05c02d93972d96d9336be08abba047d5df88728d82d71801b51",
+    "web/src/components/ui/terminal-frame.tsx": "a3972328542257db9afc71e8ba13e079324b5061b170bc85c287f592d9f0adc2",
+    "web/src/acceptance/task-terminal-chrome.test.tsx": "f3d97662b7363801ea759dfe5074d82414ad6811a047536bebe2e82e2b47f31d",
+    "web/src/views/terminal/__stories__/TerminalTabBar.view.stories.tsx": "b532257b7631b4496156c88c4850b2def34ad29f9ef01ac84f5337b29cc6956c",
+    "web/src/views/terminal/__stories__/TerminalToolbar.view.stories.tsx": "c43dbe1e33c2d74b7dce66450f64e62dbbfd41325eab1d1f5040dccaefb82167",
+    "web/src/views/terminal/__stories__/TerminalPane.view.stories.tsx": "6b3c17a34ee84b008ee4c24a773700d10eaeead592e6e01ba7c1ae81deb1d172",
+    "web/src/components/ui/__stories__/terminal-frame.stories.tsx": "aae99f8dba6034ede8cdb630b415315a0696b4e557ef5ad9328ed5c88ed0292c"
+  },
+  "review": {
+    "skill": "vercel:react-best-practices",
+    "results": [
+      "Views remain props-only; no socket or engine side effects added to view components.",
+      "Stable setState callback ref owns shared portal host; it is not a dependency of attach/socket effects.",
+      "Only active mounted session emits its toolbar Portal; session switch preserves terminal instances.",
+      "Portal unmount, user-terminal close and host remount are covered by actual container regression.",
+      "New-terminal action is a sibling of tablist, tabs use role=tab and close remains a separate accessible button.",
+      "Heavy xterm remains behind existing Next dynamic boundary; no eager engine import added."
+    ]
+  },
+  "comparisonPanels": {
+    "termbar": "terminal-termbar-draft-vs-storybook.png",
+    "topStrip": "terminal-topstrip-before-vs-after.png",
+    "reproduction": "swift artifacts/terminal-chrome-review/compose-comparison.swift",
+    "method": "ImageIO reads actual PNG captures; CoreGraphics draws both at original 1184px width without resizing; AppKit adds headings outside the captured pixels."
+  }
+}

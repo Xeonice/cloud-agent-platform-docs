@@ -1,0 +1,107 @@
+
+ RUN  v3.2.7 /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+
+ ❯ |acceptance| src/acceptance/task-terminal-chrome.test.tsx (1 test | 1 failed) 132ms
+   × WB/TRM/SBX · running task terminal chrome > the terminal tabs start the task content without a duplicate menu strip; the header still shows the locked image and stops the task 130ms
+     → expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <button
+  aria-expanded="false"
+  aria-haspopup="menu"
+  aria-label="任务菜单"
+  class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0"
+  data-state="closed"
+  id="radix-_r_o_"
+  type="button"
+>
+  <svg
+    aria-hidden="true"
+    class="lucide lucide-ellipsis size-4"
+    fill="none"
+    height="24"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      cx="12"
+      cy="12"
+      r="1"
+    />
+    <circle
+      cx="19"
+      cy="12"
+      r="1"
+    />
+    <circle
+      cx="5"
+      cy="12"
+      r="1"
+    />
+  </svg>
+</button> instead
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |acceptance| src/acceptance/task-terminal-chrome.test.tsx > WB/TRM/SBX · running task terminal chrome > the terminal tabs start the task content without a duplicate menu strip; the header still shows the locked image and stops the task
+Error: expect(element).not.toBeInTheDocument()
+
+expected document not to contain element, found <button
+  aria-expanded="false"
+  aria-haspopup="menu"
+  aria-label="任务菜单"
+  class="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0"
+  data-state="closed"
+  id="radix-_r_o_"
+  type="button"
+>
+  <svg
+    aria-hidden="true"
+    class="lucide lucide-ellipsis size-4"
+    fill="none"
+    height="24"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="2"
+    viewBox="0 0 24 24"
+    width="24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      cx="12"
+      cy="12"
+      r="1"
+    />
+    <circle
+      cx="19"
+      cy="12"
+      r="1"
+    />
+    <circle
+      cx="5"
+      cy="12"
+      r="1"
+    />
+  </svg>
+</button> instead
+ ❯ src/acceptance/task-terminal-chrome.test.tsx:48:70
+     46|     expect(within(tabs).getByRole('tab', { name: 'Agent' })).toBeInThe…
+     47|     const main = screen.getByRole('main');
+     48|     expect(within(main).queryByRole('button', { name: '任务菜单' })).not.t…
+       |                                                                      ^
+     49|     expect(tabs.parentElement?.parentElement).toBe(main);
+     50| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  23:16:02
+   Duration  1.45s (transform 395ms, setup 220ms, collect 600ms, tests 132ms, environment 260ms, prepare 38ms)
+
