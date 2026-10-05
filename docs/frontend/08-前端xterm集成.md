@@ -123,7 +123,7 @@ CSS 随 `terminal` chunk 一起动态注入，**不放全局 layout**——否�
 
 `services/ws/ptySocket.ts` 封装职责：
 
-- **WebSocket 构造函数通过参数注入**（默认全局 `WebSocket`）——为 bun test 提供 mock 注入点，避免依赖 `mock.module`（其跨文件泄漏问题见文档 12 §3.1.1）
+- **WebSocket 构造函数通过参数注入**（默认全局 `WebSocket`）——为 新版 Vitest 验收 提供 mock 注入点，避免依赖 `mock.module`（其跨文件泄漏问题见文档 12 §3.1.1）
 - 连接建立 / 关闭 / 错误分类
 - **指数退避 + jitter 重连**（上限次数 + 最大间隔；xterm 官方无内置重连，应用层实现是业界共识）
 - 断线时终端内 toast（sonner）提示"连接已断开，正在重连…"

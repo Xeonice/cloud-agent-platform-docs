@@ -1,0 +1,2186 @@
+[
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-dark-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-dark-1440.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-dark-1440.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-dark-1440.png"
+      }
+    ]
+  },
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-dark-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-dark-1024.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-dark-1024.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-dark-1024.png"
+      }
+    ]
+  },
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-dark-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-dark-390.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-dark-390.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-dark-390.png"
+      }
+    ]
+  },
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-light-1440.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-light-1440.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-light-1440.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-light-1440.png"
+      }
+    ]
+  },
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-light-1024.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-light-1024.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-light-1024.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-light-1024.png"
+      }
+    ]
+  },
+  {
+    "draftId": "f-auth-panel-01",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-01-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-02-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 10
+  },
+  {
+    "draftId": "f-auth-panel-03",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-03-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-04",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-04-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-05",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-05-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-auth-panel-06",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-06-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 11
+  },
+  {
+    "draftId": "f-auth-panel-07",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-07-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 13
+  },
+  {
+    "draftId": "f-auth-panel-08",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-08-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-auth-panel-09",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-auth-panel-09-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-01",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-01-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-02-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-03",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-03-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-git-04",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-04-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-git-05",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-git-05-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-mode-01",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-mode-01-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-01",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-01-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-02-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 12
+  },
+  {
+    "draftId": "f-crd-page-03",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-03-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-04",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-04-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 8
+  },
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-page-05-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 0
+    },
+    "requestCount": 17
+  },
+  {
+    "draftId": "f-crd-revoke-01",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-01-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-02-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-crd-revoke-03",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-crd-revoke-03-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 9
+  },
+  {
+    "draftId": "f-acc-unlock-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-02-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 1
+  },
+  {
+    "draftId": "f-acc-unlock-03",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "screenshot": "f-acc-unlock-03-light-390.png",
+    "metrics": {
+      "horizontalOverflow": false,
+      "overflowingElements": [],
+      "font": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "dialogCount": 1
+    },
+    "requestCount": 3,
+    "variantScreenshots": [
+      {
+        "state": "busy",
+        "screenshot": "f-acc-unlock-03-busy-light-390.png"
+      },
+      {
+        "state": "invalid",
+        "screenshot": "f-acc-unlock-03-invalid-light-390.png"
+      },
+      {
+        "state": "locked",
+        "screenshot": "f-acc-unlock-03-locked-light-390.png"
+      }
+    ]
+  }
+]

@@ -1,0 +1,155 @@
+<!doctype html>
+<!--
+  id: f-crd-page-01
+  页面: 21-3 凭证管理（/settings/credentials）· 首次加载
+  状态: 首次进入凭证页（或直接打开 #credentials），两份列表都还没返回：Agent 分区两张骨架卡、Git 分区一张骨架卡，与真卡同结构同高；分区标题、说明、搜索框照常显示（搜索框加载中照常可输入，现状如此）；每个分区一句读屏专用「正在读取…」（role="status"），骨架 aria-hidden、列表容器 aria-busy
+  对应 v1 稿件: g4-14（design-drafts/g4-credentials/g4-14-loading.html；预览 design-drafts/previews/g4-14.dark.png / g4-14.light.png）
+  体现的 v2 要点:
+    - 外壳照 P3（pilot/p3-credentials.html）逐字抄：全高侧栏 256（「凭证管理」当前页）+ 只盖主区的顶栏 56（h1 可见 16/600）+ 表单页内容 768 左对齐；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」
+    - 骨架（foundation §3.14、T-7）：直接用真卡的容器（.card__header 56 / .option-row 64 / .card__body--split + .card__footer），只把文字换成 .skeleton 条——名称条、厂商条、徽标胶囊位 56×24、单选圆 16、行尾按钮位 32 高；Git 卡左四行键值条、右上三个按钮位、页脚条说明条 + 按钮位
+    - 骨架底 --skeleton（亮 gray-alpha-200 / 暗 gray-100），静态稿画脉冲中间帧 .7（共享规则 [data-draft-id] .skeleton）；用普通浏览器打开照常脉冲 1.5s
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 骨架几何跟着 P3 的卡片换皮走：v1 两行卡头（名称 + 下一行厂商）+ 缩进按钮 → 单行卡头 + 行尾按钮位；Git 骨架从「四行 + 底部三个按钮」→ 键值两列 + 右上按钮位 + 页脚条。高度仍按真卡（Agent 卡 184，真卡 184–200；Git 卡 208 与真卡相同）
+    2. 骨架底色与节奏：bg-muted 2s → --skeleton 1.5s（P6b 同口径）
+    3. 底层外壳：设置区独立外壳（224 宽设置菜单 +「← 返回工作台」）→ P3 方案 A 外壳（Q-DS-24 A，逐条差异见 pilot/p3-credentials.html 头注释第 1–23 条，这里不重复）
+    4. 不变：读屏两句「正在读取 Agent 列表…」「正在读取 Git 凭证…」、aria-busy、骨架 aria-hidden 照 v1
+  示例数据来源: 无业务数据（骨架）；卡片数 2 + 1 只是占位（v1 同），不代表这台机器上的 Agent 数
+  流程: F-CRD-PAGE（REQ-CRD-030）
+  口径依据: T-7 / UX-DS-304（首次加载用骨架、高度接近真实；刷新保留旧数据不回骨架）；P21-3 L53（加载中 → 骨架屏）；plan F-WB-SHELL 路由规则（直接打开 #credentials 先出本页骨架，不出工作台骨架）；实现 web RuntimeCredentialsSection.view.tsx:83-84、GitCredentialsSection.view.tsx:101-102（现状各一块 h-24 脉冲灰块，数据一到 Agent 分区跳高）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-crd-page-01" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-crd-page-01 凭证页 · 加载中（骨架）（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3b-crd.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">凭证管理</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content content--form">
+          <div class="content__inner sections">
+
+            <section class="section" aria-labelledby="sec-agent">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-agent">Agent 帐号（这台机器上通用）</h2>
+                  <p class="section-head__desc">帐号登录 / API Key 二选一，这台机器上的所有任务都用它；两样可以同时留着，切换只改现在用哪个。</p>
+                  <p class="section-head__desc">凭证加密存在这台机器上，平台不会上传，也读不回明文。</p>
+                  <label class="input-group section-head__search"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" name="runtime-search" placeholder="搜索 Agent 名字或帐号尾号…" aria-label="搜索 Agent"></label>
+                </div>
+              </div>
+
+              <div class="stack stack--16" aria-busy="true">
+                <p class="u-sr-only" role="status">正在读取 Agent 列表…</p>
+                <div class="card card--lg" aria-hidden="true">
+                  <div class="card__header">
+                    <div class="crd-sk-head"><span class="skeleton skeleton--text" style="width: 48px"></span><span class="skeleton skeleton--text" style="width: 44px"></span></div>
+                    <span class="skeleton skeleton--pill" style="width: 56px; height: 24px"></span>
+                  </div>
+                  <div class="option-list">
+                    <div class="option-row">
+                      <div class="option-row__main"><span class="crd-sk-choice"><span class="skeleton skeleton--circle" style="width: 16px; height: 16px"></span><span class="skeleton skeleton--text" style="width: 56px"></span></span></div>
+                      <span class="skeleton" style="width: 84px; height: 32px"></span>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main"><span class="crd-sk-choice"><span class="skeleton skeleton--circle" style="width: 16px; height: 16px"></span><span class="skeleton skeleton--text" style="width: 52px"></span></span></div>
+                      <span class="skeleton" style="width: 100px; height: 32px"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="card card--lg" aria-hidden="true">
+                  <div class="card__header">
+                    <div class="crd-sk-head"><span class="skeleton skeleton--text" style="width: 84px"></span><span class="skeleton skeleton--text" style="width: 60px"></span></div>
+                    <span class="skeleton skeleton--pill" style="width: 56px; height: 24px"></span>
+                  </div>
+                  <div class="option-list">
+                    <div class="option-row">
+                      <div class="option-row__main"><span class="crd-sk-choice"><span class="skeleton skeleton--circle" style="width: 16px; height: 16px"></span><span class="skeleton skeleton--text" style="width: 56px"></span></span></div>
+                      <span class="skeleton" style="width: 84px; height: 32px"></span>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main"><span class="crd-sk-choice"><span class="skeleton skeleton--circle" style="width: 16px; height: 16px"></span><span class="skeleton skeleton--text" style="width: 52px"></span></span></div>
+                      <span class="skeleton" style="width: 100px; height: 32px"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section" aria-labelledby="sec-git">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-git">Git 凭证（私有仓库访问）</h2>
+                  <p class="section-head__desc">GitHub / GitLab SaaS → HTTPS Token；公司自建 Git（SSH 接入）→ SSH 密钥。</p>
+                  <p class="hint"><span class="icon i-info" aria-hidden="true"></span>Git 凭证用于克隆私有仓库，与 Agent 凭证无关。</p>
+                </div>
+              </div>
+
+              <div class="stack stack--16" aria-busy="true">
+                <p class="u-sr-only" role="status">正在读取 Git 凭证…</p>
+                <div class="card card--lg" aria-hidden="true">
+                  <div class="card__body card__body--split">
+                    <div class="crd-sk-kv">
+                      <span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 40px"></span></span><span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 96px"></span></span>
+                      <span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 72px"></span></span><span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 72px"></span></span>
+                      <span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 80px"></span></span><span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 76px"></span></span>
+                      <span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 64px"></span></span><span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 52px"></span></span>
+                    </div>
+                    <div class="crd-sk-actions"><span class="skeleton" style="width: 56px; height: 32px"></span><span class="skeleton" style="width: 84px; height: 32px"></span><span class="skeleton" style="width: 56px; height: 32px"></span></div>
+                  </div>
+                  <div class="card__footer">
+                    <span class="crd-sk-line"><span class="skeleton skeleton--text" style="width: 104px"></span></span>
+                    <div class="card__footer-end"><span class="skeleton" style="width: 108px; height: 32px"></span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <footer class="page-notes">
+              <p>凭证加密保存在这台机器上，不会上传；平台也读不回明文。</p>
+              <p>帐号登录在你自己的浏览器里完成，平台不接触你的密码。</p>
+              <p>SSH 私钥与 Token 存进去之后就不再显示，只留指纹 / 尾号用来认人。</p>
+            </footer>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

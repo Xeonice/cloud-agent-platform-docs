@@ -1,0 +1,3259 @@
+[
+  {
+    "frame": "f-dep-init-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "checking-init-status",
+        "screenshot": "f-dep-init-01-dark-1440-checking-init-status.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status"
+      ],
+      "writes": [],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "rechecking-with-history",
+        "screenshot": "f-dep-init-02-dark-1440-rechecking-with-history.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "online-result",
+        "screenshot": "f-dep-init-03-dark-1440-online-result.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers"
+      ],
+      "writes": [],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "partial-timeout",
+        "screenshot": "f-dep-init-04-dark-1440-partial-timeout.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers"
+      ],
+      "writes": [],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "offline-awaiting-acknowledgement",
+        "screenshot": "f-dep-init-05-dark-1440-offline-awaiting-acknowledgement.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers"
+      ],
+      "writes": [],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "proxy-save-timeout",
+        "screenshot": "f-dep-init-06-dark-1440-proxy-save-timeout.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers"
+      ],
+      "writes": [
+        {
+          "method": "PUT",
+          "path": "/api/system/settings",
+          "input": {
+            "proxyConfig": {
+              "httpProxy": "http://127.0.0.1:7890"
+            }
+          }
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "preset-checking",
+        "screenshot": "f-dep-init-07-dark-1440-preset-checking.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-08",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "preset-registry-failed",
+        "screenshot": "f-dep-init-08-dark-1440-preset-registry-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-09",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "preset-preparing-progress",
+        "screenshot": "f-dep-init-09-dark-1440-preset-preparing-progress.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-10",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "preset-preparing-failed",
+        "screenshot": "f-dep-init-10-dark-1440-preset-preparing-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-11",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "subscription-unconfigured-panel",
+        "screenshot": "f-dep-init-11-dark-1440-subscription-unconfigured-panel.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-12",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "subscription-one-active-one-expired",
+        "screenshot": "f-dep-init-12-dark-1440-subscription-one-active-one-expired.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-13",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "resource-low-but-can-finish",
+        "screenshot": "f-dep-init-13-dark-1440-resource-low-but-can-finish.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes",
+        "/api/system/resources"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-dep-init-14",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "initialization-write-failed",
+        "screenshot": "f-dep-init-14-dark-1440-initialization-write-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/system/settings",
+        "/api/providers",
+        "/api/runtimes",
+        "/api/system/resources"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        },
+        {
+          "method": "POST",
+          "path": "/api/system/init",
+          "input": {}
+        }
+      ],
+      "socketNamespaces": []
+    }
+  },
+  {
+    "frame": "f-lch-form-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "agent-unselected",
+        "screenshot": "f-lch-form-01-dark-1440-agent-unselected.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "ready-to-launch",
+        "screenshot": "f-lch-form-02-dark-1440-ready-to-launch.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "prompt-too-long",
+        "screenshot": "f-lch-form-03-dark-1440-prompt-too-long.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "runtime-provider-image-loading",
+        "screenshot": "f-lch-form-04-dark-1440-runtime-provider-image-loading.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "runtime-provider-image-errors",
+        "screenshot": "f-lch-form-05-dark-1440-runtime-provider-image-errors.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "resource-exhausted-real-capacity",
+        "screenshot": "f-lch-form-06-dark-1440-resource-exhausted-real-capacity.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/system/resources"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/sandboxes",
+          "input": {
+            "projectId": "p-web",
+            "runtime": "codex",
+            "initialPrompt": "修一下首页加载慢\n续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "branch-not-found-no-side-effects",
+        "screenshot": "f-lch-form-07-dark-1440-branch-not-found-no-side-effects.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/sandboxes",
+          "input": {
+            "projectId": "p-web",
+            "runtime": "codex",
+            "initialPrompt": "修一下首页加载慢\n续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续",
+            "branch": "feat/login-refresh"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-08",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "provider-without-terminal",
+        "screenshot": "f-lch-form-08-dark-1440-provider-without-terminal.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-09",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "deep-link-reloaded",
+        "screenshot": "f-lch-form-09-dark-1440-deep-link-reloaded.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/images",
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-form-10",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "image-options-invalid-disabled",
+        "screenshot": "f-lch-form-10-dark-1440-image-options-invalid-disabled.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "mixed-task-statuses-and-failure",
+        "screenshot": "f-lch-startup-01-dark-1440-mixed-task-statuses-and-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "submission-pending-dialog-locked",
+        "screenshot": "f-lch-startup-02-dark-1440-submission-pending-dialog-locked.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/sandboxes",
+          "input": {
+            "projectId": "p-web",
+            "runtime": "codex",
+            "initialPrompt": "修一下首页加载慢\n续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "creating-image-progress",
+        "screenshot": "f-lch-startup-03-dark-1440-creating-image-progress.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-created",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-created",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/system/resources"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "first-use-image-starting",
+        "screenshot": "f-lch-startup-04-dark-1440-first-use-image-starting.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-created",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-created",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/system/resources"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "startup-stuck-with-actions",
+        "screenshot": "f-lch-startup-05-dark-1440-startup-stuck-with-actions.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-created",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-created",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/system/resources"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-lch-startup-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "startup-cancel-confirmation",
+        "screenshot": "f-lch-startup-06-dark-1440-startup-cancel-confirmation.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-created",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-created",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/system/resources",
+        "/api/sandboxes/t-created"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "selected-project-clone-progress",
+        "screenshot": "f-prj-clone-01-dark-1440-selected-project-clone-progress.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "selected-project-slow-clone",
+        "screenshot": "f-prj-clone-02-dark-1440-selected-project-slow-clone.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/system/resources"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "cloning-project-menu",
+        "screenshot": "f-prj-clone-03-dark-1440-cloning-project-menu.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "failed-project-menu",
+        "screenshot": "f-prj-clone-04-dark-1440-failed-project-menu.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "clone-permission-failed",
+        "screenshot": "f-prj-clone-05-dark-1440-clone-permission-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "clone-interrupted-project-preserved",
+        "screenshot": "f-prj-clone-06-dark-1440-clone-interrupted-project-preserved.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects/p-infra/cancel-clone"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-clone-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-clone-07-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByText('「acme-api」下还没有任务', { exact: true }) to be visible\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/projects",
+        "/api/providers",
+        "/api/images",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects/p-api/convert-to-empty"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "create-git-required-fields",
+        "screenshot": "f-prj-create-01-dark-1440-create-git-required-fields.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "create-empty-fields",
+        "screenshot": "f-prj-create-02-dark-1440-create-empty-fields.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      },
+      {
+        "state": "empty-project-ready-immediately",
+        "screenshot": "f-prj-create-02-dark-1440-empty-project-ready-immediately.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "empty"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "project-name-collision-inputs-kept",
+        "screenshot": "f-prj-create-03-dark-1440-project-name-collision-inputs-kept.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "acme-web",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "new-project-clone-progress",
+        "screenshot": "f-prj-create-04-dark-1440-new-project-clone-progress.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "new-project-slow-clone",
+        "screenshot": "f-prj-create-05-dark-1440-new-project-slow-clone.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects",
+        "/api/system/resources"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "new-project-clone-permission-failure",
+        "screenshot": "f-prj-create-06-dark-1440-new-project-clone-permission-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "new-project-clone-not-found",
+        "screenshot": "f-prj-create-07-dark-1440-new-project-clone-not-found.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-create-08",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "new-project-clone-complete",
+        "screenshot": "f-prj-create-08-dark-1440-new-project-clone-complete.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-wait",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-wait",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects",
+        "/api/projects",
+        "/api/projects/p-created/branches"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects",
+          "input": {
+            "name": "infra-scripts",
+            "sourceType": "git",
+            "repoUrl": "https://github.com/acme/web.git"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/terminal"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-01-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-02-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-web/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-infra/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-infra/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-04-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-detail-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "project-detail-readonly",
+        "screenshot": "f-prj-detail-01-dark-1440-project-detail-readonly.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-info-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "git-project-info-focused",
+        "screenshot": "f-prj-info-01-dark-1440-git-project-info-focused.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-info-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "empty-project-info-readonly",
+        "screenshot": "f-prj-info-02-dark-1440-empty-project-info-readonly.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-info-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-info-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '正在拉取…', exact: true }).first() to be visible\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects/p-web/sync"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-info-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "project-sync-permission-failed",
+        "screenshot": "f-prj-info-04-dark-1440-project-sync-permission-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects/p-web/sync"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-info-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "project-sync-success",
+        "screenshot": "f-prj-info-05-dark-1440-project-sync-success.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/projects/p-web/sync"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-retained-01-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('group-menu-retained')\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-retained-02-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('group-menu-retained')\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-retained-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('group-menu-retained')\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-retained-04-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByTestId('group-menu-retained')\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-retained-05-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.selectOption: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByLabel('范围')\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-example/automations",
+        "/api/projects/p-web/automations",
+        "/api/projects/p-docs/automations",
+        "/api/retained-volumes",
+        "/api/retained-volumes",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-destroy-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-sbx-destroy-01-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Error: strict mode violation: getByRole('button', { name: '任务菜单', exact: true }) resolved to 11 elements:\n    1) <button type=\"button\" id=\"radix-_r_i_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_i_')\n    2) <button type=\"button\" id=\"radix-_r_k_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_k_')\n    3) <button type=\"button\" id=\"radix-_r_m_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_m_')\n    4) <button type=\"button\" id=\"radix-_r_o_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_o_')\n    5) <button type=\"button\" id=\"radix-_r_q_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_q_')\n    6) <button type=\"button\" id=\"radix-_r_s_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_s_')\n    7) <button type=\"button\" id=\"radix-_r_u_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_u_')\n    8) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_12_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_12_')\n    9) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_14_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_14_')\n    10) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_16_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_16_')\n    ...\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '任务菜单', exact: true })\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-destroy-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "destroy-provider-failed-idempotent-retry",
+        "screenshot": "f-sbx-destroy-02-dark-1440-destroy-provider-failed-idempotent-retry.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-destroy-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-sbx-destroy-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Error: strict mode violation: getByRole('button', { name: '任务菜单', exact: true }) resolved to 11 elements:\n    1) <button type=\"button\" id=\"radix-_r_g_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_g_')\n    2) <button type=\"button\" id=\"radix-_r_i_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_i_')\n    3) <button type=\"button\" id=\"radix-_r_k_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_k_')\n    4) <button type=\"button\" id=\"radix-_r_o_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_o_')\n    5) <button type=\"button\" id=\"radix-_r_q_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_q_')\n    6) <button type=\"button\" id=\"radix-_r_s_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_s_')\n    7) <button type=\"button\" id=\"radix-_r_u_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_u_')\n    8) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_10_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_10_')\n    9) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_12_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_12_')\n    10) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_14_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_14_')\n    ...\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '任务菜单', exact: true })\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-running-readonly-tools",
+        "screenshot": "f-sbx-headless-01-dark-1440-headless-running-readonly-tools.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-stream-reconnecting",
+        "screenshot": "f-sbx-headless-02-dark-1440-headless-stream-reconnecting.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-stream-exhausted",
+        "screenshot": "f-sbx-headless-03-dark-1440-headless-stream-exhausted.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/system/resources",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless",
+        "/api/system/resources"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/tasks",
+        "/tasks",
+        "/events",
+        "/tasks",
+        "/tasks",
+        "/tasks",
+        "/events",
+        "/tasks",
+        "/tasks",
+        "/tasks",
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-failed-artifacts",
+        "screenshot": "f-sbx-headless-04-dark-1440-headless-failed-artifacts.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images",
+        "/api/sandboxes/t-headless/tasks"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-cancel-inline-confirm",
+        "screenshot": "f-sbx-headless-05-dark-1440-headless-cancel-inline-confirm.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      },
+      {
+        "state": "headless-cancel-pending",
+        "screenshot": "f-sbx-headless-05-dark-1440-headless-cancel-pending.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/sandboxes/t-headless/tasks/agent-run/cancel"
+        }
+      ],
+      "socketNamespaces": [
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-headless-06",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "headless-resume-prompt",
+        "screenshot": "f-sbx-headless-06-dark-1440-headless-resume-prompt.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      },
+      {
+        "state": "headless-new-session-choice",
+        "screenshot": "f-sbx-headless-06-dark-1440-headless-new-session-choice.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-headless",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-headless",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/sandboxes/t-headless/tasks",
+        "/api/images",
+        "/api/sandboxes/t-headless/tasks"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events",
+        "/tasks"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-relaunch-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "image-failure-copy-diagnostics",
+        "screenshot": "f-sbx-relaunch-01-dark-1440-image-failure-copy-diagnostics.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-relaunch-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "timeout-outcome",
+        "screenshot": "f-sbx-relaunch-02-dark-1440-timeout-outcome.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-timeout",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-timeout",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-relaunch-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "relaunch-prefill",
+        "screenshot": "f-sbx-relaunch-03-dark-1440-relaunch-prefill.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-relaunch-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "image-source-navigation",
+        "screenshot": "f-sbx-relaunch-04-dark-1440-image-source-navigation.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/automations/attention"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/system/diagnose"
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-stopstart-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-sbx-stopstart-01-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "locator.click: Error: strict mode violation: getByRole('button', { name: '任务菜单', exact: true }) resolved to 12 elements:\n    1) <button type=\"button\" id=\"radix-_r_i_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_i_')\n    2) <button type=\"button\" id=\"radix-_r_k_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_k_')\n    3) <button type=\"button\" id=\"radix-_r_m_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_m_')\n    4) <button type=\"button\" id=\"radix-_r_o_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_o_')\n    5) <button type=\"button\" id=\"radix-_r_q_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_q_')\n    6) <button type=\"button\" id=\"radix-_r_s_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_s_')\n    7) <button type=\"button\" id=\"radix-_r_u_\" aria-label=\"任务菜单\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_u_')\n    8) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_12_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_12_')\n    9) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_14_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_14_')\n    10) <button type=\"button\" aria-label=\"任务菜单\" id=\"radix-_r_16_\" data-state=\"closed\" aria-haspopup=\"menu\" aria-expanded=\"false\" class=\"inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover:bg-muted size-7 shrink-0\">…</button> aka locator('#radix-_r_16_')\n    ...\n\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '任务菜单', exact: true })\u001b[22m\n",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-running",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-running",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-stopstart-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "stopped-task-outcome",
+        "screenshot": "f-sbx-stopstart-02-dark-1440-stopped-task-outcome.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  }
+]

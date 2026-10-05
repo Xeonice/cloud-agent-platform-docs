@@ -1,0 +1,73 @@
+[
+  {
+    "draftId": "f-crd-page-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "message": "TimeoutError: locator.click: Timeout 12000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: '配置 Git 凭证', exact: true })\u001b[22m\n",
+    "screenshot": "f-crd-page-05-dark-1440-failure.png",
+    "errors": [],
+    "requests": [
+      {
+        "path": "/api/system/init-status",
+        "method": "GET"
+      },
+      {
+        "path": "/api/automations/attention",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/resources",
+        "method": "GET"
+      },
+      {
+        "path": "/api/runtimes",
+        "method": "GET"
+      },
+      {
+        "path": "/api/credentials",
+        "method": "GET"
+      },
+      {
+        "path": "/api/projects",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sandboxes",
+        "method": "GET"
+      },
+      {
+        "path": "/api/health",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/init-status",
+        "method": "GET"
+      },
+      {
+        "path": "/api/automations/attention",
+        "method": "GET"
+      },
+      {
+        "path": "/api/system/resources",
+        "method": "GET"
+      },
+      {
+        "path": "/api/runtimes",
+        "method": "GET"
+      },
+      {
+        "path": "/api/projects",
+        "method": "GET"
+      },
+      {
+        "path": "/api/sandboxes",
+        "method": "GET"
+      },
+      {
+        "path": "/api/health",
+        "method": "GET"
+      }
+    ]
+  }
+]

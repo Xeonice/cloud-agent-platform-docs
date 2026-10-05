@@ -1,0 +1,73 @@
+<!doctype html>
+<!--
+  id: f-dep-init-12
+  页面: 21-8 部署与初始化 · 初始化向导 · 第 4 步 模型帐号
+  状态: Codex 已配置（行尾「已配置」绿勾，打码帐号 a***@example.com，没有动作）；Claude Code 凭证已过期（行尾「凭证已过期」琥珀三角 + b***@example.com + [重新授权]）；判据是「至少一个可用」，所以没有拦截说明，页脚 [上一步] [下一步]
+  对应 v1 稿件: g8-12（design-drafts/g8-init-access/g8-12-step4-ready.html；预览 design-drafts/previews/g8-12.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳 .wiz、步骤条 .wiz-steps、检查行 .dep-checks 同 f-dep-init-02（l5c-dep.css §2–§4；简报 §5.5）
+    - 状态徽标与动作列同 f-dep-init-11；已配置的行没有下一步、不给动作（动作列留空位，徽标仍对成一列）
+    - W4 评审修正（notes/consistency.md §8）：向导根 .wiz 由 <div> 改成 <main>：向导是这时页面上唯一的内容，品牌行落进主区地标（axe region；原型 #proto-wiz 加 role="main" 是同一处理），对话框仍是 role="dialog" aria-modal，版式不变（评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    W1–W8 同 f-dep-init-02 头注释（外壳、品牌行、步骤条、卡头步骤名、页脚条、「系统状态」路径、检查行、颜色），这里不重复。
+    1. 状态：行首图标 +「已配置」/「凭证已过期」文字 → 行尾徽标（badge--ok「已配置」、badge--warn「凭证已过期」），打码帐号跟在名称后面（14 次要灰，前面的「·」去掉）。需看稿（同 11 第 1 条）。
+    2. [重新授权] primary sm → secondary 28（同 11 第 2 条）。
+    3. 卡内开头一句去掉与卡头重复的前半句（同 11 第 5 条）。
+  示例数据来源: v1 g8-12 同值（打码帐号按约定 example.com）；首次启动时 Claude Code「凭证已过期」只在原型场景「凭证：Claude Code 帐号登录已过期」里出现（crd-a 场景面板同名项），见 notes/dep.md §5
+  流程: F-DEP-INIT（REQ-DEP-013）
+  口径依据: P21-8 L57-62（判据「至少一个 Agent 可用」）；实现 web/src/lib/system/subscriptionReadiness.ts:45-48（active / expiring 都算可用、expired 单列）、web/src/views/init/SubscriptionSetup.view.tsx:19-34（三态图标与文字）、:104-121（已配置不给动作；过期给 [重新授权]）、web/src/hooks/system/useInitWizard.ts:481-484（步骤条的「达成」用同一个判据）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-12">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-12 第 4 步 · 一个可用一个过期</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="wiz">
+    <div class="wiz__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <!-- 向导本体：模态对话框（BlockingDialog）——没有关闭按钮、不接 Esc、点外面不关；外壳与工作台根本不挂（AppBootGate 只渲染向导） -->
+    <section class="wiz__dialog" role="dialog" aria-modal="true" aria-labelledby="wiz-title" aria-describedby="wiz-desc" data-testid="init-wizard">
+      <header class="wiz__head">
+        <div class="wiz__head-main">
+          <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+        </div>
+        <p class="wiz__count">第 <b>4</b> / 5 步</p>
+      </header>
+        <ol class="wiz-steps" aria-label="初始化步骤" data-testid="init-wizard-steps">
+          <li class="wiz-steps__item" data-testid="init-step-connectivity" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>联网检查<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-proxy"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">代理配置（可跳过）</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-preset-image" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>沙箱镜像<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-subscription" data-state="current" aria-current="step"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">模型帐号</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-resource"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">本机资源</span></li>
+        </ol>
+      <div class="wiz__card">
+        <div class="wiz__body">
+          <div class="wiz__step-head"><h2 class="wiz__step-title">模型帐号</h2><p class="wiz__step-desc">Agent 用你自己的模型帐号跑。这一步排在最后一个准备项，是因为它是整个向导里唯一需要你离开本页去别处操作的一步 —— 而设备码只有 15 分钟。</p></div>
+          <section class="wiz__section" aria-label="模型帐号" data-testid="subscription-setup" data-ready="true">
+            <p class="dep-msg dep-msg--muted"><span><strong>配好任意一个就能开始</strong> —— 不用全部配。</span></p>
+            <ul class="list check-list dep-checks">
+            <li class="list__row" data-testid="subscription-runtime-codex" data-state="ready">
+              <div class="check-row__head"><span class="check-row__title">Codex</span><span class="dep-value">a***@example.com</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>已配置</span></span><span class="dep-row-action"></span></div>
+            </li>
+            <li class="list__row" data-testid="subscription-runtime-claude-code" data-state="expired">
+              <div class="check-row__head"><span class="check-row__title">Claude Code</span><span class="dep-value">b***@example.com</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>凭证已过期</span></span><span class="dep-row-action"><button class="btn btn--secondary btn--28" type="button" aria-expanded="false" data-testid="subscription-configure-claude-code">重新授权</button></span></div>
+            </li>
+            </ul>
+          </section>
+        </div>
+        <footer class="wiz__footer">
+          <div class="wiz__actions"><button class="btn btn--secondary" type="button">上一步</button><button class="btn btn--primary" type="button">下一步</button></div>
+        </footer>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

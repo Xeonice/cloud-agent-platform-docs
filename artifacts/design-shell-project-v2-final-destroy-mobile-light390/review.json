@@ -1,0 +1,42 @@
+[
+  {
+    "frame": "f-sbx-destroy-02",
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "states": [
+      {
+        "state": "destroy-provider-failed-idempotent-retry",
+        "screenshot": "f-sbx-destroy-02-light-390-destroy-provider-failed-idempotent-retry.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/projects",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  }
+]

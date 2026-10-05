@@ -1,0 +1,190 @@
+{
+  "audited_at": "2026-10-05T06:45:26.722455+00:00",
+  "workspace": "/Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发",
+  "heads": {
+    "api": "a453bb7",
+    "web": "93f03c5"
+  },
+  "method": "逐AC核对当前工作区及相关既有验证；closed表示代码满足该条完整目标，未逐条重跑最低层验收。基线已实现/实现先行未进行完整复验；不是工时完成率，也不是172张稿的全覆盖视觉验收。",
+  "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/product",
+  "baseline_all_ac_count": 1016,
+  "baseline_status_counts": {
+    "部分实现": 127,
+    "未实现": 201,
+    "已实现": 513,
+    "偏离": 156,
+    "未核实": 13,
+    "计划中": 2,
+    "实现先行": 4
+  },
+  "baseline_gap_count": 484,
+  "current_gap_status_counts": {
+    "closed": 87,
+    "partial": 232,
+    "open": 164,
+    "superseded": 1
+  },
+  "remaining_known_gaps": 396,
+  "remaining_gap_percent": 81.8,
+  "superseded_gap_count": 1,
+  "baseline_other_statuses": {
+    "unverified": 13,
+    "implementation_ahead": 4,
+    "planned": 2
+  },
+  "provisional_whole_list": {
+    "assumption": "仅沿用基线513已实现及4实现先行，加本次审计closed；剔除1条互斥替代AC。不代表这517条已逐条按新版重新验收。",
+    "effective_ac_count": 1015,
+    "implemented_or_baseline_implemented": 604,
+    "needs_implementation_or_verification": 411,
+    "remaining_percent": 40.5
+  },
+  "by_domain": {
+    "LCH": {
+      "closed": 19,
+      "partial": 15,
+      "open": 11,
+      "baseline_gap_count": 45,
+      "remaining": 26
+    },
+    "SBX": {
+      "partial": 20,
+      "closed": 14,
+      "open": 18,
+      "baseline_gap_count": 52,
+      "remaining": 38
+    },
+    "WB": {
+      "closed": 26,
+      "partial": 9,
+      "open": 16,
+      "baseline_gap_count": 51,
+      "remaining": 25
+    },
+    "EVT": {
+      "partial": 2,
+      "closed": 1,
+      "baseline_gap_count": 3,
+      "remaining": 2
+    },
+    "PRJ": {
+      "closed": 7,
+      "partial": 36,
+      "open": 32,
+      "baseline_gap_count": 75,
+      "remaining": 68
+    },
+    "AUTH": {
+      "partial": 12,
+      "open": 13,
+      "baseline_gap_count": 25,
+      "remaining": 25
+    },
+    "CRD": {
+      "partial": 23,
+      "open": 14,
+      "baseline_gap_count": 37,
+      "remaining": 37
+    },
+    "ACC": {
+      "open": 6,
+      "closed": 2,
+      "partial": 7,
+      "baseline_gap_count": 15,
+      "remaining": 13
+    },
+    "DEP": {
+      "open": 7,
+      "partial": 18,
+      "closed": 1,
+      "baseline_gap_count": 26,
+      "remaining": 25
+    },
+    "IMG": {
+      "open": 14,
+      "partial": 43,
+      "closed": 8,
+      "superseded": 1,
+      "baseline_gap_count": 66,
+      "remaining": 57
+    },
+    "SYS": {
+      "closed": 6,
+      "partial": 12,
+      "open": 14,
+      "baseline_gap_count": 32,
+      "remaining": 26
+    },
+    "DIA": {
+      "partial": 9,
+      "open": 1,
+      "baseline_gap_count": 10,
+      "remaining": 10
+    },
+    "AUD": {
+      "partial": 6,
+      "open": 4,
+      "baseline_gap_count": 10,
+      "remaining": 10
+    },
+    "AUT": {
+      "open": 14,
+      "partial": 20,
+      "closed": 3,
+      "baseline_gap_count": 37,
+      "remaining": 34
+    }
+  },
+  "by_version": {
+    "MVP": {
+      "closed": 82,
+      "partial": 192,
+      "open": 125,
+      "superseded": 1,
+      "baseline_gap_count": 400,
+      "remaining": 317
+    },
+    "v1.1": {
+      "open": 19,
+      "closed": 4,
+      "partial": 29,
+      "baseline_gap_count": 52,
+      "remaining": 48
+    },
+    "—": {
+      "open": 15,
+      "partial": 3,
+      "closed": 1,
+      "baseline_gap_count": 19,
+      "remaining": 18
+    },
+    "v1.2": {
+      "open": 5,
+      "partial": 8,
+      "baseline_gap_count": 13,
+      "remaining": 13
+    }
+  },
+  "critical_defects": {
+    "baseline_count": 13,
+    "statuses": {
+      "open": 7,
+      "closed": 5,
+      "partial": 1
+    },
+    "not_fully_closed": 8,
+    "note": "此缺陷口径与AC交叉，不能再加到剩余AC数。"
+  },
+  "audit_files": [
+    "shell-audit.json",
+    "project-access-audit.json",
+    "image-system-audit.json",
+    "critical-defects.json"
+  ],
+  "not_quantified_in_this_ac_audit": [
+    "172张v2稿尚未进行全覆盖逐稿视觉验收",
+    "旧测试全量移除及按新说明重建未完成",
+    "旧产品文档未整体迁移到治理目录新说明",
+    "少数需求没有AC，不进入1016条分母"
+  ]
+}

@@ -1,0 +1,405 @@
+{
+  "generatedAt": "2026-10-05T14:54:13.176Z",
+  "scope": "Approved current design migration; implementation reviews and executed tests are distinct.",
+  "requirements": 247,
+  "acceptanceCriteria": 1016,
+  "acStatuses": {
+    "closed": 1011,
+    "deferred": 2,
+    "superseded": 3
+  },
+  "acVerification": {
+    "code-review": 984,
+    "code-review-and-executed-browser": 1,
+    "code-review-and-executed-regression-and-browser": 1,
+    "code-review-and-production-browser-pointer": 3,
+    "container-http-and-wire-boundary": 2,
+    "container-route-boundary": 1,
+    "product-decision": 1,
+    "test-passed-plus-code-review": 23
+  },
+  "openImplementationACs": [],
+  "domains": {
+    "ACC": {
+      "total": 28,
+      "statuses": {
+        "closed": 28
+      }
+    },
+    "AUD": {
+      "total": 38,
+      "statuses": {
+        "closed": 38
+      }
+    },
+    "AUT": {
+      "total": 86,
+      "statuses": {
+        "closed": 86
+      }
+    },
+    "AUTH": {
+      "total": 47,
+      "statuses": {
+        "closed": 47
+      }
+    },
+    "CRD": {
+      "total": 94,
+      "statuses": {
+        "closed": 94
+      }
+    },
+    "DEP": {
+      "total": 77,
+      "statuses": {
+        "closed": 77
+      }
+    },
+    "DIA": {
+      "total": 59,
+      "statuses": {
+        "closed": 59
+      }
+    },
+    "EVT": {
+      "total": 5,
+      "statuses": {
+        "closed": 5
+      }
+    },
+    "IMG": {
+      "total": 140,
+      "statuses": {
+        "closed": 138,
+        "deferred": 1,
+        "superseded": 1
+      }
+    },
+    "LCH": {
+      "total": 68,
+      "statuses": {
+        "closed": 68
+      }
+    },
+    "PRJ": {
+      "total": 136,
+      "statuses": {
+        "closed": 135,
+        "superseded": 1
+      }
+    },
+    "SBX": {
+      "total": 73,
+      "statuses": {
+        "closed": 73
+      }
+    },
+    "SYS": {
+      "total": 78,
+      "statuses": {
+        "closed": 77,
+        "deferred": 1
+      }
+    },
+    "TRM": {
+      "total": 11,
+      "statuses": {
+        "closed": 11
+      }
+    },
+    "WB": {
+      "total": 76,
+      "statuses": {
+        "closed": 75,
+        "superseded": 1
+      }
+    }
+  },
+  "requirementsWithoutAC": [
+    {
+      "id": "REQ-SYS-051",
+      "status": "not-required-current-version"
+    },
+    {
+      "id": "REQ-DIA-015",
+      "status": "closed"
+    },
+    {
+      "id": "REQ-DIA-019",
+      "status": "closed"
+    },
+    {
+      "id": "REQ-WB-043",
+      "status": "implementation-ahead"
+    }
+  ],
+  "design": {
+    "approvedDomainDrafts": 172,
+    "statuses": {
+      "browser-passed": 170,
+      "non-ui-verified": 1,
+      "not-applicable-current-emission": 1
+    },
+    "unfinishedScenarios": [],
+    "browserCombinations": 1020,
+    "sharedComponents": "f-shared-components.html is the imported component reference, not an additional route state."
+  },
+  "tests": {
+    "api": {
+      "files": 41,
+      "passed": 160,
+      "failed": 0,
+      "skipped": 0,
+      "runtimeMatcherEvaluations": 674,
+      "source": "api/acceptance/execution-report.json"
+    },
+    "web": {
+      "files": 17,
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0,
+      "source": "artifacts/migration-audit/web-acceptance-execution.json"
+    },
+    "storybook": {
+      "files": 97,
+      "passed": 540,
+      "failed": 0,
+      "skipped": 0,
+      "source": "artifacts/migration-audit/web-storybook-execution.json"
+    },
+    "cross": {
+      "source": "artifacts/migration-audit/cross-execution-report.json",
+      "report": {
+        "startedAt": "2026-10-05T14:51:34.263Z",
+        "finishedAt": "2026-10-05T14:51:54.420Z",
+        "node": "v22.23.3",
+        "status": "passed",
+        "actualScenarios": 1,
+        "passedScenarios": 1,
+        "failedScenarios": 0,
+        "skippedScenarios": 0,
+        "runtimeExpectSteps": 31,
+        "distinctObservedAssertionLocations": 31,
+        "assertionCounting": "Actual public Playwright onStepEnd events with category=expect; distinct assertions are observed source locations. A completed expect.poll is one public step; internal polling retries are not counted separately.",
+        "sourceHashes": {
+          "e2e-contract/acceptance/task-lifecycle.spec.ts": "664ece8a908a10ff3cf901fdee43a3aa315d4005e12c640063989231915f69c2",
+          "e2e-contract/acceptance/execution-reporter.ts": "d338a197505d9b95572f2ad6ef58039f2abfe19850e0cfbaa9a54f81f400c865",
+          "e2e-contract/playwright.config.ts": "1155104d3e4942d6b6e8161364893517e6d4fefc2979c506eb8b33e638c252ee",
+          "e2e-contract/global-setup.ts": "888fabd9189de5aeb722dfe9712b48223688e8da8855cb05d8142a2cfe6441f8",
+          "e2e-contract/server/start-api.ts": "c1c72c5e2851d59dfe484df50ba314116bbdf1702cee44b7097c311deb39bfd6",
+          "e2e-contract/server/start-web.mjs": "af9a999c9457ff339d6db3ec9a154de3f5bd0e711874d5ebc937aa11bd452406",
+          "api/acceptance/support/protocol-resources.ts": "b3f906db5eb08c4a5f85e37aba8c0f7e40996773f9a79186c9118ea6508650e5"
+        },
+        "attempts": [
+          {
+            "title": " > chromium > task-lifecycle.spec.ts > browser actions use actual Nest and current SQLite through the same-origin proxy",
+            "file": "e2e-contract/acceptance/task-lifecycle.spec.ts",
+            "retry": 0,
+            "observations": [
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:11:25",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:18:31",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:24:5",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" getByRole('heading', { name: '为你的代码建一个项目' })",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:29:5",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:42:36",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:44:31",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" getByTestId('project-group-header').filter({ hasText: 'browser actual project' })",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:47:5",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" getByTestId('modal-new-task')",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:50:24",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:59:37",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:61:26",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:62:24",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:63:3",
+                "passed": true
+              },
+              {
+                "title": "Expect \"poll toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:72:6",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" locator('.xterm')",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:73:40",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:77:27",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toMatch\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:78:32",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:90:33",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" getByText('任务已停止', { exact: true })",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:91:58",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:102:34",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:103:3",
+                "passed": true
+              },
+              {
+                "title": "Expect \"poll toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:112:6",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBeVisible\" locator('.xterm')",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:113:40",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:117:24",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:118:33",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:119:29",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:120:31",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:137:36",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:138:3",
+                "passed": true
+              },
+              {
+                "title": "Expect \"poll toBe\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:142:6",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toEqual\"",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:147:5",
+                "passed": true
+              },
+              {
+                "title": "Expect \"toHaveCount\" locator('.xterm')",
+                "sourceLocation": "e2e-contract/acceptance/task-lifecycle.spec.ts:148:40",
+                "passed": true
+              }
+            ],
+            "status": "passed",
+            "durationMs": 2099
+          }
+        ],
+        "realBoundaries": [
+          "Chromium UI actions and same-origin production Next.js proxy without request/WS/HAR interception",
+          "Complete compiled Nest AppModule and current production SQLite migrations in an isolated DATA_ROOT",
+          "Production project workspace filesystem, repositories, business services, HTTP responses and terminal gateway"
+        ],
+        "controlledExternalBoundaries": [
+          "External sandbox provider transport and OCI manifest metadata; terminal output uses a real native Node subprocess byte stream",
+          "A synthetic API key and local TCP model-connectivity destination; production connectivity probe still runs"
+        ],
+        "unverifiedExternalCapabilities": [
+          "Real Docker/BoxLite resources",
+          "Vendor OAuth/account authentication",
+          "Native PTY device semantics"
+        ]
+      }
+    }
+  },
+  "decisions": [
+    {
+      "id": "AC-PRJ-053.3",
+      "status": "superseded",
+      "reason": "同条规则与REQ-PRJ-053/AC-PRJ-053.1的同一dialog切确认互斥：确认在途不再显示列表行。按同dialog确认和busy锁定执行，不能把不存在的其它行算可操作。来源：PRJ.md:687/691/705/707。"
+    },
+    {
+      "id": "AC-IMG-026.3",
+      "status": "superseded",
+      "reason": "与026.1明确二选一，已选copyConfigFromId参数继承分支；不实现反向「不带参数」行为，也不计为待做。"
+    },
+    {
+      "id": "AC-IMG-042.4",
+      "status": "deferred",
+      "reason": "IMG规格654/661与SYS Q16A明确当前代理只用于联网检测；镜像下载代理列为后续能力，本轮未实现且不假称closed。"
+    },
+    {
+      "id": "AC-SYS-050.1",
+      "status": "deferred",
+      "reason": "SYS规格389合并说明明确本轮不画访问保护区块，先接口/参数/横幅/README；该UI条件延后，不能算已实现。"
+    },
+    {
+      "id": "AC-WB-031.2",
+      "status": "superseded",
+      "reason": "与REQ-AUT-001入口③及AC-AUT-001.3「任意页逐就绪项目具名入口」互斥；采用自动化领域具体入口，每ready项目恰一条，保留ID与源Given/When/Then，不按原唯一当前项目分支算完成。裁决见 artifacts/migration-audit/migration-decisions.md。"
+    }
+  ],
+  "evidenceMeaning": "Closed = current implementation reviewed. This summary does not claim 1016 specified-level or external-provider executions."
+}

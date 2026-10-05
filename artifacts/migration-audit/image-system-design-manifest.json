@@ -1,0 +1,4104 @@
+{
+  "owner": "automation_attention",
+  "scope": [
+    "IMG",
+    "AUT",
+    "SYS",
+    "DIA",
+    "AUD"
+  ],
+  "verificationStatus": "browser-executed",
+  "runner": "web/scripts/check-design-image-system-v2.mjs",
+  "execution": "DESIGN_REVIEW_SCENARIO=dark:1440 DESIGN_REVIEW_FRAME=f-img-register-06 pnpm exec node scripts/check-design-image-system-v2.mjs http://localhost:3100; omit selectors for all 55 drafts × six screens",
+  "frames": [
+    {
+      "id": "f-aut-rules-01",
+      "group": "f-aut-rules",
+      "state": 1,
+      "title": "f-aut-rules-01 自动化规则 · 列表（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-01.html",
+      "route": "/",
+      "draftId": "f-aut-rules-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-02",
+      "group": "f-aut-rules",
+      "state": 2,
+      "title": "f-aut-rules-02 自动化规则 · 达到 20 条上限（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-02.html",
+      "route": "/",
+      "draftId": "f-aut-rules-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-03",
+      "group": "f-aut-rules",
+      "state": 3,
+      "title": "f-aut-rules-03 自动化规则 · 空态（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-03.html",
+      "route": "/",
+      "draftId": "f-aut-rules-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-04",
+      "group": "f-aut-rules",
+      "state": 4,
+      "title": "f-aut-rules-04 自动化规则 · 新建规则（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-04.html",
+      "route": "/",
+      "draftId": "f-aut-rules-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-05",
+      "group": "f-aut-rules",
+      "state": 5,
+      "title": "f-aut-rules-05 自动化规则 · 编辑规则（改了时区 + Webhook 测试失败）（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-05.html",
+      "route": "/",
+      "draftId": "f-aut-rules-05",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-05)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-05-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-06",
+      "group": "f-aut-rules",
+      "state": 6,
+      "title": "f-aut-rules-06 自动化规则 · 校验错误与保存失败（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-06.html",
+      "route": "/",
+      "draftId": "f-aut-rules-06",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-06)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-06-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-07",
+      "group": "f-aut-rules",
+      "state": 7,
+      "title": "f-aut-rules-07 自动化规则 · 规则详情与运行历史（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-07.html",
+      "route": "/",
+      "draftId": "f-aut-rules-07",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-07)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-07-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-08",
+      "group": "f-aut-rules",
+      "state": 8,
+      "title": "f-aut-rules-08 自动化规则 · 运行详情展开（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-08.html",
+      "route": "/",
+      "draftId": "f-aut-rules-08",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-08)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-08-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-09",
+      "group": "f-aut-rules",
+      "state": 9,
+      "title": "f-aut-rules-09 自动化规则 · 删除规则确认（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-09.html",
+      "route": "/",
+      "draftId": "f-aut-rules-09",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-09)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-09-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-10",
+      "group": "f-aut-rules",
+      "state": 10,
+      "title": "f-aut-rules-10 自动化规则 · 运行历史为空（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-10.html",
+      "route": "/",
+      "draftId": "f-aut-rules-10",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-10)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-10-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-11",
+      "group": "f-aut-rules",
+      "state": 11,
+      "title": "f-aut-rules-11 自动化规则 · 运行历史读取失败（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-11.html",
+      "route": "/",
+      "draftId": "f-aut-rules-11",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-11)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-11-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-aut-rules-13",
+      "group": "f-aut-rules",
+      "state": 13,
+      "title": "f-aut-rules-13 自动化规则 · 列表读取中 / 读取失败（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-aut-rules-13.html",
+      "route": "/",
+      "draftId": "f-aut-rules-13",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-aut-rules-13)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-aut-rules-13-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-env-01",
+      "group": "f-img-env",
+      "state": 1,
+      "title": "f-img-env-01 编辑运行参数（环境变量）（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-env-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-env-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-env-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-env-02",
+      "group": "f-img-env",
+      "state": 2,
+      "title": "f-img-env-02 环境变量校验错误（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-env-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-env-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-env-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-env-03",
+      "group": "f-img-env",
+      "state": 3,
+      "title": "f-img-env-03 环境变量条数超过 50（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-env-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-env-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-env-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-env-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-page-01",
+      "group": "f-img-page",
+      "state": 1,
+      "title": "f-img-page-01 空态：还没有注册任何镜像（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-page-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-page-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-page-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-page-02",
+      "group": "f-img-page",
+      "state": 2,
+      "title": "f-img-page-02 首次加载骨架（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-page-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-page-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-page-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-page-03",
+      "group": "f-img-page",
+      "state": 3,
+      "title": "f-img-page-03 镜像列表读不到（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-page-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-page-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-page-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-page-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-preset-01",
+      "group": "f-img-preset",
+      "state": 1,
+      "title": "f-img-preset-01 预制镜像下载到本机 · 进行中（37%）",
+      "source": "docs/design-v2/gap/drafts/f-img-preset-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-preset-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-preset-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-preset-02",
+      "group": "f-img-preset",
+      "state": 2,
+      "title": "f-img-preset-02 预制镜像下载到本机 · 进度未知",
+      "source": "docs/design-v2/gap/drafts/f-img-preset-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-preset-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-preset-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-preset-03",
+      "group": "f-img-preset",
+      "state": 3,
+      "title": "f-img-preset-03 预制镜像下载到本机 · 失败",
+      "source": "docs/design-v2/gap/drafts/f-img-preset-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-preset-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-preset-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-preset-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-01",
+      "group": "f-img-register",
+      "state": 1,
+      "title": "f-img-register-01 注册新镜像 · 验证通过 / 有警告（可保存）（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-02",
+      "group": "f-img-register",
+      "state": 2,
+      "title": "f-img-register-02 注册新镜像 · 验证失败（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-03",
+      "group": "f-img-register",
+      "state": 3,
+      "title": "f-img-register-03 注册新镜像 · 地址格式错误 / 结论作废（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-04",
+      "group": "f-img-register",
+      "state": 4,
+      "title": "f-img-register-04 注册新镜像 · 已经注册过（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-04.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-05",
+      "group": "f-img-register",
+      "state": 5,
+      "title": "f-img-register-05 镜像要求侧弹层（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-05.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-05",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-05)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-05-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-register-06",
+      "group": "f-img-register",
+      "state": 6,
+      "title": "f-img-register-06 注册新镜像 · 验证请求本身失败（连不上镜像下载源）（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-img-register-06.html",
+      "route": "/settings/images",
+      "draftId": "f-img-register-06",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-register-06)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-register-06-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-state-01",
+      "group": "f-img-state",
+      "state": 1,
+      "title": "f-img-state-01 镜像启停 · 已禁用",
+      "source": "docs/design-v2/gap/drafts/f-img-state-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-state-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-state-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-state-02",
+      "group": "f-img-state",
+      "state": 2,
+      "title": "f-img-state-02 镜像删除 · 删除确认",
+      "source": "docs/design-v2/gap/drafts/f-img-state-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-state-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-state-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-state-03",
+      "group": "f-img-state",
+      "state": 3,
+      "title": "f-img-state-03 镜像删除 · 被任务引用被拦",
+      "source": "docs/design-v2/gap/drafts/f-img-state-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-state-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-state-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-state-04",
+      "group": "f-img-state",
+      "state": 4,
+      "title": "f-img-state-04 镜像管理 · 禁用预制镜像确认",
+      "source": "docs/design-v2/gap/drafts/f-img-state-04.html",
+      "route": "/settings/images",
+      "draftId": "f-img-state-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-state-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-state-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-version-01",
+      "group": "f-img-version",
+      "state": 1,
+      "title": "f-img-version-01 镜像版本 · 上游有新版本（提示条 + 对比弹层）",
+      "source": "docs/design-v2/gap/drafts/f-img-version-01.html",
+      "route": "/settings/images",
+      "draftId": "f-img-version-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-version-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-version-02",
+      "group": "f-img-version",
+      "state": 2,
+      "title": "f-img-version-02 镜像版本 · 解析中 / 重新验证中",
+      "source": "docs/design-v2/gap/drafts/f-img-version-02.html",
+      "route": "/settings/images",
+      "draftId": "f-img-version-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-version-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-version-03",
+      "group": "f-img-version",
+      "state": 3,
+      "title": "f-img-version-03 镜像版本 · 展开全串 + 复制",
+      "source": "docs/design-v2/gap/drafts/f-img-version-03.html",
+      "route": "/settings/images",
+      "draftId": "f-img-version-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-version-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-img-version-04",
+      "group": "f-img-version",
+      "state": 4,
+      "title": "f-img-version-04 镜像版本 · 切换到此版本之后",
+      "source": "docs/design-v2/gap/drafts/f-img-version-04.html",
+      "route": "/settings/images",
+      "draftId": "f-img-version-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-img-version-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/final-latest/f-img-version-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/final-latest/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-01",
+      "group": "f-sys-audit",
+      "state": 1,
+      "title": "f-sys-audit-01 系统状态 · 审计为空（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-01.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-02",
+      "group": "f-sys-audit",
+      "state": 2,
+      "title": "f-sys-audit-02 系统状态 · 审计筛选无匹配（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-02.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-03",
+      "group": "f-sys-audit",
+      "state": 3,
+      "title": "f-sys-audit-03 系统状态 · 审计该类尚未记录（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-03.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-03",
+      "verificationStatus": "not-applicable-current-emission",
+      "reason": "All five current audit categories have real producers; the approved historical not-yet-emitted frame is unreachable with current API data. Production fallback remains covered by code review; no invented source state.",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "not-applicable-current-emission"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-04",
+      "group": "f-sys-audit",
+      "state": 4,
+      "title": "f-sys-audit-04 系统状态 · 审计实时中断与断层（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-04.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-05",
+      "group": "f-sys-audit",
+      "state": 5,
+      "title": "f-sys-audit-05 系统状态 · 审计按时间范围筛空（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-05.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-05",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-05)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-05-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-audit-06",
+      "group": "f-sys-audit",
+      "state": 6,
+      "title": "f-sys-audit-06 系统状态 · 审计按任务看完整时间线（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-audit-06.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-audit-06",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-audit-06)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-audit-06-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-conn-01",
+      "group": "f-sys-conn",
+      "state": 1,
+      "title": "f-sys-conn-01 系统状态 · 沙箱环境不健康（失败率 12%）",
+      "source": "docs/design-v2/gap/drafts/f-sys-conn-01.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-conn-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-conn-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-conn-02",
+      "group": "f-sys-conn",
+      "state": 2,
+      "title": "f-sys-conn-02 系统状态 · 离线 + 出网代理保存失败",
+      "source": "docs/design-v2/gap/drafts/f-sys-conn-02.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-conn-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-conn-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-conn-03",
+      "group": "f-sys-conn",
+      "state": 3,
+      "title": "f-sys-conn-03 系统状态 · 后端不可达（各卡原位读取失败）",
+      "source": "docs/design-v2/gap/drafts/f-sys-conn-03.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-conn-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-conn-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/provider-failure-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/provider-failure-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/provider-failure-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/provider-failure-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/provider-failure-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "status": "passed",
+          "screenshot": "artifacts/design-image-system-v2/runner-manifest-check/f-sys-conn-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/runner-manifest-check/review.json"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-conn-04",
+      "group": "f-sys-conn",
+      "state": 4,
+      "title": "f-sys-conn-04 系统状态 · 出网代理保存成功",
+      "source": "docs/design-v2/gap/drafts/f-sys-conn-04.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-conn-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-conn-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-conn-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-01",
+      "group": "f-sys-diag",
+      "state": 1,
+      "title": "f-sys-diag-01 系统状态 · 诊断连接中（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-01.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-02",
+      "group": "f-sys-diag",
+      "state": 2,
+      "title": "f-sys-diag-02 系统状态 · 诊断进行中 4/9（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-02.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-03",
+      "group": "f-sys-diag",
+      "state": 3,
+      "title": "f-sys-diag-03 系统状态 · 诊断中断 5/9（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-03.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-04",
+      "group": "f-sys-diag",
+      "state": 4,
+      "title": "f-sys-diag-04 系统状态 · 诊断完成 · 有失败（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-04.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-05",
+      "group": "f-sys-diag",
+      "state": 5,
+      "title": "f-sys-diag-05 系统状态 · 诊断完成 · 无需处理（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-05.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-05",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-05)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-05-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-diag-06",
+      "group": "f-sys-diag",
+      "state": 6,
+      "title": "f-sys-diag-06 系统状态 · 诊断 9 项全部正常（v2 补全稿）",
+      "source": "docs/design-v2/gap/drafts/f-sys-diag-06.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-diag-06",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-diag-06)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-diag-06-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-resource-01",
+      "group": "f-sys-resource",
+      "state": 1,
+      "title": "f-sys-resource-01 系统状态 · 首次加载（骨架）",
+      "source": "docs/design-v2/gap/drafts/f-sys-resource-01.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-resource-01",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-resource-01)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              370,
+              284
+            ],
+            "after": [
+              370,
+              284
+            ]
+          }
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              424,
+              354
+            ],
+            "after": [
+              424,
+              354
+            ]
+          }
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              440,
+              354
+            ],
+            "after": [
+              440,
+              354
+            ]
+          }
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              370,
+              284
+            ],
+            "after": [
+              370,
+              284
+            ]
+          }
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              424,
+              354
+            ],
+            "after": [
+              424,
+              354
+            ]
+          }
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-01-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed",
+          "cardHeights": {
+            "before": [
+              440,
+              354
+            ],
+            "after": [
+              440,
+              354
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "f-sys-resource-02",
+      "group": "f-sys-resource",
+      "state": 2,
+      "title": "f-sys-resource-02 系统状态 · 资源告警（CPU 偏紧，还能再发 1 个）",
+      "source": "docs/design-v2/gap/drafts/f-sys-resource-02.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-resource-02",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-resource-02)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-02-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-resource-03",
+      "group": "f-sys-resource",
+      "state": 3,
+      "title": "f-sys-resource-03 系统状态 · 资源严重（磁盘 96%，还能再发 0 个）",
+      "source": "docs/design-v2/gap/drafts/f-sys-resource-03.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-resource-03",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-resource-03)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-03-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    },
+    {
+      "id": "f-sys-resource-04",
+      "group": "f-sys-resource",
+      "state": 4,
+      "title": "f-sys-resource-04 系统状态 · 保留下来的成果占用过量（82%）",
+      "source": "docs/design-v2/gap/drafts/f-sys-resource-04.html",
+      "route": "/settings/system",
+      "draftId": "f-sys-resource-04",
+      "verificationStatus": "browser-passed",
+      "fixture": {
+        "module": "web/scripts/design-image-system.fixtures.mjs",
+        "configuration": "configure(f-sys-resource-04)",
+        "requests": "All /api/** and socket.io traffic intercepted; SSE Responses use deterministic frames and a real ReadableStream, never direct app-store diagnostic writes",
+        "mutations": "In-memory fixture only"
+      },
+      "coverage": [
+        "dark/light × 1440/1024/390",
+        "production-route-and-state",
+        "no-horizontal-overflow",
+        "accessible-primary-state",
+        "screenshot"
+      ],
+      "evidence": [
+        {
+          "theme": "dark",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-dark-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-dark-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "dark",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-dark-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1440,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-light-1440.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 1024,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-light-1024.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        },
+        {
+          "theme": "light",
+          "width": 390,
+          "screenshot": "artifacts/design-image-system-v2/sys-final/f-sys-resource-04-light-390.png",
+          "variantScreenshots": [],
+          "review": "artifacts/design-image-system-v2/sys-final/review.json",
+          "status": "passed"
+        }
+      ]
+    }
+  ],
+  "executionSummary": {
+    "production": "http://localhost:3100",
+    "drafts": 55,
+    "passedCombinations": 324,
+    "notApplicableCombinations": 6,
+    "failedCombinations": 0,
+    "sources": [
+      "artifacts/design-image-system-v2/final-latest/review.json",
+      "artifacts/design-image-system-v2/sys-final/review.json",
+      "artifacts/design-image-system-v2/provider-failure-final/review.json",
+      "artifacts/design-image-system-v2/runner-manifest-check/review.json"
+    ]
+  }
+}

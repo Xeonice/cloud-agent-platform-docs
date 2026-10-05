@@ -1,0 +1,56 @@
+<!doctype html>
+<!--
+  id: f-acc-unlock-02
+  页面: 21-8 部署与初始化 · 访问口令门（全屏；AccessGateContainer）
+  状态: 首次打开平台（全新机器，口令默认开启）：全屏中性底上一张口令卡「需要访问口令」+ 一句说明 + 访问口令输入框（打开时焦点在这里）+ 口令从哪来的一句 + [解锁]（没输入时禁用）；口令门之下不挂工作台
+  对应 v1 稿件: g8-16（design-drafts/g8-init-access/g8-16-unlock.html；预览 design-drafts/previews/g8-16.dark.png / .light.png）
+  体现的 v2 要点:
+    - 口令门 .gate（l3a-auth.css §4）：画框正中一列——品牌行（与侧栏实例菜单同一个 Logo「A」+ 产品名 +「本机」）→ 口令卡（表面 + raised 阴影、r12、宽 400、内边距 32）
+    - 卡片本身是模态对话框（role="dialog" aria-modal="true" aria-label="访问口令"，照 v1 / 现状）；标题 heading-24（tokens：向导、首启与口令门的大标题）、说明 copy-14-zh
+    - 字段（foundation §3.2）：标签 14/500 + 输入框 36；[解锁] primary 整宽 36（空输入禁用外观）紧跟输入框
+    - 口令来源放在 [解锁] 下面的表单说明 .form-note（14 次要灰），环境变量用行内代码（等宽 13）：输入 → 解锁一气呵成，不知道口令的人再往下看
+    - W4 评审修正（notes/consistency.md §8）：口令门 .gate 由 <div> 改成 <main>：门是这时页面上唯一的内容，品牌行与口令卡都落进主区地标（axe region；卡片仍是 role="dialog" aria-modal，T-21 要守的 v1 语义不变；原型给门加 role="main" 是同一处理，评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+  1. 口令门之下：工作台被 black/60 + 模糊遮住 → 全屏不透明中性底（画布色），不挂工作台（DR-28：401 时渲染中性背景 + 口令门，解锁后重跑初始化判定，再决定进向导还是工作台；顺带不再隔着模糊透出项目名）。需看稿。
+  2. 新增品牌行（Logo「A」+「Agent 管理平台」+「本机」，与侧栏实例菜单同一写法）：中性底上要说清这是哪一台平台。需看稿。
+  3. 卡片：max-w-sm p-6 描边卡 → 400 宽、r12、raised 阴影、内边距 32；标题 18/600 → heading-24。需看稿。
+  4. 说明句（PASSCODE_REQUIRED）：后端信封原句「此环境已启用访问口令，请先解锁后再访问」→ 前端按错误码给的句子「这个平台设了访问口令，输入后才能继续。」（DR-33，标暂行；现状 useAccessGate.ts 把信封 message 原样上屏）。
+  5. 口令从哪来那句：输入框下的字段帮助 12 → [解锁] 下面的表单说明 14 次要灰（它说的是整张门的口令来源，不是这个字段怎么填；输入与解锁挨在一起）；文案不变；ACCESS_PASSCODE 用行内代码。需看稿（位置）。
+  6. 输入框：v1 画了 autofocus 焦点环 → 静态稿默认不画焦点（gap/drafts README §2 第 7 条）；打开时焦点在输入框（现状 UnlockForm.view.tsx autoFocus）。
+  7. [解锁]：primary 禁用 → 整宽 36 primary 的禁用外观（fill 底 + 环）。
+  示例数据来源: 无业务数据（全新机器，还没有项目）；品牌行照 P1 / P3 侧栏实例菜单
+  流程: F-ACC-UNLOCK（REQ-ACC-003、REQ-ACC-004）
+  口径依据: D3（口令默认开启，新机器第一次打开就会看到这张）；DR-28（推荐：401 时渲染中性背景 + 口令门，解锁后重跑初始化判定）；DR-33（PASSCODE_REQUIRED 推荐词，标暂行）；P21-8 §3 L354（启用后首次访问弹口令输入）；UX-DS-320（全屏阻断：口令解锁页）；现状偏离：web/src/containers/init/AppBootGate.tsx:20-23、:54-58（init-status 401 时放行 children，口令门浮在工作台上）、web/src/containers/access/AccessGateContainer.tsx（遮罩 bg-black/60 + backdrop-blur）、web/src/views/access/UnlockForm.view.tsx:7-66（空输入禁用、验证中…、原因句取后端信封）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-acc-unlock-02">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-acc-unlock-02 口令门 · 需要访问口令</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3a-auth.css">
+</head>
+<body>
+<div class="frame">
+  <main class="gate">
+    <div class="gate__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <div class="gate__card" role="dialog" aria-modal="true" aria-label="访问口令">
+        <form class="gate__form">
+          <div class="gate__head">
+            <h1 class="gate__title">需要访问口令</h1>
+            <p class="gate__desc">这个平台设了访问口令，输入后才能继续。</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="passcode">访问口令</label>
+            <input class="input" id="passcode" type="password" name="passcode" autocomplete="off" aria-describedby="passcode-note" value="">
+          </div>
+          <button class="btn btn--primary btn--block" type="submit" disabled>解锁</button>
+          <p class="form-note" id="passcode-note">口令只在首次启动时输出在服务日志里，可以找部署这台平台的人要；忘了可以用环境变量 <code class="code">ACCESS_PASSCODE</code> 重设。</p>
+        </form>
+      </div>
+  </main>
+</div>
+</body>
+</html>

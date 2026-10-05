@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  id: f-acc-unlock-03
+  页面: 21-8 部署与初始化 · 访问口令门（全屏）· 口令错误 / 验证中 / 锁定
+  状态: 三态拼版（同一张口令卡的三个状态并排，各带一枚稿注；产品里同一时刻只有一张）：① 口令错误（第 1–4 次）：输入框红环 + 一句「口令不对，再试一次。」，输入保留、[解锁] 可点；② 验证中：输入框禁用、按钮「验证中…」转圈；③ 锁定（同一来源连错 5 次后锁 5 分钟）：一句「错得太多次，已暂时锁定，约 5 分钟后再试。」——按分钟说、不按秒；输入框保留刚才的输入，锁定期间 [解锁] 置灰
+  对应 v1 稿件: g8-17（design-drafts/g8-init-access/g8-17-unlock-error.html；预览 design-drafts/previews/g8-17.dark.png / .light.png）——v1 只画锁定，口令错误与验证中写在头注释
+  体现的 v2 要点:
+    - 口令门、品牌行、口令卡同 f-acc-unlock-02（DR-28：全屏中性底、不挂工作台）
+    - 门上的结论句 .gate__msg 紧跟输入框：16 图标带错误色（错误 = 圆叉、锁定 = 锁，形状也不同）+ 14 正文色（P6：不整句上色），role="alert"
+    - 输入框错误态 aria-invalid（红环 + 红光晕，--focus-input-error）；验证中 = 输入禁用 + 按钮 .is-loading「验证中…」（UX-DS-204）
+    - 拼版：三张卡并排（窄于 1296 时折行），每张上方一枚稿注 .contract-note（只在稿件里出现，不进实现）
+    - W4 评审修正（notes/consistency.md §8）：口令门 .gate 由 <div> 改成 <main>：门是这时页面上唯一的内容，品牌行与口令卡都落进主区地标（axe region；卡片仍是 role="dialog" aria-modal，T-21 要守的 v1 语义不变；原型给门加 role="main" 是同一处理，评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+  1. 一张稿画三态（v1 只画锁定，另两态只在头注释里）：三张卡并排，各带一枚稿注。需看稿（拼版方式）。
+  2. 口令门之下、品牌行、卡片外观同 f-acc-unlock-02 第 1–3 条（DR-28）。需看稿。
+  3. 说明句（PASSCODE_REQUIRED）与口令来源那句同 f-acc-unlock-02 第 4–5 条。
+  4. 口令错误：后端原句「访问口令不正确」→「口令不对，再试一次。」（DR-33，标暂行）；新增输入框红环与圆叉图标（句子正文色）。需看稿（小）。
+  5. 锁定：「口令错误次数太多，已暂时锁定，约 5 分钟后再试。」→「错得太多次，已暂时锁定，约 5 分钟后再试。」（DR-33；剩余秒数向上取整成分钟）；红字整句 → 锁图标带色调 + 正文色句子；锁定期间 [解锁] 置灰（v1 已改，现状仍可点、提交照样被拒）。
+  6. 验证中：同现状（输入框禁用、按钮「验证中…」），补转圈图标。
+  示例数据来源: 无业务数据；输入框里是遮罩的示例值（v1 同）；「5 次 / 5 分钟」取自 api passcode-attempt-limiter.ts:3-4，「约 5 分钟」为锁定剩余示例
+  流程: F-ACC-UNLOCK（REQ-ACC-004、REQ-ACC-005）
+  口径依据: P21-8 §3 L354（连续 5 次错误锁定 5 分钟）；DR-33（PASSCODE_INVALID / PASSCODE_LOCKED 推荐词，标暂行）；Q-DS-18 A；UX-DS-320；实现 api/apps/api/src/platform/access-passcode/passcode-errors.ts（三条信封：401 PASSCODE_REQUIRED / PASSCODE_INVALID、429 PASSCODE_LOCKED + retryAfterSec，锁定句按秒）、access.controller.ts:65-82（先查锁定再验口令；第 5 次错误记锁、这一次仍回 PASSCODE_INVALID）、passcode-attempt-limiter.ts、web/src/views/access/UnlockForm.view.tsx（验证中…、错误句取后端信封）；待核实：passcode.guard.ts:61-69 没带口令的普通请求也计一次失败（见 notes/crd-a.md「待核实」）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-acc-unlock-03">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-acc-unlock-03 口令门 · 口令错误 / 验证中 / 锁定</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3a-auth.css">
+</head>
+<body>
+<div class="frame">
+  <main class="gate">
+    <div class="gate__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <div class="gate__variants">
+      <section class="gate__variant" aria-label="口令错误（第 1–4 次）">
+        <span class="contract-note" title="稿注：同一张卡的状态之一。PASSCODE_INVALID（401）；第 5 次错误时后端已锁上但这一次仍回 PASSCODE_INVALID，下一次提交起才回 PASSCODE_LOCKED">口令错误（第 1–4 次）</span>
+        <div class="gate__card" role="dialog" aria-modal="true" aria-label="访问口令">
+        <form class="gate__form">
+          <div class="gate__head">
+            <h1 class="gate__title">需要访问口令</h1>
+            <p class="gate__desc">这个平台设了访问口令，输入后才能继续。</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="passcode-1">访问口令</label>
+            <input class="input" id="passcode-1" type="password" name="passcode" autocomplete="off" aria-invalid="true" aria-describedby="passcode-1-msg passcode-1-note" value="xxxxxxxx">
+          </div>
+          <p class="gate__msg" id="passcode-1-msg" role="alert"><span class="icon i-circle-x" aria-hidden="true"></span><span>口令不对，再试一次。</span></p>
+          <button class="btn btn--primary btn--block" type="submit">解锁</button>
+          <p class="form-note" id="passcode-1-note">口令只在首次启动时输出在服务日志里，可以找部署这台平台的人要；忘了可以用环境变量 <code class="code">ACCESS_PASSCODE</code> 重设。</p>
+        </form>
+      </div>
+      </section>
+      <section class="gate__variant" aria-label="验证中">
+        <span class="contract-note" title="稿注：同一张卡的状态之一。POST /api/access/unlock 进行中：输入框与按钮禁用">验证中</span>
+        <div class="gate__card" role="dialog" aria-modal="true" aria-label="访问口令">
+        <form class="gate__form">
+          <div class="gate__head">
+            <h1 class="gate__title">需要访问口令</h1>
+            <p class="gate__desc">这个平台设了访问口令，输入后才能继续。</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="passcode-2">访问口令</label>
+            <input class="input" id="passcode-2" type="password" name="passcode" autocomplete="off" disabled aria-describedby="passcode-2-note" value="xxxxxxxxxxxxxxxx">
+          </div>
+          <button class="btn btn--primary btn--block is-loading" type="submit" disabled><span class="icon i-loader-circle icon--spin" aria-hidden="true"></span>验证中…</button>
+          <p class="form-note" id="passcode-2-note">口令只在首次启动时输出在服务日志里，可以找部署这台平台的人要；忘了可以用环境变量 <code class="code">ACCESS_PASSCODE</code> 重设。</p>
+        </form>
+      </div>
+      </section>
+      <section class="gate__variant" aria-label="锁定（连错 5 次后）">
+        <span class="contract-note" title="稿注：同一张卡的状态之一。PASSCODE_LOCKED（429 + retryAfterSec）；按分钟说、向上取整；锁定期间 [解锁] 置灰，到点自动恢复">锁定（连错 5 次后）</span>
+        <div class="gate__card" role="dialog" aria-modal="true" aria-label="访问口令">
+        <form class="gate__form">
+          <div class="gate__head">
+            <h1 class="gate__title">需要访问口令</h1>
+            <p class="gate__desc">这个平台设了访问口令，输入后才能继续。</p>
+          </div>
+          <div class="field">
+            <label class="field__label" for="passcode-3">访问口令</label>
+            <input class="input" id="passcode-3" type="password" name="passcode" autocomplete="off" aria-describedby="passcode-3-msg passcode-3-note" value="xxxxxxxxxxxxxx">
+          </div>
+          <p class="gate__msg" id="passcode-3-msg" role="alert"><span class="icon i-lock" aria-hidden="true"></span><span>错得太多次，已暂时锁定，约 5 分钟后再试。</span></p>
+          <button class="btn btn--primary btn--block" type="submit" disabled>解锁</button>
+          <p class="form-note" id="passcode-3-note">口令只在首次启动时输出在服务日志里，可以找部署这台平台的人要；忘了可以用环境变量 <code class="code">ACCESS_PASSCODE</code> 重设。</p>
+        </form>
+      </div>
+      </section>
+    </div>
+  </main>
+</div>
+</body>
+</html>

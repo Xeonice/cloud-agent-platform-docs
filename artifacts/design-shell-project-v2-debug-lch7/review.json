@@ -1,0 +1,54 @@
+[
+  {
+    "frame": "f-lch-form-07",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "branch-not-found-no-side-effects",
+        "screenshot": "f-lch-form-07-dark-1440-branch-not-found-no-side-effects.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [
+        {
+          "method": "POST",
+          "path": "/api/sandboxes",
+          "input": {
+            "projectId": "p-web",
+            "runtime": "codex",
+            "initialPrompt": "修一下首页加载慢\n续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续续",
+            "branch": "feat/login-refresh"
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  }
+]

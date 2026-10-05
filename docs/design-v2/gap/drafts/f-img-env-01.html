@@ -1,0 +1,226 @@
+<!doctype html>
+<!--
+  id: f-img-env-01
+  页面: 21-4 镜像管理（/settings/images）· 镜像卡「运行参数」里的环境变量编辑器（卡内展开，不是弹层）
+  状态: 在 ml-agent 卡上点 [编辑环境变量]：运行参数块里、摘要下面展开编辑器——LOG_LEVEL=info、MY_SECRET（已保存的 Secret：值不回显，占位「（保持不变，输入即覆盖）」）、HTTP_TIMEOUT=30，[添加变量]；下面 [保存运行参数] [取消]；主区已滚到这张卡
+  对应 v1 稿件: g5-08（design-drafts/g5-images/g5-08-env-editor.html；预览 design-drafts/previews/g5-08.dark.png / g5-08.light.png）
+  体现的 v2 要点:
+    - 编辑器在 P7 的「运行参数」嵌入块（.card__inset，无环）里，摘要之下一条 1px 分隔：上面是已保存的值，下面是草稿（本组 CSS §2）
+    - 一行：变量名 192 | 变量值 256（.input--32 等宽 13：环境变量名是标识符，P10；值按配置串处理，宽度沿用现状 w-48 / w-64）| 自绘复选 .checkbox「Secret」| 「删除」tertiary 28 | 字节计数 12 次要灰 tabular
+    - [添加变量] secondary 28 + lucide plus（不再用字符「+」）；[保存运行参数] primary 32（卡片里唯一的实心按钮）+ [取消] tertiary 32
+    - [编辑环境变量] 是开关：本卡 aria-expanded="true" + aria-controls 指向编辑器，其余两张 aria-expanded="false"
+    - 字阶 14 为主、12 只给字节计数与徽标；没有字符假图标；描边嵌套 1 层
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要你确认）:
+    1. 外壳与卡片：同 f-img-register-01 第 1 条（P7）；v1 卡内「运行参数」描边子框 → P7 的嵌入块（无环）。需看稿（随 P7）。
+    2. 编辑器与摘要之间新增 1px 分隔（v1 只靠 mt-2 留白）：一眼分清「已保存」与「正在改」。需看稿。
+    3. 输入框：28 高、等宽 12、透明底 1px 描边 → 32 高、等宽 13、表面底 + 环（.input--32.input--mono）；宽度 192 / 256 不变；placeholder（LOG_LEVEL / info / 「（保持不变，输入即覆盖）」）不变。
+    4. Secret：系统原生复选框（蓝）→ 自绘 .checkbox 16（foundation §3.3，不出现系统蓝控件）；「Secret」12 → 14 次要灰。aria-label「Secret n」不变。需看稿。
+    5. 「删除」：12px 次要灰文字按钮（悬停变红）→ tertiary 28 文字按钮（悬停 fill，不变红：删一行草稿可以用 [取消] 撤回，不是进二次确认的破坏性入口，简报 §4.1）。aria-label「删除变量 n」不变。需看稿（悬停色）。
+    6. 字节计数：10→11px（v1 Q-DS-20 A）→ 12 次要灰 + tabular-nums。文字不变（「n / 4096 字节」）。
+    7. 「+ 添加变量」outline sm（字符「+」）→ secondary 28 + lucide plus「添加变量」（E2：不拿字符当图标）。
+    8. [保存运行参数] 实心 sm → primary 32；[取消] ghost → tertiary 32；顺序不变（保存在前）。
+    9. [编辑环境变量] 补 aria-expanded / aria-controls（现状就是开关：再点一次收起，ImagesContainer.tsx:201-204）；不可见改动。
+    10. 滚动位置：v1 是整页截图；v2 正式预览是 1440×900 视口，用 autofocus 锚点把主区滚到 ml-agent 卡（本组 CSS §5，接线时删掉），另出整页图。
+    11. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-IMG-06 A：预制镜像卡头徽标「预置」→「预制」（三组同物异名统一，只改可见文字；类名、接口字段不动）。
+  不变: 三行的变量名 / 值 / Secret 勾选与已存 Secret 不回显；「运行参数」「编辑环境变量」、摘要「环境变量：LOG_LEVEL=info · MY_SECRET=*** · HTTP_TIMEOUT=30」；全部 aria-label（变量名 n / 变量值 n / Secret n / 删除变量 n）；data-testid（env-var-editor / env-var-row / value-byte-counter / env-summary）；行内表格不是弹层
+  示例数据来源: 原型示例世界的 ml-agent（P7 摘要 LOG_LEVEL=info · MY_SECRET=*** · HTTP_TIMEOUT=30）；v1 g5-08 同一份
+  流程: F-IMG-ENV（REQ-IMG-010–019；本稿覆盖 REQ-IMG-010、011）
+  口径依据: 换皮规则 T-21；P10（等宽只给标识符）；DR-39（禁用要写原因，见 f-img-env-03）；P21-4 L342-350（键值表格、Secret 不回显）——「[编辑环境变量] 弹层」按实现改为卡内行内编辑（产品说明 REQ-IMG-010 改写旧文）；实现 web/src/views/image/EnvVarEditor.view.tsx:79-190、web/src/containers/image/ImagesContainer.tsx:153-200、web/src/hooks/image/useImages.ts:720-880、web/src/lib/image/imageManifestCards.ts:209-231；用户拍板 2026-10-04（Q-IMG-06 A：统一叫「预制镜像」）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-img-env-01" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-img-env-01 编辑运行参数（环境变量）（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l4a-img.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">镜像管理</h1>
+        <div class="header__actions"><button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">注册新镜像</span></button></div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner sections">
+
+            <div class="page-toolbar p7-toolbar">
+              <label class="input-group"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" aria-label="搜索镜像" placeholder="按名称或坐标搜索" value=""></label>
+              <div class="segmented" role="group" aria-label="状态过滤">
+                <button class="segmented__item" type="button" aria-pressed="true">全部</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-check" aria-hidden="true"></span>有效</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-triangle-alert" aria-hidden="true"></span>警告</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-x" aria-hidden="true"></span>无效</button>
+              </div>
+            </div>
+
+            <section class="section" aria-labelledby="img-list">
+              <div class="section-head section-head--16">
+                <h2 class="section-head__title" id="img-list">已注册的 OCI 镜像</h2>
+              </div>
+
+              <div class="stack stack--16">
+                <!-- 预置 · 验证通过 -->
+                <article class="card card--lg" aria-labelledby="p7-img-sandbox" data-testid="image-card" data-status="valid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="p7-img-sandbox">ghcr.io/agent-infra/sandbox</h3><span class="badge badge--20 badge--neutral">预制</span></div>
+                        <span class="p7-ref">ghcr.io/agent-infra/sandbox:latest</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="valid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>验证通过</span><span>镜像可用</span></div>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:4b17e…344</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 7 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">这就是平台的预制镜像（其他镜像从它改起）</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 有警告 · 带 1 条历史版本 -->
+                <article class="card card--lg" aria-labelledby="p7-img-ml" data-testid="image-card" data-status="warning" data-active="true">
+                  <span class="l4a-scroll-anchor" tabindex="-1" autofocus style="top: 406px"></span><!-- 静态稿专用：打开时浏览器把这里滚到内容区正中，模拟「用户已经滚到这张卡」；接线时删掉 -->
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="p7-img-ml">docker.io/acme/ml-agent</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/ml-agent:v1.0</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="warning">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>有警告</span><span>镜像仍可用</span></div>
+                      <ul class="bullets"><li>未预装 claude-code，创建时需现装，启动会明显变慢</li></ul>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:8e05a…d77</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 3 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button" aria-expanded="true" aria-controls="env-ml">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：LOG_LEVEL=info · MY_SECRET=*** · HTTP_TIMEOUT=30</span>
+                      <div class="l4a-env" id="env-ml">
+                        <div class="l4a-env__rows" data-testid="env-var-editor">
+                        <div class="l4a-env__row" data-testid="env-var-row" data-row-index="0">
+                          <div class="l4a-env__line">
+                            <input class="input input--32 input--mono l4a-env__key" type="text" aria-label="变量名 1" placeholder="LOG_LEVEL" value="LOG_LEVEL" spellcheck="false" autocomplete="off">
+                            <input class="input input--32 input--mono l4a-env__value" type="text" aria-label="变量值 1" placeholder="info" value="info" spellcheck="false" autocomplete="off">
+                            <label class="l4a-env__secret"><input class="checkbox" type="checkbox" aria-label="Secret 1">Secret</label>
+                            <button class="btn btn--tertiary btn--28" type="button" aria-label="删除变量 1">删除</button>
+                            <span class="l4a-env__bytes" data-testid="value-byte-counter">4 / 4096 字节</span>
+                          </div>
+                        </div>
+                        <div class="l4a-env__row" data-testid="env-var-row" data-row-index="1">
+                          <div class="l4a-env__line">
+                            <input class="input input--32 input--mono l4a-env__key" type="text" aria-label="变量名 2" placeholder="LOG_LEVEL" value="MY_SECRET" spellcheck="false" autocomplete="off">
+                            <input class="input input--32 input--mono l4a-env__value" type="password" aria-label="变量值 2" placeholder="（保持不变，输入即覆盖）" value="" spellcheck="false" autocomplete="off">
+                            <label class="l4a-env__secret"><input class="checkbox" type="checkbox" aria-label="Secret 2" checked>Secret</label>
+                            <button class="btn btn--tertiary btn--28" type="button" aria-label="删除变量 2">删除</button>
+                            <span class="l4a-env__bytes" data-testid="value-byte-counter">0 / 4096 字节</span>
+                          </div>
+                        </div>
+                        <div class="l4a-env__row" data-testid="env-var-row" data-row-index="2">
+                          <div class="l4a-env__line">
+                            <input class="input input--32 input--mono l4a-env__key" type="text" aria-label="变量名 3" placeholder="LOG_LEVEL" value="HTTP_TIMEOUT" spellcheck="false" autocomplete="off">
+                            <input class="input input--32 input--mono l4a-env__value" type="text" aria-label="变量值 3" placeholder="info" value="30" spellcheck="false" autocomplete="off">
+                            <label class="l4a-env__secret"><input class="checkbox" type="checkbox" aria-label="Secret 3">Secret</label>
+                            <button class="btn btn--tertiary btn--28" type="button" aria-label="删除变量 3">删除</button>
+                            <span class="l4a-env__bytes" data-testid="value-byte-counter">2 / 4096 字节</span>
+                          </div>
+                        </div>
+                        <div class="l4a-env__add"><button class="btn btn--secondary btn--28" type="button"><span class="icon i-plus" aria-hidden="true"></span>添加变量</button></div>
+                        </div>
+                        <div class="btn-row"><button class="btn btn--primary btn--32" type="button">保存运行参数</button><button class="btn btn--tertiary btn--32" type="button">取消</button></div>
+                      </div>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                  <div class="card__footer">
+                    <div class="p7-history">
+                      <span class="p7-history__label"><span class="icon i-clock" aria-hidden="true"></span>历史版本（1）</span>
+                      <ul class="p7-history__list" data-testid="image-version-history">
+                        <li class="p7-history__row" data-testid="image-version-row"><span class="text-mono-13">v1.0</span><span class="text-mono-13 u-muted">sha256:2c9d1…b08</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>有效</span></li>
+                      </ul>
+                    </div>
+                    <div class="card__footer-end"><button class="btn btn--secondary btn--32" type="button">切换到此版本</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 无效 -->
+                <article class="card card--lg" aria-labelledby="p7-img-just" data-testid="image-card" data-status="invalid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="p7-img-just">docker.io/acme/just-registered</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/just-registered:v1</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="alert" data-status="invalid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>无效</span><span>镜像不符合平台约定</span></div>
+                      <ul class="bullets"><li>平台还没有对这张镜像出具验证结论（数据异常），因此它现在不能用于创建任务。点 [重新验证] 让平台判定一次。</li></ul>
+                      <button class="btn btn--secondary btn--32" type="button" aria-expanded="false">查看镜像要求</button>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:7a3f2…e91</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 2 小时前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "basis": "User approved deleting old tests and replanning; replaced by real browser, compiled complete Nest and fresh SQLite.",
+  "retiredFiles": [
+    "e2e-contract/fixtures/seed.ts",
+    "e2e-contract/specs/_ui.ts",
+    "e2e-contract/specs/automation-list.spec.ts",
+    "e2e-contract/specs/automation-runs.spec.ts",
+    "e2e-contract/specs/first-screen.spec.ts",
+    "e2e-contract/specs/git-credential.spec.ts",
+    "e2e-contract/specs/runtime-auth-mode.spec.ts",
+    "e2e-contract/specs/webhook-test.spec.ts"
+  ],
+  "newScenario": "acceptance/task-lifecycle.spec.ts",
+  "externalBoundaries": [
+    "sandbox resource transport",
+    "OCI metadata",
+    "runtime connectivity destination metadata"
+  ],
+  "productionPaths": [
+    "AppModule/bootstrap/guards/controllers",
+    "repositories/UoW/fresh SQLite migrations",
+    "project baseline and workspace filesystem",
+    "HTTP/WS/MCP"
+  ],
+  "execution": "See artifacts/acceptance-results.json; source plan alone is not a pass."
+}

@@ -1,0 +1,194 @@
+<!doctype html>
+<!--
+  id: f-img-preset-03
+  页面: 21-4 镜像管理 · 预置镜像卡里的「下载到本机」块 · 失败
+  状态: 下载失败：进度条撤掉，保留最后一条阶段句「校验完整性：正在校验镜像包（约 320 MB）…」，下面一句失败（圆叉 + 正文色，role="alert"）「校验 sha256 对不上：已停在校验这一步，没有装载。」+ 一句指引「多半是网速：…换个网络环境后再点 [准备镜像] 重试。」（W2 按 Q-SYS-16 默认 A 改，不再让人去填代理）；按钮回到 [准备镜像]，可重试
+  对应 v1 稿件: g5-13c（design-drafts/g5-images/g5-13c-preset-provision-failed.html；预览 design-drafts/previews/g5-13c.dark.png / g5-13c.light.png）
+  体现的 v2 要点:
+    - 外壳与镜像卡照抄 P7（pilot/p7-images.html；foundation §1.2）：侧栏 256 + 顶栏 56、h1「镜像管理」+ 顶栏 [注册新镜像]、搜索 + 分段控件、卡片材质与 P7 页面类（p7-*，l4b-img.css §0 原样照抄）逐字同源；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」（W0 README §2）
+    - gap-shared §4 的失败写法：去掉 .progress__track，留 .progress__meta（最后一条阶段句）+ .progress__note--fail（圆叉带红、句子正文色，P6）+ 无图标指引 .progress__note
+    - [准备镜像] primary 可点（卡内唯一实心按钮；同屏另有顶栏 [注册新镜像]，lint W6 只提示）
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要用户确认）:
+    1. 外壳、卡片、徽标、键值、运行参数嵌入块、历史版本页脚条：全部按 P7 换皮（逐条差异与「需看稿」见 pilot/p7-images.html 头注释第 1–19 条，这里不重复）。
+    2. 块材质同 f-img-preset-01 第 2 条。需看稿。
+    3. 失败句：整句红字（--error）+ 12 号 x 图标 → 圆叉图标带红、句子正文色 13（P6：色调只上图标）。文字、role="alert"、data-testid preset-provision-error 不变。需看稿。
+    4. 指引里的路径「设置 → 系统状态 → 出网代理」→「系统状态 → 出网代理」：v2 外壳没有「设置」分区，系统状态是侧栏一级导航（Q-DS-24 A / P5）；与 W0 样张同一写法。
+    5. 失败出路句（W2 一致性，notes/consistency.md）：「…到「系统状态 → 出网代理」填一个代理，再点 [准备镜像] 重试。」→「…换个网络环境后再点 [准备镜像] 重试。」——保存的出网代理今天只管联网检查、不管镜像下载（Q-SYS-16 默认 A，IMG.md REQ-IMG-042 原句；选 B 之后再改回）。
+    6. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-IMG-06 A：徽标「预置」→「预制」；页面标题与 [准备镜像] 旁稿注里的「预置镜像」→「预制镜像」（只改可见文字；接口与代码里的 preset 不动）。
+    不变: 阶段句、失败句、指引的其余文字、[准备镜像]、「ghcr.io/agent-infra/sandbox:latest → 本机镜像库 · 约 320 MB」（W2 按实现与向导统一，原 v1 写「ghcr.io/agent-infra/sandbox → 本机 · 约 320 MB」）、data-testid preset-provision-error-hint
+  示例数据来源: v1 g5-13c（失败原因为示例：校验 sha256 对不上）；原型场景「下载失败」；W2 一致性（notes/consistency.md）：计划句按后端 provision 计划（provider-stage：from 带 tag、to「本机镜像库」）与初始化向导 f-dep-init-09 / 10 写成同一句
+  流程: F-IMG-PRESET（REQ-IMG-042）
+  口径依据: DR-36；实现 usePresetImageProvision.ts:98-110（失败时保留最后一条阶段句，不自动重试）、PresetImageCheck.view.tsx:240-268（失败句 role="alert" + 一句出路；向导里的原文「回上一步「代理配置」…」，镜像页没有上一步，只留后半句并补「再点 [准备镜像] 重试」——沿用 v1 的改写）；P22 §1（不许只报错不给出路）；gap-shared §4；待核实已查（plan.md「待核实」第 4 条）：保存的出网代理目前只被联网检查读取（api/apps/api/src/platform/system/diagnostics/connectivity.probe.ts:170），预置镜像下载用的 registry 客户端走全局 fetch、没有注入这组代理（api/packages/modules/image/src/infrastructure/spec/oci-registry.client.ts:520）——所以指引句不再让人「填一个代理」：W2 按 Q-SYS-16（合并了 IMG-B-Q3）默认 A 改成「换个网络环境后再点 [准备镜像] 重试」，AC-IMG-042.4 已改记「计划中」，选 B「让下载也走代理」之后再改回；用户拍板 2026-10-04（Q-IMG-06 A：统一叫「预制镜像」）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-img-preset-03" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-img-preset-03 预制镜像下载到本机 · 失败</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l4b-img.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">镜像管理</h1>
+        <div class="header__actions"><button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">注册新镜像</span></button></div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner sections">
+
+            <div class="page-toolbar p7-toolbar">
+              <label class="input-group"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" aria-label="搜索镜像" placeholder="按名称或坐标搜索" value=""></label>
+              <div class="segmented" role="group" aria-label="状态过滤">
+                <button class="segmented__item" type="button" aria-pressed="true">全部</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-check" aria-hidden="true"></span>有效</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-triangle-alert" aria-hidden="true"></span>警告</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-x" aria-hidden="true"></span>无效</button>
+              </div>
+            </div>
+
+            <section class="section" aria-labelledby="img-list">
+              <div class="section-head section-head--16">
+                <h2 class="section-head__title" id="img-list">已注册的 OCI 镜像</h2>
+              </div>
+
+              <div class="stack stack--16">
+                <!-- 预置 · 验证通过 · 还没下载到本机：「下载到本机」块下载失败、可重试 -->
+                <article class="card card--lg" aria-labelledby="img-sandbox" data-testid="image-card" data-status="valid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-sandbox">ghcr.io/agent-infra/sandbox</h3><span class="badge badge--20 badge--neutral">预制</span></div>
+                        <span class="p7-ref">ghcr.io/agent-infra/sandbox:latest</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="valid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>验证通过</span><span>镜像可用</span></div>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:4b17e…344</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 7 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">这就是平台的预制镜像（其他镜像从它改起）</dd>
+                    </dl>
+                    <div class="card__inset l4b-provision" data-testid="preset-provision">
+                      <div class="l4b-provision__head"><p class="icon-line icon-line--muted l4b-provision__why"><span class="icon i-cloud-download" aria-hidden="true"></span><span>预制镜像还没下载到本机：第一个任务会先下载它，要多等几分钟。现在就可以提前下，不必等到发起任务时。</span></p><span class="contract-note" title="DR-36：初始化完成后，这里是下载预制镜像的唯一入口；落点暂行，owner 可删（删掉时诊断第 ⑧ 项的下一步也要改）">暂行 · DR-36</span></div>
+                      <div class="l4b-provision__row"><button class="btn btn--primary btn--32" type="button" data-testid="preset-provision-button">准备镜像</button><span class="l4b-provision__plan">ghcr.io/agent-infra/sandbox:latest → 本机镜像库 · 约 320 MB</span></div>
+                      <div class="progress" data-testid="preset-provision-progress">
+                        <div class="progress__meta"><span class="progress__detail" data-testid="preset-provision-status">校验完整性：正在校验镜像包（约 320 MB）…</span></div>
+                        <p class="progress__note progress__note--fail" role="alert" data-testid="preset-provision-error"><span class="icon i-circle-x" aria-hidden="true"></span><span>校验 sha256 对不上：已停在校验这一步，没有装载。</span></p>
+                        <p class="progress__note" data-testid="preset-provision-error-hint">多半是网速：镜像下载源够得着、但拉得太慢，中途就断了。换个网络环境后再点 [准备镜像] 重试。</p>
+                      </div>
+                    </div>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 有警告 · 带 1 条历史版本 -->
+                <article class="card card--lg" aria-labelledby="img-ml" data-testid="image-card" data-status="warning" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-ml">docker.io/acme/ml-agent</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/ml-agent:v1.0</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="warning">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>有警告</span><span>镜像仍可用</span></div>
+                      <ul class="bullets"><li>未预装 claude-code，创建时需现装，启动会明显变慢</li></ul>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:8e05a…d77</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 3 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：LOG_LEVEL=info · MY_SECRET=*** · HTTP_TIMEOUT=30</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                  <div class="card__footer">
+                    <div class="p7-history">
+                      <span class="p7-history__label"><span class="icon i-clock" aria-hidden="true"></span>历史版本（1）</span>
+                      <ul class="p7-history__list" data-testid="image-version-history">
+                        <li class="p7-history__row" data-testid="image-version-row"><span class="text-mono-13">v1.0</span><span class="text-mono-13 u-muted">sha256:2c9d1…b08</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>有效</span></li>
+                      </ul>
+                    </div>
+                    <div class="card__footer-end"><button class="btn btn--secondary btn--32" type="button">切换到此版本</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 无效 -->
+                <article class="card card--lg" aria-labelledby="img-just" data-testid="image-card" data-status="invalid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-just">docker.io/acme/just-registered</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/just-registered:v1</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="alert" data-status="invalid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>无效</span><span>镜像不符合平台约定</span></div>
+                      <ul class="bullets"><li>平台还没有对这张镜像出具验证结论（数据异常），因此它现在不能用于创建任务。点 [重新验证] 让平台判定一次。</li></ul>
+                      <button class="btn btn--secondary btn--32" type="button" aria-haspopup="dialog">查看镜像要求</button>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:7a3f2…e91</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 2 小时前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

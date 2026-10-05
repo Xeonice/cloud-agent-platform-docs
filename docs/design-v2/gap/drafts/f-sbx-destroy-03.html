@@ -1,0 +1,186 @@
+<!doctype html>
+<!--
+  id: f-sbx-destroy-03
+  页面: 21-1 工作台 · 任务生命周期（销毁异常任务的二次确认）
+  状态: 「跑一遍示例测试」从已停止 [启动] 时容器服务没有响应、已转为异常（底层 = f-sbx-stopstart-04 那一屏，inert）；在它的任务菜单点 [销毁任务…]：遮罩上的统一破坏性确认「销毁任务「跑一遍示例测试」？」，副标题「示例项目 · Codex · 异常（启动失败）」；会删掉 → 代码副本怎么处理（单选：留下来作为成果〔默认选中〕/ 一起删掉，下面一句为什么照常给「留下来」）→ 不受影响 → 清单来源；打开时焦点在「取消」（data-initial-focus，静态稿不画环）；[销毁任务] danger
+  对应 v1 稿件: 无同屏稿（新设计；用户拍板 2026-10-04 · Q-SBX-02 B）。结构与文案照试点 P4（pilot/p4-destroy-confirm.html，v1 g2-10 销毁确认：单选默认「留下来作为成果」），对照同组 f-lch-startup-06（首次启动阶段的「取消并删除」不给「留下来」）
+  体现的 v2 要点:
+    - 破坏性确认（Q-DS-17 A；components-v2 §13 .dconfirm，与 P4 同一写法）：标题「动词 + 对象」？、副标题 = 项目 · Agent · 当前状态；分段 会删掉 → 代码副本怎么处理（role=radiogroup，默认选安全项）→ 不受影响；清单来源 12；页脚条「取消」secondary 在左（data-initial-focus）、「销毁任务」danger 在右
+    - 单选组下一句 .dconfirm__note（14 次要灰，radiogroup 的 aria-describedby）：说清这个异常任务为什么照常给「留下来」——与 f-lch-startup-06「没有成果可留，所以不给」那句对照
+    - 遮罩暗 rgb(0 0 0 / .8)、亮 rgb(0 0 0 / .32)；底层 = f-sbx-stopstart-04 那一屏（失败结果卡，含 Q-LCH-03 B 的「镜像：…」一行、Q-SYS-01② A 的 [运行诊断] 与不再只点名 Docker 的建议句），inert + aria-hidden
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 新状态：异常任务（不是首次启动阶段失败的）销毁时也给「留下来作为成果」，并默认选中（用户拍板 2026-10-04 · Q-SBX-02 B；原型与试点 P4 原来对异常任务一律不给）。需看稿。
+    2. 术语：P4 的「工作目录怎么处理」「工作目录里还没推送到远端的改动」→「代码副本怎么处理」「代码副本里还没推送到远端的改动」（用户拍板 2026-10-04 · Q-SBX-03 A：统一叫「代码副本」）。
+    3. 「会删掉」第一条按这个任务的实际情况写：「运行环境（这次没能启动起来，没有终端会话）」；没有「删掉之后」一段——异常时名额已经释放（REQ-SBX-014），删掉不再多出名额。需看文案。
+    4. 单选组下新增一句「它是重新启动时失败的，之前的改动还在代码副本里。」（f-sbx-stopstart-04 附注「销毁时选「留下来作为成果」就不会丢」的落点）。需看文案。
+  示例数据来源: 原型示例世界（acme-web 7 个任务、示例项目 3 个任务、acme-api 克隆失败、docs-site 空、infra-scripts 克隆中）；「跑一遍示例测试」的这一刻同 f-sbx-stopstart-04（启动失败：容器服务没有响应，镜像 docker.io/acme/ml-agent:v1.0）；清单来源 = 后端返回的任务详情
+  流程: F-SBX-DESTROY（REQ-SBX-020、REQ-SBX-022）；关联 F-SBX-STOPSTART（REQ-SBX-014 附注）
+  口径依据: 用户拍板 2026-10-04（Q-SBX-02 → B：只有首次启动阶段失败的任务不给「留下来作为成果」，其余异常任务、以及从已停止重新启动时被「取消并删除」的任务都给，默认选中；Q-SBX-03 → A：代码副本）；Q-DS-17 A（统一破坏性确认结构）；试点 P4（单选默认「留下来」、30 天后自动清理）；实现 api …/sandbox-application.service.ts:720-760（DELETE 对 failed 同样按 keepVolume 留代码副本）、DestroySandboxSchema 只有 keepVolume（sandbox.schema.ts:114-116）、retained-volume.service.ts:28（DEFAULT_RETENTION_DAYS = 30）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-sbx-destroy-03">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-sbx-destroy-03 销毁异常任务 · 二次确认（照常给「留下来作为成果」）（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l2b-sbx.css">
+</head>
+<body>
+<div class="frame">
+  <!-- 对话框打开时，底层外壳 inert + aria-hidden（键盘与读屏都进不去，与 aria-modal 一致；Radix Dialog 的 hideOthers 同样给外部内容挂 aria-hidden，同 P4；静态稿用 HTML 属性表达，不写 JS） -->
+  <a class="skip-link" href="#main" inert aria-hidden="true">跳到主区</a>
+  <div class="shell" inert aria-hidden="true">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span><span class="badge badge--20 badge--info" aria-hidden="true">2 等待你输入</span><span class="u-sr-only" role="status">2 个任务等待你输入</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__sep" role="separator"></div>
+
+      <section class="sidebar__section" aria-labelledby="sb-projects">
+        <div class="sidebar__section-head">
+          <h2 class="sidebar__section-title" id="sb-projects">项目</h2>
+          <div class="sidebar__section-tools">
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="按状态筛选任务" title="按状态筛选任务：全部"><span class="icon icon--14 i-list-filter" aria-hidden="true"></span></button>
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="新建项目" title="新建项目"><span class="icon icon--14 i-folder-plus" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <div class="sidebar__scroll">
+          <nav class="tree" aria-label="项目分组任务树">
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="收起分组" aria-expanded="true" title="收起 示例项目"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">示例项目</span><span class="tree-project__count">3</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="示例项目 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+              <ul class="tree-group__tasks">
+                <li class="tree-task is-current"><button class="tree-task__main" type="button" aria-current="true"><span class="status-dot status-dot--error" role="img" aria-label="异常"></span><span class="tree-task__name">跑一遍示例测试</span></button><button class="btn btn--tertiary btn--24 btn--icon tree-task__more" type="button" aria-label="任务菜单" title="跑一遍示例测试 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button><p class="tree-task__sub"><span class="tone-error">启动失败：容器服务没有响应</span></p></li>
+                <li class="tree-task"><button class="tree-task__main" type="button"><span class="status-dot status-dot--stopped" role="img" aria-label="已停止"></span><span class="tree-task__name">梳理目录结构</span></button><button class="btn btn--tertiary btn--24 btn--icon tree-task__more" type="button" aria-label="任务菜单" title="梳理目录结构 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button><p class="tree-task__sub">已停止</p></li>
+                <li class="tree-task"><button class="tree-task__main" type="button"><span class="status-dot status-dot--stopped" role="img" aria-label="已停止"></span><span class="tree-task__name">试用自动化规则</span></button><button class="btn btn--tertiary btn--24 btn--icon tree-task__more" type="button" aria-label="任务菜单" title="试用自动化规则 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button><p class="tree-task__sub">已停止</p></li>
+              </ul>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" title="展开 acme-web"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">acme-web</span><span class="tree-project__count">7</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="acme-web 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" aria-disabled="true" title="克隆失败，分组里还没有内容"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">acme-api</span><span class="badge badge--20 badge--fail">克隆失败</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="acme-api 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" title="展开 docs-site"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">docs-site</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="docs-site 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" aria-disabled="true" title="正在克隆，分组里还没有内容"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">infra-scripts</span><span class="badge badge--20 badge--warn">克隆中</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="infra-scripts 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+          </nav>
+        </div>
+      </section>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="u-sr-only">工作台：示例项目 / 跑一遍示例测试</h1>
+        <div class="header__lead">
+          <nav class="u-min-w-0" aria-label="当前位置">
+            <ol class="crumbs">
+              <li class="crumbs__item"><button class="crumb" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="切换项目（当前 示例项目）" title="切换项目；菜单首项：在左侧树中定位当前项目"><span class="icon i-folder" aria-hidden="true"></span><span class="crumb__label">示例项目</span><span class="icon crumb__switch i-chevrons-up-down" aria-hidden="true"></span></button></li>
+              <li class="crumbs__item" aria-hidden="true"><span class="icon crumbs__sep i-slash"></span></li>
+              <li class="crumbs__item"><button class="crumb" type="button" aria-current="page" aria-haspopup="menu" aria-expanded="false" aria-label="切换任务（当前 跑一遍示例测试）" title="切换任务"><span class="crumb__label">跑一遍示例测试</span><span class="icon crumb__switch i-chevrons-up-down" aria-hidden="true"></span></button></li>
+            </ol>
+          </nav>
+          <span class="badge badge--fail"><span class="status-dot status-dot--error" aria-hidden="true"></span><span class="badge__label">异常</span></span>
+        </div>
+        <div class="header__actions">
+          <button class="chip header__hide-below-960" type="button" aria-haspopup="dialog" aria-label="项目信息：仓库 https://github.com/acme/demo.git · 分支 main · 代码体积 12 MB · 最后拉取 2026/9/28 16:20" title="仓库 https://github.com/acme/demo.git · 分支 main · 代码体积 12 MB · 最后拉取 2026/9/28 16:20"><span class="icon i-git-branch" aria-hidden="true"></span>main</button>
+          <button class="btn btn--tertiary btn--32 btn--icon header__show-below-960" type="button" aria-haspopup="dialog" aria-label="项目信息：仓库 https://github.com/acme/demo.git · 分支 main · 代码体积 12 MB · 最后拉取 2026/9/28 16:20" title="项目信息"><span class="icon i-info" aria-hidden="true"></span></button>
+          <button class="btn btn--secondary btn--32 header__hide-below-800" type="button" title="只更新项目里的这份代码。已经建好的任务用的是各自建的时候复制的那一份，不会跟着变；下次新建任务才会用到刚拉下来的代码。" aria-label="拉取最新代码。只更新项目里的这份代码。已经建好的任务用的是各自建的时候复制的那一份，不会跟着变；下次新建任务才会用到刚拉下来的代码。"><span class="icon i-refresh-cw" aria-hidden="true"></span>拉取最新代码</button>
+          <button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">新任务</span></button>
+          <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="更多操作" title="更多操作"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+        </div>
+      </header>
+      <main class="main" id="main">
+        <div class="empty empty--fill empty--viewport empty--outcome" data-code="PROVIDER_UNAVAILABLE">
+          <div class="empty__icon empty__icon--fail"><span class="icon i-circle-x" aria-hidden="true"></span></div>
+          <div class="empty__head" role="alert"><h2 class="empty__title tone-fail">容器服务没有响应</h2><p class="empty__subject">任务：跑一遍示例测试</p></div>
+          <p class="empty__subject">镜像：docker.io/acme/ml-agent:v1.0</p>
+          <p class="empty__desc">平台连不上这台机器上的容器服务。点 [运行诊断] <span class="u-nowrap">看看用的是哪一种沙箱环境</span>、起没起来，它起来之后<span class="u-nowrap">重新发起</span>。</p>
+          <pre class="empty__detail">start instance: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?</pre>
+          <div class="empty__actions"><div class="btn-row"><button class="btn btn--secondary" type="button" aria-haspopup="dialog">重新发起</button><button class="btn btn--secondary" type="button">运行诊断</button><button class="btn btn--tertiary" type="button">复制诊断信息</button></div><p class="empty__note">这次是在 [启动] 时失败的，任务已转为异常、不能再启动。<span class="u-nowrap">代码副本还在</span>：销毁时选「留下来作为成果」就不会丢。</p></div>
+          <p class="empty__code">诊断码：<code>PROVIDER_UNAVAILABLE</code></p>
+        </div>
+      </main>
+    </div>
+  </div>
+  <div class="overlay">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ds-title">
+      <div class="dialog__header">
+        <h2 class="dialog__title" id="ds-title">销毁任务「跑一遍示例测试」？</h2>
+        <p class="dialog__subtitle">示例项目 · Codex · 异常（启动失败）</p>
+      </div>
+      <div class="dialog__body dconfirm">
+        <div class="dconfirm__block">
+          <div class="dconfirm__title">会删掉</div>
+          <ul class="bullets">
+            <li>运行环境 <span class="dconfirm__meta">（这次没能启动起来，没有终端会话）</span></li>
+            <li>代码副本里还没推送到远端的改动<span class="dconfirm__note">平台不检查有没有推送；拿不准就选下面的「留下」。</span></li>
+          </ul>
+        </div>
+        <div class="dconfirm__block" role="radiogroup" aria-labelledby="ds-copy-title" aria-describedby="ds-copy-note">
+          <span class="dconfirm__title" id="ds-copy-title">代码副本怎么处理</span>
+          <label class="dconfirm__option"><input class="radio" type="radio" name="ds-copy" value="keep" checked><span class="dconfirm__option-label">留下来作为成果 <span class="dconfirm__meta">（默认；30 天后自动清理，<span class="u-nowrap">可在「保留下来的成果」里下载）</span></span></span></label>
+          <label class="dconfirm__option"><input class="radio" type="radio" name="ds-copy" value="delete"><span class="dconfirm__option-label">一起删掉，不留成果</span></label>
+          <p class="dconfirm__note" id="ds-copy-note">它是重新启动时失败的，之前的改动还在代码副本里。</p>
+        </div>
+        <div class="dconfirm__block dconfirm__block--untouched">
+          <div class="dconfirm__title">不受影响</div>
+          <ul class="bullets">
+            <li>远端 Git 仓库，以及同项目的其他任务</li>
+          </ul>
+        </div>
+        <p class="dconfirm__source">清单来源：后端返回（任务详情）。</p>
+      </div>
+      <div class="dialog__footer">
+        <button class="btn btn--secondary btn--32" type="button" data-initial-focus>取消</button>
+        <div class="dialog__footer-end"><button class="btn btn--danger btn--32" type="button">销毁任务</button></div>
+      </div>
+      <!-- 关闭按钮放在对话框 DOM 末尾（与 v1、shadcn DialogContent 同序）：Tab 顺序 = 单选组 → 取消 → 销毁任务 → 关闭；Esc / 点遮罩 / 关闭 = 取消 -->
+      <button class="btn btn--tertiary btn--28 btn--icon dialog__close" type="button" aria-label="关闭"><span class="icon i-x" aria-hidden="true"></span></button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  id: f-dep-init-03
+  页面: 21-8 部署与初始化 · 初始化向导 · 第 1 步 联网检查
+  状态: 本轮刚检测完：两个模型 API 与镜像下载源都连得上（行尾「连得上」+ 耗时），结论句次要灰「联网正常：…」，「上次检测」行注明本轮刚检测；步骤条上代理配置「（可跳过）」，[下一步] 直接跳到第 3 步
+  对应 v1 稿件: g8-03（design-drafts/g8-init-access/g8-03-step1-ok.html；预览 design-drafts/previews/g8-03.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳 .wiz、步骤条 .wiz-steps、检查行 .dep-checks 同 f-dep-init-02（l5c-dep.css §2–§4；简报 §5.5）
+    - 结论句 .dep-msg--muted：正常时不加图标（v1 / 现状都是常规灰字），有问题时才带色调图标（04 / 05）
+    - W4 评审修正（notes/consistency.md §8）：向导根 .wiz 由 <div> 改成 <main>：向导是这时页面上唯一的内容，品牌行落进主区地标（axe region；原型 #proto-wiz 加 role="main" 是同一处理），对话框仍是 role="dialog" aria-modal，版式不变（评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    W1–W8 同 f-dep-init-02 头注释（外壳、品牌行、步骤条、卡头步骤名、页脚条、「系统状态」路径、检查行、颜色），这里不重复。
+    1. 本稿另：无。
+  示例数据来源: v1 g8-03 同值（耗时 182 / 236 / 412ms 为示例；时刻 2026-10-02 09:14:05 与 f-acc-unlock-01 首次启动日志 9:14 同一时刻）
+  流程: F-DEP-INIT（REQ-DEP-004、REQ-DEP-005、REQ-DEP-006）
+  口径依据: Q-DS-21 A（连得上 / 模型 API / 镜像下载源）；P21-8 L21-24（Step 1）、L273（全部 ✅ → Step 3）；实现 web/src/lib/system/connectivityVerdict.ts:62-63（ok 结论句）、:84-90（「连得上 · Nms」）、web/src/lib/system/initWizardModel.ts:97-106（nextStep：代理不进流程时跳过）、web/src/hooks/system/useInitWizard.ts:345（proxyActive = verdict ≠ ok）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-03">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-03 第 1 步 · 全部连得上</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="wiz">
+    <div class="wiz__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <!-- 向导本体：模态对话框（BlockingDialog）——没有关闭按钮、不接 Esc、点外面不关；外壳与工作台根本不挂（AppBootGate 只渲染向导） -->
+    <section class="wiz__dialog" role="dialog" aria-modal="true" aria-labelledby="wiz-title" aria-describedby="wiz-desc" data-testid="init-wizard">
+      <header class="wiz__head">
+        <div class="wiz__head-main">
+          <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+        </div>
+        <p class="wiz__count">第 <b>1</b> / 5 步</p>
+      </header>
+        <ol class="wiz-steps" aria-label="初始化步骤" data-testid="init-wizard-steps">
+          <li class="wiz-steps__item" data-testid="init-step-connectivity" data-state="current" aria-current="step"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">联网检查</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-proxy"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">代理配置（可跳过）</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-preset-image"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">沙箱镜像</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-subscription"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">模型帐号</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-resource"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">本机资源</span></li>
+        </ol>
+      <div class="wiz__card">
+        <div class="wiz__body">
+          <div class="wiz__step-head"><h2 class="wiz__step-title">联网检查</h2><p class="wiz__step-desc">平台需要连得上模型 API（Agent 用）与镜像下载源（下载沙箱镜像用）。这里直接显示上次检查的结果，不重跑一轮——需要最新结果时点 [重新检测]。</p></div>
+          <section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="ok">
+            <div class="dep-verdict">
+              <p class="dep-msg dep-msg--muted" role="status" data-testid="connectivity-verdict">联网正常：模型 API 与镜像下载源都连得上。</p>
+              <button class="btn btn--secondary btn--32" type="button">重新检测</button>
+            </div>
+            <ul class="list check-list dep-checks">
+            <li class="list__row" data-testid="connectivity-item-api.openai.com" data-ok="true" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.openai.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__meta dep-push">182ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>连得上</span></span></div>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-api.anthropic.com" data-ok="true" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.anthropic.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__meta dep-push">236ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>连得上</span></span></div>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-ghcr.io" data-ok="true" data-timed-out="false" data-model-api="false">
+              <div class="check-row__head"><span class="check-row__title">ghcr.io</span><span class="dep-value" data-testid="connectivity-kind">镜像下载源</span><span class="check-row__meta dep-push">412ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>连得上</span></span></div>
+            </li>
+            </ul>
+            <p class="dep-checked-at" data-testid="connectivity-checked-at">上次检测：2026-10-02 09:14:05（刚刚）（本轮刚检测）</p>
+          </section>
+        </div>
+        <footer class="wiz__footer">
+          <div class="wiz__actions"><button class="btn btn--primary" type="button">下一步</button></div>
+        </footer>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

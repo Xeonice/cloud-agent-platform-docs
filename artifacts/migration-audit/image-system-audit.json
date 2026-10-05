@@ -1,0 +1,1323 @@
+[
+  {
+    "id": "AC-IMG-001.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/RegisterImageModal.view.tsx:64"
+    ],
+    "reason": "仍是无点击处理的手写遮罩，空闲点击不关闭。"
+  },
+  {
+    "id": "AC-IMG-003.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:527",
+      "只读核对（本轮未重跑）：web/src/views/image/ValidationResult.view.tsx:83"
+    ],
+    "reason": "警告结构与保存已有，仍直接展示服务端issue.message，未按码生成指定人话。"
+  },
+  {
+    "id": "AC-IMG-003.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ValidationResult.view.tsx:66",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:527"
+    ],
+    "reason": "无效结构与禁止保存已有，错误句仍取后端原文而非文案表。"
+  },
+  {
+    "id": "AC-IMG-003.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:232"
+    ],
+    "reason": "issuesToText仍仅取message，没有按镜像错误码与未知码生成文案的表。"
+  },
+  {
+    "id": "AC-IMG-004.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/RegisterImageModal.view.tsx:82",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:466"
+    ],
+    "reason": "地址错误与作废结论已有；输入框仍无aria-invalid及错误句关联。"
+  },
+  {
+    "id": "AC-IMG-005.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:507",
+      "只读核对（本轮未重跑）：web/src/views/image/RegisterImageModal.view.tsx:137"
+    ],
+    "reason": "重复登记留在弹层且可定位；提示容器仍没有role=status。"
+  },
+  {
+    "id": "AC-IMG-005.2",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImageCardLocation.ts:17",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:222",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:544"
+    ],
+    "reason": "定位关闭注册弹层，单卡高亮、滚动并聚焦卡片，已补原缺口。"
+  },
+  {
+    "id": "AC-IMG-005.3",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:544",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImageCardLocation.ts:17"
+    ],
+    "reason": "定位前清搜索并切全部，再滚动聚焦目标卡。"
+  },
+  {
+    "id": "AC-IMG-006.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:483",
+      "只读核对（本轮未重跑）：api/packages/contracts/src/schemas/image.schema.ts:38"
+    ],
+    "reason": "预检仍没有digest返回/传入结论；pinnedDigestShort仅为可选展示，未满足预检后钉定版本。"
+  },
+  {
+    "id": "AC-IMG-007.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:295",
+      "只读核对（本轮未重跑）：web/src/views/image/ImageRequirementsPanel.view.tsx:80"
+    ],
+    "reason": "无罩complementary面板已有，卡片触发按钮仍无aria-expanded。"
+  },
+  {
+    "id": "AC-IMG-007.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageRequirementsPanel.view.tsx:44",
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/infrastructure/spec/oci-image-spec.provider.ts:99"
+    ],
+    "reason": "面板仍要求WorkingDir，解析器缺省回落到/，判据仍不一致。"
+  },
+  {
+    "id": "AC-IMG-008.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:493"
+    ],
+    "reason": "验证请求失败仍只toast，弹层页脚无原位失败与重试。"
+  },
+  {
+    "id": "AC-IMG-008.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:493"
+    ],
+    "reason": "REF_NOT_FOUND仍走轻提示，未在注册弹层原位说明。"
+  },
+  {
+    "id": "AC-IMG-008.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:261"
+    ],
+    "reason": "平台缺预制镜像仍走INVALID_STATE轻提示，缺弹层原位部署说明和系统状态动作。"
+  },
+  {
+    "id": "AC-IMG-008.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:537"
+    ],
+    "reason": "保存遭MANIFEST_INVALID仍只toast，未替换结论并移除保存按钮。"
+  },
+  {
+    "id": "AC-IMG-010.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:265",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:254"
+    ],
+    "reason": "行内环境变量编辑已有；触发按钮仍无aria-expanded/aria-controls。"
+  },
+  {
+    "id": "AC-IMG-012.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/EnvVarEditor.view.tsx:99"
+    ],
+    "reason": "错误句、data-code及字节计数已有；出错输入仍无aria-invalid/aria-describedby。"
+  },
+  {
+    "id": "AC-IMG-013.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/EnvVarEditor.view.tsx:178"
+    ],
+    "reason": "到50行仍仅native disabled，缺可聚焦aria-disabled、旁边原因及关联。"
+  },
+  {
+    "id": "AC-IMG-013.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/EnvVarEditor.view.tsx:172"
+    ],
+    "reason": "超量整表alert已有，仍缺50条上限按钮原因与关联。"
+  },
+  {
+    "id": "AC-IMG-014.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:960"
+    ],
+    "reason": "网络失败保留草稿但仅toast；未把保存失败写在编辑器下面。"
+  },
+  {
+    "id": "AC-IMG-020.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:155"
+    ],
+    "reason": "全串原位切换已有；缺aria-expanded与全串折行约束。"
+  },
+  {
+    "id": "AC-IMG-020.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:157"
+    ],
+    "reason": "全串span没有select-all或点击整串选择行为。"
+  },
+  {
+    "id": "AC-IMG-022.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/UpdateCompareDialog.view.tsx:60"
+    ],
+    "reason": "版本对比与结论已有，仍缺作用范围句。"
+  },
+  {
+    "id": "AC-IMG-022.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:727",
+      "只读核对（本轮未重跑）：web/src/views/image/UpdateCompareDialog.view.tsx:82"
+    ],
+    "reason": "登记再激活及忙碌行为已有；成功轻提示仍没有作用范围正文。"
+  },
+  {
+    "id": "AC-IMG-023.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:566"
+    ],
+    "reason": "warning仍toast.success且文案为展开卡片看后果说明，未改中性提示。"
+  },
+  {
+    "id": "AC-IMG-023.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:566"
+    ],
+    "reason": "结论改写且不自动禁用已有；invalid也仍走成功色轻提示。"
+  },
+  {
+    "id": "AC-IMG-024.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:299"
+    ],
+    "reason": "历史行切换仍把switchingId接成卡面行id，被点历史行不进入切换中。"
+  },
+  {
+    "id": "AC-IMG-024.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:628",
+      "只读核对（本轮未重跑）：web/src/lib/image/imageManifestCards.ts:166"
+    ],
+    "reason": "换位及各版本配置已有；切换轻提示仍只有标题无作用范围。"
+  },
+  {
+    "id": "AC-IMG-024.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageVersionHistory.view.tsx:93",
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:391"
+    ],
+    "reason": "后端拒绝invalid激活已有，但历史按钮仍可点且未说明不可选原因。"
+  },
+  {
+    "id": "AC-IMG-025.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/UpdateCompareDialog.view.tsx:79"
+    ],
+    "reason": "对比弹层仍没有只影响之后新建任务的作用范围句。"
+  },
+  {
+    "id": "AC-IMG-025.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:628",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:754"
+    ],
+    "reason": "更新/切换成功toast只有标题，缺指定作用范围正文。"
+  },
+  {
+    "id": "AC-IMG-026.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:193",
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:279",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:746",
+      "只读核对（本轮未重跑）：api/apps/api/test/e2e/images.e2e-spec.ts:1065",
+      "已跑验证记录：IMPLEMENTATION-STATUS.md:32 后端镜像38条e2e通过，其中 images.e2e-spec.ts:1065 明确覆盖密文继承。"
+    ],
+    "reason": "已选继承分支：注册带copyConfigFromId，服务端复制密文，新版本保留配置，切换仍取各版自己的配置。"
+  },
+  {
+    "id": "AC-IMG-026.3",
+    "status": "superseded",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:193",
+      "只读核对（本轮未重跑）：api/apps/api/test/e2e/images.e2e-spec.ts:1065"
+    ],
+    "reason": "与026.1二选一；参数继承已实现，本条不继承警告分支已退役，未声称实现该反向行为。"
+  },
+  {
+    "id": "AC-IMG-030.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:94",
+      "只读核对（本轮未重跑）：web/src/components/ui/status-pill.tsx:45"
+    ],
+    "reason": "已去掉整卡opacity与转圈，但禁用徽标用skipped的Minus而非实心方块。"
+  },
+  {
+    "id": "AC-IMG-030.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:661"
+    ],
+    "reason": "已改新任务不能选用；自定义镜像成功提示仍缺已经在用的任务不受影响正文。"
+  },
+  {
+    "id": "AC-IMG-031.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:308"
+    ],
+    "reason": "启用进行中会disabled，但按钮文字仍为启用而非启用中。"
+  },
+  {
+    "id": "AC-IMG-031.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:628",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:638"
+    ],
+    "reason": "启用仍复用切换版本，轻提示仍为已切换到该版本且缺新任务可选说明。"
+  },
+  {
+    "id": "AC-IMG-032.4",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/PresetDisableDialog.view.tsx:37",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:668",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:46",
+      "已跑浏览器：artifacts/design-image-v2/review.json 6场 presetConfirmationCancelAndConfirm=true；已跑 ImagesContainer 27条回归包含预制禁用取消与确认。"
+    ],
+    "reason": "预制禁用已先非危险确认，后果完整，取消/Esc不写，确认才PATCH；初焦为取消并给禁用后果提示。"
+  },
+  {
+    "id": "AC-IMG-032.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:103",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:177"
+    ],
+    "reason": "镜像卡徽标和页面可见说明使用预制，旧预置仅剩代码注释。"
+  },
+  {
+    "id": "AC-IMG-033.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:357",
+      "只读核对（本轮未重跑）：web/src/views/settings/ConfirmDialog.view.tsx:33"
+    ],
+    "reason": "自定义删除仍是简短通用确认；缺指定四段与受影响清单，删除按钮/初焦未收口。"
+  },
+  {
+    "id": "AC-IMG-033.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/interface/http/image.controller.ts:155",
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:438"
+    ],
+    "reason": "仍只有DELETE时引用计数，缺版本/未销毁任务清单的只读删除预检。"
+  },
+  {
+    "id": "AC-IMG-033.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:708",
+      "只读核对（本轮未重跑）：web/src/views/settings/ConfirmDialog.view.tsx:37"
+    ],
+    "reason": "删除后重取与卡片回退已有；忙碌仍写处理中而非删除中。"
+  },
+  {
+    "id": "AC-IMG-033.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:711"
+    ],
+    "reason": "409仍保留弹层并toast，未原位切换删除被拦视图。"
+  },
+  {
+    "id": "AC-IMG-034.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:357",
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:438"
+    ],
+    "reason": "没有预检清单与打开即被拦态，删除时才知引用冲突。"
+  },
+  {
+    "id": "AC-IMG-034.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:357"
+    ],
+    "reason": "删除确认没有改为禁用动作与对应焦点回程。"
+  },
+  {
+    "id": "AC-IMG-034.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/infrastructure/persistence/sqlite/image-manifest.repository.impl.ts:191"
+    ],
+    "reason": "引用计数仍不排除destroyed，外键也未脱离，已销毁任务仍阻止删镜像。"
+  },
+  {
+    "id": "AC-IMG-034.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/image/src/application/image-application.service.ts:442"
+    ],
+    "reason": "409存在，但message仍未明确含已停止，也未完全收口为新建任务镜像栏文案。"
+  },
+  {
+    "id": "AC-IMG-034.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:250"
+    ],
+    "reason": "INVALID_STATE保留后端原因，但标题仍带⚠️。"
+  },
+  {
+    "id": "AC-IMG-040.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:258"
+    ],
+    "reason": "镜像页尚无预制卡下载到本机块及准备镜像入口。"
+  },
+  {
+    "id": "AC-IMG-040.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:258"
+    ],
+    "reason": "下载块整条未接镜像页，不能以所有状态都不渲染充当条件显隐已实现。"
+  },
+  {
+    "id": "AC-IMG-040.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:134",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:258"
+    ],
+    "reason": "向导一次自动开始已有；镜像页准备入口及不自动开始路径尚未落地。"
+  },
+  {
+    "id": "AC-IMG-041.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:85",
+      "只读核对（本轮未重跑）：web/src/views/init/PresetImageCheck.view.tsx:222"
+    ],
+    "reason": "仍把百分比拼进阶段句，未收口条尾百分比布局。"
+  },
+  {
+    "id": "AC-IMG-041.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:90",
+      "只读核对（本轮未重跑）：web/src/views/init/PresetImageCheck.view.tsx:215"
+    ],
+    "reason": "null不当0已有，但仍缺未知进度滑动条。"
+  },
+  {
+    "id": "AC-IMG-041.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/preset-image/preset-image-provisioner.ts:277"
+    ],
+    "reason": "上屏阶段消息仍写铺进，未改为下载到本机。"
+  },
+  {
+    "id": "AC-IMG-042.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:99",
+      "只读核对（本轮未重跑）：web/src/views/init/PresetImageCheck.view.tsx:253"
+    ],
+    "reason": "向导保留最后阶段与失败已有；镜像页块尚不存在，失败句/出路仍未全部按稿收口。"
+  },
+  {
+    "id": "AC-IMG-042.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:105",
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/system.controller.ts:250"
+    ],
+    "reason": "服务端不可搬运409已有；前端仍按一般失败显示，不按原因置灰准备按钮。"
+  },
+  {
+    "id": "AC-IMG-042.5",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:105",
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/preset-image/preset-image-provisioner.ts:235"
+    ],
+    "reason": "IN_FLIGHT仍当失败展示服务端原句，镜像页专属冲突提示未实现。"
+  },
+  {
+    "id": "AC-IMG-043.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/usePresetImageProvision.ts:95"
+    ],
+    "reason": "成功仍写已放到位并重测；未改已下载到本机，也未接镜像页块。"
+  },
+  {
+    "id": "AC-IMG-043.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:258"
+    ],
+    "reason": "镜像页无准备块，重测就绪后收起链路未实现。"
+  },
+  {
+    "id": "AC-IMG-043.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:258"
+    ],
+    "reason": "镜像页无准备块，重测仍未就绪时保留块与重试未实现。"
+  },
+  {
+    "id": "AC-IMG-043.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/diagnostics/checks/preset-image.check.ts:431"
+    ],
+    "reason": "诊断下一步仍指初始化或系统状态的准备镜像，未指镜像管理预制卡。"
+  },
+  {
+    "id": "AC-IMG-050.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/image/ImageCard.view.tsx:54"
+    ],
+    "reason": "骨架仍是四块短行，未与完整卡高度/块位匹配；本轮未重做尺寸浏览器验证。"
+  },
+  {
+    "id": "AC-IMG-050.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:139"
+    ],
+    "reason": "骨架aria-hidden已有，列表仍缺aria-busy和正在读取镜像播报。"
+  },
+  {
+    "id": "AC-IMG-051.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:158"
+    ],
+    "reason": "空态保留标题/来源约束/两个动作，说明已改指新建任务镜像一栏。"
+  },
+  {
+    "id": "AC-IMG-052.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:990",
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:145",
+      "已跑回归：web/src/containers/image/__tests__/ImagesContainer.test.tsx:639 列表失败不当空态并重试恢复（本轮审计不重跑）。"
+    ],
+    "reason": "读取失败与0行分离，显示alert及重试，不冒充空态。"
+  },
+  {
+    "id": "AC-IMG-052.2",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/image/ImagesContainer.tsx:151",
+      "只读核对（本轮未重跑）：web/src/hooks/image/useImages.ts:992",
+      "已跑回归：web/src/containers/image/__tests__/ImagesContainer.test.tsx:639 列表失败不当空态并重试恢复（本轮审计不重跑）。"
+    ],
+    "reason": "重试只refetch镜像列表，成功回到正常卡列表。"
+  },
+  {
+    "id": "AC-SYS-001.4",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/workbench/useCommandPalette.ts:136",
+      "只读核对（本轮未重跑）：web/src/containers/workbench/AppFrameContainer.tsx:81"
+    ],
+    "reason": "全局命令面板已提供系统状态导航，快捷键在所有页的持久外壳可用。"
+  },
+  {
+    "id": "AC-SYS-001.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/sandbox/useSandboxOutcomeActions.ts:66",
+      "只读核对（本轮未重跑）：web/src/views/sandbox/SandboxOutcome.view.tsx:157",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useSystemStatus.ts:186"
+    ],
+    "reason": "环境错误结果提供运行诊断，进入系统页消费autorun并开始一轮；建议不再仅指Docker。"
+  },
+  {
+    "id": "AC-SYS-002.3",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/workbench/AppSidebar.view.tsx:148"
+    ],
+    "reason": "系统页共享持久侧栏，Logo链接回工作台。"
+  },
+  {
+    "id": "AC-SYS-011.3（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/resourceModel.ts:30",
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:150"
+    ],
+    "reason": "严重句仍断言建不了新任务，未接remainingTasks主数字与独立CPU建议。"
+  },
+  {
+    "id": "AC-SYS-011.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/resourceModel.ts:26"
+    ],
+    "reason": "只有单一整体结论，没有按内存后磁盘生成两条下一步。"
+  },
+  {
+    "id": "AC-SYS-012.2（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/resourceModel.ts:29",
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:181"
+    ],
+    "reason": "水位/路径已有，整体仍建议停任务且按钮仍清理保留卷，未按磁盘维度指导。"
+  },
+  {
+    "id": "AC-SYS-012.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/resourceModel.ts:30"
+    ],
+    "reason": "严重水位已有，缺磁盘专属清成果/删项目下一步。"
+  },
+  {
+    "id": "AC-SYS-020.5（改）",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useGlobalBanner.ts:120"
+    ],
+    "reason": "全局横幅仍无成果占用治理类型和跨项目清理动作。"
+  },
+  {
+    "id": "AC-SYS-020.6（改）",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/app/settings/system/page.tsx:30",
+      "只读核对（本轮未重跑）：web/src/containers/system/SystemStatusContainer.tsx:49"
+    ],
+    "reason": "清理回调仍未由页面接入，跨项目成果对话框/分组/焦点回程未实现。"
+  },
+  {
+    "id": "AC-SYS-020.7",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:157"
+    ],
+    "reason": "成果块没有82%警告句与role=status，仅按条件出现按钮。"
+  },
+  {
+    "id": "AC-SYS-020.9",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:163"
+    ],
+    "reason": "仍显示保留卷占用和清理保留卷，尚未换成果用词。"
+  },
+  {
+    "id": "AC-SYS-030.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/sandboxEnvModel.ts:21",
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:57"
+    ],
+    "reason": "窗口取接口，但1%/10%阈值仍前端写死，接口未下发。"
+  },
+  {
+    "id": "AC-SYS-030.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:109"
+    ],
+    "reason": "凭证未配置仍unknown徽标，缺停用语义与可访问名。"
+  },
+  {
+    "id": "AC-SYS-030.8",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/sandboxEnvModel.ts:61"
+    ],
+    "reason": "volumeMount仍译挂载工作区目录，未改挂载代码副本。"
+  },
+  {
+    "id": "AC-SYS-031.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/app/settings/system/page.tsx:18",
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:10"
+    ],
+    "reason": "环境最近运行日志仍无接口/卡内查看入口。"
+  },
+  {
+    "id": "AC-SYS-040.1（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/connectionModel.ts:58",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useSystemStatusModels.ts:53"
+    ],
+    "reason": "model支持错误码但生产hook仅传ok，REST失败时码仍不上屏。"
+  },
+  {
+    "id": "AC-SYS-040.4（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/connectionModel.ts:75"
+    ],
+    "reason": "0终端会话已显示，状态仍恒ok并挂正常徽标。"
+  },
+  {
+    "id": "AC-SYS-040.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useSystemStatusModels.ts:49"
+    ],
+    "reason": "首次查询pending时只看error，仍把REST判正常而非未知。"
+  },
+  {
+    "id": "AC-SYS-050.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/app/settings/system/page.tsx:18"
+    ],
+    "reason": "访问保护区块仍明确未落地，页面没有该区块。"
+  },
+  {
+    "id": "AC-SYS-060.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/contracts/src/schemas/system.schema.ts:233",
+      "只读核对（本轮未重跑）：web/src/views/system/ProxyConfigForm.view.tsx:70"
+    ],
+    "reason": "代理仅限长度；socks5未拒绝，缺字段就地校验/aria关联。"
+  },
+  {
+    "id": "AC-SYS-060.5",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useProxySettings.ts:50",
+      "只读核对（本轮未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:41"
+    ],
+    "reason": "成功仍仅invalidate设置，无原位status成功句或已配置徽标。"
+  },
+  {
+    "id": "AC-SYS-060.6",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:49",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useProxySettings.ts:57",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useProxySettings.ts:81"
+    ],
+    "reason": "设置读取失败隐藏表单与保存，显示alert/重试；保存guard拦未读配置，重试只重取设置。"
+  },
+  {
+    "id": "AC-SYS-060.8",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:41"
+    ],
+    "reason": "尚无随已存proxyConfig显隐的已配置徽标。"
+  },
+  {
+    "id": "AC-SYS-060.9",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:46"
+    ],
+    "reason": "已澄清仅联网检查并排除镜像/Git/Agent；仍缺能连上不等于够快/不测带宽说明。"
+  },
+  {
+    "id": "AC-SYS-070.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:133",
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:68"
+    ],
+    "reason": "两卡仍是读取中文字行，缺骨架、aria-busy及分别的读屏状态。"
+  },
+  {
+    "id": "AC-SYS-070.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:133",
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:68"
+    ],
+    "reason": "系统两卡尚无骨架，无法满足高度一行内和块位匹配。"
+  },
+  {
+    "id": "AC-SYS-071.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/contracts/src/schemas/system.schema.ts:379",
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/system-resources.service.ts:105"
+    ],
+    "reason": "资源契约仍无capacity.remainingTasks/registeredTasks/basis，未与创建准入同源。"
+  },
+  {
+    "id": "AC-SYS-071.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:150"
+    ],
+    "reason": "没有还能再发N个任务主数字或basis拒绝口径。"
+  },
+  {
+    "id": "AC-SYS-071.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:150"
+    ],
+    "reason": "没有remainingTasks数字及0/1/3的图标语义。"
+  },
+  {
+    "id": "AC-SYS-071.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:152"
+    ],
+    "reason": "仍显示当前活跃任务，未显示含已停止的已登记任务口径。"
+  },
+  {
+    "id": "AC-SYS-075.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/banner/GlobalBannerContainer.tsx:29"
+    ],
+    "reason": "系统状态页未知状态横幅省略自指导航动作，只留关闭。"
+  },
+  {
+    "id": "AC-SYS-075.2",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:49",
+      "只读核对（本轮未重跑）：web/src/views/system/ResourcePoolCard.view.tsx:125",
+      "只读核对（本轮未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:62",
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticsCard.view.tsx:103"
+    ],
+    "reason": "后端不可达时各卡失败不当0/空，代理不显示表单，REST异常、诊断可点、审计可重试且不遮罩。"
+  },
+  {
+    "id": "AC-DIA-001.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticsCard.view.tsx:64",
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticsCard.view.tsx:94"
+    ],
+    "reason": "连接中文字及禁用已有；缺按钮转圈和连接句role=status。"
+  },
+  {
+    "id": "AC-DIA-002.3（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticItem.view.tsx:59"
+    ],
+    "reason": "序号表仍仅①–⑧，⑨不会显示。"
+  },
+  {
+    "id": "AC-DIA-003.2（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticItem.view.tsx:51"
+    ],
+    "reason": "timeout使用时钟色，但文案仍未得出结论而非超时未响应。"
+  },
+  {
+    "id": "AC-DIA-003.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticsCard.view.tsx:89"
+    ],
+    "reason": "首帧前中断仍拼已到达结果保留下方，不符合无结果场景。"
+  },
+  {
+    "id": "AC-DIA-003.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticItem.view.tsx:75",
+      "只读核对（本轮未重跑）：web/src/lib/system/diagnoseModel.ts:214"
+    ],
+    "reason": "中断未返回项仍undefined=>pending检查中转圈，未标未返回。"
+  },
+  {
+    "id": "AC-DIA-003.7",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/types/sse-protocol.ts:49",
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/diagnostics/diagnostics.service.ts:18"
+    ],
+    "reason": "接口/契约注释仍有5s字面量，未统一引用参数；没有全量改文档。"
+  },
+  {
+    "id": "AC-DIA-012.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/system/diagnostics/checks/disk-space.check.ts:118"
+    ],
+    "reason": "磁盘建议仍写清保留卷/工作区，未使用成果和删项目定稿词。"
+  },
+  {
+    "id": "AC-DIA-030.1",
+    "status": "open",
+    "evidence": [
+      "只读检索（本轮未重跑）：rg --files 当前仓库未见 diagnose.sh"
+    ],
+    "reason": "只读检索当前仓库rg --files未发现diagnose.sh兜底自检，未实跑进程无法启动场景。"
+  },
+  {
+    "id": "AC-DIA-040.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/system/diagnoseModel.ts:204"
+    ],
+    "reason": "done汇总仍把超时混入失败，未单列超时未响应。"
+  },
+  {
+    "id": "AC-DIA-040.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/DiagnosticsCard.view.tsx:125"
+    ],
+    "reason": "汇总仍在卡底且无role=status。"
+  },
+  {
+    "id": "AC-AUD-002.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/AuditFilterBar.view.tsx:24",
+      "只读核对（本轮未重跑）：web/src/lib/audit/auditStream.ts:260"
+    ],
+    "reason": "类别仍显示沙箱，条件句也未改任务。"
+  },
+  {
+    "id": "AC-AUD-003.3（改）",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useAuditFilters.ts:38",
+      "只读核对（本轮未重跑）：web/src/containers/system/AuditStreamContainer.tsx:36"
+    ],
+    "reason": "subjectId筛选已有，但其他筛选保留、无任务名称chip，不显示完整含信息级时间线。"
+  },
+  {
+    "id": "AC-AUD-003.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/system/AuditFilterBar.view.tsx:34"
+    ],
+    "reason": "筛选条无任务chip及×，缺默认重置与焦点回程。"
+  },
+  {
+    "id": "AC-AUD-003.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/audit/auditRowModel.ts:50",
+      "只读核对（本轮未重跑）：web/src/views/system/AuditEventRow.view.tsx:100"
+    ],
+    "reason": "按钮仍叫查看该沙箱完整时间线，已按对象筛时也未隐藏。"
+  },
+  {
+    "id": "AC-AUD-003.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/audit/audit.projector.ts:84",
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/audit/audit.projector.ts:103",
+      "只读核对（本轮未重跑）：web/src/lib/audit/auditRowModel.ts:45"
+    ],
+    "reason": "摘要仍沙箱/英文状态，执行者仍Provider事件，未换定稿任务用词。"
+  },
+  {
+    "id": "AC-AUD-003.7",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/apps/api/src/platform/audit/audit.projector.ts:242",
+      "只读核对（本轮未重跑）：api/packages/modules/project/src/application/retained-volume.service.ts:126"
+    ],
+    "reason": "成果事件摘要仍保留工作区卷/保留卷，未换成果人话。"
+  },
+  {
+    "id": "AC-AUD-020.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/audit/auditStream.ts:279"
+    ],
+    "reason": "时间条件仍用ISO原串而非本地人能读时间。"
+  },
+  {
+    "id": "AC-AUD-020.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useAuditFilters.ts:49",
+      "只读核对（本轮未重跑）：web/src/views/system/AuditFilterBar.view.tsx:86"
+    ],
+    "reason": "起止不比较，错误范围仍发请求；无字段错误/保留上次有效范围。"
+  },
+  {
+    "id": "AC-AUD-020.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/audit/auditStream.ts:279"
+    ],
+    "reason": "没有跨年本地时间格式化分支。"
+  },
+  {
+    "id": "AC-AUD-020.6",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useAuditFilters.ts:49"
+    ],
+    "reason": "没有错误范围草稿/有效范围分离，故也无纠错后清提示和重取链路。"
+  },
+  {
+    "id": "AC-AUT-001.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/sandbox/SandboxTerminalContainer.tsx:648"
+    ],
+    "reason": "就绪无任务项目主区尚无设置自动化规则空态链接。"
+  },
+  {
+    "id": "AC-AUT-001.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/workbench/useCommandPalette.ts:235",
+      "只读核对（本轮未重跑）：web/src/hooks/workbench/useCommandPalette.ts:260"
+    ],
+    "reason": "已接全局命令面板；但选中项目的工作台只列当前项目动作，点名acme-web项并非任意页都存在。"
+  },
+  {
+    "id": "AC-AUT-001.4",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/banner/GlobalBannerContainer.tsx:52",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useGlobalBanner.ts:84",
+      "已跑回归：GlobalBannerContainer.test.tsx 共27条通过，包含跨项目动作保持选择。"
+    ],
+    "reason": "跨项目横幅用首条被点名项目打开面板，回工作台且不改选中项目/任务。"
+  },
+  {
+    "id": "AC-AUT-002.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:176",
+      "只读核对（本轮未重跑）：web/src/containers/workbench/WorkbenchContainer.tsx:216"
+    ],
+    "reason": "列表/详情/表单共用单dialog与标题；删除仍是行内框而非同弹层确认视图。"
+  },
+  {
+    "id": "AC-AUT-002.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/common/AppDialog.view.tsx:68"
+    ],
+    "reason": "自动化仍整体overflow-y-auto，标题关闭和表单页脚随正文滚，未固定。"
+  },
+  {
+    "id": "AC-AUT-003.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/automation/automationModel.ts:46"
+    ],
+    "reason": "调度和下次时间已有，Agent摘要仍展示codex内部id而非Codex。"
+  },
+  {
+    "id": "AC-AUT-003.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationListItem.view.tsx:31"
+    ],
+    "reason": "停用规则仍用Pause图标，未改停用灰方块。"
+  },
+  {
+    "id": "AC-AUT-004.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/automation/src/application/automation.notifier.ts:84",
+      "只读核对（本轮未重跑）：web/src/hooks/automation/useAutomations.ts:92",
+      "只读核对（本轮未重跑）：web/src/hooks/system/useGlobalBanner.ts:84"
+    ],
+    "reason": "状态通知绕过成功/失败筛选且同状态不重复；全局关注查询不依赖打开项目面板。"
+  },
+  {
+    "id": "AC-AUT-004.6",
+    "status": "closed",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/automation/src/application/automation-application.service.ts:83",
+      "只读核对（本轮未重跑）：api/apps/api/test/e2e/automation-attention.e2e-spec.ts:15",
+      "已跑验证：api attention Nest/sqlite HTTP e2e 1条通过，含响应前后规则状态不变；见 IMPLEMENTATION-STATUS.md:32。"
+    ],
+    "reason": "单次跨项目只读查询返回两类受影响规则及项目/规则名/失败次数，不逐项目读取。"
+  },
+  {
+    "id": "AC-AUT-005.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationList.view.tsx:79"
+    ],
+    "reason": "上限原因已有，按钮仍native disabled且在正文尾；缺可Tab的aria-disabled关联。"
+  },
+  {
+    "id": "AC-AUT-006.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationList.view.tsx:46"
+    ],
+    "reason": "失败不当空态已有，仍无码前缀定稿句与重试按钮。"
+  },
+  {
+    "id": "AC-AUT-006.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationList.view.tsx:46"
+    ],
+    "reason": "列表失败没有重试入口，未接失败到加载到列表链路。"
+  },
+  {
+    "id": "AC-AUT-010.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationForm.view.tsx:258"
+    ],
+    "reason": "排队/并发仍写v1.2而非还没开放。"
+  },
+  {
+    "id": "AC-AUT-012.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/WebhookSection.view.tsx:63"
+    ],
+    "reason": "默认通知项已有；URL和单选组仍无可访问名称/radiogroup。"
+  },
+  {
+    "id": "AC-AUT-012.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/WebhookSection.view.tsx:101"
+    ],
+    "reason": "成功句及圆勾已有；仍无role=status且整句成功色。"
+  },
+  {
+    "id": "AC-AUT-013.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/ScheduleSelector.view.tsx:162",
+      "只读核对（本轮未重跑）：web/src/views/project/WebhookSection.view.tsx:126"
+    ],
+    "reason": "错误句存在但星期错误仍在时区说明后，控件无aria-invalid和描述关联。"
+  },
+  {
+    "id": "AC-AUT-013.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/automation/automationPayload.ts:59"
+    ],
+    "reason": "名称仅检查空，未在失焦时拦60字上限。"
+  },
+  {
+    "id": "AC-AUT-013.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/automation/useAutomationForm.ts:116",
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationForm.view.tsx:118"
+    ],
+    "reason": "仍每次渲染直接校验，未填表单即播报字段alert。"
+  },
+  {
+    "id": "AC-AUT-014.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationForm.view.tsx:323"
+    ],
+    "reason": "保存错误保留输入已有；句子仍通用且页脚随正文滚，没有指定两行固定布局。"
+  },
+  {
+    "id": "AC-AUT-020.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/automation/useAutomationPresentation.ts:35"
+    ],
+    "reason": "配置摘要存在，但Agent仍为内部runtime id。"
+  },
+  {
+    "id": "AC-AUT-020.3",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:124"
+    ],
+    "reason": "提示预览pre仍无可聚焦tabIndex和区域名称。"
+  },
+  {
+    "id": "AC-AUT-020.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:163"
+    ],
+    "reason": "编辑/启停已有，删除仍ghost而非红字次级按钮。"
+  },
+  {
+    "id": "AC-AUT-021.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/lib/automation/formatRunOutcome.ts:35"
+    ],
+    "reason": "AUTH_EXPIRED仍说吊销，未改凭证已过期或被删除。"
+  },
+  {
+    "id": "AC-AUT-021.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryItem.view.tsx:94"
+    ],
+    "reason": "详情开关仍无aria-expanded与展开区aria-controls。"
+  },
+  {
+    "id": "AC-AUT-022.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryList.view.tsx:69"
+    ],
+    "reason": "失败仍显示共0次，未出未知计数/指定错误句/重试。"
+  },
+  {
+    "id": "AC-AUT-022.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryList.view.tsx:69"
+    ],
+    "reason": "加载文字已有但计数仍渲染共0次。"
+  },
+  {
+    "id": "AC-AUT-022.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryList.view.tsx:80"
+    ],
+    "reason": "历史hook有refresh但失败视图未接重试按钮。"
+  },
+  {
+    "id": "AC-AUT-023.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryList.view.tsx:97"
+    ],
+    "reason": "只切展开状态，没有滚到正文顶部或把焦点移到收起按钮。"
+  },
+  {
+    "id": "AC-AUT-023.5",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/RunHistoryItem.view.tsx:163"
+    ],
+    "reason": "结束运行仍没有查看成果入口与成果定位。"
+  },
+  {
+    "id": "AC-AUT-024.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:176"
+    ],
+    "reason": "仍为详情行内删除框，非统一确认视图，标题/三段/清单/取消初焦未实现。"
+  },
+  {
+    "id": "AC-AUT-024.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/common/AppDialog.view.tsx:70",
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:176"
+    ],
+    "reason": "确认视图未实现，Esc仍关闭外层弹层而非返回详情。"
+  },
+  {
+    "id": "AC-AUT-024.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/views/project/AutomationDetail.view.tsx:181"
+    ],
+    "reason": "没有统一确认与预检口径分支，只是行内一句旧确认文案。"
+  },
+  {
+    "id": "AC-AUT-024.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/containers/project/AutomationsPanelContainer.tsx:117"
+    ],
+    "reason": "成功回列表已有；NOT_FOUND仍catch留详情，仅query刷新。"
+  },
+  {
+    "id": "AC-AUT-025.1",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/automation/src/application/automation.scheduler.ts:349"
+    ],
+    "reason": "finished只finalize/applyOutcome/notify，未keepVolume销毁和登记automation-artifact。"
+  },
+  {
+    "id": "AC-AUT-025.2",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/automation/src/application/automation.scheduler.ts:349"
+    ],
+    "reason": "未做收尾登记，成果列表无规则来源产物，完成任务仍残留。"
+  },
+  {
+    "id": "AC-AUT-025.4",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：api/packages/modules/automation/src/application/automation.scheduler.ts:349"
+    ],
+    "reason": "终态任务未释放/销毁，连续成功仍可耗满任务名额。"
+  },
+  {
+    "id": "AC-AUT-027.7",
+    "status": "open",
+    "evidence": [
+      "只读核对（本轮未重跑）：web/src/hooks/system/useGlobalBanner.ts:120",
+      "只读核对（本轮未重跑）：web/src/types/banner.ts:18"
+    ],
+    "reason": "尚无Agent凭证过期治理横幅及重新登录动作。"
+  }
+]

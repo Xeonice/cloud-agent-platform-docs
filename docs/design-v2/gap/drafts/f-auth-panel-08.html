@@ -1,0 +1,186 @@
+<!doctype html>
+<!--
+  id: f-auth-panel-08
+  页面: 21-3 凭证管理（/settings/credentials）· Codex 卡内的登录面板（帐号登录 · 设备码等待授权）
+  状态: Codex 只配了 API Key（当前使用，sk-…f3a9）；点帐号登录行的 [登录帐号] 后，卡片最后一行就地展开登录面板，用户已点 [开始帐号登录]：设备码 QFRT-7KXM、倒计时 13:42、「等待授权中…」；Claude Code 两种都未配置；Git 一份 HTTPS Token
+  对应 v1 稿件: g4-03（design-drafts/g4-credentials/g4-03-login-in-progress.html；预览 design-drafts/previews/g4-03.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳与页面照 P3 逐像素同源（侧栏「凭证管理」当前页 + 顶栏页名；表单页 768 左对齐；分区 heading-16；设置卡单行卡头 + 选项行）
+    - 面板位 .auth-slot（l3a-auth.css §3）：设置卡的最后一行，上 1px 分隔线、左右 24 与选项行对齐；面板仍是嵌入区底、不加环（卡片已有一层环，lint E5）
+    - 触发按钮的打开态：[登录帐号] .is-open（fill-active 底）+ aria-expanded="true" / aria-controls 指向面板
+    - 凭证页里的面板没有一次性说明、没有「管理所有凭证」页脚（现状 CredentialsContainer.tsx:16-41 不传这两项）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+  1. 外壳、分区、设置卡、选项行、徽标、页底三句：照 P3（与 g4-01 → P3 的差异 1–23 见 pilot/p3-credentials.html 头注释）；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」。
+  2. 面板位置：卡片里选项列表下方另起一个描边框（u-mt-1 + rounded-lg border）→ 设置卡的最后一行（上 1px 线、左右 24、下 24），面板本身嵌入区底不加环。需看稿。
+  3. 面板外壳与字号同 f-auth-panel-02 第 4–7 条（嵌入区底、14 次要灰说明、下划线标签页、[收起] tertiary 28 + chevron-up）。需看稿。
+  4. [登录帐号] 展开面板后显示打开态（fill-active 底）+ aria-expanded / aria-controls（v1 无打开态）。需看稿（小）。
+  5. API Key 行：等宽 12 的「sk-…f3a9」+ 缩进按钮行 → P3 选项行写法：尾号等宽 13 放元信息行、[更换][删除] 挪到行尾（删除 = danger-tertiary，进入二次确认）；「当前使用」徽标 20。
+  6. 设备码、[复制]、倒计时、等待中同 f-auth-panel-03 第 8–12 条；「打开授权页 ↗」→ 文字 + external-link 图标。
+  7. 成功后（不另出稿）：面板停在「已连上」至少 2 秒、等 runtimes 重取完成再收起（DR-21，同 f-auth-panel-07），卡片刷新（帐号行出现 a***@example.com · 剩 N 天、[重新登录][删除]，状态徽标不变），轻提示「凭证已更新」。
+  8. 原型里能到这一态的另一条路：示例世界里 Codex 帐号登录有效，帐号行是 [重新登录]——点它展开的是同一块面板（REQ-AUTH-009），只是帐号行显示 a***@example.com · 剩 26 天；本稿照 v1 g4-03 画「首次登录帐号」。
+  示例数据来源: g4-03 同一份（v1 示例世界）：Codex API Key 尾号 sk-…f3a9（即 plan.json conventions.sample_world 新增的 Codex API Key）、设备码 QFRT-7KXM、倒计时 13:42；Claude Code 未配置、Git HTTPS Token ghp_…ab12（P3 同）
+  流程: F-AUTH-PANEL（REQ-AUTH-001、REQ-AUTH-003、REQ-AUTH-004；重新登录走同一面板：REQ-AUTH-009）
+  口径依据: P21-3 L46、L58、L115、L118（卡内页内展开授权面板，与新建任务的闸门面板同一组件；未配置时也是页内展开，改写 P21-3 L30「经发起向导」）；FE1（点了 [开始帐号登录] 才申请设备码；收起或切到 API Key 即取消）；实现 web/src/containers/credential/CredentialsContainer.tsx:16-41（panelFor：面板 + [收起]，凭证页不传一次性说明与页脚）、web/src/views/settings/RuntimeCredentialCard.view.tsx（面板 slot 在选项行之后）、api codex.adapter.ts:229-231（Codex 帐号登录 = 设备码）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-auth-panel-08" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-auth-panel-08 凭证页 · Codex 卡内设备码登录进行中</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3a-auth.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">凭证管理</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content content--form">
+          <div class="content__inner sections">
+
+            <section class="section" aria-labelledby="sec-agent">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-agent">Agent 帐号（这台机器上通用）</h2>
+                  <p class="section-head__desc">帐号登录 / API Key 二选一，这台机器上的所有任务都用它；两样可以同时留着，切换只改现在用哪个。</p>
+                  <p class="section-head__desc">凭证加密存在这台机器上，平台不会上传，也读不回明文。</p>
+                  <label class="input-group section-head__search"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" name="runtime-search" placeholder="搜索 Agent 名字或帐号尾号…" aria-label="搜索 Agent"></label>
+                </div>
+              </div>
+
+              <div class="stack stack--16">
+                <div class="card card--lg" role="group" aria-label="Codex">
+                  <div class="card__header">
+                    <div class="card__header-main"><h3 class="card__title card__title--14" id="p3-codex">Codex</h3><span class="card__desc">OpenAI</span></div>
+                    <span class="badge badge--ok"><span class="icon i-check" aria-hidden="true"></span>有效</span>
+                  </div>
+                  <div class="option-list" role="radiogroup" aria-labelledby="p3-codex">
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="codex-auth" value="account" aria-label="帐号登录"><span class="option-row__name">帐号登录</span></label>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32 is-open" type="button" aria-expanded="true" aria-controls="cx-auth-panel">登录帐号</button></div>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="codex-auth" value="api-key" aria-label="API Key" checked><span class="option-row__name">API Key</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>当前使用</span></label>
+                        <p class="option-row__meta"><span class="text-mono-13">sk-…f3a9</span></p>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">更换</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                    </div>
+                  </div>
+                  <div class="auth-slot">
+                    <section class="auth-panel" id="cx-auth-panel" aria-label="配置 Codex 凭证">
+                      <header class="auth-panel__head"><h3 class="auth-panel__title">配置 Codex 凭证</h3></header>
+                      <div class="tabs tabs--40" role="tablist" aria-label="登录方式"><button class="tab" type="button" role="tab" id="cx-auth-panel-tab-acc" aria-selected="true" aria-controls="cx-auth-panel-slot">帐号登录</button><button class="tab" type="button" role="tab" id="cx-auth-panel-tab-key" aria-selected="false" aria-controls="cx-auth-panel-slot">API Key</button></div>
+                      <p class="auth-panel__hint">帐号登录走你的订阅额度；API Key 按用量计费、配起来最快。两样可以同时留着，切换只改现在用哪个。</p>
+                      <div class="auth-panel__slot" id="cx-auth-panel-slot" role="tabpanel" aria-labelledby="cx-auth-panel-tab-acc">
+                        <div class="auth-step">
+                          <button class="btn btn--primary btn--block" type="button">打开授权页<span class="icon i-external-link btn__trail" aria-hidden="true"></span></button>
+                          <p class="auth-help">会打开一个新标签页；本页留在这里等结果，授权完成后会自己变。</p>
+                        </div>
+                        <div class="auth-step">
+                          <p class="auth-label">在新标签页粘贴这串设备码：</p>
+                          <div class="auth-code-row"><code class="auth-code" aria-label="设备码">QFRT-7KXM</code><button class="btn btn--secondary btn--32" type="button"><span class="icon i-copy" aria-hidden="true"></span>复制</button></div>
+                        </div>
+                        <p class="auth-countdown"><span class="icon i-timer" aria-hidden="true"></span><span role="timer" aria-label="倒计时">13:42</span></p>
+                        <p class="auth-status" role="status"><span class="icon i-loader-circle icon--spin" aria-hidden="true"></span>等待授权中…</p>
+                      </div>
+                    </section>
+                    <button class="btn btn--tertiary btn--28 auth-collapse" type="button" aria-controls="cx-auth-panel" aria-expanded="true"><span class="icon i-chevron-up" aria-hidden="true"></span>收起</button>
+                  </div>
+                </div>
+
+                <div class="card card--lg" role="group" aria-label="Claude Code">
+                  <div class="card__header">
+                    <div class="card__header-main"><h3 class="card__title card__title--14" id="p3-claude">Claude Code</h3><span class="card__desc">Anthropic</span></div>
+                    <span class="badge badge--inactive"><span class="icon i-square-filled" aria-hidden="true"></span>未配置</span>
+                  </div>
+                  <div class="option-list" role="radiogroup" aria-labelledby="p3-claude">
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="claude-auth" value="account" aria-label="帐号登录"><span class="option-row__name">帐号登录</span></label>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">登录帐号</button></div>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="claude-auth" value="api-key" aria-label="API Key"><span class="option-row__name">API Key</span></label>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">添加 API Key</button></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section" aria-labelledby="sec-git">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-git">Git 凭证（私有仓库访问）</h2>
+                  <p class="section-head__desc">GitHub / GitLab SaaS → HTTPS Token；公司自建 Git（SSH 接入）→ SSH 密钥。</p>
+                  <p class="hint"><span class="icon i-info" aria-hidden="true"></span>Git 凭证用于克隆私有仓库，与 Agent 凭证无关。</p>
+                </div>
+              </div>
+
+              <div class="card card--lg">
+                <div class="card__body card__body--split" role="group" aria-label="HTTPS Token">
+                  <dl class="kv u-grow">
+                    <dt>类型：</dt><dd class="u-medium">HTTPS Token</dd>
+                    <dt>Token 尾号：</dt><dd class="u-break-all"><span class="text-mono-13">ghp_…ab12</span></dd>
+                    <dt>host 白名单：</dt><dd>github.com</dd>
+                    <dt>最后使用：</dt><dd>2 小时前</dd>
+                  </dl>
+                  <div class="card__body-end"><button class="btn btn--secondary btn--32" type="button">更换</button><button class="btn btn--secondary btn--32" type="button">测试连接</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                </div>
+                <div class="card__footer">
+                  <span class="card__footer-help">添加其他类型凭证：</span>
+                  <div class="card__footer-end"><button class="btn btn--secondary btn--32" type="button">配置 SSH 密钥</button></div>
+                </div>
+              </div>
+            </section>
+
+            <footer class="page-notes">
+              <p>凭证加密保存在这台机器上，不会上传；平台也读不回明文。</p>
+              <p>帐号登录在你自己的浏览器里完成，平台不接触你的密码。</p>
+              <p>SSH 私钥与 Token 存进去之后就不再显示，只留指纹 / 尾号用来认人。</p>
+            </footer>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

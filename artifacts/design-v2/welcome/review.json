@@ -1,0 +1,45 @@
+[
+  {
+    "theme": "dark",
+    "width": 1440,
+    "errors": [],
+    "mutations": [],
+    "status": "passed"
+  },
+  {
+    "theme": "dark",
+    "width": 1024,
+    "errors": [],
+    "mutations": [],
+    "status": "passed"
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "errors": [],
+    "mutations": [],
+    "status": "passed"
+  },
+  {
+    "theme": "light",
+    "width": 1440,
+    "errors": [],
+    "mutations": [],
+    "status": "passed",
+    "maxNumberAndDialogFocus": true
+  },
+  {
+    "theme": "light",
+    "width": 1024,
+    "errors": [],
+    "mutations": [],
+    "status": "passed"
+  },
+  {
+    "theme": "light",
+    "width": 390,
+    "errors": [],
+    "mutations": [],
+    "status": "passed"
+  }
+]

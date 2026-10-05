@@ -1,0 +1,1057 @@
+{
+  "generatedAt": "2026-10-05T14:52:32.344Z",
+  "owner": "image_frontend",
+  "node": "v22.23.3",
+  "scope": "Current web acceptance framework, shared shell/task/project/init migration, full Storybook and production browser evidence. No commits or real external resources mutated.",
+  "acceptance": {
+    "command": "fnm exec --using 22 pnpm --dir web run test --reporter=json --outputFile=../artifacts/migration-audit/web-acceptance-execution.json",
+    "report": "artifacts/migration-audit/web-acceptance-execution.json",
+    "status": "passed",
+    "actualFiles": 17,
+    "cases": 78,
+    "passed": 78,
+    "failed": 0,
+    "skipped": 0,
+    "todo": 0,
+    "startedAt": "2026-10-05T14:48:59.910Z",
+    "files": [
+      {
+        "file": "web/src/acceptance/automation-workflows.test.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/credential-access.test.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/events-rest-resynchronization.test.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/git-credential-workflows.test.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/headless-restoration.test.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/headless-workflow.test.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/image-download-recheck.test.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/image-provision-conflicts.test.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/image-registration-deletion.test.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/initialization-workflow.test.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/project-workflows.test.tsx",
+        "cases": 10,
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/realtime-session-boundaries.test.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/sandbox-lifecycle.test.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/system-diagnostics-audit.test.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/task-launch.test.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/unknown-route-recovery.test.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/acceptance/workbench-navigation.test.tsx",
+        "cases": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      }
+    ],
+    "boundary": "Actual production containers, hooks, queries, stores, and events handlers. HTTP/event/PTY external-resource fixtures are explicit; this is component acceptance, not full real-backend end-to-end evidence.",
+    "executionPhase": "After all pre-commit Prettier writes; current source verified, no behavioral edit."
+  },
+  "storybook": {
+    "command": "fnm exec --using 22 pnpm --dir web test:storybook --reporter=json --outputFile=../artifacts/migration-audit/web-storybook-execution.json",
+    "report": "artifacts/migration-audit/web-storybook-execution.json",
+    "status": "passed",
+    "actualFiles": 97,
+    "cases": 540,
+    "passed": 540,
+    "failed": 0,
+    "skipped": 0,
+    "todo": 0,
+    "startedAt": "2026-10-05T14:50:42.318Z",
+    "files": [
+      {
+        "file": "web/src/hooks/__stories__/useVirtualList.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/components/ui/__stories__/blocking-dialog.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/components/ui/__stories__/status-pill.stories.tsx",
+        "cases": 10,
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/components/ui/__stories__/terminal-frame.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/access/__stories__/UnlockForm.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/banner/__stories__/BannerStack.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/common/__stories__/AppDialog.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/DeleteImageConfirm.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/EnvVarEditor.view.stories.tsx",
+        "cases": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/ImageCard.view.stories.tsx",
+        "cases": 12,
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/ImageRequirementsPanel.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/ImageVersionHistory.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/PresetDisableDialog.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/PresetImageDownload.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/RegisterImageModal.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/UpdateCompareDialog.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/image/__stories__/ValidationResult.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/ConnectivityCheck.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/ConnectivityItem.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/InitErrorPanel.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/InitWizardShell.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/OfflineNotice.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/PresetImageCheck.view.stories.tsx",
+        "cases": 12,
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/ResourceConfirm.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/init/__stories__/SubscriptionSetup.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/DestroyTaskConfirm.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/NewSandboxPanel.view.stories.tsx",
+        "cases": 28,
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/SandboxOutcome.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/SandboxRestoreState.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/SandboxStartupProgress.view.stories.tsx",
+        "cases": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/sandbox/__stories__/TaskImageMenu.view.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/task/__stories__/HeadlessTaskDetail.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/task/__stories__/HeadlessTaskLauncher.view.stories.tsx",
+        "cases": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/task/__stories__/TaskOutcome.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/task/__stories__/TaskOutputPane.view.stories.tsx",
+        "cases": 20,
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/AutomationDetail.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/AutomationEmptyState.view.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/AutomationForm.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/AutomationList.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/AutomationListItem.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/CloneProgress.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/CurrentProjectIndicator.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/DeleteAutomationConfirm.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/DeleteProjectConfirm.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/NewProjectForm.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/ProjectDetailPanel.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/ProjectGroupHeader.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/ProjectGroupMenu.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/ProjectInfoBar.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/RetainedVolumesPanel.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/RunHistoryItem.view.stories.tsx",
+        "cases": 14,
+        "passed": 14,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/RunHistoryList.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/ScheduleSelector.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/project/__stories__/WebhookSection.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/AuditDetailPanel.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/AuditEventRow.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/AuditFilterBar.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/AuditGapNotice.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/AuditStreamCard.view.stories.tsx",
+        "cases": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/ConnectionStatusCard.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/DiagnosticItem.view.stories.tsx",
+        "cases": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/DiagnosticsCard.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/ProviderLogPanel.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/ProxyConfigForm.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/ProxySettingsCard.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/ResourcePoolCard.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/SandboxEnvStatusCard.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/AllowedHostsEditor.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/AuthMethodRadioRow.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/ConfirmDialog.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/CredentialsSecurityFooter.view.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/DeleteGitCredentialConfirm.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/GitCredentialCard.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/GitCredentialsSection.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/HttpsTokenForm.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/KnownHostsRow.view.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/RevokeConfirmDialog.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/RuntimeCredentialCard.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/RuntimeCredentialsSection.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/SettingsLayout.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/SettingsMenu.view.stories.tsx",
+        "cases": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/SshKeyForm.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/settings/__stories__/TestConnectionResult.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/terminal/__stories__/ConnectionStatus.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/terminal/__stories__/TerminalPane.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/terminal/__stories__/TerminalTabBar.view.stories.tsx",
+        "cases": 8,
+        "passed": 8,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/terminal/__stories__/TerminalToolbar.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/AppSidebar.view.stories.tsx",
+        "cases": 7,
+        "passed": 7,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/CommandPalette.view.stories.tsx",
+        "cases": 4,
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/Shortcuts.view.stories.tsx",
+        "cases": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/WorkbenchHeader.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/WorkbenchOverview.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/workbench/__stories__/WorkbenchShell.view.stories.tsx",
+        "cases": 12,
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/wizard/auth/__stories__/ApiKeyAuth.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/wizard/auth/__stories__/AuthGatePanel.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/wizard/auth/__stories__/DeviceCodeAuth.view.stories.tsx",
+        "cases": 9,
+        "passed": 9,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/wizard/auth/__stories__/SetupTokenAuth.view.stories.tsx",
+        "cases": 3,
+        "passed": 3,
+        "failed": 0,
+        "skipped": 0
+      }
+    ],
+    "variantChanges": "artifacts/migration-audit/web-story-rebuild.json",
+    "historicalFailuresRetained": "artifacts/migration-audit/web-storybook-initial-failed.json",
+    "executionPhase": "After all pre-commit Prettier writes; current source verified, no behavioral edit.",
+    "includesFinalPointerFocusAndProviderHeaderChanges": true
+  },
+  "changedStoriesFollowup": {
+    "command": "fnm exec --using 22 pnpm --dir web exec vitest run --config vitest.storybook.config.ts src/views/project/__stories__/DeleteProjectConfirm.view.stories.tsx src/views/system/__stories__/SandboxEnvStatusCard.view.stories.tsx --reporter=json --outputFile=../artifacts/migration-audit/web-final-changed-story-execution.json",
+    "report": "artifacts/migration-audit/web-final-changed-story-execution.json",
+    "status": "passed",
+    "actualFiles": 2,
+    "cases": 11,
+    "passed": 11,
+    "failed": 0,
+    "skipped": 0,
+    "todo": 0,
+    "startedAt": "2026-10-05T10:44:01.303Z",
+    "files": [
+      {
+        "file": "web/src/views/project/__stories__/DeleteProjectConfirm.view.stories.tsx",
+        "cases": 5,
+        "passed": 5,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "web/src/views/system/__stories__/SandboxEnvStatusCard.view.stories.tsx",
+        "cases": 6,
+        "passed": 6,
+        "failed": 0,
+        "skipped": 0
+      }
+    ],
+    "reason": "The final pointer focus and provider failure header changes followed the full 540-case run. Their actual stories were rerun without repeating unchanged stories.",
+    "historicalScope": "Earlier targeted 11-case run retained. The final full post-formatting 540-case run includes these cases; the 11 are not added to the final total."
+  },
+  "gates": [
+    {
+      "command": "fnm exec --using 22 pnpm --dir web format:check",
+      "status": "passed",
+      "exitCode": 0,
+      "log": "artifacts/migration-audit/web-format-execution.log"
+    },
+    {
+      "command": "fnm exec --using 22 pnpm --dir web lint",
+      "status": "passed",
+      "log": "artifacts/migration-audit/web-lint-execution.log",
+      "exitCode": 0
+    },
+    {
+      "command": "fnm exec --using 22 pnpm --dir web typecheck",
+      "status": "passed",
+      "log": "artifacts/migration-audit/web-typecheck-execution.log",
+      "exitCode": 0
+    },
+    {
+      "command": "fnm exec --using 22 pnpm --dir web check:stories",
+      "status": "passed",
+      "views": 93,
+      "log": "artifacts/migration-audit/web-story-coverage-execution.log"
+    },
+    {
+      "command": "fnm exec --using 22 pnpm --dir web check:no-emoji",
+      "status": "passed",
+      "sourceFiles": 348,
+      "log": "artifacts/migration-audit/web-no-emoji-execution.log"
+    },
+    {
+      "command": "fnm exec --using 22 pnpm --dir web check:mock-contracts",
+      "status": "passed",
+      "anchoredResponses": 60,
+      "exemptions": 0,
+      "log": "artifacts/migration-audit/web-mock-contract-execution.log"
+    },
+    {
+      "command": "node scripts/check-design-migration.mjs --require-complete",
+      "status": "passed",
+      "reviewedACs": 1016,
+      "openImplementationACs": 0,
+      "approvedDrafts": 172,
+      "ownedDrafts": 172,
+      "unfinishedDraftScenarios": 0,
+      "browserCombinationsVerified": 1020,
+      "importedFilesVerified": 211
+    }
+  ],
+  "ownedBrowser": {
+    "manifest": "artifacts/migration-audit/shell-project-design-manifest.json",
+    "runner": "web/scripts/check-design-shell-project-v2.mjs",
+    "production": "Existing root-managed Next production server on port 3100; final delete focus probe and 24 combinations use final necessary build.",
+    "drafts": 91,
+    "themeWidthCombinations": 546,
+    "states": "Each owned approved draft has six final passing dark/light × 1440/1024/390 records with screenshots and state/focus/overflow checks.",
+    "boundary": "Actual Chrome production UI driven with HTTP/socket external-resource fixtures; no real-resource mutation and no claim of all ACs as real-backend e2e.",
+    "projectMobileDriver": "Project menus hidden by the 390px rail are driven at 1024 then measured at 390; each affected manifest evidence records this. These records do not claim a menu entry is visible at 390.",
+    "finalDeleteFocusReport": "artifacts/design-shell-project-v2-delete-focus-final-24/review.json",
+    "finalDeleteFocusPassed": 24,
+    "previousFailureRecordsPreserved": true
+  },
+  "actualCrossRepository": {
+    "report": "artifacts/migration-audit/cross-execution-report.json",
+    "status": "passed",
+    "actualScenarios": 1,
+    "runtimeExpectSteps": 31,
+    "executedBy": "image_backend",
+    "boundary": "Actual compiled Nest AppModule, SQLite, workspace, same-origin HTTP, browser .xterm and stop/start/delete; only external resources are fixtures. Limited to the observed task lifecycle scenario."
+  },
+  "ledger": {
+    "files": [
+      "artifacts/migration-audit/shell-project-current.json",
+      "artifacts/migration-audit/deployment-current.json"
+    ],
+    "domains": {
+      "PRJ": {
+        "total": 136,
+        "closed": 135,
+        "partial": 0,
+        "open": 0,
+        "superseded": 1,
+        "originalGaps": {
+          "closed": 75,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      },
+      "LCH": {
+        "total": 68,
+        "closed": 68,
+        "partial": 0,
+        "open": 0,
+        "superseded": 0,
+        "originalGaps": {
+          "closed": 45,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      },
+      "SBX": {
+        "total": 73,
+        "closed": 73,
+        "partial": 0,
+        "open": 0,
+        "superseded": 0,
+        "originalGaps": {
+          "closed": 52,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      },
+      "WB": {
+        "total": 76,
+        "closed": 75,
+        "partial": 0,
+        "open": 0,
+        "superseded": 1,
+        "originalGaps": {
+          "closed": 50,
+          "partial": 0,
+          "open": 0,
+          "superseded": 1
+        }
+      },
+      "TRM": {
+        "total": 11,
+        "closed": 11,
+        "partial": 0,
+        "open": 0,
+        "superseded": 0,
+        "originalGaps": {
+          "closed": 0,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      },
+      "EVT": {
+        "total": 5,
+        "closed": 5,
+        "partial": 0,
+        "open": 0,
+        "superseded": 0,
+        "originalGaps": {
+          "closed": 3,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      },
+      "DEP": {
+        "total": 77,
+        "closed": 77,
+        "partial": 0,
+        "open": 0,
+        "superseded": 0,
+        "originalGaps": {
+          "closed": 26,
+          "partial": 0,
+          "open": 0,
+          "superseded": 0
+        }
+      }
+    },
+    "interpretation": "Code review closure and actual runtime evidence remain separate categories. Two contradictory ACs retain IDs and are superseded with explicit decisions; they are not counted as open or falsely closed."
+  },
+  "retiredTestPlan": "artifacts/migration-audit/web-test-retirement.json",
+  "sourceHashes": {
+    "web/src/hooks/workbench/useWorkbenchObjectFocus.ts": "457bb98bd09b1583561e0df4a62069a736bc7dd6e521b52ad37bb5b4ccaaf0c1",
+    "web/src/views/project/DeleteProjectConfirm.view.tsx": "90e6139b6412289491c84d0aa05d82a469831eb9d71edeb66ac552d1ed7e1ff4",
+    "web/src/containers/sandbox/SandboxTerminalContainer.tsx": "7a4cce18f34259c4437d8670eaf26c0a59ac04149bb0a1597d865c0adfc21c5b",
+    "web/src/acceptance/events-rest-resynchronization.test.tsx": "7a298d9f82e8b3850564e23ac6832155f5e91a24479a58b61aba5aabae352b9e",
+    "web/scripts/check-design-shell-project-v2.mjs": "87491808919d79fc5c7cd98b1d1728bf5ed8282645e8037197916055bc78610c",
+    "web/scripts/design-shell-project.fixtures.mjs": "83eccb271ef41a0fe0fd3c6f1b32e5e921b000c21dce023f6b019b2f9d7ebf38"
+  },
+  "verificationPhase": "Pre-commit format-only final verification",
+  "preCommitFormatting": {
+    "provenance": "artifacts/migration-audit/web-commit-formatting-provenance.json",
+    "sourceHashBeforeFormatting": "artifacts/migration-audit/web-before-commit-formatting-source-hashes.json",
+    "changedFiles": 50,
+    "action": "Only Prettier formatting. No business behavior edited.",
+    "priorReport": "artifacts/migration-audit/web-execution-report-before-commit-formatting.json",
+    "browserEvidence": "1020 actual browser combinations retained; no browser rerun claimed for byte-only formatting. Runner hashes before/after are appended separately without overwriting historical browser reports."
+  }
+}

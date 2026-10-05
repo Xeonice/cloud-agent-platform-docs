@@ -1,0 +1,103 @@
+<!doctype html>
+<!--
+  id: f-crd-page-02
+  页面: 21-3 凭证管理（/settings/credentials）· 两份列表都读取失败
+  状态: Agent 列表与 Git 凭证都没读出来：各自一条 .note--warn + [重试]（role="alert"）——Agent「Agent 列表没能加载出来，现在看不到这台机器上都配了些什么。」；Git「Git 凭证没能加载出来 —— 这不代表它被删了，只是现在读不到。」；不退化成「未配置」卡，也不出「添加其他类型凭证」条；搜索框照常
+  对应 v1 稿件: g4-15（design-drafts/g4-credentials/g4-15-load-failed.html；预览 design-drafts/previews/g4-15.dark.png / g4-15.light.png）
+  体现的 v2 要点:
+    - 外壳照 P3（pilot/p3-credentials.html）逐字抄：全高侧栏 256（「凭证管理」当前页）+ 只盖主区的顶栏 56（h1 可见 16/600）+ 表单页内容 768 左对齐；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」
+    - 读取失败条：.note.note--warn.note--center（foundation §3.17）放在卡片的位置、与卡同宽，内边距 14 16；三角琥珀、句子正文色（P6）；行尾 [重试] secondary 32
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 琥珀描边框 + 整句琥珀字 → .note--warn（只有三角带琥珀、句子正文色 14）；新增前置三角图标（v1 无图标）。需看稿（字色、图标）
+    2. [重试]：outline sm（字色随框）→ secondary 32，挪到行尾（.note__end）
+    3. 底层外壳：设置区独立外壳（224 宽设置菜单 +「← 返回工作台」）→ P3 方案 A 外壳（Q-DS-24 A，逐条差异见 pilot/p3-credentials.html 头注释第 1–23 条，这里不重复）
+    4. 文案、role="alert"、「读不到 ≠ 未配置」的分态与 v1 / 现状一致
+  示例数据来源: 无业务数据（两份列表都没读出来）
+  流程: F-CRD-PAGE（REQ-CRD-031）
+  口径依据: UX-DS-305（读取失败要明说 + 重试，不说成「没有」）；Q-DS-18 A（琥珀改 token）；实现 web RuntimeCredentialsSection.view.tsx:85-97（Agent 读取失败一态）、GitCredentialCard.view.tsx:46-59 + GitCredentialsSection.view.tsx:125-127（Git 读取失败一态，不退化成未配置）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-crd-page-02">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-crd-page-02 凭证页 · 读取失败（两份）（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3b-crd.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">凭证管理</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content content--form">
+          <div class="content__inner sections">
+
+            <section class="section" aria-labelledby="sec-agent">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-agent">Agent 帐号（这台机器上通用）</h2>
+                  <p class="section-head__desc">帐号登录 / API Key 二选一，这台机器上的所有任务都用它；两样可以同时留着，切换只改现在用哪个。</p>
+                  <p class="section-head__desc">凭证加密存在这台机器上，平台不会上传，也读不回明文。</p>
+                  <label class="input-group section-head__search"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" name="runtime-search" placeholder="搜索 Agent 名字或帐号尾号…" aria-label="搜索 Agent"></label>
+                </div>
+              </div>
+
+              <div class="note note--warn note--center crd-load-fail" role="alert"><span class="icon i-triangle-alert" aria-hidden="true"></span><div class="note__body"><p class="note__text">Agent 列表没能加载出来，现在看不到这台机器上都配了些什么。</p></div><div class="note__end"><button class="btn btn--secondary btn--32" type="button">重试</button></div></div>
+            </section>
+
+            <section class="section" aria-labelledby="sec-git">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-git">Git 凭证（私有仓库访问）</h2>
+                  <p class="section-head__desc">GitHub / GitLab SaaS → HTTPS Token；公司自建 Git（SSH 接入）→ SSH 密钥。</p>
+                  <p class="hint"><span class="icon i-info" aria-hidden="true"></span>Git 凭证用于克隆私有仓库，与 Agent 凭证无关。</p>
+                </div>
+              </div>
+
+              <div class="note note--warn note--center crd-load-fail" role="alert"><span class="icon i-triangle-alert" aria-hidden="true"></span><div class="note__body"><p class="note__text">Git 凭证没能加载出来 —— 这不代表它被删了，只是现在读不到。</p></div><div class="note__end"><button class="btn btn--secondary btn--32" type="button">重试</button></div></div>
+            </section>
+
+            <footer class="page-notes">
+              <p>凭证加密保存在这台机器上，不会上传；平台也读不回明文。</p>
+              <p>帐号登录在你自己的浏览器里完成，平台不接触你的密码。</p>
+              <p>SSH 私钥与 Token 存进去之后就不再显示，只留指纹 / 尾号用来认人。</p>
+            </footer>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

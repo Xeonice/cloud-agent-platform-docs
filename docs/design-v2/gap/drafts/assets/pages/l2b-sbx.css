@@ -1,0 +1,197 @@
+/*
+ * 补全稿 · 出稿组 lch-b（任务生命周期 B：F-SBX-RELAUNCH / F-SBX-STOPSTART / F-SBX-DESTROY / F-SBX-HEADLESS）· 本组局部样式
+ *
+ * 样式链：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → assets/pages/l2b-sbx.css（本文件）
+ * 约束：颜色只用 token（亮暗两套自动切换）；字阶只用 14 / 13 / 12（标题 16）；不改 pilot/assets/*-v2.css 与 gap-shared.css。
+ * 说明：lint 的 LANE_CSS 把 f-sbx-* 映射到 l2-lch（W0 写 lint 时 L2 还没拆成 lch-a / lch-b），所以每张稿会多一条 W4 提示「挂了 l2b-sbx.css」——只是提示，样式链本身是对的。
+ *
+ *   §1 .ov                 项目总览两列栅格（照抄 pilot/assets/pages/p2.css；f-sbx-destroy-01 主区回到总览）
+ *   §2 .p7-*               镜像卡版式（照抄 pilot/assets/pages/p7.css；f-sbx-relaunch-04，标记与 P7 逐字同源）
+ *   §3 新建任务弹层的字段排版（W2 一致性：与 F-LCH-FORM 同一套类名 .nt-lead / .nt-agents / .nt-choice / .nt-meta / .nt-counter，
+ *      值与 l2a-lch.css §1 §2 §4 逐条相同；原稿照抄原型 .proto-* 并另起 .sbx-field-foot，已收成一套）
+ *   §4 （W4 已上提 gap-shared §11 .page-notice）主区页内提示（销毁过程 / 结果；PF-07）
+ *   §5 .sbx-source         镜像管理页顶的来源提示（从失败任务跳来）+ 返回链接
+ *   §6 .sbx-startup-note   启动进度块下面的一句补充（从已停止重新启动：指令不重放）
+ *   §7 .conn-bar.sbx-conn  终端 / 输出连接条的「可折行」变体（长句 + 行尾按钮，窄宽时整条折行，不裁字）；.sbx-conn__body 标题句与正文同段连排；停止中「新终端」的禁用外观
+ *   §8 .hl-*               无头任务主区：只读输出栏、输出流、工具调用折叠块、通道错误行、结果区
+ *   §9 窄屏（< 640）与高对比
+ *   §10 .hl-launch           无头任务「同一运行环境里再跑一轮」的发起表单（结果区就地换成它；W4 补稿 f-sbx-headless-06，评审 R2-34①）
+ */
+
+/* ==========================================================================
+   §1 项目总览栅格（同 p2.css：左列 clamp(340, 32%, 404) + 右列；< 640 单列）
+   ========================================================================== */
+.ov { display: grid; grid-template-columns: clamp(340px, 32%, 404px) minmax(0, 1fr); gap: var(--card-gap); align-items: start; margin-top: var(--section-gap); }
+
+/* ==========================================================================
+   §2 镜像卡版式（同 p7.css，类名不改，便于和 P7 / L4 的镜像页逐字对照）
+   ========================================================================== */
+.p7-name { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; min-width: 0; }
+.p7-name > .card__title { min-width: 0; overflow-wrap: anywhere; }
+.p7-ref { min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+.p7-verdict { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.p7-verdict__line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: var(--text-copy-14); color: var(--foreground-muted); }
+.p7-identity { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 2px; }
+.p7-identity__time { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground-muted); }
+.p7-params { gap: 6px; }
+.p7-params__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
+.p7-params__summary { min-width: 0; font: var(--text-copy-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+.p7-history { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 4px; min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); }
+.p7-history__label { display: inline-flex; align-items: center; gap: 6px; }
+.p7-history__label > .icon { width: var(--icon-14); height: var(--icon-14); }
+.p7-history__list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.p7-history__row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
+
+/* ==========================================================================
+   §3 新建任务弹层的字段排版（W2：与 l2a-lch.css §1 §2 §4 逐条同值、同一套 .nt-* 类名，几何同原型 proto.css；重新发起只在这上面加一条 .note 与两句 .field__help）
+   ========================================================================== */
+.nt-lead { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.nt-lead strong { font-weight: var(--weight-medium); color: var(--foreground); }
+.nt-agents { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.nt-agents > legend { padding: 0; margin-bottom: 8px; font: var(--text-label-14-strong); color: var(--foreground); }
+.nt-choice { display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; min-height: 20px; cursor: pointer; font: var(--text-label-14); color: var(--foreground); }
+.nt-choice__id { font: var(--text-mono-13); }
+.nt-choice__desc { color: var(--foreground-muted); }
+.nt-meta { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; min-height: 18px; }
+/* 左边一句说明（.field__help：13 次要灰、不带图标、折行）——深链刷新后的「刷新后指令未保留，请重新输入」与重新发起的「原来的任务指令没有带过来…」同一写法
+   （W2 统一：实现 NewSandboxPanel.view.tsx:416-423 是一行灰字、无图标）；有说明时贴顶对齐，计数跟第一行 */
+.nt-meta:has(> .field__help) { align-items: flex-start; gap: 16px; }
+.nt-meta > .field__help { flex: 1; min-width: 0; }
+.nt-meta:has(> .field__help) > .nt-counter { margin-top: 1px; }
+.nt-counter { flex: none; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 字段说明句尾的稿注（.contract-note 是 inline-flex，跟在句子后面换行时不拆开） */
+.field__help > .contract-note { margin-left: 6px; vertical-align: 1px; }
+
+/* ==========================================================================
+   §4 主区页内提示（总览内容顶部；PF-07：中性 .note，不是整宽色带，随内容滚动）
+   ========================================================================== */
+/* W4（评审 R2-27）：已上提 gap-shared §11 .page-notice（与 wb 组、原型统一成一件），稿件改用 .page-notice，这里不再重复 */
+
+/* ==========================================================================
+   §5 来源提示（镜像管理页顶：从哪个任务跳来、要看什么、怎么回去；可关）
+   ========================================================================== */
+.sbx-source .note__actions { column-gap: 16px; }
+.sbx-source > .note__end { align-self: flex-start; margin-top: -2px; } /* 多行提示：关闭按钮跟第一行，不居中 */
+/* 返回链接：箭头在前（.link > .icon 默认是跟在文字后面的箭头，这里反过来） */
+.sbx-link-back > .icon { margin-left: 0; margin-right: 4px; }
+/* 定位到的镜像卡：卡头多一枚 info 徽标说明「为什么是这张」（.card.is-current 的 2px 焦点色环来自 components-v2 §「定位到镜像」） */
+.sbx-located { white-space: nowrap; }
+
+/* ==========================================================================
+   §6 启动进度块下面的一句（13 次要灰，与进度块同宽、左对齐）
+   ========================================================================== */
+.sbx-startup-note { width: min(var(--gap-phases-w), 100%); margin-top: 16px; font: var(--text-copy-13); color: var(--foreground-muted); text-align: left; text-wrap: pretty; } /* W4（R2-35）：末行不只剩「后回到终端。」 */
+
+/* ==========================================================================
+   §7 连接条可折行变体（components-v2 的 .conn-bar 固定 32 高、单行；这里的句子更长，还要带一个行尾按钮）
+   ========================================================================== */
+.conn-bar.sbx-conn { height: auto; min-height: 32px; padding-top: 4px; padding-bottom: 4px; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; }
+.conn-bar.sbx-conn > .icon { align-self: center; }
+.sbx-conn__text { min-width: 0; color: var(--foreground); }
+.sbx-conn__muted { min-width: 0; color: var(--foreground-muted); }
+/* 标题句以全角标点收尾、后面紧跟正文时（「…（第 2 次）；」「…输出停止更新。」）：两段放进同一段落连排，
+   不再隔一个 8px 的 flex 间隔（全角标点自带半格空白，再加间隔就成了两格）；窄宽时整句按段落折行 */
+.conn-bar.sbx-conn > .sbx-conn__body { flex: 1 1 0; min-width: 0; margin: 0; color: var(--foreground); } /* 基准 0：窄宽时图标、段落、行尾按钮仍在同一行，段落自己折行 */
+.conn-bar.sbx-conn > .conn-bar__end { flex: none; }
+/* 停止中「新终端」：aria-disabled（能聚焦、能说原因），外观同禁用的 tertiary（components-v2 .ttab--new 没有禁用态） */
+.ttab--new[aria-disabled="true"] { color: var(--foreground-disabled); cursor: not-allowed; }
+.ttab--new[aria-disabled="true"]:hover { background: none; color: var(--foreground-disabled); }
+
+/* ==========================================================================
+   §8 无头任务主区（DR-01 A：只放只读输出，不挂终端标签栏）
+   结构：.main > .hl-bar（40 高，同终端栏的位置与材质）→ 可选 .conn-bar（重连中 / 已断开）→ .hl-log（输出流，内部滚动）→ 结束后 .hl-result（结果区）
+   输出流：等宽 14/20（与终端画布同字号；工具调用的摘要、入参 / 输出块也是 14，层级靠颜色与嵌入区底，不靠缩字号）、保留换行不折行、超长行横向滚动（P21-1 L70）；整段一个 role="log"（逐条 alert 会刷屏）
+   ========================================================================== */
+.hl-bar { --focus-gap: var(--canvas); display: flex; align-items: center; gap: 12px; flex: none; min-width: 0; min-height: var(--shell-termbar-h); padding: 4px 16px; background: var(--canvas); border-bottom: 1px solid var(--border-subtle); flex-wrap: wrap; }
+.hl-bar__title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font: var(--text-label-14-strong); color: var(--foreground); }
+.hl-bar__title > .icon { color: var(--foreground-muted); }
+.hl-bar__end { margin-left: auto; display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
+.hl-bar__deadline { font: var(--text-label-14); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.hl-log { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px 16px; background: var(--canvas); }
+/* 结束态「跟随到底」：静态稿不写 JS，用 column-reverse 让滚动起点落在末尾（v1 .output-pane__scroll--follow-end 同法） */
+.hl-log--end { display: flex; flex-direction: column-reverse; }
+.hl-log__list { display: flex; flex-direction: column; gap: 6px; min-width: max-content; }
+.hl-line { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hl-line > pre { margin: 0; font: 400 var(--fs-14)/var(--lh-14) var(--font-mono); color: var(--foreground); white-space: pre; }
+.hl-line--message > pre { color: var(--foreground); }                 /* Agent 的正文消息：正文色 */
+.hl-line--notice > pre { color: var(--foreground-muted); }
+/* 通道错误帧（{type:'error', code}）：图标 + 整句失败色（日志里的错误行，P21-1 / plan「通道错误行红」）+ 下一行 12 诊断码 */
+.hl-line--error { flex-direction: row; align-items: flex-start; gap: 8px; }
+.hl-line--error > .icon { flex: none; width: var(--icon-14); height: var(--icon-14); margin-top: 3px; color: var(--status-fail-fg); }
+.hl-line--error .hl-line__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hl-line--error pre { margin: 0; font: 400 var(--fs-14)/var(--lh-14) var(--font-mono); color: var(--status-fail-fg); white-space: pre; }
+.hl-line__code { font: var(--text-label-12); color: var(--foreground-muted); }
+.hl-line__code > code { font: var(--text-mono-12); }
+
+/* 工具调用：一行摘要（折叠 / 展开），展开后是嵌入区底的入参 / 输出块（不加环：一个表面一层描边） */
+.hl-tool { min-width: 0; border-radius: var(--radius-md); }
+.hl-tool__summary { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px 0 4px; border-radius: var(--radius-md); cursor: pointer; list-style: none; font: var(--text-label-14); color: var(--foreground); white-space: nowrap; }
+.hl-tool__summary::-webkit-details-marker { display: none; }
+.hl-tool__summary:hover { background: var(--fill); }
+.hl-tool__summary:focus-visible { box-shadow: var(--focus-ring-inset); }
+.hl-tool__chev { width: var(--icon-14); height: var(--icon-14); color: var(--foreground-muted); transition: transform var(--duration-fast) var(--ease-standard); }
+.hl-tool[open] > .hl-tool__summary .hl-tool__chev { transform: rotate(90deg); }
+.hl-tool__summary > .icon:not(.hl-tool__chev) { width: var(--icon-14); height: var(--icon-14); color: var(--foreground-muted); }
+.hl-tool__name { font: 400 var(--fs-14)/var(--lh-14) var(--font-mono); color: var(--foreground); }
+.hl-tool__status { margin-left: 6px; font: var(--text-label-14); color: var(--foreground-muted); }
+.hl-tool__status--fail { color: var(--status-fail-fg); }
+.hl-tool--fail > .hl-tool__summary > .icon:not(.hl-tool__chev) { color: var(--status-fail-fg); }
+.hl-tool:not([open]) > .hl-tool__body { display: none; } /* 折叠时不参与布局（Chromium 的 details 用 content-visibility 藏内容，布局查询仍会量到它） */
+/* 入参 / 输出块：放在画布上，用表面底 + 环（嵌入区底在暗色画布上看不出来，同 gap-shared §5 .empty__detail 的取舍）；一个表面一层描边 */
+.hl-tool__body { display: flex; flex-direction: column; gap: 4px; margin: 2px 0 4px 24px; padding: 8px 12px 10px; border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--shadow-ring); }
+.hl-tool__label { font: var(--text-label-12); color: var(--foreground-muted); }
+.hl-tool__label + .hl-tool__pre { margin-bottom: 4px; }
+.hl-tool__pre { margin: 0; font: 400 var(--fs-14)/var(--lh-14) var(--font-mono); color: var(--foreground-muted); white-space: pre; }
+.hl-tool__wait { font: var(--text-copy-14); color: var(--foreground-muted); }
+
+/* 结果区（运行结束后接在输出流下面；上 1px 线，不是卡片——输出仍在上面可读可滚） */
+.hl-result { --focus-gap: var(--canvas); display: flex; flex-direction: column; gap: 12px; flex: none; max-height: 60%; overflow: auto; padding: 16px 24px 20px; background: var(--canvas); border-top: 1px solid var(--border-subtle); }
+.hl-result__head { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 4px; }
+.hl-result__title { display: inline-flex; align-items: center; gap: 8px; font: var(--text-heading-16); letter-spacing: var(--tracking-heading); }
+.hl-result__title > .icon { width: var(--icon-16); height: var(--icon-16); }
+.hl-result__exit { font: var(--text-copy-14); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+.hl-result__exit > b { font-weight: var(--weight-medium); color: var(--foreground); }
+.hl-result__advice { max-width: 720px; font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.hl-result__section { display: flex; flex-direction: column; gap: 8px; max-width: 720px; }
+.hl-result__section-title { font: var(--text-label-14-strong); color: var(--foreground); }
+.hl-artifact__name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font: var(--text-mono-13); color: var(--foreground); overflow-wrap: anywhere; } /* 文件名没有断点（auth.spec.trace.zip）时也能在框内折行，不压到右边的大小 · 时间 */
+.hl-artifact__name > .icon { width: var(--icon-14); height: var(--icon-14); color: var(--foreground-muted); }
+.hl-artifact__meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+.hl-result__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hl-result__code { font: var(--text-label-12); color: var(--foreground-muted); }
+.hl-result__code > code { font: var(--text-mono-12); color: var(--foreground-muted); }
+
+/* ==========================================================================
+   §9 窄屏（< 640；Q-DS-18 A：390 只保证不溢出、不重叠）与高对比
+   ========================================================================== */
+@media (max-width: 639px) {
+  .ov { grid-template-columns: minmax(0, 1fr); }
+  .p7-card-head { flex-wrap: wrap; }
+  .p7-toolbar > .segmented { flex: 1 1 100%; justify-content: space-between; }
+  .hl-bar { padding: 4px 12px; }
+  .hl-bar__end { margin-left: 0; justify-content: flex-start; }
+  .hl-log { padding: 8px 12px 12px; }
+  .hl-result { padding: 12px 16px 16px; }
+  /* 产物行：文件名独占一行，大小 · 时间与 [下载] 折到下一行（390 宽时三段挤一行会互相压住） */
+  .hl-result .list__row { flex-wrap: wrap; row-gap: 4px; }
+  .hl-result .list__row > .hl-artifact__name { flex: 1 1 100%; }
+  .hl-tool__body { margin-left: 8px; }
+}
+@media (forced-colors: active) {
+  .hl-tool__summary:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+  .hl-tool__body { outline: 1px solid CanvasText; outline-offset: -1px; }
+}
+
+/* ==========================================================================
+   §10 无头任务的发起表单（[接着聊] / [发起全新任务] 打开；结果区 .hl-result 就地换成它，W4 补稿 f-sbx-headless-06）
+   字段排版用新建任务弹层的 .nt-lead / .nt-meta / .nt-counter（gap-shared §9）；超时与 --verbose 同一行；续接提示是中性 .note + 行内链接
+   ========================================================================== */
+.hl-launch { gap: 16px; }
+.hl-launch > .nt-lead, .hl-launch__resume, .hl-launch__fields { max-width: 720px; }
+.hl-launch__fields { gap: 16px; }
+.hl-launch__resume .note__text .link { margin-left: 4px; }
+.hl-launch__row { display: flex; flex-wrap: wrap; align-items: flex-end; column-gap: 24px; row-gap: 12px; }
+.hl-launch__timeout { width: 160px; }
+.hl-launch__check { display: inline-flex; align-items: center; gap: 10px; min-height: var(--control-32); font: var(--text-label-14); color: var(--foreground); cursor: pointer; }
+.hl-launch__check .code { font: var(--text-mono-13); }

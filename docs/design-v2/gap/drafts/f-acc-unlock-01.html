@@ -1,0 +1,69 @@
+<!doctype html>
+<!--
+  id: f-acc-unlock-01
+  页面: 21-8 部署与初始化 · 访问口令的来处（宿主机终端，不是产品界面）
+  状态: 首次启动平台（docker compose up）时宿主机终端里的服务日志：一段醒目的「访问口令（只显示这一次）：AB12-CD34-EF56」+ 为什么现在就记下来 + 之后访问都要口令（同一个浏览器 7 天免输）+ 换口令的两种方式（环境变量 ACCESS_PASSCODE / 接口重新生成）+ 忘了怎么办；下面再示意一次重启，口令不再出现；横幅里补「换口令默认不影响已登录的浏览器、要让它们同时失效怎么做」两行（Q-ACC-01 C）
+  对应 v1 稿件: g8-15（design-drafts/g8-init-access/g8-15-passcode-first-boot.html；预览 design-drafts/previews/g8-15.dark.png / .light.png）——按 D3 推荐
+  体现的 v2 要点:
+    - 画法区分产品界面与宿主机：一句说明（14 次要灰 + ⓘ）+ 一扇「终端窗口」（标题栏随主题：表面 + 下 1px 线；画布恒黑 .term：Geist Mono 14/18、ANSI 用 v2 终端色阶）；亮色主题下只有标题栏与外框随主题，画布仍是黑的
+    - 窗口 r12 + raised 阴影（一层描边），画布里不再套框；终端内容按 xterm 行为在窄宽下横向滚动（l3a-auth.css §5）
+    - W4 评审修正（notes/consistency.md §8）：主区补一个读屏 h1「访问口令（服务日志）」（axe page-has-heading-one，评审 R2-18）；版式不变
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+  1. 终端相框（term-frame + 灰字工具条）→ v2 终端窗口：标题栏 40（terminal 图标 +「宿主机终端 · /srv/agent-platform」，14 次要灰）、画布恒黑满宽、r12 + raised 阴影。需看稿（小）。
+  2. 说明句：12 次要灰 → 14 次要灰 + ⓘ 图标；文案不变。
+  3. 终端字体：Menlo 14 → Geist Mono 14/18；ANSI 色换 v2 终端色阶（--ansi-*；绿 / 青 / 黄 / 亮黄与 P1 同一套）。
+  4. 日志全文逐字照 v1（口令横幅、记下来的理由、7 天免输、换口令两种方式、忘了怎么办、重启后不再出现）。
+  5. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-ACC-01 C：口令横幅「7 天内不用再输」后补「（从输对那一刻算，不顺延）」；换口令两种方式之后补两行「换口令默认不影响已经登录的浏览器（各自到 7 天期满）；要让它们同时失效（比如口令泄露了）：第 2 种在请求里加 "signOutAllSessions":true；第 1 种同时把 PASSCODE_COOKIE_SECRET 换成新值」。界面里没有口令管理区块（U-112 / D9 延后），所以落在启动日志与部署说明里；参数名按 REQ-ACC-007 的示例写 signOutAllSessions（名字由实现定，写进 openapi）。需看文案。
+  示例数据来源: 照 v1 g8-15：口令 AB12-CD34-EF56 是一眼假的示例（真实口令是 16 位、不含 0 O l 1 的随机串，passcode.service.ts:14、:84-91）；时间、pid 为示例；「7 天」取自 passcode.service.ts:12 COOKIE_TTL_MS
+  流程: F-ACC-UNLOCK（REQ-ACC-001、REQ-ACC-002）
+  口径依据: D3（00-决策简报：访问口令默认开启——首次启动生成、只在服务日志里显示一次；不回复按推荐）；DR-13（口令横幅只走 stdout，不落盘、不进 [导出日志]；docker 的 json-file 日志驱动会保留 stdout，「平台不再输出」≠「docker logs 查不到」，要在 README 写明）；Q-SYS-07 ② / D9（系统状态页不加口令管理区块，口令改为首次启动输出 + 环境变量 / 接口修改，见 plan「不做」U-112）；现状偏离：出厂不开口令、全仓没有开机生成口令的代码（passcode.service.ts:68-75 source = none ⇒ enabled = false），启动日志只打「access passcode ENABLED via env/stored」（:56-61）；接口 PUT /api/system/access-passcode 已有（access-passcode.service.ts，ACCESS_PASSCODE 固定时 409）；用户拍板 2026-10-04（Q-ACC-01 C：口令会话固定 7 天；换口令时可选同时让已登录的浏览器失效（接口参数待契约））
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-acc-unlock-01">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-acc-unlock-01 首次启动 · 服务日志里的访问口令</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3a-auth.css">
+</head>
+<body>
+<div class="frame">
+  <main class="host-shot" aria-label="宿主机终端示意">
+    <h1 class="u-sr-only">访问口令（服务日志）</h1>
+    <p class="host-shot__caption"><span class="icon i-info" aria-hidden="true"></span><span>宿主机终端示意 · 首次启动平台时的服务日志（这不是产品界面；访问口令只在这里出现这一次）</span></p>
+    <div class="host-term">
+      <div class="host-term__bar"><span class="icon i-terminal" aria-hidden="true"></span><span>宿主机终端 · /srv/agent-platform</span></div>
+      <div class="term"><pre class="term__screen"><span class="ansi-green">$</span> docker compose up -d &amp;&amp; docker compose logs -f api
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:14:01 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[NestFactory]</span> <span class="ansi-green">Starting Nest application...</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:14:02 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[InstanceLoader]</span> <span class="ansi-green">PlatformModule dependencies initialized <span class="ansi-yellow">+41ms</span></span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:14:02 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[PasscodeService]</span> <span class="ansi-green">首次启动：还没有访问口令，已自动生成一个并开启口令门</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-bright-yellow">========================================================================</span>
+<span class="ansi-cyan">api-1  |</span>
+<span class="ansi-cyan">api-1  |</span>   <span class="ansi-bright-yellow ansi-bold">访问口令（只显示这一次）：AB12-CD34-EF56</span>
+<span class="ansi-cyan">api-1  |</span>
+<span class="ansi-cyan">api-1  |</span>   现在就把它记下来：平台只保存它的哈希，之后的日志、页面和接口都不会再显示它。
+<span class="ansi-cyan">api-1  |</span>   之后打开平台都要先输入它；同一个浏览器输对一次，7 天内不用再输（从输对那一刻算，不顺延）。
+<span class="ansi-cyan">api-1  |</span>
+<span class="ansi-cyan">api-1  |</span>   要换口令（二选一）：
+<span class="ansi-cyan">api-1  |</span>     1. 环境变量：在部署配置里设 ACCESS_PASSCODE=&lt;新口令&gt;，重启后生效（设了它就以它为准）
+<span class="ansi-cyan">api-1  |</span>     2. 接口：先用当前口令登录，再调 PUT /api/system/access-passcode  {"action":"regenerate"}
+<span class="ansi-cyan">api-1  |</span>        新口令只在那次响应里返回一次
+<span class="ansi-cyan">api-1  |</span>   换口令默认不影响已经登录的浏览器（各自到 7 天期满）；要让它们同时失效（比如口令泄露了）：
+<span class="ansi-cyan">api-1  |</span>     第 2 种在请求里加 "signOutAllSessions":true；第 1 种同时把 PASSCODE_COOKIE_SECRET 换成新值
+<span class="ansi-cyan">api-1  |</span>   忘了口令：用第 1 种方式重设，重启即可。
+<span class="ansi-cyan">api-1  |</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-bright-yellow">========================================================================</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:14:02 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[PasscodeService]</span> <span class="ansi-green">access passcode ENABLED via stored (REST/MCP-HTTP require it; health + STDIO exempt)</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:14:03 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[Bootstrap]</span> <span class="ansi-green">API listening on http://0.0.0.0:3000 (prefix /api)</span>
+
+<span class="ansi-green">$</span> docker compose restart api &amp;&amp; docker compose logs --since 1m api
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:31:40 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[PasscodeService]</span> <span class="ansi-green">access passcode ENABLED via stored (REST/MCP-HTTP require it; health + STDIO exempt)</span>
+<span class="ansi-cyan">api-1  |</span> <span class="ansi-green">[Nest] 1  - </span>10/02/2026, 9:31:41 AM     <span class="ansi-green">LOG</span> <span class="ansi-yellow">[Bootstrap]</span> <span class="ansi-green">API listening on http://0.0.0.0:3000 (prefix /api)</span>
+<span class="ansi-green">$</span> <span class="term__cursor"> </span></pre></div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

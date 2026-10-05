@@ -1,0 +1,5 @@
+
+> agent-platform-web@0.1.0 check:no-emoji /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+> tsx scripts/check-no-emoji.ts
+
+✅ 无 emoji 检查通过：348 个源文件的渲染文本均未使用 emoji。

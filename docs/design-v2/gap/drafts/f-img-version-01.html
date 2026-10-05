@@ -1,0 +1,215 @@
+<!doctype html>
+<!--
+  id: f-img-version-01
+  页面: 21-4 镜像管理（/settings/images；P7 同一外壳）· ml-agent 卡里的「上游有新版本」提示条 + 对比弹层（模态）
+  状态: 对 docker.io/acme/ml-agent:v1.0 点了 [检查更新]，上游这个 tag 已经指向另一版：卡片元信息下面出现信息色提示条「下载源上这个 tag 已经指向另一版（sha256:c1f9e…a20）[查看变更]」，同时打开对比弹层——当前 sha256:8e05a…d77（解析于 3 天前）/ 上游 sha256:c1f9e…a20 + 上游新版本的结论「验证通过 · 镜像可用」+ [暂不更新] [更新到新版本]；底层页面 inert
+  对应 v1 稿件: g5-03（design-drafts/g5-images/g5-03-upstream-update.html；预览 design-drafts/previews/g5-03.dark.png / g5-03.light.png）
+  体现的 v2 要点:
+    - 外壳与镜像卡照抄 P7（pilot/p7-images.html；foundation §1.2）：侧栏 256 + 顶栏 56、h1「镜像管理」+ 顶栏 [注册新镜像]、搜索 + 分段控件、卡片材质与 P7 页面类（p7-*，l4b-img.css §0 原样照抄）逐字同源；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」（W0 README §2）
+    - 提示条 = components-v2 §14 .note.note--info（信息色底 + 内环 + refresh-cw 图标，句子正文色 14，sha 等宽 13）+ 句尾文字链 [查看变更]；蓝不是黄——当前镜像仍完全可用（P21-4 §5）
+    - 对话框 = components-v2 §13 .dialog（512、r12、--shadow-modal、标题 heading-20 + 副标题 14 次要灰、页脚条）；版本对照 = 嵌入区底块不加环（l4b-compare，一个表面一层描边）+ 两列键值；上游结论复用卡上的结论行（徽标 20 + 一句次要灰，role="status"）
+    - 作用范围一句 = l4b-scope（14 次要灰，放在结论之后、页脚之前）
+    - 按钮：[暂不更新] secondary 在页脚左、[更新到新版本] primary 在右（T-23，与 P4 同序）；对话框内实心按钮 1 个
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要用户确认）:
+    1. 外壳、卡片、徽标、键值、运行参数嵌入块、历史版本页脚条：全部按 P7 换皮（逐条差异与「需看稿」见 pilot/p7-images.html 头注释第 1–19 条，这里不重复）。
+    2. 角标：info 色描边条（整句 info 色、12px）→ .note--info 提示条（底与环带色调、图标 info 色、句子正文色 14、sha 等宽 13）；位置不变（元信息之后、运行参数之前）。文案、data-testid="upstream-update-badge"、data-tone="info" 不变。需看稿。
+    3. 弹层材质：手写遮罩 black/60 + max-w-xl r10 描边盒 → v2 遮罩（--overlay）+ .dialog 512（r12、--shadow-modal、无描边）；标题前的 refresh 图标去掉（v2 对话框标题不带图标，P4 同）；坐标副标题由等宽 12 改 Geist 14 次要灰（P10：坐标按 URL 处理）。aria-label「docker.io/acme/ml-agent 的上游更新」不变。
+    4. 版本对照：描边小框 12px → 嵌入区底块 + 两列键值（当前 / 上游，14；sha 等宽 13）；v1 上游 sha 用 info 色（Q-DS-18 A），v2 改正文色——P6：色调只上徽标与图标，「上游」这个键已经说清是哪一行。需看稿。
+    5. 按钮：[暂不更新] ghost 与 [更新到新版本] default 同在右下 → 页脚条：[暂不更新] secondary 在左、[更新到新版本] primary 在右（T-23）。文字不变。需看稿（与 P4 第 3 条同一规则）。
+    6. 新增一句作用范围（14 次要灰）「只影响之后新建的任务；已经建好的任务继续用各自建的时候锁定的那一版。」——[更新到新版本] 点了就生效、没有第二次确认，后果要在按之前说清；与 f-img-version-04 切换后的轻提示同一句（任务存的是版本行 id，sandbox-application.service.ts:325-326；P21-4 §9 L267）。需看稿（新增文案）。
+    7. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-IMG-06 A：预制镜像卡头徽标「预置」→「预制」（三组同物异名统一，只改可见文字；类名、接口字段不动）。
+    不变: 全部可见文字（提示条句子与 [查看变更]、弹层标题「上游有新版本」、坐标、当前 / 上游两行与「（解析于 3 天前）」、「验证通过 · 镜像可用」、两个按钮）；data-testid current-digest / upstream-digest；结论 role="status" data-status="valid"；弹层没有关闭 ×（v1 与实现都只有 [暂不更新] 一个出口）
+  示例数据来源: 原型示例世界（pilot/proto/proto.js 镜像三张 = P7）；上游 sha256:c1f9e…a20 沿用 v1 g5-03（全串登记在 notes/img-b.md「示例世界增补」）
+  流程: F-IMG-VERSION（REQ-IMG-022；同屏的 [检查更新] 入口见 REQ-IMG-021，弹层里的作用范围一句见 REQ-IMG-025）
+  口径依据: P21-4 §5 L97（上游有新版本：信息色角标 + [查看变更]，不自动切换）、§5 ★ L215-217（上游判为无效时不给 [更新到新版本]：只剩 [暂不更新] +「上游新版本不满足平台约定，已保留当前版本。」+ [查看镜像要求]——本稿不另画，实现 UpdateCompareDialog.view.tsx:79-95，样式 l4b-img.css .l4b-kept）、§6 L228；实现 ImageCard.view.tsx:237-258（角标）、UpdateCompareDialog.view.tsx（弹层）、useImages.ts:512-558（检查更新同时写角标与弹层）、useImages.ts:637-671（[更新到新版本] = 注册新行 + activate，进行中「更新中…」，成功轻提示「已更新到新版本（sha256:…）。」）；Q-DS-18 A（info token）；T-23（按钮顺序）；P10（坐标 Geist、sha 等宽）；用户拍板 2026-10-04（Q-IMG-06 A：统一叫「预制镜像」）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-img-version-01" data-lint-ratio14-floor="65" data-lint-ratio14-reason="有遮罩时只统计对话框：对比弹层一共 130 个字，两串版本号是等宽 13（P10 / tokens --text-mono-13）、标题 20、徽标 12，其余说明与按钮都是 14">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-img-version-01 镜像版本 · 上游有新版本（提示条 + 对比弹层）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l4b-img.css">
+</head>
+<body>
+<div class="frame">
+  <!-- 弹层打开时底层外壳 inert + aria-hidden（键盘与读屏都进不去，与 aria-modal 一致；实现的 Radix Dialog 用 hideOthers 同样给对话框以外的节点挂 aria-hidden；静态稿用 HTML 属性表达） -->
+  <a class="skip-link" href="#main" inert aria-hidden="true">跳到主区</a>
+  <div class="shell" inert aria-hidden="true">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">镜像管理</h1>
+        <div class="header__actions"><button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">注册新镜像</span></button></div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner sections">
+
+            <div class="page-toolbar p7-toolbar">
+              <label class="input-group"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" aria-label="搜索镜像" placeholder="按名称或坐标搜索" value=""></label>
+              <div class="segmented" role="group" aria-label="状态过滤">
+                <button class="segmented__item" type="button" aria-pressed="true">全部</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-check" aria-hidden="true"></span>有效</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-triangle-alert" aria-hidden="true"></span>警告</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-x" aria-hidden="true"></span>无效</button>
+              </div>
+            </div>
+
+            <section class="section" aria-labelledby="img-list">
+              <div class="section-head section-head--16">
+                <h2 class="section-head__title" id="img-list">已注册的 OCI 镜像</h2>
+              </div>
+
+              <div class="stack stack--16">
+                <!-- 预置 · 验证通过 -->
+                <article class="card card--lg" aria-labelledby="img-sandbox" data-testid="image-card" data-status="valid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-sandbox">ghcr.io/agent-infra/sandbox</h3><span class="badge badge--20 badge--neutral">预制</span></div>
+                        <span class="p7-ref">ghcr.io/agent-infra/sandbox:latest</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="valid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>验证通过</span><span>镜像可用</span></div>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:4b17e…344</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 7 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">这就是平台的预制镜像（其他镜像从它改起）</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 有警告 · 带 1 条历史版本 -->
+                <article class="card card--lg" aria-labelledby="img-ml" data-testid="image-card" data-status="warning" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-ml">docker.io/acme/ml-agent</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/ml-agent:v1.0</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="status" data-status="warning">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>有警告</span><span>镜像仍可用</span></div>
+                      <ul class="bullets"><li>未预装 claude-code，创建时需现装，启动会明显变慢</li></ul>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:8e05a…d77</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 3 天前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="note note--info l4b-upstream" data-testid="upstream-update-badge" data-tone="info"><span class="icon i-refresh-cw" aria-hidden="true"></span><p class="note__text">下载源上这个 tag 已经指向另一版（<span class="text-mono-13">sha256:c1f9e…a20</span>）<button class="link l4b-upstream__link" type="button" aria-haspopup="dialog">查看变更</button></p></div>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：LOG_LEVEL=info · MY_SECRET=*** · HTTP_TIMEOUT=30</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                  <div class="card__footer">
+                    <div class="p7-history">
+                      <span class="p7-history__label"><span class="icon i-clock" aria-hidden="true"></span>历史版本（1）</span>
+                      <ul class="p7-history__list" data-testid="image-version-history">
+                        <li class="p7-history__row" data-testid="image-version-row"><span class="text-mono-13">v1.0</span><span class="text-mono-13 u-muted">sha256:2c9d1…b08</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>有效</span></li>
+                      </ul>
+                    </div>
+                    <div class="card__footer-end"><button class="btn btn--secondary btn--32" type="button">切换到此版本</button></div>
+                  </div>
+                </article>
+
+                <!-- 自定义 · 无效 -->
+                <article class="card card--lg" aria-labelledby="img-just" data-testid="image-card" data-status="invalid" data-active="true">
+                  <div class="card__body">
+                    <div class="card__head p7-card-head">
+                      <div class="card__head-main">
+                        <div class="p7-name"><h3 class="card__title card__title--14" id="img-just">docker.io/acme/just-registered</h3><span class="badge badge--20 badge--neutral">自定义</span></div>
+                        <span class="p7-ref">docker.io/acme/just-registered:v1</span>
+                      </div>
+                      <span class="badge badge--ok" data-testid="enable-state"><span class="icon i-check" aria-hidden="true"></span>已启用</span>
+                    </div>
+                    <div class="p7-verdict" role="alert" data-status="invalid">
+                      <div class="p7-verdict__line"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>无效</span><span>镜像不符合平台约定</span></div>
+                      <ul class="bullets"><li>平台还没有对这张镜像出具验证结论（数据异常），因此它现在不能用于创建任务。点 [重新验证] 让平台判定一次。</li></ul>
+                      <button class="btn btn--secondary btn--32" type="button" aria-haspopup="dialog">查看镜像要求</button>
+                    </div>
+                    <dl class="kv">
+                      <dt>适用：</dt><dd>codex、claude-code</dd>
+                      <dt>运行的版本：</dt><dd class="p7-identity" data-testid="image-identity-row"><span class="text-mono-13">sha256:7a3f2…e91</span><button class="link link--muted" type="button">展开全串</button><button class="link link--muted" type="button" aria-label="复制版本号">复制</button><span class="p7-identity__time"><span class="meta-sep" aria-hidden="true"></span>解析于 2 小时前</span></dd>
+                      <dt>来源：</dt><dd data-testid="image-lineage">从预制镜像 sha256:4b17e…344 改来的</dd>
+                    </dl>
+                    <div class="card__inset p7-params">
+                      <div class="p7-params__head"><span class="icon-line icon-line--muted"><span class="icon i-wrench" aria-hidden="true"></span>运行参数</span><button class="btn btn--tertiary btn--24" type="button">编辑环境变量</button></div>
+                      <span class="p7-params__summary" data-testid="env-summary">环境变量：（未配置）</span>
+                    </div>
+                    <div class="btn-row"><button class="btn btn--secondary btn--32" type="button">检查更新</button><button class="btn btn--secondary btn--32" type="button">重新验证</button><button class="btn btn--secondary btn--32" type="button">禁用</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                  </div>
+                </article>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+  <!-- 对比弹层（模态）：底层外壳 inert；无关闭 ×（v1 / 实现都只有 [暂不更新] 一个出口） -->
+  <div class="overlay">
+    <div class="dialog" role="dialog" aria-modal="true" aria-label="docker.io/acme/ml-agent 的上游更新">
+      <div class="dialog__header">
+        <h2 class="dialog__title">上游有新版本</h2>
+        <p class="dialog__subtitle">docker.io/acme/ml-agent:v1.0</p>
+      </div>
+      <div class="dialog__body">
+        <div class="l4b-compare">
+          <dl class="kv">
+            <dt>当前</dt><dd data-testid="current-digest"><span class="text-mono-13">sha256:8e05a…d77</span><span class="u-muted">（解析于 3 天前）</span></dd>
+            <dt>上游</dt><dd data-testid="upstream-digest"><span class="text-mono-13">sha256:c1f9e…a20</span></dd>
+          </dl>
+        </div>
+        <div class="p7-verdict" role="status" data-status="valid">
+          <div class="p7-verdict__line"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>验证通过</span><span>镜像可用</span></div>
+        </div>
+        <p class="l4b-scope">只影响之后新建的任务；已经建好的任务继续用各自建的时候锁定的那一版。</p>
+      </div>
+      <div class="dialog__footer">
+        <button class="btn btn--secondary btn--32" type="button">暂不更新</button>
+        <div class="dialog__footer-end"><button class="btn btn--primary btn--32" type="button">更新到新版本</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

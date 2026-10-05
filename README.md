@@ -1,5 +1,7 @@
 # 云 Agent 管理平台
 
+本轮设计迁移见 [当前状态](./IMPLEMENTATION-STATUS.md) 与 [新版完整设计](./docs/design-v2/README.md)。迁移核对命令为 `pnpm migration:check`，完成校验为 `pnpm migration:check:complete`。
+
 单机私有化部署的沙箱 AI agent 平台。数据、代码、凭证不出本机；对外同时提供
 **MCP** 与 **REST(OpenAPI)** 两套协议面。
 

@@ -1,0 +1,152 @@
+[
+  {
+    "frame": "f-sbx-destroy-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "destroy-pending-overview-excludes-task",
+        "screenshot": "f-sbx-destroy-01-dark-1440-destroy-pending-overview-excludes-task.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      },
+      {
+        "state": "destroy-complete-task-removed",
+        "screenshot": "f-sbx-destroy-01-dark-1440-destroy-complete-task-removed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/sandboxes/t-failed",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/sandboxes/t-failed",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/system/init-status",
+        "/api/system/resources"
+      ],
+      "writes": [
+        {
+          "method": "DELETE",
+          "path": "/api/sandboxes/t-failed",
+          "input": {
+            "keepVolume": false
+          }
+        }
+      ],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-destroy-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "destroy-provider-failed-idempotent-retry",
+        "screenshot": "f-sbx-destroy-02-dark-1440-destroy-provider-failed-idempotent-retry.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-sbx-destroy-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-sbx-destroy-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes/t-stopped-0",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/sandboxes/t-stopped-0",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/sandboxes/t-stopped-0"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  }
+]

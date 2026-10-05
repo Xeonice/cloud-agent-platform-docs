@@ -1,0 +1,171 @@
+<!doctype html>
+<!--
+  id: f-sys-conn-03
+  页面: 21-5 系统状态（/settings/system，看板页）· 全局横幅 + 六张卡各自的失败态
+  状态: 读平台初始化状态失败（后端没有响应）⇒ 主列顶部阻断横幅「无法确认平台状态」（本页不放「查看系统状态」，只留 ×）；资源卡、沙箱环境卡各自原位一句读取失败（不显示成 0% 或空条）；连接卡 REST「异常 · 请求失败」；出网代理读取失败：不显示表单，一句「读到已存的配置之前不能修改」+ [重试]；诊断尚未运行；审计流加载失败 + [重试]
+  对应 v1 稿件: g6-14（design-drafts/g6-system/g6-14-backend-down.html；预览 design-drafts/previews/g6-14.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳与看板照 P5（pilot/p5-system-status.html，逐行同源）：全高侧栏 256（「系统状态」为当前页；设置类页面不挂任务树、「任务」不带等待徽标，foundation §1.4）+ 只盖主区的顶栏 56（h1「系统状态」）；看板 .p5-board 左窄右宽、分区标签在卡外、卡 = 表面 + r6 + 环 + 2px 柔影；实例菜单 aria-label 按 Q-DS-34 A 去掉「文档」（gap README §2）
+    - 资源卡 = Usage 卡（.card--usage / .kpi / .usage / .meter，与 P2 / P5 同一组件）：每条水位一个嵌入块，条 6 高、轨道 fill-active，正常时中性灰、越过阈值才用 warn / fail（评审 VL-05）
+    - 颜色只表达状态（P6）：色调只在徽标、图标、越过阈值的用量条、错误码芯片上；句子一律正文色 / 次要灰；徽标 = 无边框胶囊（卡内行 20 高）
+    - 字阶 14 为主、13 给帮助与长说明、12 只给徽标与元信息；等宽只给环境变量名、时间戳、错误码；图标全用 .icon.i-*（无字符假图标）；每个容器实心主按钮 ≤ 1（同屏的「保存」「重新诊断」分属两张卡，P5 同）
+    - 失败一律原位说、各说各的（UX-DS-305）：卡片保留分区标签与位置，卡内只剩一句（l5a-sys.css §2：圆叉图标红 + 句子正文色）+ 该卡自己的恢复动作在右上（资源卡 [刷新]、出网代理 [重试]）；审计流在筛选条下方一条 .note--fail
+    - W4 评审修正（notes/consistency.md §8）：连接卡「终端连接」一行挂的「正常」徽标是换皮沿用的现状口径（T-21）；AC-SYS-040.4 / 040.6（只报数量、不挂「正常」，首屏 REST 写「未知」）待 Q-SYS-21 拍板，原型已按 AC 画——拍板认可后删掉这枚徽标（评审 R2-32，登记在 notes/consistency.md §8.3）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 横幅位置：整个外壳顶部 → 主列顶部、顶栏之下（W0 .banner-stack，F-WB-BANNER）；文字按钮「关闭」→ × 图标按钮（aria-label 照 v1）；自指动作「查看系统状态」在本页隐藏（T-8，v1 同；现状 globalBanner.ts:75 仍显示，偏离）。需看稿。
+    2. 读取失败句（资源卡、沙箱环境卡）：v1 整句红字 → 圆叉图标（红）+ 句子正文色（P6），文字与 role="alert" 不变；资源卡的 [刷新] 留在原位（卡内右上 24 次按钮），与失败句同一行。需看稿。
+    3. 出网代理（新增形态）：v1 照常显示三个空输入框 +「保存」（现状设置读不到时回退空值，useProxySettings.ts:35-43；这时点保存会用空值覆盖已存的代理——PUT 时整个 proxyConfig 被替换，system-settings.service.ts:133-134；UX-DS-310）→ 读到之前不显示表单、不给保存：原位一句「出网代理读取失败 —— 读到已存的配置之前不能修改，免得把它清空」+ [重试]（只重取 GET /api/system/settings）。需看稿。
+    4. 审计流加载失败：红色 callout（fail pill「审计流加载失败」+ outline sm [重试]）→ 卡内一条 .note--fail（圆叉 + 标题 + 32 次按钮 [重试]，标题红、无整句着色）。需看稿。
+    5. 连接卡：REST 行「异常 · 请求失败」胶囊挪到行尾（P5 同写法）；终端连接仍写「正常」——现状写死（connectionModel.ts:75，UX-DS-306 缺口），v1 同样记录在案未改，本稿照 v1，记入 notes/sys-a.md 待裁决。
+    6. 诊断照常（尚未运行），v1 同。
+  示例数据来源: v1 同一份（design-drafts/README.md §5；「今天」= 2026-10-02，审计 8 条与 P5 相同）+ 原型示例世界（pilot/proto/proto.js）+ plan.json conventions.sample_world（凭证：Codex 已配置、Claude Code 两种都未配置——所以 Agent 一节写「凭证未配置」，与 P3 / 原型一致；P5 这里写的是「已配置」，与 P3 不一致，见 notes/sys-a.md）；「本机最多 8 个」、留出 15%、健康统计窗口与阈值、诊断超时时限都读自接口 / 首帧（UX-DS-070），是示例值；横幅括号里的原因「后端没有响应」照 v1 改写（现状原始串「网络请求失败：Failed to fetch」，design-drafts README §3.2）
+  流程: F-SYS-CONN（REQ-SYS-075 后端不可达时本页的样子；REQ-SYS-060 AC-SYS-060.6 读取失败不许保存）；横幅本身归 F-WB-BANNER，审计流失败态归 F-SYS-AUDIT（REQ-AUD-004）
+  口径依据: UX-DS-305（读取失败原位一句、不显示成 0% 或空）；UX-DS-310（初值没读到前不可提交并说明原因）；T-8 / UX-DS-311（自指动作隐藏）；UX-DS-303（不用「暂无记录」盖住失败）；plan F-SYS-CONN（后端不可达：各卡原位一句读取失败、不显示 0%，横幅里不放指向本页的动作；读取失败时不许保存以免清掉已有配置）；实现 web/src/views/system/ResourcePoolCard.view.tsx:125-131、SandboxEnvStatusCard.view.tsx:62-66、web/src/lib/system/connectionModel.ts:51-61、AuditStreamCard.view.tsx:141-150、web/src/lib/system/globalBanner.ts:65-77、web/src/hooks/system/useProxySettings.ts:35-43
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-sys-conn-03" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-sys-conn-03 系统状态 · 后端不可达（各卡原位读取失败）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5a-sys.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">系统状态</h1>
+      </header>
+      <!-- 横幅栈（W0 .banner-stack，F-WB-BANNER）：「无法确认平台状态」——标题里没有「离线」两个字（globalBanner.ts:65-77）；
+           动作「查看系统状态」指向的就是本页 → 本页隐藏，只留关闭（T-8 / UX-DS-311；现状 globalBanner.ts:75 仍会显示，偏离） -->
+      <div class="banner-stack" role="region" aria-label="全局提示">
+        <div class="banner banner--fail" role="alert"><span class="icon i-octagon-alert" aria-hidden="true"></span><span class="u-sr-only">阻断</span>
+          <p class="banner__body"><span class="banner__title">无法确认平台状态</span><span class="banner__text">读取平台初始化状态失败（后端没有响应）。这多半是后端没起来或不可达 —— 在它恢复之前，「Agent 是否可用」无法判定：既不表示网络正常，也不表示离线。</span></p>
+          <div class="banner__end"><button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="关闭「无法确认平台状态」提示" title="关闭"><span class="icon i-x" aria-hidden="true"></span></button></div>
+        </div>
+      </div>
+
+      <main class="main" id="main">
+        <div class="content">
+          <!-- 看板照 P5：左列 资源 + 连接，右列 沙箱环境 + 出网代理；诊断与审计流各占整行（page.tsx：grid items-start lg:grid-cols-2） -->
+          <div class="content__inner p5-board" data-testid="system-status-grid">
+
+            <div class="p5-board__col" data-testid="system-status-column-left">
+              <!-- 本机资源水位 · 读取失败：卡内只剩一句（role="alert"）+ 原位的 [刷新]；不渲染 KPI、水位条与保留卷（不显示成 0% 或空条：UX-DS-305） -->
+              <section class="section" aria-labelledby="resource-pool-heading">
+                <div class="section-head"><h2 class="section-head__title" id="resource-pool-heading">本机资源水位</h2></div>
+                <div class="card">
+                  <div class="l5a-failrow">
+                    <p class="l5a-msg l5a-msg--fail" role="alert"><span class="icon i-circle-x" aria-hidden="true"></span><span>本机资源读取失败，当前数字不可用 —— 请点 [刷新] 重试</span></p>
+                    <div class="l5a-failrow__end"><button class="btn btn--secondary btn--24" type="button">刷新</button></div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 连接状态：一张卡 + 行间 1px（P5 同）；REST 行按本页两个查询的结论（connectionModel.ts:51-61）：都失败 → 异常「请求失败」（拿不到错误码时不写「错误码 …」）。终端连接行仍是「正常」——现状写死（connectionModel.ts:75，UX-DS-306 缺口，v1 g6-14 同样未改） -->
+              <section class="section" aria-labelledby="connection-status-heading">
+                <div class="section-head"><h2 class="section-head__title" id="connection-status-heading">连接状态</h2></div>
+                <div class="card">
+                  <ul class="list list--stack">
+                    <li class="list__row" data-testid="connection-row-rest">
+                      <div class="list__line"><span class="list__name">REST</span><span class="list__desc">请求失败</span><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>异常</span></div>
+                    </li>
+                    <li class="list__row" data-testid="connection-row-events">
+                      <div class="list__line"><span class="list__name">WS /events</span><span class="list__desc">本页未测量</span><span class="badge badge--20 badge--unknown"><span class="icon i-circle" aria-hidden="true"></span>未知</span></div>
+                      <p class="list__note">/events 只在工作台挂载（本页不另开一条连接：那测的是新连接通不通，不是工作台那条）；通道断连时工作台会自行退避重连，无需在此干预</p>
+                    </li>
+                    <li class="list__row" data-testid="connection-row-terminals">
+                      <div class="list__line"><span class="list__name">终端连接</span><span class="list__desc">0 个终端会话</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></div>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+
+            <div class="p5-board__col" data-testid="system-status-column-right">
+              <!-- 沙箱环境状态 · 读取失败：一句（role="alert"，SandboxEnvStatusCard.view.tsx:62-66）；分区标题行右侧的「健康统计窗口」随数据一起不显示（现状 :55-59）。
+                   这张卡没有自己的重试：[刷新]（资源卡右上）同时重取资源与沙箱环境（useSystemStatus.ts:192-196），30 秒轮询也会自己再试 -->
+              <section class="section" aria-labelledby="sandbox-env-status-heading">
+                <div class="section-head"><h2 class="section-head__title" id="sandbox-env-status-heading">沙箱环境状态</h2></div>
+                <div class="card">
+                  <div class="card__body">
+                    <p class="l5a-msg l5a-msg--fail" role="alert"><span class="icon i-circle-x" aria-hidden="true"></span><span>沙箱环境概览读取失败 —— 这里的空白不代表这台机器上没有沙箱环境</span></p>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 出网代理 · 设置读取失败（新增形态，UX-DS-310）：现状读不到时回退三个空输入框（useProxySettings.ts:35-43），此时点保存 = 用空值 / 半截值覆盖已存的代理
+                   （PUT 时整个 proxyConfig 被替换，system-settings.service.ts:133-134）。⇒ 读到之前不显示表单、不给保存，原位一句 + [重试]（只重取 GET /api/system/settings） -->
+              <section class="section" aria-labelledby="proxy-settings-heading" data-testid="proxy-settings-card">
+                <div class="section-head"><h2 class="section-head__title" id="proxy-settings-heading">出网代理</h2></div>
+                <div class="card">
+                  <div class="l5a-failrow">
+                    <p class="l5a-msg l5a-msg--fail" role="alert" data-testid="proxy-read-error"><span class="icon i-circle-x" aria-hidden="true"></span><span>出网代理读取失败 —— 读到已存的配置之前不能修改，免得把它清空</span></p>
+                    <div class="l5a-failrow__end"><button class="btn btn--secondary btn--24" type="button">重试</button></div>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- 诊断：占整行（运行后高度会跳变）；卡内一行 = 说明 + 右侧动作（主动作在右端）——P5 同 -->
+            <section class="section p5-board__full" aria-labelledby="diagnostics-heading" data-testid="system-status-diagnostics-row">
+              <div class="section-head"><h2 class="section-head__title" id="diagnostics-heading">诊断</h2></div>
+              <div class="card">
+                <div class="card__row">
+                  <p class="card__desc">尚未运行。点 [重新诊断] 跑一轮：各项并行，某一项超时也不阻塞其余项。</p>
+                  <div class="card__row-end">
+                    <button class="btn btn--secondary btn--32" type="button">导出日志</button>
+                    <button class="btn btn--primary btn--32" type="button">重新诊断</button>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 审计流：占整行；一张卡 = 筛选条 + 加载失败一条（后端不可达） -->
+            <section class="section p5-board__full" aria-labelledby="audit-stream-heading" data-testid="system-status-audit-row">
+              <div class="section-head"><h2 class="section-head__title" id="audit-stream-heading">审计流</h2></div>
+              <div class="card log">
+                <div class="card__toolbar" role="group" aria-label="审计流筛选">
+                  <label class="card__toolbar-item"><span>类别</span><span class="select select--32 p5-select"><select class="select__control" aria-label="类别"><option selected>全部</option><option>任务</option><option>项目</option><option>凭证</option><option>镜像</option><option>系统</option></select><span class="icon i-chevron-down select__icon" aria-hidden="true"></span></span></label>
+                  <label class="card__toolbar-item card__toolbar-item--toggle"><input class="switch" type="checkbox" role="switch"><span>仅告警</span></label>
+                  <label class="card__toolbar-item"><span>起</span><input class="input input--32 input--date p5-date" type="datetime-local" aria-label="起始时间"></label>
+                  <label class="card__toolbar-item"><span>止</span><input class="input input--32 input--date p5-date" type="datetime-local" aria-label="结束时间"></label>
+                </div>
+                <!-- 加载失败：卡内一条失败提示条（圆叉 + 标题 +［重试］）；⛔ 不出现「暂无记录」（AuditStreamCard.view.tsx:10-12：「暂无记录」盖住一次 500 是本页最坏的谎） -->
+                <div class="note note--fail note--center l5a-audit-fail" role="alert"><span class="icon i-circle-x" aria-hidden="true"></span><div class="note__body"><span class="note__title">审计流加载失败</span></div><div class="note__end"><button class="btn btn--secondary btn--32" type="button">重试</button></div></div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

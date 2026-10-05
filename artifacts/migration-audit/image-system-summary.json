@@ -1,0 +1,324 @@
+{
+  "scope": "baseline.gaps 中 IMG/AUT/SYS/DIA/AUD 全部155条；未评全部1016验收或其他域",
+  "method": "逐条读取当前workspace Given/When/Then；本轮只读，不重跑全测试、不启服务。已有实跑仅在各条证据明确标注。",
+  "coverage": 155,
+  "closed": 17,
+  "partial": 90,
+  "open": 47,
+  "superseded": 1,
+  "remaining_ac": 137,
+  "byDomain": {
+    "IMG": {
+      "total": 66,
+      "closed": 8,
+      "partial": 43,
+      "open": 14,
+      "superseded": 1
+    },
+    "SYS": {
+      "total": 32,
+      "closed": 6,
+      "partial": 12,
+      "open": 14,
+      "superseded": 0
+    },
+    "DIA": {
+      "total": 10,
+      "closed": 0,
+      "partial": 9,
+      "open": 1,
+      "superseded": 0
+    },
+    "AUD": {
+      "total": 10,
+      "closed": 0,
+      "partial": 6,
+      "open": 4,
+      "superseded": 0
+    },
+    "AUT": {
+      "total": 37,
+      "closed": 3,
+      "partial": 20,
+      "open": 14,
+      "superseded": 0
+    }
+  },
+  "impl_gap_defects": [
+    {
+      "number": 7,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/packages/modules/automation/src/application/automation.scheduler.ts:349"
+      ],
+      "reason": "终态只记录和通知，未销毁任务/登记自动化成果；名额泄漏仍在。"
+    },
+    {
+      "number": 8,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/packages/modules/image/src/application/image-application.service.ts:193",
+        "只读核对（本輪未重跑）：api/apps/api/test/e2e/images.e2e-spec.ts:1065"
+      ],
+      "reason": "更新已从同镜像同tag来源复制配置密文；38条镜像e2e已有通过记录。"
+    },
+    {
+      "number": 9,
+      "status": "partial",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:46",
+        "只读核对（本輪未重跑）：web/src/views/init/PresetImageCheck.view.tsx:271"
+      ],
+      "reason": "系统代理卡已只承诺联网检查，初始化失败指引仍让人回上一步填代理修镜像下载；B后端代理注入仍backlog。"
+    },
+    {
+      "number": 13,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/system/ProxySettingsCard.view.tsx:49",
+        "只读核对（本輪未重跑）：web/src/hooks/system/useProxySettings.ts:57"
+      ],
+      "reason": "配置读取失败隐藏表单并阻止保存，原位alert和只重取设置的重试已接。"
+    },
+    {
+      "number": 19,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/containers/system/SystemStatusContainer.tsx:49",
+        "只读核对（本輪未重跑）：web/src/app/settings/system/page.tsx:30"
+      ],
+      "reason": "清理成果仍未传回调，按钮无实际跨项目成果去处。"
+    },
+    {
+      "number": 34,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:544",
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImageCardLocation.ts:17"
+      ],
+      "reason": "定位先清过滤搜索，再单卡高亮、滚动与聚焦；本条仅只读核对未新增实跑。"
+    },
+    {
+      "number": 35,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:493",
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:537"
+      ],
+      "reason": "预检/保存请求错误仍只toast，未原位失败/重试/结论切换。"
+    },
+    {
+      "number": 36,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:990",
+        "只读核对（本輪未重跑）：web/src/containers/image/ImagesContainer.tsx:145"
+      ],
+      "reason": "读取错误不再当0行空态，alert及重试已有；现有container回归已跑通过。"
+    },
+    {
+      "number": 37,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/containers/image/ImagesContainer.tsx:299"
+      ],
+      "reason": "历史切换busy仍指卡面行id，被点行无切换中。"
+    },
+    {
+      "number": 38,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/packages/modules/image/src/infrastructure/persistence/sqlite/image-manifest.repository.impl.ts:191"
+      ],
+      "reason": "镜像引用计数仍含destroyed任务，外键未清退。"
+    },
+    {
+      "number": 39,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/system/usePresetImageProvision.ts:105"
+      ],
+      "reason": "IN_FLIGHT仍一般error直出服务端message；镜像页下载入口也未接。"
+    },
+    {
+      "number": 40,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/system/diagnostics/checks/preset-image.check.ts:431"
+      ],
+      "reason": "第⑧项仍指没有准备按钮的系统状态页，镜像管理入口未落地。"
+    },
+    {
+      "number": 41,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/image/PresetDisableDialog.view.tsx:37",
+        "只读核对（本輪未重跑）：web/src/lib/image/launchImageOptions.ts:62"
+      ],
+      "reason": "预制禁用先说后果并确认；新建任务默认镜像不可用的原因已可见，6场隔离浏览器通过。"
+    },
+    {
+      "number": 42,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/system/useSystemStatusModels.ts:49",
+        "只读核对（本輪未重跑）：web/src/lib/system/connectionModel.ts:75"
+      ],
+      "reason": "pending即REST正常、0终端仍ok未改。"
+    },
+    {
+      "number": 43,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/packages/contracts/src/schemas/system.schema.ts:233"
+      ],
+      "reason": "代理字符串仍仅长度校验，未拒绝socks5。"
+    },
+    {
+      "number": 44,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/system/DiagnosticItem.view.tsx:75"
+      ],
+      "reason": "诊断中断未返回项仍pending转圈。"
+    },
+    {
+      "number": 45,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/lib/system/diagnoseModel.ts:204"
+      ],
+      "reason": "汇总仍写失败含超时，没有单独超时计数句。"
+    },
+    {
+      "number": 46,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/system/useAuditFilters.ts:49",
+        "只读核对（本輪未重跑）：web/src/lib/audit/auditStream.ts:279"
+      ],
+      "reason": "起止不比较且条件仍ISO，错误范围照常请求。"
+    },
+    {
+      "number": 47,
+      "status": "partial",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:773",
+        "只读核对（本輪未重跑）：web/src/containers/system/SystemStatusContainer.tsx:38"
+      ],
+      "reason": "镜像复制已捕获失败；系统诊断复制仍直接访问clipboard，非安全上下文缺API会同步抛错，五处统一兜底未完整。"
+    },
+    {
+      "number": 48,
+      "status": "closed",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/automation/useAutomations.ts:92",
+        "只读核对（本輪未重跑）：web/src/containers/banner/GlobalBannerContainer.tsx:52"
+      ],
+      "reason": "跨项目attention已全局读取，错误抑制旧缓存并定位首条项目，API/前端相关回归已有通过记录。"
+    },
+    {
+      "number": 49,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/packages/modules/automation/src/application/automation.notifier.ts:72"
+      ],
+      "reason": "凭证跳过仍明确不按triggerOn过滤，尚未按设计收口。"
+    },
+    {
+      "number": 50,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/automation/useAutomationForm.ts:116",
+        "只读核对（本輪未重跑）：web/src/lib/automation/automationPayload.ts:59"
+      ],
+      "reason": "未触碰即出alert，名称长度仍只交后端拒绝。"
+    },
+    {
+      "number": 51,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/system/system-resources.service.ts:24",
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/system/system-resources.service.ts:126"
+      ],
+      "reason": "成果到期仍旧状态时间加固定30天，未读成果账本实际expiresAt。"
+    },
+    {
+      "number": 58,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/hooks/image/useImages.ts:628"
+      ],
+      "reason": "启用成功仍复用切换版本提示。"
+    },
+    {
+      "number": 59,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/system/preset-image/preset-image-provisioner.ts:277"
+      ],
+      "reason": "搬运阶段仍写铺进。"
+    },
+    {
+      "number": 60,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/image/ImageRequirementsPanel.view.tsx:44",
+        "只读核对（本輪未重跑）：api/packages/modules/image/src/infrastructure/spec/oci-image-spec.provider.ts:99"
+      ],
+      "reason": "面板强制WorkingDir与后端缺省/仍矛盾。"
+    },
+    {
+      "number": 61,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/image/RegisterImageModal.view.tsx:64"
+      ],
+      "reason": "注册手写遮罩空闲点击仍不关。"
+    },
+    {
+      "number": 62,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/views/system/DiagnosticItem.view.tsx:59"
+      ],
+      "reason": "诊断序号表仍只到⑧。"
+    },
+    {
+      "number": 63,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/types/sse-protocol.ts:49",
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/system/diagnostics/diagnostics.service.ts:18"
+      ],
+      "reason": "单项时限注释仍写5s而运行预算10s。"
+    },
+    {
+      "number": 64,
+      "status": "open",
+      "evidence": [
+        "只读核对（本輪未重跑）：api/apps/api/src/platform/audit/audit.projector.ts:84",
+        "只读核对（本輪未重跑）：web/src/lib/audit/auditRowModel.ts:45"
+      ],
+      "reason": "审计上屏旧沙箱/英文状态/Provider事件尚未改。"
+    },
+    {
+      "number": 65,
+      "status": "partial",
+      "evidence": [
+        "只读核对（本輪未重跑）：web/src/containers/banner/GlobalBannerContainer.tsx:29",
+        "只读核对（本輪未重跑）：web/src/views/system/SandboxEnvStatusCard.view.tsx:109"
+      ],
+      "reason": "自指横幅已改，但凭证未配置unknown徽标/硬编码阈值等同条剩余仍在。"
+    }
+  ],
+  "defect_count_note": "此处缺陷复核与AC重叠，不能再加到137条剩余；高优先级13条全局口径以root critical-defects.json为准。",
+  "most_important_remaining": [
+    "自动化终态收尾与成果登记（AUT-025）仍缺，成功任务仍占名额。",
+    "镜像删除预检/受影响任务清单/销毁引用清退（IMG-033/034）与历史行切换busy仍缺。",
+    "镜像页预制下载块及完整失败/冲突/完成链路（IMG-040至043）仍未迁移。",
+    "系统容量契约与创建准入同源（SYS-071）、跨项目成果清理及按实际账本到期仍缺。",
+    "诊断中断/超时单列、第⑨序号与兜底自检；审计完整时间线/时间范围校验仍缺。",
+    "#9初始化向导旧代理指引仍误导镜像下载，不能认定缺陷完整消除。"
+  ]
+}

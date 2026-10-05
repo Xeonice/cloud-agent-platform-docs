@@ -1,0 +1,36 @@
+<!doctype html>
+<!--
+  id: f-dep-init-01
+  页面: 21-8 部署与初始化 · 启动放行闸门（AppBootGate）——打开平台后的第一屏
+  状态: init-status 还没回来：整屏画布上只有居中一句「正在检查平台初始化状态…」（前缀转圈，role="status"）；此刻工作台与向导都不挂（防闪现）。之后只挂一个：口令被拒（401 / 429）→ 口令门 f-acc-unlock-02；未初始化 → 向导 f-dep-init-02 起；已初始化 → 工作台；读失败（后端 500、连不上）→ 放行进工作台 + 横幅「无法确认平台状态」（f-wb-banner-01）
+  对应 v1 稿件: g8-01（design-drafts/g8-init-access/g8-01-boot-check.html；预览 design-drafts/previews/g8-01.dark.png / .light.png）
+  体现的 v2 要点:
+    - 画框 .frame 自适应（宽 100%、高 = 视口），画布底 --canvas；整屏一句 .boot（l5c-dep.css §1）：14 次要灰 + 16 前缀转圈（加载中写法，UX-DS-204）
+    - 不画外壳、不画骨架：这一刻还不知道该挂向导、口令门还是工作台，任何一种骨架都可能「先画出来再被换掉」（F21-8 §5 防闪现）
+    - W4 评审修正（notes/consistency.md §8）：「正在检查…」外面包一层主区地标 <main class="boot-main">（l5c-dep §1：接过 .boot 在画框里的 flex 位置）+ 读屏 h1「Agent 管理平台」，与原型 #proto-boot 同构、像素不变（axe landmark-one-main / page-has-heading-one，评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 句子前加 16 转圈图标（i-loader-circle，次要灰；reduced motion 下静止）：v1 只有一句字。需看稿（小）。
+    2. 字号 14 不变；颜色 muted → --foreground-muted；画布底按 v2 token（暗 / 亮各一套）。
+  示例数据来源: 无业务数据
+  流程: F-DEP-INIT（REQ-DEP-001、REQ-DEP-002）
+  口径依据: DR-28（推荐：401 时渲染中性背景 + 口令门，解锁后重跑初始化判定——判定顺序 口令门 → init-status → 向导 / 工作台）；F21-8 §2「判定位置 / 路由拦截」、§5「首载判定：pending 期间渲染骨架而非工作台（防闪现）」；REQ-WB-014（读失败放行 + 横幅「无法确认平台状态」，不说成离线）；实现 web/src/containers/init/AppBootGate.tsx:38-49（pending 分支：flex min-h-screen items-center justify-center text-sm text-muted-foreground，role="status"）、:51-56（initialized === false 只挂向导）、:58（其余放行）、:33-36（401 交给口令门）、web/src/hooks/system/useInitGate.ts:14-23（不重试、staleTime Infinity）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-01">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-01 启动检查中</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="boot-main" id="main">
+    <h1 class="u-sr-only">Agent 管理平台</h1>
+    <div class="boot" role="status" data-testid="app-boot-skeleton"><span class="icon i-loader-circle icon--spin" aria-hidden="true"></span>正在检查平台初始化状态…</div>
+  </main>
+</div>
+</body>
+</html>

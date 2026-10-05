@@ -1,0 +1,1271 @@
+[
+  {
+    "id": "AC-DEP-001.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/hooks/system/useInitGate.ts:15（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：这 2 秒里只有「正在检查平台初始化状态…」（role=status）；DOM 里没有工作台、向导、口令门；没有发项目、任务、事件请求",
+    "verification": "code-review",
+    "given": "init-status 延迟 2 秒才返回",
+    "when": "打开首页",
+    "then": "这 2 秒里只有「正在检查平台初始化状态…」（role=status）；DOM 里没有工作台、向导、口令门；没有发项目、任务、事件请求"
+  },
+  {
+    "id": "AC-DEP-001.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/system/useInitGate.ts:15（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：只请求一次，不重试",
+    "verification": "code-review",
+    "given": "init-status 失败",
+    "when": "—",
+    "then": "只请求一次，不重试"
+  },
+  {
+    "id": "AC-DEP-002.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/access/AccessGateContainer.tsx:6（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/hooks/access/useAccessGate.ts:27（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：只有向导，地址仍是 /settings/images；完成后显示的是该页，不跳回首页",
+    "verification": "code-review",
+    "given": "initialized=false",
+    "when": "直接打开 /settings/images",
+    "then": "只有向导，地址仍是 /settings/images；完成后显示的是该页，不跳回首页"
+  },
+  {
+    "id": "AC-DEP-002.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/access/AccessGateContainer.tsx:6（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/access/useAccessGate.ts:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：只有全屏口令门；DOM 里没有工作台，也没发它的请求",
+    "verification": "code-review",
+    "given": "init-status 返回 401 PASSCODE_REQUIRED",
+    "when": "—",
+    "then": "只有全屏口令门；DOM 里没有工作台，也没发它的请求"
+  },
+  {
+    "id": "AC-DEP-002.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/access/AccessGateContainer.tsx:6（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/access/useAccessGate.ts:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：换成向导",
+    "verification": "code-review",
+    "given": "口令门",
+    "when": "解锁成功，重新判定得到 initialized=false",
+    "then": "换成向导"
+  },
+  {
+    "id": "AC-DEP-002.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/access/AccessGateContainer.tsx:6（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/access/useAccessGate.ts:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：放行进工作台；横幅「无法确认平台状态」，说明含「（后端返回 500）」、不含「离线」；没有向导",
+    "verification": "code-review",
+    "given": "init-status 返回 500",
+    "when": "—",
+    "then": "放行进工作台；横幅「无法确认平台状态」，说明含「（后端返回 500）」、不含「离线」；没有向导"
+  },
+  {
+    "id": "AC-DEP-002.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/containers/init/AppBootGate.tsx:9（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/access/AccessGateContainer.tsx:6（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/access/useAccessGate.ts:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：工作台；向导不挂载",
+    "verification": "code-review",
+    "given": "initialized=true",
+    "when": "—",
+    "then": "工作台；向导不挂载"
+  },
+  {
+    "id": "AC-DEP-003.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：向导不关、不变",
+    "verification": "code-review",
+    "given": "向导任一步",
+    "when": "按 Esc；点画布空白",
+    "then": "向导不关、不变"
+  },
+  {
+    "id": "AC-DEP-003.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：一个 role=dialog、aria-modal=true，名称「平台初始化 · 共 5 步」，描述是页头那句说明",
+    "verification": "code-review",
+    "given": "向导",
+    "when": "读屏查询",
+    "then": "一个 role=dialog、aria-modal=true，名称「平台初始化 · 共 5 步」，描述是页头那句说明"
+  },
+  {
+    "id": "AC-DEP-003.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：第 1 步没有 [上一步]；其余有",
+    "verification": "code-review",
+    "given": "第 1 步 / 第 2–5 步",
+    "when": "渲染页脚",
+    "then": "第 1 步没有 [上一步]；其余有"
+  },
+  {
+    "id": "AC-DEP-003.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不出现向导",
+    "verification": "code-review",
+    "given": "初始化已完成",
+    "when": "打开任何页面",
+    "then": "不出现向导"
+  },
+  {
+    "id": "AC-DEP-003.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：去处写「系统状态」；不含耗时承诺",
+    "verification": "code-review",
+    "given": "页头说明、第 5 步页脚句",
+    "when": "渲染",
+    "then": "去处写「系统状态」；不含耗时承诺"
+  },
+  {
+    "id": "AC-DEP-004.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：到第 3 步；步骤条第 2 格「代理配置（可跳过）」、不打勾",
+    "verification": "code-review",
+    "given": "联网全部连得上",
+    "when": "在第 1 步点 [下一步]",
+    "then": "到第 3 步；步骤条第 2 格「代理配置（可跳过）」、不打勾"
+  },
+  {
+    "id": "AC-DEP-004.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：到第 2 步；第 2 格不带「（可跳过）」",
+    "verification": "code-review",
+    "given": "联网有一项超时未响应",
+    "when": "在第 1 步点 [下一步]",
+    "then": "到第 2 步；第 2 格不带「（可跳过）」"
+  },
+  {
+    "id": "AC-DEP-004.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：回到第 2 步代理配置，不是第 1 步",
+    "verification": "code-review",
+    "given": "联网全部连得上，在第 3 步",
+    "when": "点 [上一步]",
+    "then": "回到第 2 步代理配置，不是第 1 步"
+  },
+  {
+    "id": "AC-DEP-004.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：步骤条第 3 格是「走过没达成」（三角 + 读屏「走过、没有完成」），不是勾",
+    "verification": "code-review",
+    "given": "在第 3 步点了 [稍后配置，下一步]（镜像未就绪）",
+    "when": "到第 4 步",
+    "then": "步骤条第 3 格是「走过没达成」（三角 + 读屏「走过、没有完成」），不是勾"
+  },
+  {
+    "id": "AC-DEP-004.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：显示「第 N / 5 步」与五个步骤名；当前那一格 aria-current=\"step\"",
+    "verification": "code-review",
+    "given": "任一步",
+    "when": "渲染步骤条",
+    "then": "显示「第 N / 5 步」与五个步骤名；当前那一格 aria-current=\"step\""
+  },
+  {
+    "id": "AC-DEP-005.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/views/init/ConnectivityCheck.view.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：直接显示这份结果与「上次检测：…（14 小时前）（上次检测的结果，进向导不重跑）」；不发 /diagnose",
+    "verification": "code-review",
+    "given": "init-status 带 14 小时前的结果",
+    "when": "进向导",
+    "then": "直接显示这份结果与「上次检测：…（14 小时前）（上次检测的结果，进向导不重跑）」；不发 /diagnose"
+  },
+  {
+    "id": "AC-DEP-005.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/views/init/ConnectivityCheck.view.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：自动跑一轮；结果到之前显示「还没有检查过这台机器能不能联网。」与「正在检测联网状况…」",
+    "verification": "code-review",
+    "given": "init-status 没有任何历史",
+    "when": "进向导",
+    "then": "自动跑一轮；结果到之前显示「还没有检查过这台机器能不能联网。」与「正在检测联网状况…」"
+  },
+  {
+    "id": "AC-DEP-005.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/ConnectivityCheck.view.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不发第二个请求；按钮显示「重新检测（Ns）」并禁用",
+    "verification": "code-review",
+    "given": "刚点过 [重新检测]",
+    "when": "3 秒内再点（含同一批次里连点）",
+    "then": "不发第二个请求；按钮显示「重新检测（Ns）」并禁用"
+  },
+  {
+    "id": "AC-DEP-005.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ConnectivityCheck.view.tsx:22（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：再自动跑 1 次；第 2 次也断了不再自动跑",
+    "verification": "code-review",
+    "given": "自动跑的一轮中断",
+    "when": "—",
+    "then": "再自动跑 1 次；第 2 次也断了不再自动跑"
+  },
+  {
+    "id": "AC-DEP-005.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/ConnectivityCheck.view.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「这份结果没有带时刻 —— …建议点 [重新检测] 跑一轮。」",
+    "verification": "code-review",
+    "given": "历史结果没有时刻",
+    "when": "渲染",
+    "then": "「这份结果没有带时刻 —— …建议点 [重新检测] 跑一轮。」"
+  },
+  {
+    "id": "AC-DEP-006.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ConnectivityItem.view.tsx:23（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「连得上」+「182ms」",
+    "verification": "code-review",
+    "given": "一行 ok、latencyMs 182",
+    "when": "渲染",
+    "then": "「连得上」+「182ms」"
+  },
+  {
+    "id": "AC-DEP-006.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ConnectivityItem.view.tsx:23（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「超时未响应」，timeout 色相、时钟图标；不出现「连不上」",
+    "verification": "code-review",
+    "given": "一行 timedOut=true",
+    "when": "渲染",
+    "then": "「超时未响应」，timeout 色相、时钟图标；不出现「连不上」"
+  },
+  {
+    "id": "AC-DEP-006.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/ConnectivityItem.view.tsx:23（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：hint 整段显示、不截断；「镜像仓库」上屏为「镜像下载源」",
+    "verification": "code-review",
+    "given": "一行连不上且带 hint",
+    "when": "渲染",
+    "then": "hint 整段显示、不截断；「镜像仓库」上屏为「镜像下载源」"
+  },
+  {
+    "id": "AC-DEP-006.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ConnectivityItem.view.tsx:23（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：说「这不等于连不上」与「重跑一次看它稳不稳定」；只在「每次都这样」时才提代理",
+    "verification": "code-review",
+    "given": "超时的那一行",
+    "when": "生成 hint",
+    "then": "说「这不等于连不上」与「重跑一次看它稳不稳定」；只在「每次都这样」时才提代理"
+  },
+  {
+    "id": "AC-DEP-007.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「联网正常：…」；没有离线确认",
+    "verification": "code-review",
+    "given": "三行都连得上",
+    "when": "计算结论",
+    "then": "「联网正常：…」；没有离线确认"
+  },
+  {
+    "id": "AC-DEP-007.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「有镜像下载源超时未响应 —— 模型 API 都连得上，Agent 可用；受影响的只是下载新镜像。超时不等于连不上：…」",
+    "verification": "code-review",
+    "given": "模型 API 都连得上，ghcr.io 超时",
+    "when": "计算结论",
+    "then": "「有镜像下载源超时未响应 —— 模型 API 都连得上，Agent 可用；受影响的只是下载新镜像。超时不等于连不上：…」"
+  },
+  {
+    "id": "AC-DEP-007.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「部分」档、上面那句暂行结论；不宣布离线、不出离线确认",
+    "verification": "code-review",
+    "given": "两个模型 API 都 timedOut=true",
+    "when": "计算结论",
+    "then": "「部分」档、上面那句暂行结论；不宣布离线、不出离线确认"
+  },
+  {
+    "id": "AC-DEP-007.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前API代码核对：api/apps/api/src/platform/system/initialization.service.ts:94",
+      "新版API验收（后端所有者报告通过，按实际用例范围引用）：api/acceptance/dep/service/initialization-evidence.spec.ts:1；源映射 api/acceptance/adopted-regressions.json"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不返回 409 OFFLINE_NOT_ACKNOWLEDGED",
+    "verification": "code-review",
+    "given": "同 .3，POST /init 没带 acknowledgeOffline",
+    "when": "—",
+    "then": "不返回 409 OFFLINE_NOT_ACKNOWLEDGED"
+  },
+  {
+    "id": "AC-DEP-007.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：离线那句；句子里不含 Agent 名与目标名",
+    "verification": "code-review",
+    "given": "两个模型 API 都解析失败",
+    "when": "计算结论",
+    "then": "离线那句；句子里不含 Agent 名与目标名"
+  },
+  {
+    "id": "AC-DEP-007.6",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/connectivityVerdict.ts:34（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「有模型 API 没通过检查 —— 其余模型 API 连得上，所以平台不算断网；但依赖它的那个 Agent 可能用不了，其他 Agent 不受影响。」",
+    "verification": "code-review",
+    "given": "一个模型 API 连不上、一个连得上",
+    "when": "计算结论",
+    "then": "「有模型 API 没通过检查 —— 其余模型 API 连得上，所以平台不算断网；但依赖它的那个 Agent 可能用不了，其他 Agent 不受影响。」"
+  },
+  {
+    "id": "AC-DEP-008.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/OfflineNotice.view.tsx:31（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：确认提示条（标题「以离线模式继续」，role=alert）；结论句只在结论行出现一次；[下一步] disabled；页脚那句",
+    "verification": "code-review",
+    "given": "判为离线、还没确认",
+    "when": "渲染",
+    "then": "确认提示条（标题「以离线模式继续」，role=alert）；结论句只在结论行出现一次；[下一步] disabled；页脚那句"
+  },
+  {
+    "id": "AC-DEP-008.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/OfflineNotice.view.tsx:31（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：提示条留着、换成已确认那句；[下一步] 可用；页脚句消失；仍停在第 1 步",
+    "verification": "code-review",
+    "given": "同上",
+    "when": "点 [我知道，继续]",
+    "then": "提示条留着、换成已确认那句；[下一步] 可用；页脚句消失；仍停在第 1 步"
+  },
+  {
+    "id": "AC-DEP-008.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/OfflineNotice.view.tsx:31（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：请求体带 / 不带 acknowledgeOffline: true",
+    "verification": "code-review",
+    "given": "确认过离线 / 没确认过",
+    "when": "第 5 步完成",
+    "then": "请求体带 / 不带 acknowledgeOffline: true"
+  },
+  {
+    "id": "AC-DEP-008.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/OfflineNotice.view.tsx:31（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前API代码核对：api/apps/api/src/platform/system/initialization.service.ts:94",
+      "新版API验收（后端所有者报告通过，按实际用例范围引用）：api/acceptance/dep/service/initialization-evidence.spec.ts:1；源映射 api/acceptance/adopted-regressions.json"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：409 OFFLINE_NOT_ACKNOWLEDGED，平台一个字都没写",
+    "verification": "code-review",
+    "given": "写入前后端那一轮判为离线、用户没确认过",
+    "when": "POST /init",
+    "then": "409 OFFLINE_NOT_ACKNOWLEDGED，平台一个字都没写"
+  },
+  {
+    "id": "AC-DEP-009.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：发 PUT /api/system/settings，不发 POST /init；成功后自动跑一轮联网检查",
+    "verification": "code-review",
+    "given": "填好三项",
+    "when": "点 [保存并重新检测]",
+    "then": "发 PUT /api/system/settings，不发 POST /init；成功后自动跑一轮联网检查"
+  },
+  {
+    "id": "AC-DEP-009.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：proxyConfig: null / 只含 httpsProxy",
+    "verification": "code-review",
+    "given": "三个都清空 / 只填 HTTPS_PROXY",
+    "when": "生成请求体",
+    "then": "proxyConfig: null / 只含 httpsProxy"
+  },
+  {
+    "id": "AC-DEP-009.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：按钮之上「保存失败：这次请求超时了，可以再试一次。」（role=alert）；不显示后端原句",
+    "verification": "code-review",
+    "given": "保存请求超时",
+    "when": "—",
+    "then": "按钮之上「保存失败：这次请求超时了，可以再试一次。」（role=alert）；不显示后端原句"
+  },
+  {
+    "id": "AC-DEP-009.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：示例串是等宽行内代码，没有反引号、没有 emoji",
+    "verification": "code-review",
+    "given": "渲染表单说明",
+    "when": "—",
+    "then": "示例串是等宽行内代码，没有反引号、没有 emoji"
+  },
+  {
+    "id": "AC-DEP-009.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：说明句不含「上一步有目标连不上」",
+    "verification": "code-review",
+    "given": "联网全部连得上，从第 3 步 [上一步] 回到代理配置",
+    "when": "渲染",
+    "then": "说明句不含「上一步有目标连不上」"
+  },
+  {
+    "id": "AC-DEP-009.6",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/system/ProxyConfigForm.view.tsx:49（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：[保存并重新检测] 禁用并显示「保存并重新检测（3s）」；保存中「保存中…」",
+    "verification": "code-review",
+    "given": "一轮检测刚开始的 3 秒内",
+    "when": "渲染",
+    "then": "[保存并重新检测] 禁用并显示「保存并重新检测（3s）」；保存中「保存中…」"
+  },
+  {
+    "id": "AC-DEP-010.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：5 行「检查中…」；[下一步] 禁用，页脚「镜像检查完成后才能继续。」",
+    "verification": "code-review",
+    "given": "进第 3 步，第 ⑧ 项结论还没到",
+    "when": "渲染",
+    "then": "5 行「检查中…」；[下一步] 禁用，页脚「镜像检查完成后才能继续。」"
+  },
+  {
+    "id": "AC-DEP-010.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：第 1 项通过；第 2 项未通过（结论 + 证据 + 动作 + 命令 + 错误码）；第 3–5 项未检查",
+    "verification": "code-review",
+    "given": "帧报停在 registry、status fail",
+    "when": "生成模型",
+    "then": "第 1 项通过；第 2 项未通过（结论 + 证据 + 动作 + 命令 + 错误码）；第 3–5 项未检查"
+  },
+  {
+    "id": "AC-DEP-010.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：停止点之后显示「未检查」，不转圈",
+    "verification": "code-review",
+    "given": "镜像帧已到、其他检查还在跑",
+    "when": "渲染",
+    "then": "停止点之后显示「未检查」，不转圈"
+  },
+  {
+    "id": "AC-DEP-010.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「第 N 项（共 5 项） · 名称」",
+    "verification": "code-review",
+    "given": "任一行",
+    "when": "渲染标题",
+    "then": "「第 N 项（共 5 项） · 名称」"
+  },
+  {
+    "id": "AC-DEP-010.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：用后端那条 / 未通过时才用兜底；通过与提示的项不给命令、不给动作",
+    "verification": "code-review",
+    "given": "后端给了 command / 没给",
+    "when": "生成",
+    "then": "用后端那条 / 未通过时才用兜底；通过与提示的项不给命令、不给动作"
+  },
+  {
+    "id": "AC-DEP-010.6",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/presetImageChain.ts:108（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：轻提示「已复制」/「复制失败，请手动选中命令复制」",
+    "verification": "code-review",
+    "given": "点 [复制]",
+    "when": "剪贴板可用 / 不可用",
+    "then": "轻提示「已复制」/「复制失败，请手动选中命令复制」"
+  },
+  {
+    "id": "AC-DEP-011.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/usePresetImageProvision.ts:47（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不等用户点就开始；离开再回来不再开第二次",
+    "verification": "code-review",
+    "given": "第 5 项提示且 provisionable",
+    "when": "进第 3 步",
+    "then": "不等用户点就开始；离开再回来不再开第二次"
+  },
+  {
+    "id": "AC-DEP-011.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/usePresetImageProvision.ts:47（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：条到 37%、行尾「37%」；阶段句不含「· 37%」；已用时每秒走",
+    "verification": "code-review",
+    "given": "进行中，progress=0.37",
+    "when": "渲染",
+    "then": "条到 37%、行尾「37%」；阶段句不含「· 37%」；已用时每秒走"
+  },
+  {
+    "id": "AC-DEP-011.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/usePresetImageProvision.ts:47（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：进度未知那一句；不画百分比和停住的条；已用时照走",
+    "verification": "code-review",
+    "given": "progress=null",
+    "when": "渲染",
+    "then": "进度未知那一句；不画百分比和停住的条；已用时照走"
+  },
+  {
+    "id": "AC-DEP-011.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/usePresetImageProvision.ts:47（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：留最后一句阶段文案 + 失败原因（role=alert）+ 出路；[准备镜像] 可点；不自动重试",
+    "verification": "code-review",
+    "given": "搬运失败",
+    "when": "渲染",
+    "then": "留最后一句阶段文案 + 失败原因（role=alert）+ 出路；[准备镜像] 可点；不自动重试"
+  },
+  {
+    "id": "AC-DEP-011.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/usePresetImageProvision.ts:47（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：重跑镜像检查；第 5 项转通过后才说就绪",
+    "verification": "code-review",
+    "given": "搬运完成",
+    "when": "—",
+    "then": "重跑镜像检查；第 5 项转通过后才说就绪"
+  },
+  {
+    "id": "AC-DEP-012.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：卡内拦截说明一处（role=alert）；页脚没有同义句；主按钮「稍后配置，下一步」且 aria-describedby 指向那句",
+    "verification": "code-review",
+    "given": "第 2 项未通过",
+    "when": "渲染",
+    "then": "卡内拦截说明一处（role=alert）；页脚没有同义句；主按钮「稍后配置，下一步」且 aria-describedby 指向那句"
+  },
+  {
+    "id": "AC-DEP-012.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/PresetImageCheck.view.tsx:77（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：到第 4 步；步骤条第 3 格「走过没达成」",
+    "verification": "code-review",
+    "given": "同上",
+    "when": "点 [稍后配置，下一步]",
+    "then": "到第 4 步；步骤条第 3 格「走过没达成」"
+  },
+  {
+    "id": "AC-DEP-013.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：达成；Codex 无动作、Claude Code [重新授权]；没有拦截说明",
+    "verification": "code-review",
+    "given": "Codex active、Claude Code expired",
+    "when": "生成模型",
+    "then": "达成；Codex 无动作、Claude Code [重新授权]；没有拦截说明"
+  },
+  {
+    "id": "AC-DEP-013.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：算已配置",
+    "verification": "code-review",
+    "given": "某 Agent credentialStatus=expiring",
+    "when": "生成模型",
+    "then": "算已配置"
+  },
+  {
+    "id": "AC-DEP-013.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：那一行里展开面板，停在空闲态（只有 [开始帐号登录]），不发 begin；行尾变 [收起]",
+    "verification": "code-review",
+    "given": "两个都未配置",
+    "when": "点 Codex [去配置]",
+    "then": "那一行里展开面板，停在空闲态（只有 [开始帐号登录]），不发 begin；行尾变 [收起]"
+  },
+  {
+    "id": "AC-DEP-013.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：拦截说明只在卡内一处；主按钮「稍后配置，下一步」aria-describedby 指向它",
+    "verification": "code-review",
+    "given": "一个都没配",
+    "when": "渲染",
+    "then": "拦截说明只在卡内一处；主按钮「稍后配置，下一步」aria-describedby 指向它"
+  },
+  {
+    "id": "AC-DEP-013.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「读不到 Agent 列表 —— …」（role=alert）；可以跳过",
+    "verification": "code-review",
+    "given": "/api/runtimes 失败",
+    "when": "渲染",
+    "then": "「读不到 Agent 列表 —— …」（role=alert）；可以跳过"
+  },
+  {
+    "id": "AC-DEP-013.6",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/subscriptionReadiness.ts:28（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/views/init/SubscriptionSetup.view.tsx:46（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/hooks/credential/useRuntimeAuthCompletion.ts:13（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「已连上」停留后收起；那一行变「已配置」+ 打码身份；主按钮变 [下一步]；拦截说明消失",
+    "verification": "code-review",
+    "given": "在面板里登录成功",
+    "when": "—",
+    "then": "「已连上」停留后收起；那一行变「已配置」+ 打码身份；主按钮变 [下一步]；拦截说明消失"
+  },
+  {
+    "id": "AC-DEP-014.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ResourceConfirm.view.tsx:27（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：磁盘偏低；偏低那句以「仍可继续」开头，含「可用磁盘 38 GB（建议 ≥ 50 GB）」",
+    "verification": "code-review",
+    "given": "可用磁盘 38 GB",
+    "when": "生成模型",
+    "then": "磁盘偏低；偏低那句以「仍可继续」开头，含「可用磁盘 38 GB（建议 ≥ 50 GB）」"
+  },
+  {
+    "id": "AC-DEP-014.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/ResourceConfirm.view.tsx:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：[确认，开始使用] 可点",
+    "verification": "code-review",
+    "given": "偏低",
+    "when": "渲染",
+    "then": "[确认，开始使用] 可点"
+  },
+  {
+    "id": "AC-DEP-014.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ResourceConfirm.view.tsx:27（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：只说构成、不说数字",
+    "verification": "code-review",
+    "given": "默认档未知",
+    "when": "生成磁盘构成句",
+    "then": "只说构成、不说数字"
+  },
+  {
+    "id": "AC-DEP-014.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/ResourceConfirm.view.tsx:27（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：「读不到本机资源占用 —— …」（role=alert）；不显示 0%",
+    "verification": "code-review",
+    "given": "/api/system/resources 失败",
+    "when": "渲染",
+    "then": "「读不到本机资源占用 —— …」（role=alert）；不显示 0%"
+  },
+  {
+    "id": "AC-DEP-014.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/lib/system/initWizardModel.ts:63（未在本条重跑指定单元验收）",
+      "当前代码核对：web/src/views/init/ResourceConfirm.view.tsx:27（未在本条重跑指定单元验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：都不含「进度条」",
+    "verification": "code-review",
+    "given": "渲染步骤说明与预留一句",
+    "when": "—",
+    "then": "都不含「进度条」"
+  },
+  {
+    "id": "AC-DEP-015.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定e2e验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定e2e验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：向导卸载；第一屏是欢迎态；没有「初始化完成」提示",
+    "verification": "code-review",
+    "given": "第 5 步，实例里没有项目",
+    "when": "点 [确认，开始使用]，写入成功",
+    "then": "向导卸载；第一屏是欢迎态；没有「初始化完成」提示"
+  },
+  {
+    "id": "AC-DEP-015.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：按钮「正在完成…」并禁用",
+    "verification": "code-review",
+    "given": "请求在途",
+    "when": "渲染",
+    "then": "按钮「正在完成…」并禁用"
+  },
+  {
+    "id": "AC-DEP-015.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不含 proxyConfig；acknowledgeOffline 只在确认过时为 true",
+    "verification": "code-review",
+    "given": "写入请求体",
+    "when": "—",
+    "then": "不含 proxyConfig；acknowledgeOffline 只在确认过时为 true"
+  },
+  {
+    "id": "AC-DEP-015.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：[确认，开始使用] 在页脚条右端，那句「点它才算装完…」在左；壳上不再另有 [下一步]",
+    "verification": "code-review",
+    "given": "第 5 步",
+    "when": "渲染页脚",
+    "then": "[确认，开始使用] 在页脚条右端，那句「点它才算装完…」在左；壳上不再另有 [下一步]"
+  },
+  {
+    "id": "AC-DEP-015.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/views/init/InitWizardShell.view.tsx:53（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/containers/init/InitWizardContainer.tsx:22（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不自动重试",
+    "verification": "code-review",
+    "given": "POST /init 网络错误",
+    "when": "—",
+    "then": "不自动重试"
+  },
+  {
+    "id": "AC-DEP-016.1",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：停在第 5 步；「初始化没有完成」+ 原因 + [重试]（role=alert）",
+    "verification": "code-review",
+    "given": "POST /init 返回 500「写入失败：数据目录只读（…）」",
+    "when": "—",
+    "then": "停在第 5 步；「初始化没有完成」+ 原因 + [重试]（role=alert）"
+  },
+  {
+    "id": "AC-DEP-016.2",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：放行；不出错误面板",
+    "verification": "code-review",
+    "given": "409 ALREADY_INITIALIZED",
+    "when": "—",
+    "then": "放行；不出错误面板"
+  },
+  {
+    "id": "AC-DEP-016.3",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：不放行；前端句 + [回到联网检查]；点它回第 1 步并重跑一轮（结果离线时出离线确认）",
+    "verification": "code-review",
+    "given": "409 OFFLINE_NOT_ACKNOWLEDGED",
+    "when": "—",
+    "then": "不放行；前端句 + [回到联网检查]；点它回第 1 步并重跑一轮（结果离线时出离线确认）"
+  },
+  {
+    "id": "AC-DEP-016.4",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定集成验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定集成验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：重读 init-status：initialized=true 才放行；false 或读失败 → 错误面板",
+    "verification": "code-review",
+    "given": "409 code=INVALID_STATE（旧后端）",
+    "when": "—",
+    "then": "重读 init-status：initialized=true 才放行；false 或读失败 → 错误面板"
+  },
+  {
+    "id": "AC-DEP-016.5",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": false,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：[重试]「重试中…」、[确认，开始使用]「正在完成…」都禁用",
+    "verification": "code-review",
+    "given": "点 [重试]",
+    "when": "在途",
+    "then": "[重试]「重试中…」、[确认，开始使用]「正在完成…」都禁用"
+  },
+  {
+    "id": "AC-DEP-016.6",
+    "domain": "DEP",
+    "version": "MVP",
+    "baselineGap": true,
+    "status": "closed",
+    "evidence": [
+      "当前代码核对：web/src/hooks/system/useInitWizard.ts:87（未在本条重跑指定组件验收）",
+      "当前代码核对：web/src/views/init/InitErrorPanel.view.tsx:19（未在本条重跑指定组件验收）"
+    ],
+    "reason": "逐项核对现有触发、对象与结果：原因是前端句，不出现「Failed to fetch」",
+    "verification": "code-review",
+    "given": "网络断开，POST /init 抛 TypeError",
+    "when": "—",
+    "then": "原因是前端句，不出现「Failed to fetch」"
+  }
+]

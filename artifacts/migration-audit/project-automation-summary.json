@@ -1,0 +1,42 @@
+{
+  "source": "current workspace; product PRJ/AUT; exact baseline IDs; no original transcript modification",
+  "scope": "project and automation backend plus automation frontend; shared PRJ frontend and final browser are coordinated with their owners",
+  "ac_count": 222,
+  "counts": {
+    "PRJ": {
+      "closed": 71,
+      "partial": 65
+    },
+    "AUT": {
+      "partial": 12,
+      "closed": 74
+    }
+  },
+  "pending": [
+    "PRJ frontend owner current acceptance evidence merge",
+    "root shared focus origin and scrolled header divider",
+    "shared project.clone_progress.startedAt wire type and frontend elapsed restore",
+    "sandbox destroyed automation artifact registration recovery proof",
+    "root unified production build/browser check-design-automation-v2.mjs"
+  ],
+  "validation": {
+    "api_owned_unit": "20 files255 passed; subsequent slow-phase5/5 and facade4/4 passed",
+    "api_sqlite": "6 project deletion +10 retained repository +17 automation repository =33 passed",
+    "web_owned_unit": "14 files179 passed; subsequent container23/23 (new row12 focus test) passed",
+    "web_typecheck": "passed after shared generated OpenAPI",
+    "web_owned_lint": "passed",
+    "web_owned_prettier": "passed",
+    "api_owned_lint": "passed before last clone start/helper edits; recheck pending shared wire",
+    "api_test_typecheck": "pending root Tx import/project.clone_progress.startedAt and shared fakes"
+  },
+  "critical_defects": {
+    "2": "project deletion metadata is transactional; code cleanup is after commit; actual rollback SQLite test passed",
+    "3": "project rules and complete run histories cascade transactionally; active task guard rechecked inside delete; reservation same-Tx project existence door added",
+    "7": "teardown + artifact registration snapshots implemented; registration failure recovery proof pending sandbox owner"
+  },
+  "notes": [
+    "Partial entries include required verification not yet run, and must not be interpreted as a production implementation count.",
+    "Do not add critical-defect statuses to AC counts.",
+    "The original transcript remains untouched; no commits."
+  ]
+}

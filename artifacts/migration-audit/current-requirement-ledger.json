@@ -1,0 +1,3748 @@
+{
+  "rows": [
+    {
+      "id": "REQ-ACC-001",
+      "title": "口令默认开启：首次启动生成，只在服务日志里显示一次",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-001.1",
+        "AC-ACC-001.2",
+        "AC-ACC-001.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-ACC-002",
+      "title": "换口令与忘记口令；回环免口令要显式开启",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-002.1",
+        "AC-ACC-002.2",
+        "AC-ACC-002.3",
+        "AC-ACC-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-ACC-003",
+      "title": "被拒即全屏口令门，底下不挂工作台；解锁后重跑初始化判定",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-003.1",
+        "AC-ACC-003.2",
+        "AC-ACC-003.3",
+        "AC-ACC-003.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-ACC-004",
+      "title": "口令卡：输入、解锁、验证中、口令不对、口令从哪来",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-004.1",
+        "AC-ACC-004.2",
+        "AC-ACC-004.3",
+        "AC-ACC-004.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-ACC-005",
+      "title": "连错锁定：只数提交口令的失败，按分钟说",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-005.1",
+        "AC-ACC-005.2",
+        "AC-ACC-005.3",
+        "AC-ACC-005.4",
+        "AC-ACC-005.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-ACC-006",
+      "title": "会话：7 天、按浏览器；豁免面",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-006.1",
+        "AC-ACC-006.2",
+        "AC-ACC-006.3",
+        "AC-ACC-006.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-ACC-007",
+      "title": "换口令时可选「同时让已登录的浏览器失效」",
+      "source": "docs/design-v2/gap/product/ACC.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-ACC-007.1",
+        "AC-ACC-007.2",
+        "AC-ACC-007.3",
+        "AC-ACC-007.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-001",
+      "title": "入口：四个入口打开同一个弹层",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-001.1",
+        "AC-AUT-001.2",
+        "AC-AUT-001.3",
+        "AC-AUT-001.4",
+        "AC-AUT-001.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-002",
+      "title": "形态：居中弹层，视图就地切换，带返回链",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-002.1",
+        "AC-AUT-002.2",
+        "AC-AUT-002.3",
+        "AC-AUT-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-003",
+      "title": "规则列表：每行说清 Agent、调度、下次、时区、状态",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-003.1",
+        "AC-AUT-003.2",
+        "AC-AUT-003.3",
+        "AC-AUT-003.4",
+        "AC-AUT-003.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-004",
+      "title": "规则的四种状态与连续失败策略",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-004.1",
+        "AC-AUT-004.2",
+        "AC-AUT-004.3",
+        "AC-AUT-004.4",
+        "AC-AUT-004.5",
+        "AC-AUT-004.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-AUT-005",
+      "title": "每个项目最多 20 条",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-005.1",
+        "AC-AUT-005.2",
+        "AC-AUT-005.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-AUT-006",
+      "title": "列表的空、加载中与读取失败",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-006.1",
+        "AC-AUT-006.2",
+        "AC-AUT-006.3",
+        "AC-AUT-006.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-010",
+      "title": "表单字段、默认值与上限",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-010.1",
+        "AC-AUT-010.2",
+        "AC-AUT-010.3",
+        "AC-AUT-010.4",
+        "AC-AUT-010.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-011",
+      "title": "调度、预览与时区快照",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-011.1",
+        "AC-AUT-011.2",
+        "AC-AUT-011.3",
+        "AC-AUT-011.4",
+        "AC-AUT-011.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-012",
+      "title": "Webhook 通知与 [测试连接]",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-012.1",
+        "AC-AUT-012.2",
+        "AC-AUT-012.3",
+        "AC-AUT-012.4",
+        "AC-AUT-012.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-013",
+      "title": "填写时的校验：字段错误紧贴字段",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-013.1",
+        "AC-AUT-013.2",
+        "AC-AUT-013.3",
+        "AC-AUT-013.4",
+        "AC-AUT-013.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-014",
+      "title": "保存：进行中、成功去向、失败与错误码",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-014.1",
+        "AC-AUT-014.2",
+        "AC-AUT-014.3",
+        "AC-AUT-014.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-020",
+      "title": "规则详情：配置摘要与动作",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-020.1",
+        "AC-AUT-020.2",
+        "AC-AUT-020.3",
+        "AC-AUT-020.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-021",
+      "title": "运行历史：六类结果、算不算失败、翻页",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-021.1",
+        "AC-AUT-021.2",
+        "AC-AUT-021.3",
+        "AC-AUT-021.4",
+        "AC-AUT-021.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-022",
+      "title": "运行历史的空、加载中与读取失败",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-022.1",
+        "AC-AUT-022.2",
+        "AC-AUT-022.3",
+        "AC-AUT-022.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-023",
+      "title": "运行详情与 [打开任务]",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-023.1",
+        "AC-AUT-023.2",
+        "AC-AUT-023.3",
+        "AC-AUT-023.4",
+        "AC-AUT-023.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-024",
+      "title": "删除规则：同一弹层里的统一确认",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-024.1",
+        "AC-AUT-024.2",
+        "AC-AUT-024.3",
+        "AC-AUT-024.4",
+        "AC-AUT-024.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUT-025",
+      "title": "跑完收尾：销毁任务、留下成果",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-025.1",
+        "AC-AUT-025.2",
+        "AC-AUT-025.3",
+        "AC-AUT-025.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUT-026",
+      "title": "不做成果 diff 导出",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-026.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-AUT-027",
+      "title": "到点时的判定：每个触发时刻都留一行",
+      "source": "docs/design-v2/gap/product/AUT.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUT-027.1",
+        "AC-AUT-027.2",
+        "AC-AUT-027.3",
+        "AC-AUT-027.4",
+        "AC-AUT-027.5",
+        "AC-AUT-027.6",
+        "AC-AUT-027.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-AUTH-001",
+      "title": "一套登录面板，三处共用，在当前容器里就地展开",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-001.1",
+        "AC-AUTH-001.2",
+        "AC-AUTH-001.3",
+        "AC-AUTH-001.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUTH-002",
+      "title": "新建任务的凭证闸门：只拦未配置 / 已过期，先折叠、点了才展开",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-002.1",
+        "AC-AUTH-002.2",
+        "AC-AUTH-002.3",
+        "AC-AUTH-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUTH-003",
+      "title": "先停在空闲态，点 [开始帐号登录] 才开始；收起、切走、关掉即取消",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-003.1",
+        "AC-AUTH-003.2",
+        "AC-AUTH-003.3",
+        "AC-AUTH-003.4",
+        "AC-AUTH-003.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUTH-004",
+      "title": "Codex 帐号登录（设备码）：打开授权页、设备码、倒计时、等待授权",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-004.1",
+        "AC-AUTH-004.2",
+        "AC-AUTH-004.3",
+        "AC-AUTH-004.4",
+        "AC-AUTH-004.5",
+        "AC-AUTH-004.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-AUTH-005",
+      "title": "设备码停下来的两种原因分开说，都给 [换一串重来]",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-005.1",
+        "AC-AUTH-005.2",
+        "AC-AUTH-005.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-AUTH-006",
+      "title": "Claude Code 帐号登录（授权链接 + 授权码）",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-006.1",
+        "AC-AUTH-006.2",
+        "AC-AUTH-006.3",
+        "AC-AUTH-006.4",
+        "AC-AUTH-006.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUTH-007",
+      "title": "API Key：前缀提示不拦提交、服务端拒绝给原因、提交即清空",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-007.1",
+        "AC-AUTH-007.2",
+        "AC-AUTH-007.3",
+        "AC-AUTH-007.4",
+        "AC-AUTH-007.5",
+        "AC-AUTH-007.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-AUTH-008",
+      "title": "登录成功：「已连上」停留到看得见，身份句与发起立刻更新",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-008.1",
+        "AC-AUTH-008.2",
+        "AC-AUTH-008.3",
+        "AC-AUTH-008.4",
+        "AC-AUTH-008.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUTH-009",
+      "title": "重新登录：同一面板、无缝替换、不连带销毁在跑的任务",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-009.1",
+        "AC-AUTH-009.2",
+        "AC-AUTH-009.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-AUTH-010",
+      "title": "登录会话有上限、会回收",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-010.1",
+        "AC-AUTH-010.2",
+        "AC-AUTH-010.3",
+        "AC-AUTH-010.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUTH-011",
+      "title": "面板里的错误按码说人话",
+      "source": "docs/design-v2/gap/product/AUTH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUTH-011.1",
+        "AC-AUTH-011.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-CRD-001",
+      "title": "上屏只说「删除」：确认框标题「删除 X 的 Y？」、按钮写动作本身",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-001.1",
+        "AC-CRD-001.2",
+        "AC-CRD-001.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-CRD-002",
+      "title": "打开即如实列出会被销毁的任务：按绑定、最多 10 条、读不到明说可重试、没有就说没有",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-002.1",
+        "AC-CRD-002.2",
+        "AC-CRD-002.3",
+        "AC-CRD-002.4",
+        "AC-CRD-002.5",
+        "AC-CRD-002.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-CRD-003",
+      "title": "波及范围：只销毁本 Agent 的在跑任务、保留代码副本；准备中任务写进「删掉之后」",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-003.1",
+        "AC-CRD-003.2",
+        "AC-CRD-003.3",
+        "AC-CRD-003.4",
+        "AC-CRD-003.5",
+        "AC-CRD-003.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-CRD-004",
+      "title": "删的是当前生效方式：删前说清，删后追问要不要切到另一种",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-004.1",
+        "AC-CRD-004.2",
+        "AC-CRD-004.3",
+        "AC-CRD-004.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-005",
+      "title": "确认之后：立即生效、轻提示、卡片原地刷新；任务走删除中后移除；失败说人话",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-005.1",
+        "AC-CRD-005.2",
+        "AC-CRD-005.3",
+        "AC-CRD-005.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-010",
+      "title": "切到已配置的方式：确认 → 切换 →「当前使用」移动",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-010.1",
+        "AC-CRD-010.2",
+        "AC-CRD-010.3",
+        "AC-CRD-010.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-011",
+      "title": "什么时候「配好即生效」",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-011.1",
+        "AC-CRD-011.2",
+        "AC-CRD-011.3",
+        "AC-CRD-011.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-012",
+      "title": "单选按 Agent 分组，确认前不动",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-012.1",
+        "AC-CRD-012.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-CRD-020",
+      "title": "Git 分区：已配置卡、未配置卡、缺哪种补哪种，永不回显",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-020.1",
+        "AC-CRD-020.2",
+        "AC-CRD-020.3",
+        "AC-CRD-020.4",
+        "AC-CRD-020.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-CRD-021",
+      "title": "配置 HTTPS Token：来源推导 host、白名单、scope 提示、可选的测试、保存只留尾号",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-021.1",
+        "AC-CRD-021.2",
+        "AC-CRD-021.3",
+        "AC-CRD-021.4",
+        "AC-CRD-021.5",
+        "AC-CRD-021.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-CRD-022",
+      "title": "配置 SSH 密钥：保存前本地预检、只显指纹、主机指纹首连信任可核对",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-022.1",
+        "AC-CRD-022.2",
+        "AC-CRD-022.3",
+        "AC-CRD-022.4",
+        "AC-CRD-022.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-CRD-023",
+      "title": "测试连接：最多 15 秒、原位三态、按错误码说人话、目标仓库",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-023.1",
+        "AC-CRD-023.2",
+        "AC-CRD-023.3",
+        "AC-CRD-023.4",
+        "AC-CRD-023.5",
+        "AC-CRD-023.6",
+        "AC-CRD-023.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-CRD-024",
+      "title": "使用范围与选择规则：只在平台侧克隆 / 拉取时用、按地址协议选、Token 只发给白名单 host",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-024.1",
+        "AC-CRD-024.2",
+        "AC-CRD-024.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-CRD-025",
+      "title": "[更换]：同类型空表单，保存即替换旧的那份",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-025.1",
+        "AC-CRD-025.2",
+        "AC-CRD-025.3",
+        "AC-CRD-025.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-026",
+      "title": "删除 Git 凭证：统一破坏性确认，说清后果、如实列出相关项目",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-026.1",
+        "AC-CRD-026.2",
+        "AC-CRD-026.3",
+        "AC-CRD-026.4",
+        "AC-CRD-026.5",
+        "AC-CRD-026.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-CRD-030",
+      "title": "首次加载：两个分区各自骨架，与真卡同结构同高",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-030.1",
+        "AC-CRD-030.2",
+        "AC-CRD-030.3",
+        "AC-CRD-030.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-031",
+      "title": "读取失败：两份各自明说 + [重试]，不退化成「未配置」或「没有匹配」",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-031.1",
+        "AC-CRD-031.2",
+        "AC-CRD-031.3",
+        "AC-CRD-031.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-CRD-032",
+      "title": "搜索 Agent：过滤名字与打码标识的可见部分；无匹配与本来为空分开说",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-032.1",
+        "AC-CRD-032.2",
+        "AC-CRD-032.3",
+        "AC-CRD-032.4",
+        "AC-CRD-032.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-CRD-033",
+      "title": "有效期：即将过期 / 已过期，建议句与 [重新登录]",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-033.1",
+        "AC-CRD-033.2",
+        "AC-CRD-033.3",
+        "AC-CRD-033.4",
+        "AC-CRD-033.5",
+        "AC-CRD-033.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-CRD-034",
+      "title": "从克隆失败跳来的回程：Git 分区回程条、重试克隆 / 放弃",
+      "source": "docs/design-v2/gap/product/CRD.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-CRD-034.1",
+        "AC-CRD-034.2",
+        "AC-CRD-034.3",
+        "AC-CRD-034.4",
+        "AC-CRD-034.5",
+        "AC-CRD-034.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DEP-001",
+      "title": "启动检查中：整屏一句，工作台、向导、口令门都不挂",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-001.1",
+        "AC-DEP-001.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DEP-002",
+      "title": "判定之后只挂一个：口令门、向导、工作台，或放行并明说读不到",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-002.1",
+        "AC-DEP-002.2",
+        "AC-DEP-002.3",
+        "AC-DEP-002.4",
+        "AC-DEP-002.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-003",
+      "title": "向导：外壳之外整屏阻断、不可关闭、只出现一次",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-003.1",
+        "AC-DEP-003.2",
+        "AC-DEP-003.3",
+        "AC-DEP-003.4",
+        "AC-DEP-003.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-004",
+      "title": "步骤流转：代理配置按需进入、[上一步] 永远回得去、步骤条如实标记",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-004.1",
+        "AC-DEP-004.2",
+        "AC-DEP-004.3",
+        "AC-DEP-004.4",
+        "AC-DEP-004.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-005",
+      "title": "联网检查：先显示上次结果（带时刻），没有才自动跑；[重新检测] 节流",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-005.1",
+        "AC-DEP-005.2",
+        "AC-DEP-005.3",
+        "AC-DEP-005.4",
+        "AC-DEP-005.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-006",
+      "title": "逐目标结果：分两类、连得上带耗时、超时未响应不等于连不上、提示原文整段",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-006.1",
+        "AC-DEP-006.2",
+        "AC-DEP-006.3",
+        "AC-DEP-006.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-DEP-007",
+      "title": "结论与离线判定：只有模型 API 全部「连不上」才算离线",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-007.1",
+        "AC-DEP-007.2",
+        "AC-DEP-007.3",
+        "AC-DEP-007.4",
+        "AC-DEP-007.5",
+        "AC-DEP-007.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DEP-008",
+      "title": "离线确认：显式确认才能往下走，确认后留痕",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-008.1",
+        "AC-DEP-008.2",
+        "AC-DEP-008.3",
+        "AC-DEP-008.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-DEP-009",
+      "title": "代理配置：只存配置、存完立即重检；失败按码说人话",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-009.1",
+        "AC-DEP-009.2",
+        "AC-DEP-009.3",
+        "AC-DEP-009.4",
+        "AC-DEP-009.5",
+        "AC-DEP-009.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DEP-010",
+      "title": "沙箱镜像检查：五项各说各的，任一项未通过即止",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-010.1",
+        "AC-DEP-010.2",
+        "AC-DEP-010.3",
+        "AC-DEP-010.4",
+        "AC-DEP-010.5",
+        "AC-DEP-010.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DEP-011",
+      "title": "自动准备镜像（下载到本机）：进这一步就开始、只报真实进度、失败说清停在哪一步",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-011.1",
+        "AC-DEP-011.2",
+        "AC-DEP-011.3",
+        "AC-DEP-011.4",
+        "AC-DEP-011.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-012",
+      "title": "镜像未就绪不拦：可以稍后配置，后果只说一处",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-012.1",
+        "AC-DEP-012.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DEP-013",
+      "title": "模型帐号：每个 Agent 一行，至少一个可用才算就绪；同一登录面板就地展开",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-013.1",
+        "AC-DEP-013.2",
+        "AC-DEP-013.3",
+        "AC-DEP-013.4",
+        "AC-DEP-013.5",
+        "AC-DEP-013.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DEP-014",
+      "title": "本机资源：偏低不是门；磁盘说可用与总量、构成按档说",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-014.1",
+        "AC-DEP-014.2",
+        "AC-DEP-014.3",
+        "AC-DEP-014.4",
+        "AC-DEP-014.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-015",
+      "title": "[确认，开始使用]：唯一放行的动作；成功后向导卸载、落到欢迎态",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-015.1",
+        "AC-DEP-015.2",
+        "AC-DEP-015.3",
+        "AC-DEP-015.4",
+        "AC-DEP-015.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-DEP-016",
+      "title": "写入失败：「初始化没有完成」+ 原因 + [重试]，不放行；两种 409 按码分流",
+      "source": "docs/design-v2/gap/product/DEP.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DEP-016.1",
+        "AC-DEP-016.2",
+        "AC-DEP-016.3",
+        "AC-DEP-016.4",
+        "AC-DEP-016.5",
+        "AC-DEP-016.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-001",
+      "title": "注册弹层：入口、打开即可输入、何时能关",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-001.1",
+        "AC-IMG-001.2",
+        "AC-IMG-001.3",
+        "AC-IMG-001.4",
+        "AC-IMG-001.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-002",
+      "title": "[验证]：只读预检、进行中、时限以平台为准",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-002.1",
+        "AC-IMG-002.2",
+        "AC-IMG-002.3",
+        "AC-IMG-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-003",
+      "title": "三级结论：通过 / 有警告可保存 / 无效不可保存，句子按错误码查表",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-003.1",
+        "AC-IMG-003.2",
+        "AC-IMG-003.3",
+        "AC-IMG-003.4",
+        "AC-IMG-003.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-004",
+      "title": "地址格式就地提示；改地址即作废结论",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-004.1",
+        "AC-IMG-004.2",
+        "AC-IMG-004.3",
+        "AC-IMG-004.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-005",
+      "title": "已经注册过：就地提示 + [定位到该镜像]，不当错误",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-005.1",
+        "AC-IMG-005.2",
+        "AC-IMG-005.3",
+        "AC-IMG-005.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-006",
+      "title": "[保存]：钉定版本、成功后的去向",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-006.1",
+        "AC-IMG-006.2",
+        "AC-IMG-006.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-007",
+      "title": "镜像要求侧弹层：四条判据、无遮罩、不抢焦点、只有 [关闭] 能关",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-007.1",
+        "AC-IMG-007.2",
+        "AC-IMG-007.3",
+        "AC-IMG-007.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-008",
+      "title": "预检 / 保存请求本身失败：在弹层里原位说清、能再试",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-008.1",
+        "AC-IMG-008.2",
+        "AC-IMG-008.3",
+        "AC-IMG-008.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-010",
+      "title": "运行参数在卡内行内编辑",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-010.1",
+        "AC-IMG-010.2",
+        "AC-IMG-010.3",
+        "AC-IMG-010.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-011",
+      "title": "Secret：已存的值永不回显",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-011.1",
+        "AC-IMG-011.2",
+        "AC-IMG-011.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-012",
+      "title": "变量预检：四个错误码前后端同名同句，标在出错的那一格",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-012.1",
+        "AC-IMG-012.2",
+        "AC-IMG-012.3",
+        "AC-IMG-012.4",
+        "AC-IMG-012.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-013",
+      "title": "每张镜像最多 50 条：到顶的按钮要说原因",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-013.1",
+        "AC-IMG-013.2",
+        "AC-IMG-013.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-014",
+      "title": "保存运行参数：成功一句，平台拒绝映回具体行",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-014.1",
+        "AC-IMG-014.2",
+        "AC-IMG-014.3",
+        "AC-IMG-014.4",
+        "AC-IMG-014.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-020",
+      "title": "运行的版本：短串、原位展开全串、复制完整版本号",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-020.1",
+        "AC-IMG-020.2",
+        "AC-IMG-020.3",
+        "AC-IMG-020.4",
+        "AC-IMG-020.5",
+        "AC-IMG-020.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-021",
+      "title": "[检查更新]：解析中、已是最新、tag 已不在、有新版本；不能检查时写原因",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-021.1",
+        "AC-IMG-021.2",
+        "AC-IMG-021.3",
+        "AC-IMG-021.4",
+        "AC-IMG-021.5",
+        "AC-IMG-021.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-022",
+      "title": "上游有新版本：信息色提示条 + 对比弹层，用户点了才更新",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-022.1",
+        "AC-IMG-022.2",
+        "AC-IMG-022.3",
+        "AC-IMG-022.4",
+        "AC-IMG-022.5",
+        "AC-IMG-022.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-023",
+      "title": "[重新验证]：原位转圈、结论原位改写，判为无效也不自动禁用",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-023.1",
+        "AC-IMG-023.2",
+        "AC-IMG-023.3",
+        "AC-IMG-023.4",
+        "AC-IMG-023.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-024",
+      "title": "[切换到此版本]：不确认、被点的那一行「切换中…」、卡面与历史条换位",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-024.1",
+        "AC-IMG-024.2",
+        "AC-IMG-024.3",
+        "AC-IMG-024.4",
+        "AC-IMG-024.5",
+        "AC-IMG-024.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-025",
+      "title": "换版本的作用范围：只影响之后新建的任务，并在结果里说清",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-025.1",
+        "AC-IMG-025.2",
+        "AC-IMG-025.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-026",
+      "title": "运行参数跟着版本走：更新时带过去，切换时用那一版自己的",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-026.1",
+        "AC-IMG-026.2",
+        "AC-IMG-026.3"
+      ],
+      "acStatuses": {
+        "closed": 2,
+        "superseded": 1
+      }
+    },
+    {
+      "id": "REQ-IMG-030",
+      "title": "禁用：乐观、停用色调、只挡新任务",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-030.1",
+        "AC-IMG-030.2",
+        "AC-IMG-030.3",
+        "AC-IMG-030.4",
+        "AC-IMG-030.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-031",
+      "title": "启用：走「切到这一版」，说清结果",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-031.1",
+        "AC-IMG-031.2",
+        "AC-IMG-031.3",
+        "AC-IMG-031.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-032",
+      "title": "预制镜像：不能删；禁用前先确认，说清新任务默认用不了它",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-032.1",
+        "AC-IMG-032.2",
+        "AC-IMG-032.3",
+        "AC-IMG-032.4",
+        "AC-IMG-032.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-033",
+      "title": "删除确认：只给自定义镜像，打开就把后果写全",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-033.1",
+        "AC-IMG-033.2",
+        "AC-IMG-033.3",
+        "AC-IMG-033.4",
+        "AC-IMG-033.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-034",
+      "title": "删除被拦：有任务在用就打开即说明，给 [改为禁用]",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-034.1",
+        "AC-IMG-034.2",
+        "AC-IMG-034.3",
+        "AC-IMG-034.4",
+        "AC-IMG-034.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-040",
+      "title": "入口：镜像管理预制镜像卡上的「下载到本机」块（暂行）",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-040.1",
+        "AC-IMG-040.2",
+        "AC-IMG-040.3",
+        "AC-IMG-040.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-IMG-041",
+      "title": "下载进度：阶段、百分比或进度未知、真实已用时",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-041.1",
+        "AC-IMG-041.2",
+        "AC-IMG-041.3",
+        "AC-IMG-041.4",
+        "AC-IMG-041.5",
+        "AC-IMG-041.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-IMG-042",
+      "title": "失败与冲突：说清停在哪一步、给出路、不自动重试",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-042.1",
+        "AC-IMG-042.2",
+        "AC-IMG-042.3",
+        "AC-IMG-042.4",
+        "AC-IMG-042.5"
+      ],
+      "acStatuses": {
+        "closed": 4,
+        "deferred": 1
+      }
+    },
+    {
+      "id": "REQ-IMG-043",
+      "title": "完成：以检查结论为准；诊断第 ⑧ 项指到这里",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-043.1",
+        "AC-IMG-043.2",
+        "AC-IMG-043.3",
+        "AC-IMG-043.4",
+        "AC-IMG-043.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-IMG-050",
+      "title": "首次加载：页头可用，列表位置是卡片骨架",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-050.1",
+        "AC-IMG-050.2",
+        "AC-IMG-050.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-051",
+      "title": "一张镜像都没有：空态，与「过滤后为空」分开",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-051.1",
+        "AC-IMG-051.2",
+        "AC-IMG-051.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-IMG-052",
+      "title": "列表读不到：如实说、能重试，不冒充「没有镜像」",
+      "source": "docs/design-v2/gap/product/IMG.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-IMG-052.1",
+        "AC-IMG-052.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-LCH-001",
+      "title": "打开弹层：八个入口、「项目」字段与预选",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-001.1",
+        "AC-LCH-001.2",
+        "AC-LCH-001.3",
+        "AC-LCH-001.4",
+        "AC-LCH-001.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-LCH-002",
+      "title": "Agent 必选、没有默认",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-002.1",
+        "AC-LCH-002.2",
+        "AC-LCH-002.3",
+        "AC-LCH-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-LCH-003",
+      "title": "凭证闸门：只看凭证状态拦，点了才展开登录",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-003.1",
+        "AC-LCH-003.2",
+        "AC-LCH-003.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-LCH-004",
+      "title": "分支与镜像：都可选；分支跟随项目，镜像默认平台预制镜像；读不到只降级",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-004.1",
+        "AC-LCH-004.2",
+        "AC-LCH-004.3",
+        "AC-LCH-004.4",
+        "AC-LCH-004.5",
+        "AC-LCH-004.6",
+        "AC-LCH-004.7",
+        "AC-LCH-004.8",
+        "AC-LCH-004.9",
+        "AC-LCH-004.10"
+      ],
+      "acStatuses": {
+        "closed": 10
+      }
+    },
+    {
+      "id": "REQ-LCH-005",
+      "title": "任务指令：可选、上限 `PARAM.TASK_PROMPT_MAX`、超出就地说",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-005.1",
+        "AC-LCH-005.2",
+        "AC-LCH-005.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-LCH-006",
+      "title": "弹层自己的加载与加载失败",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-006.1",
+        "AC-LCH-006.2",
+        "AC-LCH-006.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-LCH-007",
+      "title": "同步失败留在弹层：门口拒绝与创建失败（含资源不够）",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-007.1",
+        "AC-LCH-007.2",
+        "AC-LCH-007.3",
+        "AC-LCH-007.4",
+        "AC-LCH-007.5",
+        "AC-LCH-007.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-LCH-008",
+      "title": "这台机器开不了终端：只说事实和去处",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-008.1",
+        "AC-LCH-008.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-LCH-009",
+      "title": "深链打开、刷新与回落",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-009.1",
+        "AC-LCH-009.2",
+        "AC-LCH-009.3",
+        "AC-LCH-009.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-LCH-010",
+      "title": "提交：创建中不可关，受理即关",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-010.1",
+        "AC-LCH-010.2",
+        "AC-LCH-010.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-LCH-011",
+      "title": "受理之后：树里出现准备中行，主区是启动进度卡",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-011.1",
+        "AC-LCH-011.2",
+        "AC-LCH-011.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-LCH-012",
+      "title": "启动四阶段、已等待与长等待说明",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-012.1",
+        "AC-LCH-012.2",
+        "AC-LCH-012.3",
+        "AC-LCH-012.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-LCH-013",
+      "title": "可能卡住：提示与出口",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-013.1",
+        "AC-LCH-013.2",
+        "AC-LCH-013.3",
+        "AC-LCH-013.4",
+        "AC-LCH-013.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-LCH-014",
+      "title": "取消并删除：二次确认，任何准备阶段都删得掉",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-014.1",
+        "AC-LCH-014.2",
+        "AC-LCH-014.3",
+        "AC-LCH-014.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-LCH-015",
+      "title": "启动的三种结局：运行中 / 异常 / 超时未响应",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-015.1",
+        "AC-LCH-015.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-LCH-016",
+      "title": "刷新恢复与计时锚点",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-016.1",
+        "AC-LCH-016.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-LCH-017",
+      "title": "看得到这个任务用的是哪张镜像：启动进度卡、结果卡、复制诊断信息",
+      "source": "docs/design-v2/gap/product/LCH.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-LCH-017.1",
+        "AC-LCH-017.2",
+        "AC-LCH-017.3",
+        "AC-LCH-017.4",
+        "AC-LCH-017.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-001",
+      "title": "入口：四处入口打开同一个「新建项目」弹层",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-001.1",
+        "AC-PRJ-001.2",
+        "AC-PRJ-001.3",
+        "AC-PRJ-001.4",
+        "AC-PRJ-001.5",
+        "AC-PRJ-001.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-002",
+      "title": "字段与校验：名称、来源、仓库地址、分支",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-002.1",
+        "AC-PRJ-002.2",
+        "AC-PRJ-002.3",
+        "AC-PRJ-002.4",
+        "AC-PRJ-002.5",
+        "AC-PRJ-002.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-003",
+      "title": "提交与被拒：按码就地一句、输入全部保留",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-003.1",
+        "AC-PRJ-003.2",
+        "AC-PRJ-003.3",
+        "AC-PRJ-003.4",
+        "AC-PRJ-003.5",
+        "AC-PRJ-003.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-004",
+      "title": "克隆进度：同一弹层换视图，按阶段与对象数说进度",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-004.1",
+        "AC-PRJ-004.2",
+        "AC-PRJ-004.3",
+        "AC-PRJ-004.4",
+        "AC-PRJ-004.5",
+        "AC-PRJ-004.6",
+        "AC-PRJ-004.7",
+        "AC-PRJ-004.8"
+      ],
+      "acStatuses": {
+        "closed": 8
+      }
+    },
+    {
+      "id": "REQ-PRJ-005",
+      "title": "克隆的结果：完成，或按失败码给出口",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-005.1",
+        "AC-PRJ-005.2",
+        "AC-PRJ-005.3",
+        "AC-PRJ-005.4",
+        "AC-PRJ-005.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-006",
+      "title": "空项目：提交即就绪，不经进度视图",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-006.1",
+        "AC-PRJ-006.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-PRJ-010",
+      "title": "克隆中 / 克隆失败的项目可以选中；三处给同一组动作",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-010.1",
+        "AC-PRJ-010.2",
+        "AC-PRJ-010.3",
+        "AC-PRJ-010.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-011",
+      "title": "树：未就绪项目的组头（徽标、计数位、折叠箭头）",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-011.1",
+        "AC-PRJ-011.2",
+        "AC-PRJ-011.3",
+        "AC-PRJ-011.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-012",
+      "title": "克隆中项目的主区：进度卡",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-012.1",
+        "AC-PRJ-012.2",
+        "AC-PRJ-012.3",
+        "AC-PRJ-012.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-013",
+      "title": "取消克隆（保留项目）",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-013.1",
+        "AC-PRJ-013.2",
+        "AC-PRJ-013.3",
+        "AC-PRJ-013.4",
+        "AC-PRJ-013.5",
+        "AC-PRJ-013.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-014",
+      "title": "重试克隆",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-014.1",
+        "AC-PRJ-014.2",
+        "AC-PRJ-014.3",
+        "AC-PRJ-014.4",
+        "AC-PRJ-014.5",
+        "AC-PRJ-014.6",
+        "AC-PRJ-014.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-PRJ-015",
+      "title": "改为空项目",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-015.1",
+        "AC-PRJ-015.2",
+        "AC-PRJ-015.3",
+        "AC-PRJ-015.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-016",
+      "title": "未就绪项目不能发起任务：原因分两句",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-016.1",
+        "AC-PRJ-016.2",
+        "AC-PRJ-016.3",
+        "AC-PRJ-016.4",
+        "AC-PRJ-016.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-020",
+      "title": "项目信息：只读四项 / 空项目两项，分支缺省「远端默认分支」，chip 与 ⓘ 打开同一张浮层",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-020.1",
+        "AC-PRJ-020.2",
+        "AC-PRJ-020.3",
+        "AC-PRJ-020.4",
+        "AC-PRJ-020.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-021",
+      "title": "拉取最新代码：仅就绪的 Git 项目，按下之前说清作用范围，拉取中两处同态",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-021.1",
+        "AC-PRJ-021.2",
+        "AC-PRJ-021.3",
+        "AC-PRJ-021.4",
+        "AC-PRJ-021.5",
+        "AC-PRJ-021.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-022",
+      "title": "拉取的结果：成功一句、失败按原因说并给去处，原位播报",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-022.1",
+        "AC-PRJ-022.2",
+        "AC-PRJ-022.3",
+        "AC-PRJ-022.4",
+        "AC-PRJ-022.5",
+        "AC-PRJ-022.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-030",
+      "title": "项目详情：独立只读弹层五行，计数不知道写「—」，零按钮",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-030.1",
+        "AC-PRJ-030.2",
+        "AC-PRJ-030.3",
+        "AC-PRJ-030.4",
+        "AC-PRJ-030.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-040",
+      "title": "删除项目打开即说清：活跃任务与没清理的成果拦下并给去处",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-040.1",
+        "AC-PRJ-040.2",
+        "AC-PRJ-040.3",
+        "AC-PRJ-040.4",
+        "AC-PRJ-040.5",
+        "AC-PRJ-040.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-041",
+      "title": "可删时如实列出：会删掉 / 删掉之后 / 不受影响",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-041.1",
+        "AC-PRJ-041.2",
+        "AC-PRJ-041.3",
+        "AC-PRJ-041.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-042",
+      "title": "删除正在克隆的项目：先停克隆再删，就地给 [取消克隆（保留项目）]",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-042.1",
+        "AC-PRJ-042.2",
+        "AC-PRJ-042.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-PRJ-043",
+      "title": "删除中不可关、失败就地说、项目原样保留",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-043.1",
+        "AC-PRJ-043.2",
+        "AC-PRJ-043.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-PRJ-044",
+      "title": "删除成功：各处同时消失，删的是当前项目时回总览并说一句",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-044.1",
+        "AC-PRJ-044.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-PRJ-050",
+      "title": "「保留下来的成果」：统一名称，五个入口打开同一个弹层",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-050.1",
+        "AC-PRJ-050.2",
+        "AC-PRJ-050.3",
+        "AC-PRJ-050.4",
+        "AC-PRJ-050.5",
+        "AC-PRJ-050.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-PRJ-051",
+      "title": "成果列表：按到期先后、来源任务名、两个大小、三档倒计时、合计与读法",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-051.1",
+        "AC-PRJ-051.2",
+        "AC-PRJ-051.3",
+        "AC-PRJ-051.4",
+        "AC-PRJ-051.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-PRJ-052",
+      "title": "下载：浏览器原生下载，不做恢复",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-052.1",
+        "AC-PRJ-052.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-PRJ-053",
+      "title": "删除一份成果：同一弹层就地切成统一确认，删除中只禁这一行",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-053.1",
+        "AC-PRJ-053.2",
+        "AC-PRJ-053.3",
+        "AC-PRJ-053.4",
+        "AC-PRJ-053.5"
+      ],
+      "acStatuses": {
+        "closed": 4,
+        "superseded": 1
+      }
+    },
+    {
+      "id": "REQ-PRJ-054",
+      "title": "空与读取失败两个分支不混，读取失败给 [重试]",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-054.1",
+        "AC-PRJ-054.2",
+        "AC-PRJ-054.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-PRJ-055",
+      "title": "倒计时只属于保留下来的成果，按每份自己的到期时间",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-055.1",
+        "AC-PRJ-055.2",
+        "AC-PRJ-055.3",
+        "AC-PRJ-055.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-PRJ-056",
+      "title": "跨项目视图：系统状态 [清理成果] 进入，范围「全部项目」、按项目分组",
+      "source": "docs/design-v2/gap/product/PRJ.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-PRJ-056.1",
+        "AC-PRJ-056.2",
+        "AC-PRJ-056.3",
+        "AC-PRJ-056.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-001",
+      "title": "异常结果卡：一句人话、主语行、建议、细节、动作、诊断码行",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-001.1",
+        "AC-SBX-001.2",
+        "AC-SBX-001.3",
+        "AC-SBX-001.4",
+        "AC-SBX-001.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SBX-002",
+      "title": "超时未响应：时钟 + 超时色，没有 [强制停止]",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-002.1",
+        "AC-SBX-002.2",
+        "AC-SBX-002.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-003",
+      "title": "[重新发起]：预选原项目、Agent 与镜像，指令不回填，原任务留着",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-003.1",
+        "AC-SBX-003.2",
+        "AC-SBX-003.3",
+        "AC-SBX-003.4",
+        "AC-SBX-003.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SBX-004",
+      "title": "改配置的出口按错误码分流；镜像类去镜像管理并带来源提示",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-004.1",
+        "AC-SBX-004.2",
+        "AC-SBX-004.3",
+        "AC-SBX-004.4",
+        "AC-SBX-004.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SBX-005",
+      "title": "[复制诊断信息]：多行纯文本 + 两句轻提示",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-005.1",
+        "AC-SBX-005.2",
+        "AC-SBX-005.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-010",
+      "title": "停止 = 暂停：入口、不二次确认、继续占名额、不过期",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-010.1",
+        "AC-SBX-010.2",
+        "AC-SBX-010.3",
+        "AC-SBX-010.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-011",
+      "title": "停止中：副行「停止中…」、终端只读、新终端与 [启动] 不可用",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-011.1",
+        "AC-SBX-011.2",
+        "AC-SBX-011.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-012",
+      "title": "已停止：结果卡说真话，给 [启动][发起新任务]",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-012.1",
+        "AC-SBX-012.2",
+        "AC-SBX-012.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-013",
+      "title": "启动：从「启动运行环境」开始，会话从头、指令不重放",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-013.1",
+        "AC-SBX-013.2",
+        "AC-SBX-013.3",
+        "AC-SBX-013.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-014",
+      "title": "停止 / 启动失败：转异常结果卡",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-014.1",
+        "AC-SBX-014.2",
+        "AC-SBX-014.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-015",
+      "title": "状态已变：409「现在的状态不允许做这件事」",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-015.1",
+        "AC-SBX-015.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-SBX-020",
+      "title": "删除中：淡出点 + 半透明，菜单只剩禁用项，移除后出树",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-020.1",
+        "AC-SBX-020.2",
+        "AC-SBX-020.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-021",
+      "title": "删的是当前任务：主区回项目总览，页内提示过程与结果",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-021.1",
+        "AC-SBX-021.2",
+        "AC-SBX-021.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-022",
+      "title": "销毁失败与保留期",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-022.1",
+        "AC-SBX-022.3",
+        "AC-SBX-022.2",
+        "AC-SBX-022.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-030",
+      "title": "无头任务只由自动化（与 MCP）发起；入口是运行详情 [打开任务]；能看出来自哪条规则",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-030.1",
+        "AC-SBX-030.2",
+        "AC-SBX-030.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SBX-031",
+      "title": "主区只放只读输出：不挂终端标签、不自动连 Agent",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-031.1",
+        "AC-SBX-031.2",
+        "AC-SBX-031.3",
+        "AC-SBX-031.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-032",
+      "title": "剩余时间与终止：行内确认、两阶段强杀",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-032.1",
+        "AC-SBX-032.2",
+        "AC-SBX-032.3",
+        "AC-SBX-032.4",
+        "AC-SBX-032.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SBX-033",
+      "title": "事件流断线：如实说、自动重连、按序号续，不重复不丢",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-033.1",
+        "AC-SBX-033.2",
+        "AC-SBX-033.3",
+        "AC-SBX-033.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-034",
+      "title": "本轮结果：结论、退出码、建议、产物、诊断码",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-034.1",
+        "AC-SBX-034.2",
+        "AC-SBX-034.3",
+        "AC-SBX-034.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SBX-035",
+      "title": "续接与下一轮：同一运行环境里再跑一轮",
+      "source": "docs/design-v2/gap/product/SBX.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SBX-035.1",
+        "AC-SBX-035.2",
+        "AC-SBX-035.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SYS-001",
+      "title": "入口：所有入口都落到「设置 › 系统状态」",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-001.1",
+        "AC-SYS-001.2",
+        "AC-SYS-001.3",
+        "AC-SYS-001.4",
+        "AC-SYS-001.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SYS-002",
+      "title": "退出路径",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-002.1",
+        "AC-SYS-002.2",
+        "AC-SYS-002.3",
+        "AC-SYS-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SYS-003",
+      "title": "资源概念只在本页出现",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-003.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-SYS-010",
+      "title": "本机资源水位：展示、轮询、刷新与读取失败",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-010.1",
+        "AC-SYS-010.2",
+        "AC-SYS-010.3",
+        "AC-SYS-010.4（改）",
+        "AC-SYS-010.5",
+        "AC-SYS-010.6（改）",
+        "AC-SYS-010.7",
+        "AC-SYS-010.8",
+        "AC-SYS-010.9"
+      ],
+      "acStatuses": {
+        "closed": 9
+      }
+    },
+    {
+      "id": "REQ-SYS-011",
+      "title": "CPU 与内存分三档；下一步对准 CPU / 内存",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-011.1",
+        "AC-SYS-011.2（改）",
+        "AC-SYS-011.3（改）",
+        "AC-SYS-011.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SYS-012",
+      "title": "磁盘分三档；下一步说清理成果或删项目",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-012.1",
+        "AC-SYS-012.2（改）",
+        "AC-SYS-012.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SYS-013",
+      "title": "整体等级取最差的一维",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-013.1",
+        "AC-SYS-013.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-SYS-014",
+      "title": "测不准时不判「耗尽」",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-014.1",
+        "AC-SYS-014.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-SYS-020",
+      "title": "成果占用、超量提示与 [清理成果]",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-020.1",
+        "AC-SYS-020.2",
+        "AC-SYS-020.3",
+        "AC-SYS-020.4",
+        "AC-SYS-020.5（改）",
+        "AC-SYS-020.6（改）",
+        "AC-SYS-020.7",
+        "AC-SYS-020.8",
+        "AC-SYS-020.9"
+      ],
+      "acStatuses": {
+        "closed": 9
+      }
+    },
+    {
+      "id": "REQ-SYS-021",
+      "title": "「保留下来的成果」的定义与计量（旧称「保留卷」）",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-021.1",
+        "AC-SYS-021.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-SYS-030",
+      "title": "沙箱环境状态：最近一小时失败率 + 无样本",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-030.1",
+        "AC-SYS-030.2（改）",
+        "AC-SYS-030.3（改）",
+        "AC-SYS-030.4（改）",
+        "AC-SYS-030.5",
+        "AC-SYS-030.6",
+        "AC-SYS-030.7",
+        "AC-SYS-030.8"
+      ],
+      "acStatuses": {
+        "closed": 8
+      }
+    },
+    {
+      "id": "REQ-SYS-031",
+      "title": "在卡片内查看最近日志",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-031.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-SYS-040",
+      "title": "连接状态：只报本页测到的",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-040.1（改）",
+        "AC-SYS-040.2（改）",
+        "AC-SYS-040.4（改）",
+        "AC-SYS-040.6"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SYS-050",
+      "title": "访问保护区块",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-050.1"
+      ],
+      "acStatuses": {
+        "deferred": 1
+      }
+    },
+    {
+      "id": "REQ-SYS-051",
+      "title": "升级与备份区块",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "status": "not-required-current-version",
+      "verification": "source-decision-review",
+      "reason": "源规格明确v1.5起且当前版本不要求；Q-SYS-14按DEC-0003不考虑升级与备份流程，本轮不制造占位或假实现。",
+      "evidence": [
+        "docs/design-v2/gap/product/SYS.md",
+        "docs/design-v2/gap/product/open-questions.md"
+      ]
+    },
+    {
+      "id": "REQ-SYS-060",
+      "title": "出网代理：回填、只存不重测、校验、成功与失败",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-060.1",
+        "AC-SYS-060.2（改）",
+        "AC-SYS-060.3",
+        "AC-SYS-060.4",
+        "AC-SYS-060.5",
+        "AC-SYS-060.6",
+        "AC-SYS-060.7",
+        "AC-SYS-060.8",
+        "AC-SYS-060.9"
+      ],
+      "acStatuses": {
+        "closed": 9
+      }
+    },
+    {
+      "id": "REQ-SYS-070",
+      "title": "首屏骨架",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-070.1",
+        "AC-SYS-070.2",
+        "AC-SYS-070.3",
+        "AC-SYS-070.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-SYS-071",
+      "title": "主数字「还能再发 N 个任务」与口径句",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-071.1",
+        "AC-SYS-071.2",
+        "AC-SYS-071.3",
+        "AC-SYS-071.4",
+        "AC-SYS-071.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-SYS-075",
+      "title": "后端不可达时本页：各卡原位说、横幅不自指",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-075.1",
+        "AC-SYS-075.2",
+        "AC-SYS-075.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-SYS-076",
+      "title": "离线时本页：横幅 [重新检测] 就地跑诊断",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-SYS-076.1",
+        "AC-SYS-076.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-001",
+      "title": "一键诊断：触发、连接中、不阻塞、可重复、结果保留",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-001.1",
+        "AC-DIA-001.2",
+        "AC-DIA-001.3",
+        "AC-DIA-001.4",
+        "AC-DIA-001.5",
+        "AC-DIA-001.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-DIA-002",
+      "title": "检查项清单以首帧为准（现为 9 项）、固定顺序、逐项到达",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-002.1",
+        "AC-DIA-002.2",
+        "AC-DIA-002.3（改）",
+        "AC-DIA-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-DIA-003",
+      "title": "单项时限、超时不等于失败、断开时保留已到结果",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-003.1",
+        "AC-DIA-003.2（改）",
+        "AC-DIA-003.3（改）",
+        "AC-DIA-003.4（改）",
+        "AC-DIA-003.5",
+        "AC-DIA-003.6",
+        "AC-DIA-003.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-DIA-004",
+      "title": "结论语义：提示、超时、无法判定",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-004.1",
+        "AC-DIA-004.2",
+        "AC-DIA-004.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-DIA-005",
+      "title": "判据总纲：一项检查报多重，取决于「谁需要它」",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-005.1",
+        "AC-DIA-005.2",
+        "AC-DIA-005.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-DIA-006",
+      "title": "每项结论的呈现：结论、证据、下一步、可复制命令",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-006.1",
+        "AC-DIA-006.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-010",
+      "title": "① 容器服务：通了要有证据，不需要它时不报错",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-010.1",
+        "AC-DIA-010.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-011",
+      "title": "② 轻量虚拟机：按平台问对的问题",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-011.1",
+        "AC-DIA-011.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-012",
+      "title": "③ 磁盘余量",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-012.1",
+        "AC-DIA-012.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-013",
+      "title": "④ 端口占用：说清被谁占了",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-013.1",
+        "AC-DIA-013.2",
+        "AC-DIA-013.3",
+        "AC-DIA-013.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-DIA-014",
+      "title": "⑤ 外网连通：按证据强弱下结论",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-014.1",
+        "AC-DIA-014.2",
+        "AC-DIA-014.3",
+        "AC-DIA-014.4",
+        "AC-DIA-014.5",
+        "AC-DIA-014.6",
+        "AC-DIA-014.7",
+        "AC-DIA-014.8"
+      ],
+      "acStatuses": {
+        "closed": 8
+      }
+    },
+    {
+      "id": "REQ-DIA-015",
+      "title": "⑥ 实时推送自检",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "status": "closed",
+      "verification": "code-review",
+      "reason": "WsLoopbackCheck注册于真实诊断序列，检测实际监听端口的engine.io open握手；结果明确是传输回环边界，不冒称每个namespace的已认证业务订阅。",
+      "evidence": [
+        "api/apps/api/src/platform/system/diagnostics/checks/ws-loopback.check.ts",
+        "api/apps/api/src/platform/system/system.module.ts"
+      ]
+    },
+    {
+      "id": "REQ-DIA-016",
+      "title": "⑦ 数据目录文件系统：写时复制三态",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-016.1",
+        "AC-DIA-016.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-DIA-017",
+      "title": "⑧ 预制镜像就绪：五步检查链，不得合并",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-017.1",
+        "AC-DIA-017.2",
+        "AC-DIA-017.3",
+        "AC-DIA-017.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-DIA-018",
+      "title": "⑧ 预制镜像：能自己动手时不只报事实",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-018.1",
+        "AC-DIA-018.2",
+        "AC-DIA-018.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-DIA-019",
+      "title": "⑨ 帐号登录环境",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "status": "closed",
+      "verification": "test-passed-plus-code-review",
+      "reason": "Q-DIA-01已选纳入第九项，清单以服务端首帧为准；真实AuthHelperCheck检查登录环境和CLI兼容性，production诊断注册该项，新验收覆盖失败/可用/版本结果。",
+      "evidence": [
+        "docs/design-v2/gap/product/open-questions.md",
+        "api/apps/api/src/platform/system/diagnostics/checks/auth-helper.check.ts",
+        "api/apps/api/src/platform/system/system.module.ts",
+        "api/acceptance/sys/service/auth-helper-diagnosis.spec.ts"
+      ]
+    },
+    {
+      "id": "REQ-DIA-020",
+      "title": "与初始化向导共用同一套检查",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-020.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-DIA-030",
+      "title": "后端进程起不来时的兜底",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-030.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-DIA-040",
+      "title": "一轮结束：汇总一句（超时单列）、原位播报、非正常项默认展开",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-DIA-040.1",
+        "AC-DIA-040.2",
+        "AC-DIA-040.3",
+        "AC-DIA-040.4",
+        "AC-DIA-040.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUD-001",
+      "title": "审计流与运行日志是两样东西",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-001.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-AUD-002",
+      "title": "审计面板：默认内容、三项筛选走服务端、增量刷新",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-002.1",
+        "AC-AUD-002.2",
+        "AC-AUD-002.3",
+        "AC-AUD-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-AUD-003",
+      "title": "审计行：内容、行内详情、按任务看完整时间线（就地筛）",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-003.1",
+        "AC-AUD-003.2（改）",
+        "AC-AUD-003.3（改）",
+        "AC-AUD-003.4",
+        "AC-AUD-003.5",
+        "AC-AUD-003.6",
+        "AC-AUD-003.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-AUD-004",
+      "title": "空、失败、断层、实时中断都要如实说",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-004.1",
+        "AC-AUD-004.2",
+        "AC-AUD-004.3",
+        "AC-AUD-004.4",
+        "AC-AUD-004.5",
+        "AC-AUD-004.6",
+        "AC-AUD-004.7",
+        "AC-AUD-004.8"
+      ],
+      "acStatuses": {
+        "closed": 8
+      }
+    },
+    {
+      "id": "REQ-AUD-005",
+      "title": "审计保留与完整性声明",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-005.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-AUD-006",
+      "title": "导出日志包：浏览器原生下载、四件",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-006.1",
+        "AC-AUD-006.2",
+        "AC-AUD-006.3",
+        "AC-AUD-006.4",
+        "AC-AUD-006.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-AUD-007",
+      "title": "运行日志落盘与轮转",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-007.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-AUD-008",
+      "title": "凭证明文不出现在审计、日志与导出包里",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-008.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-AUD-020",
+      "title": "时间范围：只填一端、起晚于止就地提示、条件句写人能读的时间",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-020.1",
+        "AC-AUD-020.2",
+        "AC-AUD-020.3",
+        "AC-AUD-020.4",
+        "AC-AUD-020.5",
+        "AC-AUD-020.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-AUD-021",
+      "title": "加载更早的记录：游标翻页、加载中、到底",
+      "source": "docs/design-v2/gap/product/SYS.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-AUD-021.1",
+        "AC-AUD-021.2",
+        "AC-AUD-021.3",
+        "AC-AUD-021.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-WB-001",
+      "title": "没有任何项目时：树为空、「未选择项目」、[新任务] 禁用并说「先新建一个项目」",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-001.1",
+        "AC-WB-001.2",
+        "AC-WB-001.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-002",
+      "title": "欢迎态：两张入口卡，都打开「新建项目」弹层并预选来源",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-002.1",
+        "AC-WB-002.2",
+        "AC-WB-002.3",
+        "AC-WB-002.4",
+        "AC-WB-002.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-WB-003",
+      "title": "第一个项目建好之后；初始化完成后的第一屏",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-003.1",
+        "AC-WB-003.2",
+        "AC-WB-003.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-010",
+      "title": "横幅栈的位置：主列顶部，工作台与设置页同一位置",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-010.1",
+        "AC-WB-010.2",
+        "AC-WB-010.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-011",
+      "title": "分级、排序与堆叠：最多显示 2 条 +「还有 N 条提示」",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-011.1",
+        "AC-WB-011.2",
+        "AC-WB-011.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-012",
+      "title": "关闭：阻断类本次会话内不再出现；治理类不自动收起、「今天不再提示」",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-012.1",
+        "AC-WB-012.2",
+        "AC-WB-012.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-013",
+      "title": "横幅动作的去处；动作指向当前页时不显示；「自动化需关注」按全部项目判定",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-013.1",
+        "AC-WB-013.2",
+        "AC-WB-013.3",
+        "AC-WB-013.4",
+        "AC-WB-013.5",
+        "AC-WB-013.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-WB-014",
+      "title": "两条阻断：无法确认平台状态（不说成离线）与离线模式；离线置灰发起入口；顶栏「后端不可用」",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-014.1",
+        "AC-WB-014.2",
+        "AC-WB-014.3",
+        "AC-WB-014.4",
+        "AC-WB-014.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-WB-015",
+      "title": "三种治理横幅：磁盘、保留下来的成果、Agent 帐号登录到期",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-015.1",
+        "AC-WB-015.2",
+        "AC-WB-015.3",
+        "AC-WB-015.4",
+        "AC-WB-015.5",
+        "AC-WB-015.6",
+        "AC-WB-015.7"
+      ],
+      "acStatuses": {
+        "closed": 7
+      }
+    },
+    {
+      "id": "REQ-WB-030",
+      "title": "⌘K 命令面板：入口、分组、搜索与排序",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-030.1",
+        "AC-WB-030.2",
+        "AC-WB-030.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-031",
+      "title": "「动作」组清单：补 5 个动作；项目级动作对谁",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-031.1",
+        "AC-WB-031.2",
+        "AC-WB-031.3",
+        "AC-WB-031.4",
+        "AC-WB-031.5"
+      ],
+      "acStatuses": {
+        "closed": 4,
+        "superseded": 1
+      }
+    },
+    {
+      "id": "REQ-WB-032",
+      "title": "不放破坏性动作；禁用项只说原因、不执行",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-032.1",
+        "AC-WB-032.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-WB-040",
+      "title": "地址指向的对象已不在：回落项目总览并说一句，地址改正",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-040.1",
+        "AC-WB-040.2",
+        "AC-WB-040.3",
+        "AC-WB-040.4",
+        "AC-WB-040.5",
+        "AC-WB-040.6"
+      ],
+      "acStatuses": {
+        "closed": 6
+      }
+    },
+    {
+      "id": "REQ-WB-041",
+      "title": "新建任务深链 `/?new=1&project=<id>`",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-041.1",
+        "AC-WB-041.2",
+        "AC-WB-041.3",
+        "AC-WB-041.4",
+        "AC-WB-041.5"
+      ],
+      "acStatuses": {
+        "closed": 5
+      }
+    },
+    {
+      "id": "REQ-WB-042",
+      "title": "镜像页过滤深链 `/settings/images?filter=warning`",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-042.1",
+        "AC-WB-042.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-WB-043",
+      "title": "任务深链 `?taskId=` 本轮不做",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "status": "implementation-ahead",
+      "verification": "code-review",
+      "reason": "源稿将分享深链标计划中；本轮为WB040的地址恢复与错误回退实现了taskId查询恢复，并保留本机选择。此项没有遗漏，记录实现先行，不能伪称源稿已要求发布分享能力。",
+      "evidence": [
+        "web/src/hooks/workbench/useWorkbenchRoute.ts",
+        "web/src/hooks/sandbox/useSandboxRestore.ts",
+        "web/src/containers/workbench/WorkbenchContainer.tsx"
+      ]
+    },
+    {
+      "id": "REQ-WB-050",
+      "title": "总览的状态筛选与左侧树共用一份，作用到两张列表与项目卡",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-050.1",
+        "AC-WB-050.2",
+        "AC-WB-050.3",
+        "AC-WB-050.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-WB-051",
+      "title": "总览工具条的组成；不提供「卡片 / 列表」切换",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-051.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-WB-060",
+      "title": "实例菜单只放 系统状态 / 外观 / 快捷键，不放「文档」",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-060.1"
+      ],
+      "acStatuses": {
+        "closed": 1
+      }
+    },
+    {
+      "id": "REQ-WB-061",
+      "title": "首屏骨架期：操作类控件只置灰、不写原因",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-061.1",
+        "AC-WB-061.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    },
+    {
+      "id": "REQ-WB-062",
+      "title": "直接打开设置页时先出该页自己的骨架",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-062.1",
+        "AC-WB-062.2",
+        "AC-WB-062.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-WB-063",
+      "title": "终端 [复制]：复制什么、三句反馈",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-WB-063.1",
+        "AC-WB-063.2",
+        "AC-WB-063.3",
+        "AC-WB-063.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-TRM-001",
+      "title": "终端连接条：五种状态与优先级，画布保留断线前的输出",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-TRM-001.1",
+        "AC-TRM-001.2",
+        "AC-TRM-001.3",
+        "AC-TRM-001.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-TRM-002",
+      "title": "自动重连的节奏与上限；[手动重连] 清零重来",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-TRM-002.1",
+        "AC-TRM-002.2",
+        "AC-TRM-002.3",
+        "AC-TRM-002.4"
+      ],
+      "acStatuses": {
+        "closed": 4
+      }
+    },
+    {
+      "id": "REQ-TRM-003",
+      "title": "握手被拒与会话已结束：说人话、接管整条、不给按不通的按钮",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-TRM-003.1",
+        "AC-TRM-003.2",
+        "AC-TRM-003.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-EVT-001",
+      "title": "/events 断开时如实说：侧栏一条提示，列表保留最后已知状态",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-EVT-001.1",
+        "AC-EVT-001.2",
+        "AC-EVT-001.3"
+      ],
+      "acStatuses": {
+        "closed": 3
+      }
+    },
+    {
+      "id": "REQ-EVT-002",
+      "title": "恢复后自动重同步，提示消失",
+      "source": "docs/design-v2/gap/product/WB.md",
+      "review": "covered-by-current-ac-review",
+      "acIds": [
+        "AC-EVT-002.1",
+        "AC-EVT-002.2"
+      ],
+      "acStatuses": {
+        "closed": 2
+      }
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+[
+  {
+    "defect": 1,
+    "severity": "sev1",
+    "status": "closed",
+    "reason": "任意状态销毁与provision取消协调，超时阻止迟到实例复活",
+    "evidence": [
+      "api/acceptance/sbx/service/lifecycle-races.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 2,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "项目/规则/运行/任务数据库事务，提交后才清理文件并可恢复",
+    "evidence": [
+      "api/acceptance/prj/sqlite/deletion-transaction.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 3,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "服务端活跃任务门口拒绝，结束任务和规则/历史按事务级联",
+    "evidence": [
+      "api/acceptance/prj/sqlite/deletion-transaction.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 4,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "排队克隆取消落failed/INTERRUPTED，不进入后续clone执行",
+    "evidence": [
+      "api/acceptance/prj/service/clone-queue-cancellation.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 5,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "匿名无口令的普通请求不数猜测，已认证会话先放行",
+    "evidence": [
+      "api/acceptance/acc/protocol/protected-resource-attempts.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 6,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "快照重取带事件序号，迟到REST不能覆盖更新事件",
+    "evidence": [
+      "web/src/containers/workbench/AppFrameContainer.tsx",
+      "web/src/acceptance/events-rest-resynchronization.test.tsx"
+    ],
+    "verification": "生产实现审查；新版真实 AppFrame、EventsSocket 与 HTTP 边界验收通过：迟到 REST 保留较新事件，断线重连发起实际新查询。"
+  },
+  {
+    "defect": 7,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "自动化最终退出/清理状态、成果登记与残余资源恢复持久化",
+    "evidence": [
+      "api/acceptance/aut/sqlite/artifact-recovery.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 8,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "服务端镜像参数继承不覆盖目标用户配置，登记/验证基于真实digest",
+    "evidence": [
+      "api/acceptance/img/service/preview-and-preflight.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 9,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "初始化镜像下载失败明确层级与可执行出口",
+    "evidence": [
+      "web/src/views/init/PresetImageCheck.view.tsx"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 10,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "同方式重登录事务迁移绑定，擦除旧密文，无撤销销毁事件",
+    "evidence": [
+      "api/acceptance/crd/sqlite/injection-revocation.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 11,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "注入前重新校验凭证，撤销/注入竞争由事务绑定保护",
+    "evidence": [
+      "api/acceptance/crd/sqlite/revocation-cleanup.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 12,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "销毁失败保留durable绑定，定时及启动恢复执行补偿",
+    "evidence": [
+      "api/acceptance/crd/sqlite/revocation-cleanup.spec.ts"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  },
+  {
+    "defect": 13,
+    "severity": "sev2",
+    "status": "closed",
+    "reason": "代理配置加载或失败时无可保存表单，保存错误原位处理可重试",
+    "evidence": [
+      "web/src/acceptance/system-diagnostics-audit.test.tsx"
+    ],
+    "verification": "当前生产代码审查；新版验收在独立fresh框架执行，scope以具体case为准，不声称真实外部部署复现。"
+  }
+]

@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  id: f-dep-init-05
+  页面: 21-8 部署与初始化 · 初始化向导 · 第 1 步 联网检查（离线确认）
+  状态: 模型 API 全部连不上（DNS 解析不了）→ 判为离线：结论句（红圆叉 + 正文色）「当前连不上外网，Agent 将不可用 —— …」；三行都是「连不上」+ 后端提示；下面离线确认提示条「以离线模式继续」+「网络恢复后无需重装…」+ [我知道，继续] + 一句说明；[下一步] 禁用，页脚一句「请先在上方确认「以离线模式继续」。」；代理配置进流程
+  对应 v1 稿件: g8-05（design-drafts/g8-init-access/g8-05-step1-offline.html；预览 design-drafts/previews/g8-05.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳 .wiz、步骤条 .wiz-steps、检查行 .dep-checks 同 f-dep-init-02（l5c-dep.css §2–§4；简报 §5.5）
+    - 离线确认 = components-v2 .note.note--fail（r6、fail subtle 底 + 环、图标 16 带色调、标题 14/500 fail 色、正文 14 正文色、动作行 32）；role="alert"
+    - 「连不上」= badge--fail（i-x），与超时（紫、时钟）分开
+    - 内容比 1440×900 视口高：另出整页图（data-shoot="full"），视口图停在顶部
+    - W4 评审修正（notes/consistency.md §8）：向导根 .wiz 由 <div> 改成 <main>：向导是这时页面上唯一的内容，品牌行落进主区地标（axe region；原型 #proto-wiz 加 role="main" 是同一处理），对话框仍是 role="dialog" aria-modal，版式不变（评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    W1–W8 同 f-dep-init-02 头注释（外壳、品牌行、步骤条、卡头步骤名、页脚条、「系统状态」路径、检查行、颜色），这里不重复。
+    1. 离线结论句只留一处（DR-25 推荐「重复的句子只保留一处」；v1 / 现状同一句在结论行与确认框里各出现一次）：留在结论行（红圆叉 + 正文色）；确认框换成短标题「以离线模式继续」——正是页脚那句「请先在上方确认「以离线模式继续」。」所指的东西。需看稿。
+    2. 确认框：error 描边框（callout--error）→ .note--fail；图标 X → i-wifi-off（说的是离线这件事）；[我知道，继续] outline → secondary 32；按钮旁的说明 12 → 13 次要灰。需看稿（小）。
+    3. 读屏：结论行补 role="status"（重新检测后的新结论要原位播报，UX-DS-508；现状没有 role）；确认框 role="alert" 不变。
+  示例数据来源: v1 g8-05 同值（DNS 解析失败分支的提示原文取后端 hintFor；「Codex 的模型 API」「Claude Code 的模型 API」是 Agent 申报的目标说明）
+  流程: F-DEP-INIT（REQ-DEP-007、REQ-DEP-008）
+  口径依据: P21-8 §1（完全离线：Agent 不可用——物理约束）、L23-24（模型 API 全失败 → 明示离线、仍可继续）；DR-25；Q-DS-18 A（红色默认色板改 token）；实现 web/src/views/init/OfflineNotice.view.tsx:31-67（[我知道，继续] 是显式确认；确认后不消失、换成已确认一句）、web/src/containers/init/InitWizardContainer.tsx:49-52、:66-67（离线且未确认 → [下一步] 禁用 + 页脚句）、web/src/hooks/system/useInitWizard.ts:445-452（只有点过才带 acknowledgeOffline）、api/apps/api/src/platform/system/initialization.service.ts:89-108（没带确认 → 409 OFFLINE_NOT_ACKNOWLEDGED）
+  另一变体（确认后）: 点 [我知道，继续] 后，按钮那一行换成「勾（14 次要灰）+ 已确认以离线模式继续 —— 完成初始化后，工作台会常驻一条离线横幅，发起任务的入口会置灰（只置灰、不隐藏）。」（13 次要灰）；提示条本身不消失；[下一步] 可用、页脚句消失（REQ-DEP-008 AC .2）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-05" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-05 第 1 步 · 离线确认</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="wiz">
+    <div class="wiz__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <!-- 向导本体：模态对话框（BlockingDialog）——没有关闭按钮、不接 Esc、点外面不关；外壳与工作台根本不挂（AppBootGate 只渲染向导） -->
+    <section class="wiz__dialog" role="dialog" aria-modal="true" aria-labelledby="wiz-title" aria-describedby="wiz-desc" data-testid="init-wizard">
+      <header class="wiz__head">
+        <div class="wiz__head-main">
+          <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+        </div>
+        <p class="wiz__count">第 <b>1</b> / 5 步</p>
+      </header>
+        <ol class="wiz-steps" aria-label="初始化步骤" data-testid="init-wizard-steps">
+          <li class="wiz-steps__item" data-testid="init-step-connectivity" data-state="current" aria-current="step"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">联网检查</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-proxy"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">代理配置</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-preset-image"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">沙箱镜像</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-subscription"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">模型帐号</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-resource"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">本机资源</span></li>
+        </ol>
+      <div class="wiz__card">
+        <div class="wiz__body">
+          <div class="wiz__step-head"><h2 class="wiz__step-title">联网检查</h2><p class="wiz__step-desc">平台需要连得上模型 API（Agent 用）与镜像下载源（下载沙箱镜像用）。这里直接显示上次检查的结果，不重跑一轮——需要最新结果时点 [重新检测]。</p></div>
+          <section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="offline">
+            <div class="dep-verdict">
+              <p class="dep-msg dep-msg--fail" role="status" data-testid="connectivity-verdict"><span class="icon i-circle-x" aria-hidden="true"></span><span>当前连不上外网，Agent 将不可用 —— 每个 Agent 都必须能访问自己的模型 API，这是物理约束，不是配置问题。平台其余功能（项目管理、凭证与镜像配置、系统诊断）照常可用。</span></p>
+              <button class="btn btn--secondary btn--32" type="button">重新检测</button>
+            </div>
+            <ul class="list check-list dep-checks">
+            <li class="list__row" data-testid="connectivity-item-api.openai.com" data-ok="false" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.openai.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>连不上</span></span></div>
+              <p class="dep-hint">DNS 解析不了 api.openai.com（Codex 的模型 API）。内网环境通常要配代理：在初始化向导 / 系统设置里填 HTTP_PROXY / HTTPS_PROXY</p>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-api.anthropic.com" data-ok="false" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.anthropic.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>连不上</span></span></div>
+              <p class="dep-hint">DNS 解析不了 api.anthropic.com（Claude Code 的模型 API）。内网环境通常要配代理：在初始化向导 / 系统设置里填 HTTP_PROXY / HTTPS_PROXY</p>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-ghcr.io" data-ok="false" data-timed-out="false" data-model-api="false">
+              <div class="check-row__head"><span class="check-row__title">ghcr.io</span><span class="dep-value" data-testid="connectivity-kind">镜像下载源</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--fail"><span class="icon i-x" aria-hidden="true"></span>连不上</span></span></div>
+              <p class="dep-hint">DNS 解析不了 ghcr.io（预制镜像所在的镜像下载源（由 SANDBOX_DEFAULT_IMAGE 推出））。内网环境通常要配代理：在初始化向导 / 系统设置里填 HTTP_PROXY / HTTPS_PROXY</p>
+            </li>
+            </ul>
+            <p class="dep-checked-at" data-testid="connectivity-checked-at">上次检测：2026-10-02 09:14:05（刚刚）（本轮刚检测）</p>
+          </section>
+          <section class="note note--fail" role="alert" aria-label="离线确认" data-testid="offline-notice" data-acknowledged="false">
+            <span class="icon i-wifi-off" aria-hidden="true"></span>
+            <div class="note__body">
+              <p class="note__title">以离线模式继续</p>
+              <p class="note__text">网络恢复后无需重装，回系统状态页重新检测即可。</p>
+              <div class="note__actions dep-actions"><button class="btn btn--secondary btn--32" type="button">我知道，继续</button><span class="dep-actions__note">点它表示你确认在这台机器上 Agent 不可用，仍要完成初始化。</span></div>
+            </div>
+          </section>
+        </div>
+        <footer class="wiz__footer">
+          <p class="wiz__note" id="wiz-note">请先在上方确认「以离线模式继续」。</p>
+          <div class="wiz__actions"><button class="btn btn--primary" type="button" disabled>下一步</button></div>
+        </footer>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  id: f-dep-init-13
+  页面: 21-8 部署与初始化 · 初始化向导 · 第 5 步 本机资源
+  状态: CPU、内存「正常」；磁盘可用 38 GB 低于 50 GB 建议值 →「偏低」（琥珀），磁盘行下一句构成说明；预留比例一句；偏低提示条（琥珀，先说「仍可继续」，role="status"）；[确认，开始使用] 照常可点（偏低不是门），与「点它才算装完…」一起在页脚条
+  对应 v1 稿件: g8-13（design-drafts/g8-init-access/g8-13-step5-resources.html；预览 design-drafts/previews/g8-13.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳 .wiz、步骤条 .wiz-steps、检查行 .dep-checks 同 f-dep-init-02（l5c-dep.css §2–§4；简报 §5.5）
+    - 资源行 = 名称 14/500 + 读数 14 次要灰 + 行尾徽标（正常 / 偏低）
+    - 偏低提示 = .note.note--warn；页脚条左边「点它才算装完…」、右边 [上一步] + [确认，开始使用]（primary 36，整个向导里唯一会写 initialized=true 的按钮）
+    - W4 评审修正（notes/consistency.md §8）：向导根 .wiz 由 <div> 改成 <main>：向导是这时页面上唯一的内容，品牌行落进主区地标（axe region；原型 #proto-wiz 加 role="main" 是同一处理），对话框仍是 role="dialog" aria-modal，版式不变（评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    W1–W8 同 f-dep-init-02 头注释（外壳、品牌行、步骤条、卡头步骤名、页脚条、「系统状态」路径、检查行、颜色），这里不重复。
+    1. [确认，开始使用] 与旁边那句「点它才算装完 —— …」从卡内挪到页脚条（简报 §5.5「页脚条放上一步 / 继续」；v1 / 现状这一步壳上只有 [上一步]，主按钮在内容区）。需看稿。
+    2. 不提不存在的进度条（DR-25 推荐「向导第 5 步那句不提进度条」——向导里没有进度条）：卡头说明「…（具体比例见下方），进度条的分母仍然是总容量。」→「…（具体比例见下方）。」；预留那句去掉「（上面的进度条分母仍然是总容量）」。
+    3. 资源行：行首胶囊「正常 / 偏低」→ 行尾徽标；读数 14 正文色 → 14 次要灰（名称 14/500 是主语）；磁盘构成说明 12 → 14 次要灰。需看稿（同 W7）。
+    4. 预留一句 12 → 14 次要灰；偏低提示框 warning 描边框 → .note--warn（琥珀三角 + 正文色），文字不变（DR-26：句首 ⚠️ 换图标，v1 已改）。
+    5. 页脚句里的「设置 → 系统状态」→「系统状态」（W6）。
+    6. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-SBX-03 A：「工作目录」→「代码副本」——磁盘构成一句「每个任务一份工作区副本」→「每个任务一份代码副本」（三组同物异名统一，只改可见文字）。
+  示例数据来源: v1 g8-13 同值（预留 15% 取接口 disk.reservedPercent = PARAM.SCHED_RESERVED_PCT；偏低阈值 CPU < 2 核 / 内存 < 4 GB / 可用磁盘 < 50 GB 取 initWizardModel.ts；磁盘构成句按轻量虚拟机一档）；与 P5 系统状态页的示例机器（10 核 / 32 GB / 500 GB）不是同一台，见 notes/dep.md §5
+  流程: F-DEP-INIT（REQ-DEP-014、REQ-DEP-015）
+  口径依据: P21-8 L67-78（偏低不阻断、磁盘按真实构成与可用量说、量级按档）、§7 L397-400（预留 15%、与当前可用取小）；DR-25；简报 §5.5；实现 web/src/lib/system/initWizardModel.ts:167-169（偏低阈值）、:191-200（diskCompositionFor 按档）、:240-268（lowText「仍可继续」前置、reservedText）、web/src/views/init/ResourceConfirm.view.tsx:44-93（行、预留、偏低框、[确认，开始使用] 与旁注）、web/src/containers/init/InitWizardContainer.tsx:224-245（最后一步壳上不给 [下一步]）；用户拍板 2026-10-04（Q-SBX-03 A：统一叫「代码副本」）
+  另一变体: 资源接口读失败——行的位置换成一句（红圆叉 + 正文色，role="alert"）「读不到本机资源占用 —— 这不代表资源充足，只代表这一项没查出来。仍可继续初始化，装好后可在系统状态页再看。」（中间那半句正文色 500），不渲染成 0% 或空；[确认，开始使用] 照常可点（REQ-DEP-014 AC .4）。请求在途时 [确认，开始使用] is-loading「正在完成…」——POST /init 会先再跑一轮联网检查，最长约 PARAM.DIAG_ITEM_TIMEOUT_MS（REQ-DEP-015 AC .2）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-13">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-13 第 5 步 本机资源 · 偏低</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="wiz">
+    <div class="wiz__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <!-- 向导本体：模态对话框（BlockingDialog）——没有关闭按钮、不接 Esc、点外面不关；外壳与工作台根本不挂（AppBootGate 只渲染向导） -->
+    <section class="wiz__dialog" role="dialog" aria-modal="true" aria-labelledby="wiz-title" aria-describedby="wiz-desc" data-testid="init-wizard">
+      <header class="wiz__head">
+        <div class="wiz__head-main">
+          <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+        </div>
+        <p class="wiz__count">第 <b>5</b> / 5 步</p>
+      </header>
+        <ol class="wiz-steps" aria-label="初始化步骤" data-testid="init-wizard-steps">
+          <li class="wiz-steps__item" data-testid="init-step-connectivity" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>联网检查<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-proxy"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">代理配置（可跳过）</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-preset-image" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>沙箱镜像<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-subscription" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>模型帐号<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-resource" data-state="current" aria-current="step"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">本机资源</span></li>
+        </ol>
+      <div class="wiz__card">
+        <div class="wiz__body">
+          <div class="wiz__step-head"><h2 class="wiz__step-title">本机资源</h2><p class="wiz__step-desc">确认这台机器的资源规模。平台会留出一部分容量不拿去跑任务（具体比例见下方）。</p></div>
+          <section class="wiz__section" aria-label="本机资源" data-testid="resource-confirm">
+            <ul class="list check-list dep-checks">
+            <li class="list__row" data-testid="resource-row-cpu" data-low="false">
+              <div class="check-row__head"><span class="check-row__title">CPU</span><span class="dep-value">4 核 · 当前负载 23.5%</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span></div>
+            </li>
+            <li class="list__row" data-testid="resource-row-ram" data-low="false">
+              <div class="check-row__head"><span class="check-row__title">内存</span><span class="dep-value">8 GB（已用 41.2%）</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span></div>
+            </li>
+            <li class="list__row" data-testid="resource-row-disk" data-low="true">
+              <div class="check-row__head"><span class="check-row__title">磁盘</span><span class="dep-value">可用 38 GB / 总 120 GB（已用 68.3%，/srv/agent-platform/data）</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>偏低</span></span></div>
+              <p class="dep-hint">磁盘会被三样东西持续吃掉：预制镜像下载到本机后约 1.3GB（下载 0.3GB）· 沙箱环境自己的镜像缓存实测约 31GB · 每个任务一份代码副本。所以这里看的是可用容量，不是总量。</p>
+            </li>
+            </ul>
+            <p class="dep-hint" data-testid="resource-reserved">平台会留出总容量的 15% 不拿去跑任务：内存最多能分出 6.8 GB、磁盘 102 GB —— 磁盘还要与当前可用的 38 GB 取小。</p>
+            <p class="note note--warn" role="status" data-testid="resource-low"><span class="icon i-triangle-alert" aria-hidden="true"></span><span class="note__text">仍可继续 —— 当前这台机器的资源偏低（可用磁盘 38 GB（建议 ≥ 50 GB）），建议加上去之后再正式投入使用；现在就用也行，只是同时能跑的任务更少、镜像下载到本机更慢。</span></p>
+          </section>
+        </div>
+        <footer class="wiz__footer">
+          <p class="wiz__note" id="wiz-note">点它才算装完 —— 这一步只做一次，之后要改任何配置都在「系统状态」里。</p>
+          <div class="wiz__actions"><button class="btn btn--secondary" type="button">上一步</button><button class="btn btn--primary" type="button">确认，开始使用</button></div>
+        </footer>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

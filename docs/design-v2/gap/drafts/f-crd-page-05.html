@@ -1,0 +1,167 @@
+<!doctype html>
+<!--
+  id: f-crd-page-05
+  页面: 21-3 凭证管理（/settings/credentials）· 从项目克隆失败跳来的回程（视口停在 Git 分区；整页图见 previews/f-crd-page-05.*.full.png）
+  状态: 新建项目「acme-api」克隆时 401，就地点 [配置 Git 凭证] 跳到本页：Git 分区顶部回程条「为项目「acme-api」配置凭证后，可重试克隆。」+ [重试克隆] [放弃]；用户刚保存了一份 HTTPS Token（主区右上角轻提示「HTTPS Token 已保存」；新 Token 还没用过，卡上不显示「最后使用」）。点 [重试克隆] → 按钮「重试中…」禁用 → 成功后回工作台、acme-api 进入克隆中；[放弃] → 回程条消失，项目仍是克隆失败
+  对应 v1 稿件: g4-17（design-drafts/g4-credentials/g4-17-clone-retry-guide.html；预览 design-drafts/previews/g4-17.dark.png / g4-17.light.png）
+  体现的 v2 要点:
+    - 外壳照 P3（pilot/p3-credentials.html）逐字抄：全高侧栏 256（「凭证管理」当前页）+ 只盖主区的顶栏 56（h1 可见 16/600）+ 表单页内容 768 左对齐；实例菜单 aria-label 按 Q-DS-34 默认 A 去掉「文档」
+    - 设置卡（foundation §3.12 / §3.19）：卡头单行 56（名称 14/600 + 厂商 14 次要灰 + 状态徽标）、登录方式 .option-row（自绘单选 + 方式名 14/500 + 徽标 / 元信息行 / 行尾 32 按钮）；「删除」一律 danger-tertiary（进入二次确认的入口）；Git 卡 = 键值两列 + 动作右上 + 页脚条
+    - 回程条：中性 .note（foundation §3.17）放在 Git 分区标题下、卡片之前，与卡同宽；正文 14 + 动作行（[重试克隆] primary 32——这一区只有它一个实心主按钮；[放弃] tertiary 32）；role="region" + aria-label「重试克隆」
+    - 轻提示：W0 .toast，主区右上角、跟随主题（DR-29：现状 sonner 恒为亮色是缺陷，按推荐修）
+    - 视口停在 Git 分区：从克隆失败跳来时实现本来就该落到这里（plan F-PRJ-INFO / F-PRJ-CLONE「go credentials 并滚到 Git 分区」）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    1. 回程条：primary 色描边框（border-primary/40 + bg-primary/5）→ 中性 .note（中性底 + 中性环）；新增前置图标 i-folder-git-2（项目仓库）；按钮主次不变（[重试克隆] 实心、[放弃] 文字按钮）；回程条加 role="region" + aria-label「重试克隆」（v1 与现状是无语义的 div，读屏可按地标跳到它）。需看稿（图标、色调）
+    2. 轻提示：sonner 恒亮色、视口右上角 32 → 跟随主题的菜单材质、主区右上角（W0 §5.1，DR-29 推荐）。需看稿
+    3. 卡片换皮同 P3：卡头单行、登录方式行内布局（按钮挪到行尾、「剩 N 天」挪到帐号后面）、徽标改胶囊、单选自绘且按 Agent 分组（DR-20 的现状缺陷在 P3 已修）、Git 卡键值两列 + 动作右上 + 页脚条（P3 头注释第 11–18 条，需看稿项在那里）
+    4. 底层外壳：设置区独立外壳（224 宽设置菜单 +「← 返回工作台」）→ P3 方案 A 外壳（Q-DS-24 A，逐条差异见 pilot/p3-credentials.html 头注释第 1–23 条，这里不重复）
+  示例数据来源: 原型示例世界（pilot/proto/proto.js PROJECTS / tasks；P3 同一份）+ plan.json conventions.sample_world 增补「凭证：Codex 帐号登录有效 + API Key 已配置；Claude Code 两种都未配置；Git 一份 HTTPS Token（github.com）」——Codex 的 API Key 尾号写 sk-…f3a9（design-drafts/README.md §5 示例凭证）。acme-api 在示例世界里是「克隆失败（网络错误）」；本稿是场景「下一次克隆：需要凭证」得到的 401（g7-06 同一个项目）。Git 刚配的这份 Token 尾号沿用 v1 g4-17 的 ghp_…ab12（在原型里：先删掉示例世界那份 Token 再走这条路，或用 [更换] 换一份新的）——登记在 notes/crd-b.md
+  流程: F-CRD-PAGE（REQ-CRD-034）；依赖 F-PRJ-CLONE（回程条的来处）
+  口径依据: P21-3 L165（clone 权限失败 → 配置 Git 凭证 → [重试克隆]）、L189（回程载体「待原型落实」——本稿落实：载体是凭证页 Git 分区的回程条，不回创建弹层）；附录 A G7-OI-8（权限类失败不给 [重试克隆]，重试走凭证页回程）；DR-29（轻提示跟随主题）；实现 web GitCredentialsSection.view.tsx:76-99（回程条文案、[重试克隆]「重试中…」、[放弃]）、useGitCredentialManager.ts:322-337（重试成功 router.push('/')、放弃清回程态）、createUiSlice.ts:21-31（pendingProjectCreate 只在内存）、PendingCloneReturnGuard.tsx（离开凭证页即作废）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-crd-page-05" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-crd-page-05 凭证页 · 从克隆失败跳来，配好凭证后重试克隆（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l3b-crd.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">凭证管理</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content content--form">
+          <div class="content__inner sections">
+
+            <section class="section" aria-labelledby="sec-agent">
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-agent">Agent 帐号（这台机器上通用）</h2>
+                  <p class="section-head__desc">帐号登录 / API Key 二选一，这台机器上的所有任务都用它；两样可以同时留着，切换只改现在用哪个。</p>
+                  <p class="section-head__desc">凭证加密存在这台机器上，平台不会上传，也读不回明文。</p>
+                  <label class="input-group section-head__search"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" name="runtime-search" placeholder="搜索 Agent 名字或帐号尾号…" aria-label="搜索 Agent"></label>
+                </div>
+              </div>
+
+              <div class="stack stack--16">
+                <div class="card card--lg" role="group" aria-label="Codex">
+                  <div class="card__header">
+                    <div class="card__header-main"><h3 class="card__title card__title--14" id="crd-codex">Codex</h3><span class="card__desc">OpenAI</span></div>
+                    <span class="badge badge--ok"><span class="icon i-check" aria-hidden="true"></span>有效</span>
+                  </div>
+                  <div class="option-list" role="radiogroup" aria-labelledby="crd-codex">
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="codex-auth" value="account" aria-label="帐号登录" checked><span class="option-row__name">帐号登录</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>当前使用</span></label>
+                        <p class="option-row__meta"><span class="u-truncate">a***@example.com</span><span class="meta-sep" aria-hidden="true"></span><span class="u-tabular u-nowrap">剩 26 天</span></p>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">重新登录</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="codex-auth" value="api-key" aria-label="API Key"><span class="option-row__name">API Key</span></label>
+                        <p class="option-row__meta"><span class="text-mono-13 u-truncate">sk-…f3a9</span></p>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">更换</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="card card--lg" role="group" aria-label="Claude Code">
+                  <div class="card__header">
+                    <div class="card__header-main"><h3 class="card__title card__title--14" id="crd-claude">Claude Code</h3><span class="card__desc">Anthropic</span></div>
+                    <span class="badge badge--inactive"><span class="icon i-square-filled" aria-hidden="true"></span>未配置</span>
+                  </div>
+                  <div class="option-list" role="radiogroup" aria-labelledby="crd-claude">
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="claude-auth" value="account" aria-label="帐号登录"><span class="option-row__name">帐号登录</span></label>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">登录帐号</button></div>
+                    </div>
+                    <div class="option-row">
+                      <div class="option-row__main">
+                        <label class="option-row__choice"><input class="radio" type="radio" name="claude-auth" value="api-key" aria-label="API Key"><span class="option-row__name">API Key</span></label>
+                      </div>
+                      <div class="btn-row option-row__actions"><button class="btn btn--secondary btn--32" type="button">添加 API Key</button></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="section crd-scroll-here" aria-labelledby="sec-git"><span class="crd-scroll-anchor" aria-hidden="true"></span>
+              <div class="section-head section-head--16">
+                <div class="section-head__main">
+                  <h2 class="section-head__title" id="sec-git">Git 凭证（私有仓库访问）</h2>
+                  <p class="section-head__desc">GitHub / GitLab SaaS → HTTPS Token；公司自建 Git（SSH 接入）→ SSH 密钥。</p>
+                  <p class="hint"><span class="icon i-info" aria-hidden="true"></span>Git 凭证用于克隆私有仓库，与 Agent 凭证无关。</p>
+                </div>
+              </div>
+
+              <div class="stack stack--16">
+              <div class="note crd-return" role="region" aria-label="重试克隆"><span class="icon i-folder-git-2" aria-hidden="true"></span><div class="note__body"><p class="note__text">为项目「acme-api」配置凭证后，可重试克隆。</p><div class="note__actions"><button class="btn btn--primary btn--32" type="button">重试克隆</button><button class="btn btn--tertiary btn--32" type="button">放弃</button></div></div></div>
+              <div class="card card--lg">
+                <div class="card__body card__body--split" role="group" aria-label="HTTPS Token">
+                  <dl class="kv u-grow">
+                    <dt>类型：</dt><dd class="u-medium">HTTPS Token</dd>
+                    <dt>Token 尾号：</dt><dd class="u-break-all"><span class="text-mono-13">ghp_…ab12</span></dd>
+                    <dt>host 白名单：</dt><dd>github.com</dd>
+                  </dl>
+                  <div class="card__body-end"><button class="btn btn--secondary btn--32" type="button">更换</button><button class="btn btn--secondary btn--32" type="button">测试连接</button><button class="btn btn--danger-tertiary btn--32" type="button">删除</button></div>
+                </div>
+                <div class="card__footer">
+                  <span class="card__footer-help">添加其他类型凭证：</span>
+                  <div class="card__footer-end"><button class="btn btn--secondary btn--32" type="button">配置 SSH 密钥</button></div>
+                </div>
+              </div>
+              </div>
+            </section>
+
+            <footer class="page-notes">
+              <p>凭证加密保存在这台机器上，不会上传；平台也读不回明文。</p>
+              <p>帐号登录在你自己的浏览器里完成，平台不接触你的密码。</p>
+              <p>SSH 私钥与 Token 存进去之后就不再显示，只留指纹 / 尾号用来认人。</p>
+            </footer>
+
+          </div>
+        </div>
+        <section class="toast-region" aria-label="通知"><div class="toast toast--ok" role="status"><span class="icon i-circle-check" aria-hidden="true"></span><div class="toast__body"><p class="toast__title">HTTPS Token 已保存</p></div></div></section>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

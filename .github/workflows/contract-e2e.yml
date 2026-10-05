@@ -1,19 +1,6 @@
-# 跨仓**运行时**契约 e2e（权威定义：docs/shared/29-测试策略与测试Agent.md §3.1 / §3.1.1）
-#
-# 它与 docs-check 是**同一性质**的检查，只是问法不同：
-#   · docs-check 的 B3 问「两份 openapi.json 是否逐字节相同」—— 查**静态定义**同源；
-#   · 本 workflow 问「真前端打真后端，两边对不对得上」—— 查**运行时行为**一致。
-# 主仓是唯一同时持有 api 与 web 两个 submodule 的地方，所以两道门都落在这里。
-#
-# ⚠️⚠️ **本 workflow 刻意不在 `pull_request` 上触发，也刻意不进 branch protection 的
-# required checks。** 理由写在 29 §3.1.1「CI 编排」与 §3.3.4：这是三层 e2e 里最慢、最容易
-# flaky 的一层，**新门禁第一周误伤就会被绕过或直接关掉**——那比没有这道门更糟，因为关掉
-# 之后没人会记得再打开。所以先只在 main 与每晚跑，让人**看见结果**、攒够「它红过几次、
-# 每次是真红还是抖动」的样本；稳定之后再谈阻断。
-#
-# ⇒ 升级成 PR 阻断门禁时要改两处（缺一不可，只改一处会得到一道假门）：
-#     ① 这里的 `on:` 加回 `pull_request:`；
-#     ② 仓库设置里把 `契约 e2e` 加进 required status checks。
+# 新版真实跨仓验收：浏览器→生产web→完整Nest→freshSQLite。
+# 外部资源Provider明确隔离；浏览器不route拦截API。独立DATA_ROOT和.next-acceptance。
+# 保持main/nightly/manual触发；本轮不变更远端branch protection。
 name: contract-e2e
 
 on:
@@ -109,7 +96,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # ⚠️ 只装 chromium。装全套浏览器在这一层没有收益：本层验的是字段名/必填性/错误码
-      # /分页信封/时间格式，没有一条与浏览器差异有关（跨浏览器是 web e2e 的活）。
+      # /分页信封/时间格式及实际生命周期响应由新的跨仓验收覆盖。
       - name: 安装 playwright chromium
         working-directory: e2e-contract
         run: pnpm exec playwright install --with-deps chromium
@@ -128,5 +115,7 @@ jobs:
           path: |
             e2e-contract/playwright-report/
             e2e-contract/test-results/
+            e2e-contract/artifacts/acceptance-results.json
+            artifacts/migration-audit/cross-execution-report.json
           retention-days: 7
           if-no-files-found: ignore

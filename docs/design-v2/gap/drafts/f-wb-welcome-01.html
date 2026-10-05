@@ -1,0 +1,114 @@
+<!doctype html>
+<!--
+  id: f-wb-welcome-01
+  页面: 21-1 工作台（/）· 没有任何项目时的主区 = 欢迎态（建项目引导；P21-6 §5）
+  状态: 实例里一个项目都没有（示例世界清空：PROJECTS = []、tasks = []）：侧栏「项目」分区只留「新建项目」图标、树为空；顶栏左侧「未选择项目」（不可点），右侧「新任务」禁用（原因「先新建一个项目」，按下时说，见 f-wb-welcome-02）；主区欢迎态 = 图标框 +「欢迎使用 · 第一步」+ 标题「为你的代码建一个项目」+ 一句说明 + 两张入口卡「用我的代码库」「开一个空项目」+ 第二步一句
+  对应 v1 稿件: g1-10（design-drafts/g1-workbench-main/g1-10-empty-no-project.html；预览 design-drafts/previews/g1-10.dark.png）——在它的空工作台上把主区那一句话换成欢迎态；外壳照 pilot P1 / P6 抄
+  体现的 v2 要点:
+    - 外壳方案 A（同 P1 / P6，几何逐像素一致）；「任务」导航是当前页、没有等待徽标（留空的 role=status，foundation §1.4）
+    - 主区 = 空态组件 .empty（foundation §3.13）的放大版：图标框 48（folder-plus）→ 引导小字 13 → 标题 heading-20（整页只为这一件事，比项目空态 P6 的 16 高一档）→ 说明 14/22（最宽 480）→ 两张入口卡 → 第二步一句（中性小徽标「第二步」+ 14 次要灰）；整块居中于视口（.empty--viewport）
+    - 入口卡（本组 CSS §2 .wb-entry）：整卡一个按钮（aria-haspopup="dialog"，名称 = 卡标题、说明 = aria-describedby）；表面 + card 阴影、r8、内边距 16 20；左上 32 图标块（fill 底、不加环，一个表面一层描边）、右上 arrow-right；悬停环换 border-strong（同 .card--interactive）；两张等宽，1024 宽仍并排、< 640 单列
+    - 顶栏：左侧静态位置文字（本组 CSS §1，14 次要灰，不是按钮、没有 ⇅）；右端仍是同一个「新任务」（foundation §1.4 创建入口规则），aria-disabled（能聚焦、按下说原因，foundation §3.20）
+    - 同屏没有实心主按钮（顶栏「新任务」是禁用外观；入口卡不是按钮样式）；字阶 14 为主，最小 12；图标全部 lucide
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要你确认）:
+    1. 主区：一句「选择左侧项目，或新建一个项目开始。」→ 欢迎态（标题 + 说明 + 两张入口卡 + 第二步一句）。Q-DS-31 按默认 A；新增可见文字（「欢迎使用 · 第一步」「为你的代码建一个项目」、说明句、两张卡的标题与说明、「第二步」一句）取自 P21-6 §5 L81-91 与 P20 L45，措辞是本稿新写。新范围，需看稿。
+    2. 两张入口卡点开的都是「新建项目」弹层（F-PRJ-CREATE），分别预选来源「Git 仓库」/「空项目」；空项目的名称预填「未命名项目 1」（前端按现有项目名里的「未命名项目 N」取最大 N + 1，不改后端；没有就从 1 起）。不做「一键直建、跳过弹层」（Q-DS-31 C，P21-6 L129 改写）。需看稿。
+    3. 「新任务」：v1 侧栏底部整宽实心按钮 disabled + 下方常驻原因「先在左侧选中一个项目」→ 顶栏右端「新任务」禁用（aria-disabled，32 primary 的禁用外观），原因改为「先新建一个项目」——一个项目都没有时「先选中」做不到（plan F-WB-WELCOME / REQ-WB-001；实现 WorkbenchContainer.tsx:276-287 在这一态也说「先在左侧选中一个项目」，列为偏离）。原因从常驻一行改为按下 / 悬停时出（tooltip，P21-8 L403 同一种写法），title 与 aria-describedby 里也有。需看稿。
+    4. 顶栏左侧「未选择项目」：v1 灰字 → 与面包屑同位同字号的静态文字（14 次要灰，不可点，P21-6 L73），文字不变；有项目时这里才是范围切换器「全部项目 ⇅」（P2）。需看稿。
+    5. 顶栏不放「⋯ 更多操作」：没有当前项目，菜单里没有可做的事（P1 / P6 的「⋯」列的是项目 / 任务动作）。需看稿。
+    6. 「新建项目」：v1 侧栏底部整宽 outline 按钮 → 「项目」分区标题的 folder-plus 图标按钮（同 P1 第 10 条）；本态分区里不出「按状态筛选」（没有任务可筛，plan F-WB-WELCOME「只留新建图标」）。需看稿。
+    7. 外壳通用改动（画框铺满视口、方案 A 外壳、实例菜单、查找 ⌘K、一级导航、等待汇总条 → 导航徽标、筛选 chip 串 → 图标按钮、侧栏底部两个整宽按钮退役、字体字阶颜色图标）与 pilot P1 头注释第 1–3、5–10、15–18 条相同，不重复列；实例菜单 aria-label 按 Q-DS-34 默认 A 写「系统状态、外观、快捷键」（去掉「文档」）。需看稿（看 P1）。
+  示例数据来源: 空实例（示例世界清空：PROJECTS = []、tasks = []；原型场景「没有任何项目」）；「未命名项目 1」= 现有项目名里没有「未命名项目 N」时取 1
+  流程: F-WB-WELCOME（REQ-WB-001–003）
+  口径依据: Q-DS-31 按默认 A（两张入口卡、预选来源、空项目名前端预填）；P20 L45、L56-57；P21-1 L65；P21-6 §5 L81-91、L73（未选择项目不可点）、L121-123（未命名项目 N 编号）、L129（一键直建不做）；P21-8 L77（初始化完成后进建项目引导）；P22 L155（「三步引导卡」统一为两张入口卡）；P21-2 L232（无选中项目不能发起）；实现 WorkbenchContainer.tsx:276-287（newTaskDisabledReason）、:321-325（兜底句）；api/packages/contracts/src/schemas/project.schema.ts:54-59（name 必填 1–40，后端不自动命名）；foundation §1.4、§3.13、§3.20
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-wb-welcome-01">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-wb-welcome-01 欢迎态 · 还没有任何项目（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l6a-wb.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span><span class="u-sr-only" role="status"></span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__sep" role="separator"></div>
+
+      <section class="sidebar__section" aria-labelledby="sb-projects">
+        <div class="sidebar__section-head">
+          <h2 class="sidebar__section-title" id="sb-projects">项目</h2>
+          <div class="sidebar__section-tools">
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-haspopup="dialog" aria-label="新建项目" title="新建项目"><span class="icon icon--14 i-folder-plus" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <div class="sidebar__scroll">
+          <nav class="tree" aria-label="项目分组任务树"></nav>
+        </div>
+      </section>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="dialog" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="u-sr-only">工作台：还没有项目</h1>
+        <div class="header__lead">
+          <span class="wb-crumb-static">未选择项目</span>
+        </div>
+        <div class="header__actions">
+          <button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog" aria-disabled="true" aria-describedby="why-new" title="先新建一个项目"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">新任务</span></button><span class="u-sr-only" id="why-new">先新建一个项目</span>
+        </div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="empty empty--fill empty--viewport wb-welcome">
+          <div class="empty__icon"><span class="icon i-folder-plus" aria-hidden="true"></span></div>
+          <p class="wb-welcome__kicker">欢迎使用 · 第一步</p>
+          <h2 class="empty__title">为你的代码建一个项目</h2>
+          <p class="empty__desc">先有项目，再在项目里发起任务。每个任务都在项目代码的一份副本上干活，互不干扰。</p>
+          <div class="empty__actions">
+            <div class="wb-entry-grid" role="group" aria-label="新建项目的两种方式">
+              <button class="wb-entry" type="button" aria-haspopup="dialog" aria-labelledby="we-git-t" aria-describedby="we-git-d">
+                <span class="wb-entry__head"><span class="wb-entry__icon"><span class="icon i-folder-git-2" aria-hidden="true"></span></span><span class="icon wb-entry__go i-arrow-right" aria-hidden="true"></span></span>
+                <span class="wb-entry__title" id="we-git-t">用我的代码库</span>
+                <span class="wb-entry__desc" id="we-git-d">填 Git 仓库地址，平台把代码克隆到这台机器上。私有仓库会先引导你配好 Git 凭证。</span>
+              </button>
+              <button class="wb-entry" type="button" aria-haspopup="dialog" aria-labelledby="we-empty-t" aria-describedby="we-empty-d">
+                <span class="wb-entry__head"><span class="wb-entry__icon"><span class="icon i-folder" aria-hidden="true"></span></span><span class="icon wb-entry__go i-arrow-right" aria-hidden="true"></span></span>
+                <span class="wb-entry__title" id="we-empty-t">开一个空项目</span>
+                <span class="wb-entry__desc" id="we-empty-d">从一个空目录开始，不关联任何仓库。名称先填好<strong>「未命名项目 1」</strong>，建之前可以改。</span>
+              </button>
+            </div>
+            <p class="wb-welcome__next"><span class="badge badge--20 badge--neutral">第二步</span>项目就绪后会自动选中，接着就能发起第一个任务。</p>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

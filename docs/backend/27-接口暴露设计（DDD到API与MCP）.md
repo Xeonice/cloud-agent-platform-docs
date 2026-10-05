@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **63**（+1：`GET /api/providers` 能力发现；+2 实现期补录：`POST /api/projects/:id/cancel-clone`、`POST /api/access/unlock`；+4 S6 无头 Task：`GET /api/sandboxes/:id/tasks`、`GET …/tasks/:taskId`、`GET …/tasks/:taskId/artifacts/:name`、`POST …/tasks/:taskId/cancel`；**+2 分支与基线同步：`GET /api/projects/:id/branches`、`POST /api/projects/:id/sync`**；另 2 个 v1.5 占位：`/api/system/backup`、`/api/system/version`） | 10 §6.1–6.6 |
+| REST 端点 | **68 条能力 path / 78 个 operation**（2026-10 按当前清单核对：**67 条 path / 77 个 operation 已实现**，含新增 `GET /api/automations/attention`；另 1 条 `POST /api/system/backup` 为 ⏳ 预留。排除 3 条 MCP 传输路径；`POST /api/system/diagnose` 的 SSE 响应计入此 HTTP 清单，也在下行单列） | 10 §6.1–6.6 |
 | MCP tools | **14 设计 / 14 已注册**（本迭代把最后四个补齐——它们的 REST 端点此前也不存在，所以是「先做端点、再包壳」两层一起落地，见 §2） | 02 §5.2 |
 | WS 通道 | **3**（`/events`、`/terminal`、`/tasks`） | 10 §6.7 |
 | WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
@@ -76,7 +76,7 @@
 |---|---|---|---|---|---|---|---|---|
 | `listSandboxes` | `GET /api/sandboxes?projectId=&status=` | `list_sandboxes` | 按项目过滤是主链路默认形态 | `SandboxDto[]`，含派生 `waitingInput` | `list-sandboxes` query | — | — | — |
 | `getSandbox` | `GET /api/sandboxes/:id` | `get_sandbox` | | `SandboxDto` + 资源占用；**`status='failed'` 时带 `failureCode` / `failureMessage`**（10 §7.3——异步失败没有同步响应可承载错误码，这是刷新后仍能解释失败的唯一出口） | `get-sandbox` query | — | `NOT_FOUND` | — |
-| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 补 120；`headless=false` 传了 → 400**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、**`INSTALL_FAILED`**(500，装 CLI 失败，04 §4 / 03 §4.3 ③)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed`（+ `starting` 期间 0..n 条 **`runtime.install_progress`**） |
+| `createSandbox` | `POST /api/sandboxes` → **202** | `create_sandbox` | `{ projectId, runtime, image?, provider?, initialPrompt?, quota?, headless?, timeoutMinutes?, require? }`；**`headless=true` 未传 `timeoutMinutes` → 当前服务补 30；`headless=false` 时记录为 null（UI 不提交硬超时）**；**`require`** = `{ spawnTty?, volumeMount?, updateResources?, pauseResume?, snapshot? }` 能力前置条件（**刻意无 `watchEvents`**，理由见下方第 4 条） | `SandboxDto`（`status:'pending'`） | `create-sandbox` command | I-SBX-1/3/5、I-PRJ-5（archived 项目拒绝）、I-IMG-2（invalid 镜像拒绝） | **`UNSUPPORTED_CAPABILITY`(409)**、`RESOURCE_EXHAUSTED`(429)、`DISK_INSUFFICIENT`(507)、`IMAGE_PULL_FAILED`(502)、`WORKSPACE_PREPARE_FAILED`(500)、**`INSTALL_FAILED`**(500，装 CLI 失败，04 §4 / 03 §4.3 ③)、`INVALID_ARGUMENT`(400) | `sandbox.created` → 5 条 `sandbox.status_changed`（+ `starting` 期间 0..n 条 **`runtime.install_progress`**） |
 | `startSandbox` | `POST /api/sandboxes/:id/start` | `start_sandbox` | 仅 `stopped` 可调 | `SandboxDto`，**`status:'starting'`**——答的是「已受理」不是「已就绪」 | `start-sandbox` command | I-SBX-1/9（重启**不经** preparing-workspace）、I-SBX-3（没有 provider 实例可启 ⇒ 409 而不是背地里失败） | `INVALID_STATE`(409)。⚠️ **`RESOURCE_EXHAUSTED`(429) 落地后拿不到**：`start` 与 `create` 同为异步（`starting` 段实测可达数分钟），provider 抛的资源不足发生在响应发出**之后**，只能经 `sandbox.status_changed.errorCode` + `SandboxDto.failureCode` 到达（04 §4 那条「异步失败没有同步响应可承载错误码」）。要让它成为 429，得先有个**同步的准入检查**（ResourcePool，03 §1 —— 今天不存在） | `sandbox.status_changed` |
 | `stopSandbox` | `POST /api/sandboxes/:id/stop` | `stop_sandbox` | 仅 `running`/`idle` 可调 | `SandboxDto`（`status:'stopped'`）。**保留实例与工作区**——否则 `start` 无物可启 | `stop-sandbox` command | I-SBX-1 | `INVALID_STATE`(409)。provider 停不下来 ⇒ 聚合落 `failed`（不留在 `stopping`）+ 透传 provider 码 | `sandbox.status_changed` |
 | `destroySandbox` | `DELETE /api/sandboxes/:id` | `destroy_sandbox` | **`{ keepVolume?: boolean }`**（body 或 `?keepVolume=`，query 优先）。**默认值两面不同**：REST 由前端表单传（UI 默认勾选保留）；**MCP 默认 `false`** | 204 | `destroy-sandbox` command | I-SBX-4、I-RV-1/3 | `INVALID_STATE`(409) | `sandbox.status_changed` → `sandbox.removed` |
@@ -93,7 +93,7 @@
 1. **创建是异步的**：`POST` 返回 202 与一条 `pending` 记录，**真正的进度全在 WS**。技术状态序列是 `pending→scheduling→preparing-workspace→creating→starting→running`，而产品进度卡是四格「初始化 / 拉取镜像 / 准备工作区 / 启动实例」——**两者顺序不同是刻意的**，映射关系：`preparing-workspace`→「准备工作区」、`creating`→「拉取镜像」（03 §4.0）。
 2. **`waitingInput` 是派生字段**：来自网关内存态（经 terminal 的只读查询端口，06 §8.2），**只驱动展示、不改主状态**；网关重启后会短暂回落 `false`，这是可接受的（03 §4.1 红线）。
 3. **资源/配额对用户完全不可见**（P22 §4.6）：`quota` 只为程序化消费方保留，UI 不要暴露。
-4. **provider 选项与默认档一律来自 `GET /api/providers`，前端不得枚举闭集**：响应是扁平数组，默认档是数组里 `isDefault` 为 true 的那一项（**没有顶层 default 字段**）。第三方 provider 经 04 §8 注册后自动出现在该端点、进而自动出现在 UI，**前端零改动**。`capabilities` 7 位全量下发（S6 新增 `headlessTask`），用于按能力显隐控件（无 `pauseResume` 就不渲染「暂停」）。前端消费形态（query key / staleTime / 加载失败空三态）见前端 15 §2.1–§2.2 与 F21-2 §4.1。
+4. **provider 选项与默认档一律来自 `GET /api/providers`，前端不得枚举闭集**：响应是扁平数组，默认档是数组里 `isDefault` 为 true 的那一项（**没有顶层 default 字段**）。第三方 provider 经 04 §8 注册后自动出现在该端点、进而自动出现在 UI，**前端零改动**。`capabilities` 7 位全量下发（S6 新增 `headlessTask`），用于创建准入及能力解释；能力位还需要相应端点与完整业务流程才能成为动作入口，当前 UI 不提供暂停或快照按钮。前端消费形态（query key / staleTime / 加载失败空三态）见前端 15 §2.1–§2.2 与 F21-2 §4.1。
 5. **异步失败的错误码走 DTO + WS 两条出口，不是二选一**（S5 前端反馈）：`POST /api/sandboxes` 返回 202，此后的任何失败都**没有同步响应可承载错误码**（02 §6.1 / 04 §4）。因此 ① WS `sandbox.status_changed` 在 `status:'failed'` 时带 `errorCode`（即时呈现），② `SandboxDto.failureCode` / `failureMessage` 持久回显（刷新后恢复——WS 事件错过即丢）。**`runtime.install_progress` 不是兜底**：它只覆盖装 CLI 那一段，`IMAGE_CONTRACT_VIOLATION` 完全不经过它。两处给的都是**码**（04 §4 闭集，兜底 `INTERNAL`），人话由前端按 P22 §1 查表出；`failureMessage` 只是排障细节，不是 UI 文案。
 6. **`initialPrompt` 后端落库、但不回显**（S5 裁决 D-14，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-1）：它落 `sandboxes.initial_prompt`（13 §2.1.1，跨 T1 → provision 边界必须有存储），但**不进 `SandboxDto`**（10 §7.3 已写明理由——主要是 MCP 面的暴露）。**前端需要的默认任务名由后端算好放在 `SandboxDto.name` 里**（P21-1 §9 规则），前端刷新后不必自己重算，也不需要留着 prompt。前端"任务指令不落 persist"的红线（15 §3.5）不受影响。
 7. **「启动时即执行」已由后端保证，不再依赖前端点开终端**（裁决 D-15，03 §4.3 ⑤）：agent 会话在 `starting` 段就起好并开始跑；前端打开终端时**看到的是已在执行中的会话**（可能已经刷了一屏输出）。**MCP `create_sandbox` 同理**——它没有终端，但指令照样执行。相应地，`starting` 状态的停留时间可能很长（装 CLI 实测可达 12.5 分钟），前端应消费 `runtime.install_progress`（§10.8）给出子文案，而不是把长时间的 `starting` 当成卡死。
@@ -129,6 +129,7 @@
 | `convertToEmpty` | `POST /api/projects/:id/convert-to-empty` | — | 仅 `failed` 态；放弃克隆转空项目：`sourceType='empty'` + 丢弃 `repoUrl` + 删半成品基线目录 + `cloneStatus='ready'`；**id / 名称 / 已关联 Task 全部保留** | `ProjectDto` | `convert-to-empty` command | I-PRJ-6/**7** | `INVALID_STATE`(409) | — |
 | `cancelClone` | `POST /api/projects/:id/cancel-clone` | — | **只取消克隆、不删项目**：中止在跑的 clone（排队中的直接出队）；项目 id / 名称 / 已关联 Task 全部保留，之后仍可 `retryClone` 或 `convertToEmpty`。**非 cloning 态是 no-op**（回当前 `ProjectDto`，不报 409） | `ProjectDto`（`cloneStatus:'failed'`、`errorCode:'INTERRUPTED'`） | `cancel-clone` command | I-PRJ-6 | — | `project.clone_progress`（`phase:'failed'`） |
 | `deleteProject` | `DELETE /api/projects/:id` | — | **cloning 态调用 = 先取消克隆再删**（要"取消但保留项目"用上一行的 `cancelClone`） | 204 | `delete-project` command | — | `INVALID_STATE`(409) | 其下 Task 的 `sandbox.removed` |
+| `deletionPreview` | `GET /api/projects/:id/deletion-preview` | — | 只读 | 任务/规则/成果/基线摘要 | query | 删除时重检 | `NOT_FOUND` | — |
 | `listRetainedVolumes` | `GET /api/retained-volumes?projectId=` | — | **不含已清理的**（`deletedAt` 非空即只读，对外等于不存在）；不带 `projectId` = 全部项目 | `RetainedVolumeDto[]` | `list-retained-volumes` query | I-RV-2 | — | — |
 | （手动清理保留卷） | `DELETE /api/retained-volumes/:id` | — | **先删目录、再置 `deletedAt`**（反过来崩溃就留下一个 reaper 再也扫不到的目录）；记录留档供审计 | 204 | — | I-RV-2 | `NOT_FOUND` | — |
 | `downloadRetainedVolume` | `GET /api/retained-volumes/:id/archive` | — | **不进 MCP**（二进制流不适合 tool 返回，与 `downloadTaskArtifact` 同理） | **tar 流** + 精确 `Content-Length`（口径见 10 §6 那张表：git 口径挑内容、不压缩换进度、`.git` 保留） | — | I-RV-2（`deletedAt` 非空即只读，不可下载） | `NOT_FOUND` | — |
@@ -151,11 +152,13 @@
 | `listRuntimes` | `GET /api/runtimes` | — | | `[{ id, displayName, vendor, authMethods, credentialStatus:'none'\|'active'\|'expiring'\|'expired', maskedIdentifier?, expiresAt?, activeAuthMethod? }]` | `list-runtimes` query | — | — | — |
 | `getCredentialStatus` | `GET /api/runtimes/:rt/credentials/status` | — | 单 runtime 按需刷新 | 同上单项 | `get-credential-status` query | I-CRD-2（永不回明文） | `NOT_FOUND` | — |
 | `beginAuth` | `POST /api/runtimes/:rt/auth/begin` | — | `{ method }` | `AuthChallenge{ kind, verificationUrl?, userCode?, expiresAt, challengeRef, instructions }` | `begin-auth` command | testkit RA-03/RA-05 | `UNSUPPORTED_METHOD`(400)、`PROVIDER_UNAVAILABLE`(503，helper 不可用) | — |
-| `pollAuthStatus` | `GET /api/runtimes/:rt/auth/status?challengeRef=` | — | 前端 3–5s 轮询 | `{ status:'pending'\|'success'\|'expired'\|'error', maskedIdentifier? }` | `poll-auth-status` query | — | `AUTH_CHALLENGE_EXPIRED`(410)、`AUTH_REJECTED`(401) | `runtime-auth.status_changed`（成功时） |
+| `pollAuthStatus` | `GET /api/runtimes/:rt/auth/status?challengeRef=` | — | 前端轮询，连续失败3次显式重试，同challenge恢复 | `{ status:'pending'\|'success'\|'expired'\|'error', maskedIdentifier? }` | `poll-auth-status` query | — | `NOT_FOUND`(404)；到期读 expired | `runtime-auth.status_changed`（成功时） |
+| `cancelAuth` | `DELETE /api/runtimes/:rt/auth/sessions/:challengeRef` | — | 幂等 | 204 | command | helper 清理、迟到授权不入库 | — | — |
 | `completeAuth` | `POST /api/runtimes/:rt/auth/complete` | — | `{ challengeRef, pastedText }` | `{ maskedIdentifier }` | `complete-auth` command | I-CRD-1/2 | `AUTH_REJECTED`(401)、`AUTH_CHALLENGE_EXPIRED`(410) | `runtime-auth.status_changed` |
 | `submitSecret` | `POST /api/runtimes/:rt/credentials/secret` | — | `{ method:'api-key', secret }`；**不经 helper、不起 pty** | `{ maskedIdentifier }` | `submit-secret` command | I-CRD-1/5 | `AUTH_REJECTED`(401) | `runtime-auth.status_changed` |
 | `setAuthMode` | `PUT /api/runtimes/:rt/auth-mode` | — | `{ method:'account'\|'api-key' }` | `RuntimeSettingsDto` | `set-auth-mode` command | **I-RTS-2（目标模式无凭证 → 409）** | 409 | `runtime-auth.status_changed` |
 | `revokeCredential` | `DELETE /api/runtimes/:rt/credentials/:credentialId` | — | | 204 | `revoke-credential` command | I-CRD-3/4 | `NOT_FOUND` | `runtime-auth.status_changed` |
+| `deletionPreview` | `GET /api/runtimes/:rt/credentials/:credentialId/deletion-preview` | — | 指定本人凭证 | 真实绑定任务与准备中任务（页面另行注明来源） | query | 按 credentialId + LIVE 口径 | `NOT_FOUND` | — |
 
 **前端要知道的四件事**：
 
@@ -221,14 +224,15 @@
 
 | 能力 | REST | MCP | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|---|
-| `listImages` | `GET /api/images` | — | 向导下拉带 `?runtimeId=` 拿**可选集**（`isActive ∧ 非 invalid`）；管理页不带该参数、**含历史版本**。⚠️ **`runtimeId` 自 2026-08 起只是「要不要只看可选集」的开关，不再按 runtime 筛**（04 §7 ★血统 ⑤）：镜像不会因为「没预装某个 runtime」而从下拉里消失——血统保证了它装得上，而藏起来会让那张 ⚠️ 卡永远选不到（前端按 `imageId` 聚合成卡，只把当前活行显示在卡面，其余收进历史，P21-4 §3） | `ImageManifestDto[]`——**每项必须带 `digest` / `resolvedAt` / `imageId` / `imageName` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`**。⚠️ 缺 `digest` + `resolvedAt` 则卡片退回「最后验证 N 小时前」那种没有下文的时效暗示，`🔄 上游有新版本`、对比弹层、`以 digest 注册` 三档全部渲染不出来（P21-4 §3/§5） | `list-images` / `list-selectable-images` | I-IMG-3（禁用的不出现在可选列表） | — | — |
-| `registerImage` | `POST /api/images` | — | `{ ref }`。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `ImageManifestDto` + `ValidationOutcome` | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
+| `listImages` | `GET /api/images` | — | `?runtimeId=&provider=`。`runtimeId` 单独出现取**可选集**（`isActive ∧ 非 invalid`），仅作开关、不按 runtime 筛；都不传取历史版本。传 `provider` 时优先取完整历史（含禁用与 invalid），供任务镜像选择器解释不可选原因（10 §6.4） | `ImageManifestDto[]`——含 `digest` / `resolvedAt` / `imageId` / `imageName` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`；provider 查询另附可选 `providerCompatibility` / `isProviderDefault`，精确类型见 10 §7.3 | `ImageApplicationService.listImages(runtimeId?, provider?)` | I-IMG-3（禁用的不出现在可选集；历史查询保留禁用行）；创建时仍判 I-IMG-2/3 | — | — |
+| `registerImage` | `POST /api/images` | — | `{ ref, copyConfigFromId? }`。可从同镜像、同 tag 的 manifest 继承运行参数（秘密由服务端复制）；幂等命中已有 digest 仅补空配置、不覆盖已有配置。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `{ manifest: ImageManifestDto, validation: ValidationOutcome, created: boolean }` | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `NOT_FOUND`（继承来源不存在）、`REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，继承来源跨镜像/跨 tag，或**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
 | `validateImage`（**预检**） | `POST /api/images/validate` | — | `{ ref }`；**不落库、不产生 manifest** | `ValidationOutcome{ status:'valid'\|'warning'\|'invalid', errors[], warnings[] }` | `validate-image` command | — | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502) | — |
 | `revalidateImage` | `POST /api/images/:id/validate` | — | 已注册镜像重验证；**digest 没变才写回 `validationStatus`**，变了只报告不写回（新 digest 描述的是另一份 bits，替本行盖章会悄悄让一个好版本退役） | `ValidationOutcome` **+ `currentDigest` / `upstreamDigest` / `digestChanged`**（`RevalidateOutcomeSchema`；本格原写「同上」，实现比它宽） | `validate-image` command | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502) | — |
 | `patchImage` | `PATCH /api/images/:id` | — | `{ isActive?, imageConfig? }`——**改 manifest 可变字段的唯一入口**。⚠️ **`isActive` 只收 `false`**（禁用是单行操作）；`true` → **400**，`message` 指向 `POST /api/images/:id/activate`——启用必然要停掉同 tag 的现任，是「换」不是「加」（10 §6 ★）。⚠️ **这两个字段恰好就是 I-IMG-7 允许改的全部**（23 §9.2）：`digest` / `version` / `baseImage` 一旦落库永不 UPDATE，升级镜像是 INSERT 新行 + 旧行下线（13 §2.4.2 ★）。**所以这个入参形状不是省事，是不变量的落点**——往里加一个 `digest?` 就等于把 I-IMG-7 拆了 | `ImageManifestDto` | `patch-image` command | I-IMG-1（EnvVarSet 构造即校验）、I-IMG-4/5 | **顶层 `VALIDATION_FAILED` / 400**，四个 `ENV_*` 码在 `details[].code`（`ENV_NAME_INVALID` / `ENV_NAME_RESERVED` / `ENV_LIMIT_EXCEEDED` / `ENV_DUPLICATE_KEY`）+ 逐项 `path`。⚠️ 顶层码此前四份文档都没写过，而前端文案表是按顶层码查的——定案与理由见 10 §6.8 | — |
 | `activateImage` | `POST /api/images/:id/activate` | — | 把这一行设为该 tag 的**当前版本**。**同时承担 [更新到新版本] 与 [回滚到旧版本]**——实现上是同一件事（换当前指针），只是方向不同 | `ImageManifestDto` | `activate-image` command | I-IMG-7（不改行，只换 `isActive`）；`unique(image_id, version) WHERE is_active` 由同一事务保证 | `NOT_FOUND`；**`INVALID_STATE`(409)** —— `validationStatus='invalid'` 的版本不许激活（I-IMG-2） | — |
 | `checkImageUpdate` | `POST /api/images/:id/check-update` | — | 重解该行的 `version`(tag) → 比对 digest，**不落库、不产生 manifest** | `{ current:{digest,resolvedAt}, upstream:{digest,validation}\|null, changed:boolean }` | `check-image-update` query | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502)；**`INVALID_STATE`(409)** —— ref 是 digest 形态时无 tag 可解，天然不漂移（P21-4 §5 ★） | — |
 | `deleteImage` | `DELETE /api/images/:id` | — | 硬删除 | 204 | `delete-image` command | I-IMG-4（预置镜像不可删） | `409`（有 sandbox 引用或预置镜像） | — |
+| `deletionPreview` | `GET /api/images/:id/deletion-preview` | — | 只读 | 版本、任务引用、canDelete | query | stopped/failed 仍属引用 | `NOT_FOUND` | — |
 
 **digest 在这两个端点上冻结，别处不再解析**（04 §7「`resolve` 到底在哪一步被调用」的定案，本节只引不重述）：
 
@@ -267,7 +271,7 @@
 
 > 领域模型 23 §11 · 时序 24 §4 · 调度器 03 §8。**不进 MCP**（管理员配置动作）。
 >
-> **✅ 11 个端点整块落地（F21-7，2026-08-31）**，`⏳` 全摘。落点：`@platform/automation`
+> **✅ 原 11 个端点已落地（F21-7，2026-08-31）；2026-10 新增跨项目关注查询，现为 12 个 operation / 9 条 path**，`⏳` 全摘。落点：`@platform/automation`
 > （四层齐全）+ 两张表（migration `0018`）+ `AutomationScheduler`。
 >
 > **实现侧三条与本表原文的偏差，如实记在这里：**
@@ -286,8 +290,10 @@
 | 能力 | REST | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|
 | `listAutomations` | `GET /api/projects/:id/automations` | | `AutomationDto[]` | `list-automations` query | — | — | — |
+| `listAttention` | `GET /api/automations/attention` | 无参数；跨项目只读，不依赖当前项目选择 | `AutomationAttentionItemDto[]`（全部字段必有：项目 id/名称、规则 id/名称、`autoDisabled` 或 `degraded`、连续失败计数）；自动禁用优先，再按项目 id/规则 id 稳定排序；正常与未达到门槛的手动禁用规则不返回；精确契约见 10 §6.5 / §7.3 | `AutomationApplicationService.listAttention()`（读取规则与项目名） | 只读，不触发调度或更改规则状态 | — | —（全局横幅在挂载、切页、回到前台与手动刷新时拉取；读取失败不显示该提示） |
 | `createAutomation` | `POST /api/projects/:id/automations` | `{ name, runtimeId, prompt, schedule, **timezone**, timeoutMinutes, webhookUrl?, triggerOn?, artifactRetentionDays? }`——**`timezone` 由前端传当前浏览器时区，创建后快照不变** | `AutomationDto` | `create-automation` command | I-AUT-5、I-AUT-6、**I-AUT-7（每项目 ≤20）**、**I-AUT-9（IANA 非空、不可隐式改写）** | `INVALID_ARGUMENT`(400)、`409`（超上限） | — |
 | `getAutomation` / `updateAutomation` / `deleteAutomation` | `GET / PUT / DELETE /api/automations/:id` | | `AutomationDto` / 204 | 同名 command | 同上 | `NOT_FOUND` | — |
+| `deletionPreview` | `GET /api/automations/:id/deletion-preview` | — | 只读 | 该规则实际活跃任务 | query | 不终止当前任务 | `NOT_FOUND` | — |
 | `enableAutomation` / `disableAutomation` | `POST /api/automations/:id/enable` · `/disable` | 动作而非字段更新（判据见 02 §5.1） | `AutomationDto` | 同名 command | **I-AUT-4（启用必须清零 `consecutiveFailures` 与 `degraded`）** | `NOT_FOUND` | — |
 | `listRuns` | `GET /api/automations/:id/runs`（分页） | | `AutomationRunDto[]` | `list-runs` query | — | — | — |
 | `getRun` | `GET /api/automations/runs/:runId` | | `AutomationRunDto` + `outputSummary`（末尾 1KB） | `get-run` query | — | `NOT_FOUND` | — |
@@ -319,6 +325,7 @@
 | `listAudit` | `GET /api/system/audit` | — | 游标增量（`seq`），可按 category / severity / subjectId 筛 | — | **观察设施非账本**（13 §2.8.2）：写入永不阻断业务，故产品文案不得声称"完整无遗漏"；`subjectId` 支撑沙箱详情时间线 |
 | `exportAudit` | `GET /api/system/audit/export` | — | `tar.gz`：**四份** —— `audit.jsonl` + `runtime.log` + `diagnose.json` + **`export-range.json`**（范围说明单独成份，理由见 P21-5 §10.3；10 §6.6 同） | — | 前**三份**（内容那三份）都在**写入口**已脱敏（05 §4）；第四份 `export-range.json` 是范围元数据，本身不含用户内容。截断时必须在包内注明范围，否则读者会以为日志只有这些 |
 | `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 | — | 统一名（P1-6）。**✅ 2026-08-28 落地**；⏳ 「最近 testkit 结果」**没有产出方**（testkit 跑在 CI 里，运行期一份结果都没有 —— 编一个恒 null 的字段只会多一格永远空着的卡）。⚠️ `healthy` 不是「刚探测过它活着」：`SandboxProvider` 契约里没有健康探测方法，这里用的是 `sandboxes` 表里最近 1h 的成败；`sampleSize: 0` 是「这一小时没人用过它」而不是「正常」。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页。**✅ `imageSpec` 那一档的注册表已经有了**（本句此前写的是「裸 Symbol、连注册表都不存在」，现在是反的）：`IMAGE_SPEC_REGISTRY` 有接口、有实现、有 DI 绑定、有第三方注入点（04 §8），`list()` 就是本端点要列的那一档。「provider / runtime / 镜像三层可注册」（19 §1 原则 5）**三层都是活的**；本端点也随本轮落地了 |
+| `getProviderLogs` | `GET /api/system/providers/:id/logs` | 懒读取 | `{ lines, unavailableReason? }` | — | runtime.log 真实20行、写入脱敏、不可读取明说原因 |
 | `unlock`（访问口令提交） | `POST /api/access/unlock` | `{ passcode }` | `{ unlocked: true }` + `Set-Cookie: ap_session`（签名 `HttpOnly`，7 天） | `PASSCODE_INVALID`(401)、`PASSCODE_LOCKED`(429，含 `retryAfterSec`) | **MVP**（审计 P0-3）。**不进 MCP**（§1.2 判据②：凭证提交面）。未启用口令时直接回 `{ unlocked:true }`；连续 5 次错锁 5 分钟，**与 Guard 共用同一把锁**（11 §3.1）。⚠️ **四条路径全部进审计流**（`category: 'system'`，13 §2.8.2 / 11 §3.1）：这是纯安全事件，此前只有一行运行日志。⛔ 口令本身与任何投影（长度/前缀/hash）不进 `summary`/`detail` |
 | `health` | `GET /api/health` | | `{ ok: true }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |
@@ -364,7 +371,7 @@ Step2 确认：
 | **setup-token**（Claude Code） | `POST .../auth/begin { method:'setup-token' }` → 展示 `verificationUrl` → 用户贴回 code → `POST .../auth/complete { challengeRef, pastedText }` |
 | **api-key**（通用） | `POST /api/runtimes/:rt/credentials/secret { method:'api-key', secret }` —— **一步完成，无轮询** |
 | 模式切换 | `PUT /api/runtimes/:rt/auth-mode` → **409 时就地展开目标模式的配置面板**（不是报错） |
-| 吊销 | 先用已有的 `GET /api/sandboxes` 本地按 runtime 过滤出受影响运行中 Task（最多列 10 条）→ `DELETE /api/runtimes/:rt/credentials/:id` |
+| 吊销 | 先读 `GET /api/runtimes/:rt/credentials/:id/deletion-preview` 的真实绑定任务（最多显示10条；未读取成功明说并可重试）→ `DELETE /api/runtimes/:rt/credentials/:id` |
 | Git 凭证 | `GET /api/credentials?kind=git` → 卡片；`POST /api/credentials/git` 保存；`POST /api/credentials/git/test` 测试连接（15s） |
 
 **要点**：三个分支都**不需要任何 sandbox**；轮询遇连续 3 次网络错误转「网络异常 [重试]」且**不消耗设备码倒计时**（P22 §2）。

@@ -1,0 +1,212 @@
+[
+  {
+    "frame": "f-prj-retained-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "retained-sorted-expiry-and-source",
+        "screenshot": "f-prj-retained-01-dark-1440-retained-sorted-expiry-and-source.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/images",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "retained-delete-same-dialog-confirmation",
+        "screenshot": "f-prj-retained-02-dark-1440-retained-delete-same-dialog-confirmation.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      },
+      {
+        "state": "retained-confirm-cancel-restores-row-focus",
+        "screenshot": "f-prj-retained-02-dark-1440-retained-confirm-cancel-restores-row-focus.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "retained-empty-project",
+        "screenshot": "f-prj-retained-03-dark-1440-retained-empty-project.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "retained-load-failed",
+        "screenshot": "f-prj-retained-04-dark-1440-retained-load-failed.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/retained-volumes",
+        "/api/retained-volumes",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-retained-05",
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "states": [
+      {
+        "state": "retained-all-projects-groups",
+        "screenshot": "f-prj-retained-05-dark-1440-retained-all-projects-groups.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/retained-volumes"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  }
+]

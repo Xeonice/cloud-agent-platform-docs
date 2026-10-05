@@ -1,0 +1,5 @@
+
+> agent-platform-web@0.1.0 check:stories /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+> tsx scripts/check-story-coverage.ts
+
+✅ story 覆盖检查通过：93 个 view 均有配套 story。

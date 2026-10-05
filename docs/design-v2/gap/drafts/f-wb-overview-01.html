@@ -1,0 +1,201 @@
+<!doctype html>
+<!--
+  id: f-wb-overview-01
+  页面: 21-1 工作台（/）· 项目总览（P2 修订：工具条）
+  状态: 项目总览，按状态筛选 = 等待输入（与左侧树是同一份筛选）：工具行筛选按钮旁一个可移除 chip「等待输入」，「卡片 / 列表」分段去掉；需要你处理只剩 2 条等待输入（异常那条筛掉）；项目卡只剩 acme-web，卡上计数只写「2 等待你输入」，分区标题行右侧一句「按筛选显示 1 个 / 共 5 个」；最近任务筛空一句「等待输入的任务都列在「需要你处理」里」；侧栏树同步只剩 acme-web 的两条（组计数 2）+ 分区下 chip「等待输入」
+  对应 v1 稿件: 无（新设计；P2 修订）。筛选口径取自 g1-03（六档、过滤后整组不剩任务的组头不渲染）、g1-04（筛空句「没有<档名>的任务」）；外壳与主区照 pilot P2
+  体现的 v2 要点:
+    - 一份筛选两处显示：总览工具行的筛选按钮打开的就是树的同一个菜单（全部 / 准备中 / 运行中 / 等待输入 / 已停止 / 异常），改哪边两边一起变；已选筛选在两处各有一个可移除 chip（.chip--removable，「移除筛选：等待输入」）
+    - 筛的是任务：两张列表只留该状态的任务；项目卡只留有该状态任务的项目、卡上计数随筛选；本机资源卡不受筛选影响
+    - 筛空一句：卡内空态 .empty--card（14/500 一句），不留空表格（P21 L118）；「最近任务」与「需要你处理」不重复列同一个任务（P2 第 9 条），所以这一档的最近任务为空时说清去哪看
+    - 同屏实心主按钮只有「新建」1 个；字阶 14 为主
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要你确认）:
+    1. 总览「按状态筛选」从「原型：未接入」变成可用，并与树共用同一份筛选（Q-DS-30 默认 A）；筛选结果作用到两张列表与项目卡。新范围，需看稿。
+    2. 已选筛选的 chip 放在工具行筛选按钮右边（树那边仍在「项目」分区标题下）。需看稿。
+    3. 去掉「卡片 / 列表」分段控件（Q-DS-30 A；列表视图不做，plan「不做」）。需看稿。
+    4. 新增可见文字：项目分区「按筛选显示 1 个 / 共 5 个」、最近任务筛空句「等待输入的任务都列在「需要你处理」里」（其它档写「没有<档名>的任务」，同 g1-04）。需看稿。
+    5. 外壳通用改动（画框铺满视口、方案 A 外壳、实例菜单、查找 ⌘K、一级导航、等待汇总条 → 导航徽标、筛选 chip 串 → 图标按钮、侧栏底部两个整宽按钮退役、字体字阶颜色图标）与 pilot P1 头注释第 1–3、5–10、15–18 条相同，不重复列；实例菜单 aria-label 按 Q-DS-34 默认 A 写「系统状态、外观、快捷键」（去掉「文档」）。需看稿（看 P1）。
+  示例数据来源: 交互原型示例世界（pilot/proto/proto.js:40-70 PROJECTS / tasks；P1 / P2 同一份）；筛选 = 等待输入（补 e2e 用例、重构支付回调）
+  流程: F-WB-OVERVIEW（REQ-WB-050–051）
+  口径依据: Q-DS-30 按默认 A；Q-DS-28 A（总览；选 B 时本稿作废）；P21-1 L94（六档口径）、L142（过滤作用于任务）；v1 g1-03 / g1-04；原型 index.html:548（筛选按钮 nohook）、:551（分段 nohook）、proto.js:396-402（树 chip）、:426-433（过滤后整组不渲染）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-wb-overview-01" data-lint-ratio14-floor="60" data-lint-ratio14-reason="筛选后两张列表与项目卡只剩 3 行 / 1 张，14px 的行文字变少，12px 元信息（树副行、chip、计数徽标、列表状态词与时间，简报 §4.7、§4.8 指定的 12px 角色）占比上升；非元信息文字 14px 见 lint 报告 pct14NonMeta；同一页不筛选时（P2）≥ 70%">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-wb-overview-01 总览 · 已筛「等待输入」（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l6a-wb.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span><span class="badge badge--20 badge--info" aria-hidden="true">2 等待你输入</span><span class="u-sr-only" role="status">2 个任务等待你输入</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__sep" role="separator"></div>
+
+      <section class="sidebar__section" aria-labelledby="sb-projects">
+        <div class="sidebar__section-head">
+          <h2 class="sidebar__section-title" id="sb-projects">项目</h2>
+          <div class="sidebar__section-tools">
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="按状态筛选任务" title="按状态筛选任务：等待输入"><span class="icon icon--14 i-list-filter" aria-hidden="true"></span></button>
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-haspopup="dialog" aria-label="新建项目" title="新建项目"><span class="icon icon--14 i-folder-plus" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <div class="sidebar__section-chips"><span class="chip chip--removable">等待输入<button class="chip__remove" type="button" aria-label="移除筛选：等待输入" title="移除筛选"><span class="icon i-x" aria-hidden="true"></span></button></span></div>
+        <div class="sidebar__scroll">
+          <nav class="tree" aria-label="项目分组任务树">
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="收起 acme-web" aria-expanded="true" title="收起 acme-web"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button" aria-expanded="true" aria-label="acme-web，2 个等待输入的任务"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">acme-web</span><span class="tree-project__count">2</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="acme-web 的项目菜单" title="acme-web 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+              <ul class="tree-group__tasks">
+                <li class="tree-task"><button class="tree-task__main" type="button"><span class="status-dot status-dot--waiting" role="img" aria-label="等待你输入"></span><span class="tree-task__name">补 e2e 用例</span></button><button class="btn btn--tertiary btn--24 btn--icon tree-task__more" type="button" aria-label="补 e2e 用例 的任务菜单" title="补 e2e 用例 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button><p class="tree-task__sub">活跃于 刚刚 · <span class="tone-waiting">等待你输入</span></p></li>
+                <li class="tree-task"><button class="tree-task__main" type="button"><span class="status-dot status-dot--waiting" role="img" aria-label="等待你输入"></span><span class="tree-task__name">重构支付回调</span></button><button class="btn btn--tertiary btn--24 btn--icon tree-task__more" type="button" aria-label="重构支付回调 的任务菜单" title="重构支付回调 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button><p class="tree-task__sub">活跃于 4 分钟前 · <span class="tone-waiting">等待你输入</span></p></li>
+              </ul>
+            </section>
+          </nav>
+        </div>
+      </section>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="dialog" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="u-sr-only">工作台：项目总览（全部项目）</h1>
+        <div class="header__lead">
+          <nav class="u-min-w-0" aria-label="当前位置">
+            <ol class="crumbs">
+              <li class="crumbs__item"><button class="crumb" type="button" aria-current="page" aria-haspopup="menu" aria-expanded="false" aria-label="切换项目（当前 全部项目）" title="切换项目：全部项目，或进入其中一个项目"><span class="crumb__label">全部项目</span><span class="icon crumb__switch i-chevrons-up-down" aria-hidden="true"></span></button></li>
+            </ol>
+          </nav>
+        </div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner">
+            <div class="page-toolbar">
+              <label class="input-group"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" placeholder="搜索项目与任务…" aria-label="搜索项目与任务" aria-keyshortcuts="/"><span class="kbd" aria-hidden="true">/</span></label>
+              <button class="btn btn--secondary btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="按状态筛选" title="按状态筛选：等待输入"><span class="icon i-list-filter" aria-hidden="true"></span></button>
+              <span class="chip chip--removable">等待输入<button class="chip__remove" type="button" aria-label="移除筛选：等待输入" title="移除筛选"><span class="icon i-x" aria-hidden="true"></span></button></span>
+              <button class="btn btn--primary" type="button" aria-haspopup="menu" aria-expanded="false" title="新任务…、新建项目…">新建<span class="icon btn__trail i-chevron-down" aria-hidden="true"></span></button>
+            </div>
+
+            <div class="ov">
+              <!-- 左列：本机资源 ↔ Usage、需要你处理 ↔ Alerts -->
+              <div class="sections">
+                <section class="section" aria-labelledby="ov-res">
+                  <div class="section-head">
+                    <h2 class="section-head__title" id="ov-res">本机资源</h2>
+                    <a class="section-head__link" href="#">系统状态<span class="icon i-chevron-right" aria-hidden="true"></span></a>
+                  </div>
+                  <div class="card card--usage">
+                    <div class="card__body">
+                      <div class="card__head">
+                        <p class="kpi"><span>还能再发</span><span class="kpi__value">3</span><span>个任务</span></p>
+                        <span class="contract-note" title="待契约（DR-08）：这个数要由后端按准入规则给（capacity.remainingTasks），前端不自己算；契约定下来之前，这张卡先不上线（Q-DS-28 推荐）">待契约 · DR-08</span>
+                      </div>
+                      <p class="card__desc card__desc--zh">按配额登记计算，含已停止的任务。<br>下面的实时占用率只作参考。</p>
+                      <ul class="usage">
+                        <li class="usage__item">
+                          <div class="usage__row"><span class="usage__name">CPU</span><span class="usage__value">3.1 / 10 核（31%）</span></div>
+                          <span class="meter" role="progressbar" aria-label="CPU 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="31"><span class="meter__bar" style="width: 31%"></span></span>
+                        </li>
+                        <li class="usage__item">
+                          <div class="usage__row"><span class="usage__name">内存</span><span class="usage__value">11.5 / 32 GB（35.9%）</span></div>
+                          <span class="meter" role="progressbar" aria-label="内存 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36"><span class="meter__bar" style="width: 35.9%"></span></span>
+                        </li>
+                        <li class="usage__item" title="数据目录 /srv/agent-platform/data">
+                          <div class="usage__row"><span class="usage__name">磁盘</span><span class="usage__value">210 / 500 GB（42%）</span></div>
+                          <span class="meter" role="progressbar" aria-label="磁盘 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42"><span class="meter__bar" style="width: 42%"></span></span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="section" aria-labelledby="ov-todo">
+                  <div class="section-head section-head--inline">
+                    <h2 class="section-head__title" id="ov-todo">需要你处理</h2>
+                    <span class="badge badge--20 badge--neutral" aria-hidden="true">2</span><span class="u-sr-only">2 项</span>
+                  </div>
+                  <div class="card">
+                    <ul class="list list--two-line">
+                      <li class="list__row list__row--link">
+                        <span class="list__lead"><span class="status-dot status-dot--waiting" aria-hidden="true"></span></span>
+                        <div class="list__main"><a class="list__title" href="#">补 e2e 用例</a><div class="list__meta"><span class="list__status tone-waiting">等待你输入</span><span class="chip"><span class="icon i-folder" aria-hidden="true"></span>acme-web</span></div></div>
+                        <div class="list__end"><span class="list__time">活跃于 刚刚</span><button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="补 e2e 用例 的任务菜单" title="补 e2e 用例 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button></div>
+                      </li>
+                      <li class="list__row list__row--link">
+                        <span class="list__lead"><span class="status-dot status-dot--waiting" aria-hidden="true"></span></span>
+                        <div class="list__main"><a class="list__title" href="#">重构支付回调</a><div class="list__meta"><span class="list__status tone-waiting">等待你输入</span><span class="chip"><span class="icon i-folder" aria-hidden="true"></span>acme-web</span></div></div>
+                        <div class="list__end"><span class="list__time">活跃于 4 分钟前</span><button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="重构支付回调 的任务菜单" title="重构支付回调 的任务菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button></div>
+                      </li>
+                    </ul>
+                  </div>
+                </section>
+              </div>
+
+              <!-- 右列：项目卡网格 ↔ Projects；最近任务 ↔ Recent Previews -->
+              <div class="sections">
+                <section class="section" aria-label="项目卡片">
+                  <div class="section-head">
+                    <h2 class="section-head__title">项目</h2>
+                    <p class="section-head__meta">按筛选显示 1 个 / 共 5 个</p>
+                  </div>
+                  <div class="card-grid">
+                    <article class="card card--interactive card--entity" aria-labelledby="pc-web">
+                      <div class="card__body">
+                        <div class="entity__head">
+                          <span class="avatar" aria-hidden="true">AW</span>
+                          <div class="entity__id"><h3 class="entity__name" id="pc-web"><a href="#">acme-web</a></h3><span class="entity__sub" title="https://github.com/acme/web.git">github.com/acme/web</span></div>
+                          <div class="entity__end"><button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="acme-web 的项目菜单" title="acme-web 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button></div>
+                        </div>
+                        <p class="entity__line entity__line--lead entity__stats"><span class="entity__stat"><span class="status-dot status-dot--waiting" aria-hidden="true"></span>2 等待你输入</span></p>
+                        <p class="entity__line" title="分支 main · 代码体积 45 MB · 最后拉取 2026/10/2 09:12:01"><span class="icon i-git-branch" aria-hidden="true"></span><span class="entity__text">main · 45 MB · 最后拉取 今天 09:12</span></p>
+                      </div>
+                    </article>
+                  </div>
+                </section>
+
+                <section class="section" aria-labelledby="ov-recent">
+                  <div class="section-head">
+                    <h2 class="section-head__title" id="ov-recent">最近任务</h2>
+                  </div>
+                  <div class="card"><div class="empty empty--card" role="status"><p class="empty__title">等待输入的任务都列在「需要你处理」里</p></div></div>
+                </section>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

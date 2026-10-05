@@ -1,0 +1,893 @@
+{
+  "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style",
+  "capturedAt": "2026-10-05",
+  "files": [
+    {
+      "path": "gap/product/LCH.md",
+      "sourceSha256": "beee1cd9f1f8e45b38997c6b68d8f9a95e1caa39a937aa8a0804d343a3c5995c",
+      "repositorySha256": "f9e194c8691c2a7555f464ef9c36210cd2704da72a654e0b792f468250257bea",
+      "normalizations": [
+        {
+          "from": "F21-2 §9.0",
+          "to": "F21-2 N.0",
+          "reason": "原引用9.0在当前旧前端文档实际为N.0（项目归属）"
+        }
+      ]
+    },
+    {
+      "path": "gap/product/IMG.md",
+      "sourceSha256": "2155087429bd444f3cbc236a7002454c297e020411c2aea29c87d1dbf16f8b00",
+      "repositorySha256": "a07543043f2984983fbf773e2ce85acb76fdd9b46bda2d5098370af772ae3d3e",
+      "normalizations": [
+        {
+          "from": "P21-4 §0",
+          "to": "原P21-4第0节",
+          "reason": "历史引用指向已退休的页面未实现状态，保留历史语义而不误指当前规格"
+        }
+      ]
+    },
+    {
+      "path": "gap/product/AUT.md",
+      "sourceSha256": "e679dce7c2f0e0bd6207feffee093830c4d79d9ab75ec2d3e6009c1bc8c8be28"
+    },
+    {
+      "path": "gap/product/CRD.md",
+      "sourceSha256": "0916346c7d9c923733b646c6d55ec5a3ae09f729f0f9c05a0f3cbba563106e8a"
+    },
+    {
+      "path": "gap/product/PRJ.md",
+      "sourceSha256": "994c39232751dac64196f2d56d141be5335776f024a0e2ad4ca3af6429e5eeea",
+      "repositorySha256": "5592baff39589a3c4d80b7f64e82a65cdcb3189261cd60d1abea49a456c25ed4",
+      "normalizations": [
+        {
+          "from": "F21-3 §10.2",
+          "to": "原稿 F21-3 第10.2节",
+          "reason": "历史版本节号，现旧文档已无该节；保留出处语义，不伪造当前锚点"
+        }
+      ]
+    },
+    {
+      "path": "gap/product/impl-gaps.md",
+      "sourceSha256": "cc63f208ab8484afe2ab16965174585ce0734052e38eaa9c85131f18bf3310e9",
+      "repositorySha256": "5aa014ef997491d1194360688db051d7dfed2258526a676e63cda48e15eee738",
+      "normalizations": [
+        {
+          "from": "02 §14",
+          "to": "原测试计划第14节",
+          "reason": "02指治理测试计划而不是backend/02，避免代号歧义"
+        }
+      ]
+    },
+    {
+      "path": "gap/product/SYS.md",
+      "sourceSha256": "8075f9b3d60659f72467298873f524bbed8e459d38e326d9b0c990dd24e1d502"
+    },
+    {
+      "path": "gap/product/ACC.md",
+      "sourceSha256": "9fe6987198397fa6578bae9644a346a1c4378a703f2f9206c176292f1c9ff831"
+    },
+    {
+      "path": "gap/product/WB.md",
+      "sourceSha256": "3b824ecc91866968f464e2bb24aaa9ff4c11fd155a72d3e881e22aca144e211d"
+    },
+    {
+      "path": "gap/product/README.md",
+      "sourceSha256": "3f5b0e2b5242248fc1139f63b4b9d0ed2067cd22bca9f2336844062e28131725"
+    },
+    {
+      "path": "gap/product/DEP.md",
+      "sourceSha256": "83170a0afa22e51629186942546cc53dc3d6c7f23597e82b4fab81bd11c82f39"
+    },
+    {
+      "path": "gap/product/AUTH.md",
+      "sourceSha256": "f4ec28f6a145625e52b4bb7bbf12f1eba3aed5eaedd5a1a5c377fe2bbd249568"
+    },
+    {
+      "path": "gap/product/open-questions.md",
+      "sourceSha256": "d774e83c5c29d983cb9662269a1138a63d7c9f9d80df4c00f514216f6e7e3e3e"
+    },
+    {
+      "path": "gap/product/SBX.md",
+      "sourceSha256": "249efe9f3fd314d5578517ce7645997b84b72b8dd19c85f1d4d4f1e34aa4d9bd",
+      "repositorySha256": "40b67988938318fd21308c1884f439d64d64e6b2158e2a9485c7b1afd7b2e8e4",
+      "normalizations": [
+        {
+          "from": "[重试](仅失败阶段)",
+          "to": "[重试]（仅失败阶段）",
+          "reason": "旧文举例的括号不是Markdown链接，修复转录语法"
+        }
+      ]
+    },
+    {
+      "path": "gap/drafts/f-wb-live-02.html",
+      "sourceSha256": "e50d3964b441086d678b485e5af557675f47d38f7a9b2afae6f56d6bdcb9e8a5"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-01.html",
+      "sourceSha256": "ea01fbc580f098edf0563cde33da6d8f181109b151b4d2903ee27483df7d2cff"
+    },
+    {
+      "path": "gap/drafts/f-sys-resource-04.html",
+      "sourceSha256": "ac828b2ed84abf2245ff0f876a776f445c39ea4bbc897a701b3c3dde6e492130"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-01.html",
+      "sourceSha256": "2c850c895c0914c50582563b9efbded808238f245b3cd159b11018121569d956"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-05.html",
+      "sourceSha256": "3e92294b51ee3572a54142196bb54b4ff7eb95042d80fe65893ee1e9556946b6"
+    },
+    {
+      "path": "gap/drafts/f-crd-page-04.html",
+      "sourceSha256": "d03a17cc6a6393aeaa4f375ddd76af355e969efcf1a5f43590847911eb1ce20e"
+    },
+    {
+      "path": "gap/drafts/f-sys-conn-01.html",
+      "sourceSha256": "b70a7247bd8d251ebda998b3ad2909e12ca5b34e99868fe2b06c5c84805c0055"
+    },
+    {
+      "path": "gap/drafts/f-img-register-03.html",
+      "sourceSha256": "6f34271503a246f0e42134650f9d63fd336a5b6c24379087fa5dcda144f74bfb"
+    },
+    {
+      "path": "gap/drafts/f-wb-welcome-01.html",
+      "sourceSha256": "9b19e70dffd563850c029551ff3c98e72e21b1f8646f91a84fbf6483a7917ed9"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-01.html",
+      "sourceSha256": "08e74d108d1643801d41a14a178d0bbb1037385d934ea55349188ccd3a6a2f1b"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-05.html",
+      "sourceSha256": "76f2223c3a28f3b11395e0c43b1bde3b2cbb5872f4ae140c6b1d1afb01422b5f"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-03.html",
+      "sourceSha256": "6d3ff264770e315298b5886743980d181b85a740f91acc45329f2e6fea5089fb"
+    },
+    {
+      "path": "gap/drafts/f-img-state-03.html",
+      "sourceSha256": "589b9398da48de8cd658877a1544bec4c9599c41cb9ef271aae1c9f60360fe28"
+    },
+    {
+      "path": "gap/drafts/f-shared-components.html",
+      "sourceSha256": "414101b0b1f64c90eb2c2e5c9b6cfba8bd2383406948d45f2063a83def5bd897"
+    },
+    {
+      "path": "gap/drafts/f-wb-banner-01.html",
+      "sourceSha256": "8c796248287fa24eecacaeaf0f4b56f145bd6e739ada2627754f23db76772756"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-02.html",
+      "sourceSha256": "ea8e0e32e7286f31b640e057928570c4a909981a973d3fbe672e83287c204a67"
+    },
+    {
+      "path": "gap/drafts/f-prj-retained-03.html",
+      "sourceSha256": "940c84a95af011017239e48c47537ecd0e21bc1400079a65ee26ea99f20c8573"
+    },
+    {
+      "path": "gap/drafts/f-crd-git-02.html",
+      "sourceSha256": "d768428de65b8c190cdb34bdb627fde89822aa2f081f78b37acbeaa71bf70b0d"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-01.html",
+      "sourceSha256": "da004a4010c76cf46025fcc4d93d19d3982f7dc999333a2fb26418f022762592"
+    },
+    {
+      "path": "gap/drafts/f-prj-retained-02.html",
+      "sourceSha256": "9e443002209128eb608d0398c2adf2671a4a2eec247dce1f46482e9f17ee6245"
+    },
+    {
+      "path": "gap/drafts/f-crd-git-03.html",
+      "sourceSha256": "644fcb37ae15c96aec8f60e77ea6305effdba0dd94e65f6010038f5a53f121f0"
+    },
+    {
+      "path": "gap/drafts/f-crd-mode-01.html",
+      "sourceSha256": "78dab63a3aa38bb153cfa6fa945d29c76adb68ca75b8ada03949b8bf9294c2ca"
+    },
+    {
+      "path": "gap/drafts/f-prj-delete-04.html",
+      "sourceSha256": "dc313dc5cf24cfc1f953b5a03920b6ce3be35c2b4cda215994b0102b7bcf9128"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-03.html",
+      "sourceSha256": "fb5c24ef808da4385e7e135162ab700e0610b759f228787868dd7dbf69bb4892"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-02.html",
+      "sourceSha256": "c5faa590e15eed7e179fbb206f5540cbe24b2ebb50f596c56b3f2d4603c9eae9"
+    },
+    {
+      "path": "gap/drafts/f-img-state-02.html",
+      "sourceSha256": "2ce4f0304261be8359c0671fa50204822f8d1f612370a13569e5adc86b59adfb"
+    },
+    {
+      "path": "gap/drafts/f-img-version-01.html",
+      "sourceSha256": "b9d92877e329a919dfa2d5704ab9dff949a6e71442f644903db0224a0dfe80f0"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-14.html",
+      "sourceSha256": "d8aece3f1b3d7669c1c7cdb77160161491de0bc06b00040e88d85538231270c9"
+    },
+    {
+      "path": "gap/drafts/f-img-preset-01.html",
+      "sourceSha256": "9fc78ea963bd72be18b601eb90277e85fdd9c477ebb4f49979566c70a741b198"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-04.html",
+      "sourceSha256": "0707aa78eaee8832e1c0691619f5c2b4d102750e6d08e6f4398f59f093587d4f"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-01.html",
+      "sourceSha256": "c4ec3c565526eb691fb47b1d26810ed59f4e1196ff4c59c309c0f622d9f537fc"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-06.html",
+      "sourceSha256": "1f1aa40ae5a099c5d14e589d88432e76514b51f9d78a34a960ebafaffb3145bc"
+    },
+    {
+      "path": "gap/drafts/f-img-register-02.html",
+      "sourceSha256": "d0d58593c846141a096cfba84d270405352e47b072b070b0223f3e1c08c6984a"
+    },
+    {
+      "path": "gap/drafts/f-crd-revoke-01.html",
+      "sourceSha256": "7a03fb196b133917809ec2f88ee9b635b831c1f9677c95eaf5759b5a0e78f7c2"
+    },
+    {
+      "path": "gap/drafts/f-crd-page-05.html",
+      "sourceSha256": "3b6f1d837e971b1452d8dcbb400d09b9e221e8a5d1c5b8cacd0250648b9e4635"
+    },
+    {
+      "path": "gap/drafts/f-sbx-relaunch-01.html",
+      "sourceSha256": "7d0e80372a9c9fb87d8a5c4441d601aac1e23367c95b3c09a08fedeb190389ea"
+    },
+    {
+      "path": "gap/drafts/f-wb-cmdk-02.html",
+      "sourceSha256": "d0ccb7ca14b7f79f4fa767edf069359f0f06ebf230f79b07ffbc04bc514481dd"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-04.html",
+      "sourceSha256": "24355622ed1c47a074402d91c9e17fae6c57b93ecec6c5ef528998d39a77ef04"
+    },
+    {
+      "path": "gap/drafts/f-wb-live-03.html",
+      "sourceSha256": "fd47804d635b1d1241cdff2890d56c2c7b57b0a91ac823f75ab709d63c227078"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-03.html",
+      "sourceSha256": "ad4208d2b57b39a12348bb2b7fa75ffe0aa97feb09482e650409b18b57baa18a"
+    },
+    {
+      "path": "gap/drafts/f-acc-unlock-01.html",
+      "sourceSha256": "6ab1fca719cc26f580ee7dea9ae86a248402f213fcf7b342bd35cb1c12e10e73"
+    },
+    {
+      "path": "gap/drafts/f-sbx-destroy-03.html",
+      "sourceSha256": "443ab5d69120fb3656b15e51b89d31971ab7ab2bcc0b93529ec81b00396eb681"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-13.html",
+      "sourceSha256": "656cb3560f9fbf18bfd5e1f71d6933d8e42d4641507cd96b36d0ab1feb8e3221"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-05.html",
+      "sourceSha256": "8585c26d5023bd3f8297f43c00b995cdd7c57f817a232bdd4b7e28e84e56bdf1"
+    },
+    {
+      "path": "gap/drafts/f-prj-delete-03.html",
+      "sourceSha256": "f2febbf42a18d1be68c58109433fb814bfcabe6f3d91f5c0b7620f464ea6ecb6"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-04.html",
+      "sourceSha256": "f472b817834dd32c355b3476bc4b9acc26122d4885b4bc57e116dc14eb6108dd"
+    },
+    {
+      "path": "gap/drafts/f-prj-retained-05.html",
+      "sourceSha256": "d6fd42d0a8ab5771b293ed8768ab5015a69207706346e30469549c1277c8ed90"
+    },
+    {
+      "path": "gap/drafts/f-crd-git-04.html",
+      "sourceSha256": "54d6987cf2ffd21c3bc5ef1758f16c4fcce1806575c88a937ed48f9733fe38fe"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-06.html",
+      "sourceSha256": "e7382f7bfadf221a59d768f30c0dde212c8c62ab41bbba56db09a89cb772dd2d"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-07.html",
+      "sourceSha256": "fc38ba551156f82ccee7d86271e28e469ee30141f097f5f915ea0f17b52901d9"
+    },
+    {
+      "path": "gap/drafts/f-sys-resource-02.html",
+      "sourceSha256": "1801aad5df6ffab65263135a600ca846d47ddd407ed1916ddb651922b2dd9fc8"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-07.html",
+      "sourceSha256": "c6a63ccc5832692c7793bfda0eec5fc6e8d0fe3624bbf0d5efda8c6bd6c078b1"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-03.html",
+      "sourceSha256": "8c3ce9f3ae966abbf6af7dff43b601c7814e1c27fccf317a7274e087e63675b2"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-09.html",
+      "sourceSha256": "92415a76839a4468255f8e2c9a372d052da09872031555d133799ee66fa32a89"
+    },
+    {
+      "path": "gap/drafts/f-prj-info-01.html",
+      "sourceSha256": "8fc4fe9eb4185dc3bd98d3f691a0f4cfe95f9d143165fd2849e3de7095837d2e"
+    },
+    {
+      "path": "gap/drafts/f-crd-page-02.html",
+      "sourceSha256": "8eca159ef10a8a85675535122c4b3beaf69d624cf9d1b300abf2e07fd67dacdb"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-10.html",
+      "sourceSha256": "3b8037e708adcc3eae1ded77ebe915b58477fece2bf656c12ffba0f35b1af8c8"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-01.html",
+      "sourceSha256": "ae8f6eb47b458a75406ac49e0d37a652c447870c1cd34f298d7b2aba3f4b897b"
+    },
+    {
+      "path": "gap/drafts/f-img-register-05.html",
+      "sourceSha256": "fdc96b42dfe46f160978fe705850c81dc855e47d31497405b9f8ecbb2f16f8a3"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-06.html",
+      "sourceSha256": "135f941de7c853ede8a0a0ac814c8e266e268130702bef6c2e8a77df727e0862"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-07.html",
+      "sourceSha256": "86c2076d7650918c3814a4bcbe167d48d78dbb945de9f1d7306ff47168011a87"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-06.html",
+      "sourceSha256": "8f256a19572c6618d740ce7222d2e8e3e5ca9396e0467667f1aee87f95f583c0"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-07.html",
+      "sourceSha256": "ccb2372a24b0e499e007607fc20caacc34b34dfd3f1d46a655d86ad4ea0f5933"
+    },
+    {
+      "path": "gap/drafts/f-img-register-04.html",
+      "sourceSha256": "58c2f5bad2f87e96f2e10461a2c23b287ed7a10a9a107f0d19e5cd7bf8fc66cc"
+    },
+    {
+      "path": "gap/drafts/f-wb-overview-01.html",
+      "sourceSha256": "f1e8bc4c342f23763724d448523d2e7588e9ad0e0a3d9049e2ca80c776933b15"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-10.html",
+      "sourceSha256": "d9cbca1e01fcd2c2f2a9912aa92fa1e64d159164241e209813937d9e55dbefb2"
+    },
+    {
+      "path": "gap/drafts/f-crd-page-03.html",
+      "sourceSha256": "34a18821f82945d74face3e6b408b3c6f354bd8cb20b2da28d5a8f479529849e"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-11.html",
+      "sourceSha256": "113c932749f031bfb8627a4c71dc966731ce11a27f8d402740d4d4abfee9771f"
+    },
+    {
+      "path": "gap/drafts/f-sbx-stopstart-01.html",
+      "sourceSha256": "9956f19f0d98b44f9eb88aaf762ca627086469d90e71fbbd4d9d4bb2ec262bd6"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-02.html",
+      "sourceSha256": "23faee10b74c77f5e6ed75829b3b13b39d2929ad44bb6da6b38018d24a171cd7"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-08.html",
+      "sourceSha256": "226df3d6fbec28a71fc05b622e2b574b04bb2673262162ef64bed11c6a9c6acf"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-06.html",
+      "sourceSha256": "d259cd1ef0182778c5f74ec9d8db152fe575b63ef67ee7606d7f439b62748612"
+    },
+    {
+      "path": "gap/drafts/f-prj-detail-01.html",
+      "sourceSha256": "c3d3e3a1bfec59c49fb90f4b2e2a9b223536da4806b449b14fb62161a1a25ab9"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-06.html",
+      "sourceSha256": "012f4dbf9888513bbd7f7102344237a45aa82da411f57cff6b31b3154b8341c9"
+    },
+    {
+      "path": "gap/drafts/f-sys-resource-03.html",
+      "sourceSha256": "ef1491f821495ee1050ac1a8030b4003a3a9fabe24dae835e96acbc024c3f2db"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-07.html",
+      "sourceSha256": "1d328d172cc09d3d40549430842809e279f5456dc558ba319b2178da2c920499"
+    },
+    {
+      "path": "gap/drafts/f-prj-retained-04.html",
+      "sourceSha256": "15cdcf03c65b3ead01fd1462aed9101809a1607030f712c15edc0b1263491811"
+    },
+    {
+      "path": "gap/drafts/f-crd-git-05.html",
+      "sourceSha256": "de76d255c666ba837614b828cee27154f17b4f93eaf5376b9884f071ea984fcd"
+    },
+    {
+      "path": "gap/drafts/f-img-env-01.html",
+      "sourceSha256": "ad4265b95de2c4f022b9c23e93b1bfe18d8f2526112ac8160ed0d788f02011bd"
+    },
+    {
+      "path": "gap/drafts/f-prj-delete-02.html",
+      "sourceSha256": "b1723c0a0a5cb7c878618e22a0a7a216f388e582aba40060dea13bf037991bcb"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-05.html",
+      "sourceSha256": "9c8c1a019325f8b88baf55a67f0446abd15728b117353f8b80165781d48f025a"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-04.html",
+      "sourceSha256": "03b9c19133b918f64d16591d6f495ee1a1483432708ac023af6d1ecab570f9ae"
+    },
+    {
+      "path": "gap/drafts/f-img-state-04.html",
+      "sourceSha256": "2caf25a15d8a63c134addeec7efb3ef7df88d9cec535a3487536d7d4515117ec"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-12.html",
+      "sourceSha256": "d1d46dd2be5a444c55fa50a4fa52c864807e7791e5211bf2d4a2e6cd27f4bb88"
+    },
+    {
+      "path": "gap/drafts/f-sbx-destroy-02.html",
+      "sourceSha256": "6949d706a2b4e63d5be4a9d5643eeb449f3af6c819c83cdbe0b9d6b81712497b"
+    },
+    {
+      "path": "gap/drafts/f-img-page-01.html",
+      "sourceSha256": "eb10062c733ef939948fb41977486cac90d79be1f295b594a0a1fa96ae5ca073"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-02.html",
+      "sourceSha256": "479bf680a95e97c419ee966deb2e60d8ab847eb64a6e555a8b4836093d353d4e"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-08.html",
+      "sourceSha256": "800830b80aaa79fe844600380d66e15e0a37c24edf803ccdffae926dc4aff73e"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-04.html",
+      "sourceSha256": "049d73b6f9f83f202b9bd828a5f453464aa7d0e2fbf1d93651679bce2ed6ebf7"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-09.html",
+      "sourceSha256": "10f4164f7908a3c4c56321437bf0ebf8bf9790b847bdc02e8903fda631745bcb"
+    },
+    {
+      "path": "gap/drafts/f-img-env-02.html",
+      "sourceSha256": "64397078206218286310d8f4011e29415478a48fccba67a01532d4a43be38470"
+    },
+    {
+      "path": "gap/drafts/f-prj-delete-01.html",
+      "sourceSha256": "9b06d621ad7d7e499840229c0d71a72cf5442fd323eaae50f3b421d7d4cacee4"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-06.html",
+      "sourceSha256": "34e07089a0b183bb6925661b1cedaad475341ccbb3b25b794238f3b2fd876e9e"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-07.html",
+      "sourceSha256": "9d14070a845dc3a26fd3e33644c9672cc067686977d1792ca18aae47dc344afc"
+    },
+    {
+      "path": "gap/drafts/f-img-version-04.html",
+      "sourceSha256": "0bea7a165667c08f6f6ebbab4736396f6ebb9f6bfe08d281a8c657a9cc964ac4"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-11.html",
+      "sourceSha256": "3776c0aff617e611e369ca0038ce335ce3b9cac99c2ff37a0168f7c786eeb47c"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-09.html",
+      "sourceSha256": "d45479ecc6b1cd71891bea663cf424742e1451fe38529cc590ead813724388ca"
+    },
+    {
+      "path": "gap/drafts/f-img-page-02.html",
+      "sourceSha256": "4689173b024f103d60a53b7ddc10a8310a048dd471a669d59fc2ecb6506119ca"
+    },
+    {
+      "path": "gap/drafts/f-sbx-destroy-01.html",
+      "sourceSha256": "ca599869bc50b92185cb5b8f29b6ca5d39b58702a657b9dfb02fa63ecb590a80"
+    },
+    {
+      "path": "gap/drafts/f-acc-unlock-03.html",
+      "sourceSha256": "cb520b06012829cc9bbdbfdde6cc8dd076c44a93f8a9c5ad693152716016078f"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-01.html",
+      "sourceSha256": "608961d2f8c29ee64bb7bc43abd1b7a9f1888b897a55e8a1d9884e445120b48e"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-05.html",
+      "sourceSha256": "50067cf4dec0c73dfe203b818fc6b4afb9768ce51823e9cb8b1a1fa63af64b63"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-04.html",
+      "sourceSha256": "2bce81238e43c5e4f7a82cf563431e9f3f2a452e0978a47fa276a7da3ccb7ccf"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-03.html",
+      "sourceSha256": "f8d8b5650a1a6a69d0fbaf4c3f711b4ce0ab5350ffbfae3a0683637f4e2a6e8b"
+    },
+    {
+      "path": "gap/drafts/f-sbx-relaunch-04.html",
+      "sourceSha256": "b17ee7dfd7ce7c4eceec2504b33e79a77f2b4609f13ce34c2dd53244139be81e"
+    },
+    {
+      "path": "gap/drafts/f-prj-info-03.html",
+      "sourceSha256": "08d2c347f9b5ec4613aad68debd31a3f5c508b179fe6a11b1ed1060b841ace4a"
+    },
+    {
+      "path": "gap/drafts/f-sbx-stopstart-02.html",
+      "sourceSha256": "4d1511997239bf6a583f42424900a098fff1b4b826236c9230a182200c38c97c"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-01.html",
+      "sourceSha256": "fc9c294520739d13e908d7f8d5d057737a0f23eaa9c5eac74a43754f4b7bd685"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-05.html",
+      "sourceSha256": "d0b78b3c7030964d5c310c03e2093190a72560369a9c69f306b82ff82dd0e620"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-05.html",
+      "sourceSha256": "fb1ed288e016d4c880c509e49a4d03a8f789a85a68bc4ba7950979b452aaaaea"
+    },
+    {
+      "path": "gap/drafts/f-sys-resource-01.html",
+      "sourceSha256": "9f02bc00d42928e021c180792768a699571c3c87144b8927e67310b94803be3b"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-04.html",
+      "sourceSha256": "ec32dffda016c65ef2c91b8e913146d78774f02477c89e7bc873c71ff6c7e73a"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-04.html",
+      "sourceSha256": "fc8fd93a74a0e059be12c9d3dde5caa26448ee684622194912a5494b3e6266c6"
+    },
+    {
+      "path": "gap/drafts/f-prj-info-02.html",
+      "sourceSha256": "dc8bdb3f80a1536c1349e3759aa3d132be019b2ea59da28220faa6b5120e8ef3"
+    },
+    {
+      "path": "gap/drafts/f-sbx-stopstart-03.html",
+      "sourceSha256": "ccc9c97c9cb924ff5ace8023c33b2134f0685e14f85734f081608af99bce5028"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-13.html",
+      "sourceSha256": "4e3bc17cf355cca1baf6f708e2ce969b15a81bf3ce0def9c40191ad6f4c461b9"
+    },
+    {
+      "path": "gap/drafts/f-sys-conn-04.html",
+      "sourceSha256": "2798627b05e8adeaa543a9e6f70e0c2039dd9cdfb08ef559d6595992930c795c"
+    },
+    {
+      "path": "gap/drafts/f-crd-page-01.html",
+      "sourceSha256": "e7f5bce640234365c13d93e3dc1336b5d09df278003cd3cd4e81db8deb8b588a"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-02.html",
+      "sourceSha256": "01684fd00ced2265435cb2f5b044f798fa778a973f3fbf54aad5c6dddafcc4b3"
+    },
+    {
+      "path": "gap/drafts/f-img-register-06.html",
+      "sourceSha256": "c777731f48bf8a556f0b5ee9c34c2af6487742a2b622cd8a9d2d86d098e83683"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-05.html",
+      "sourceSha256": "40ac5bf61152af73114944e051eda5f785c40c2269702fbeeb449df7970c2883"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-04.html",
+      "sourceSha256": "225d2b8cbfb02a392cb172cc125b9990f4ca0aa57d1da99a546ec9758467fea6"
+    },
+    {
+      "path": "gap/drafts/f-acc-unlock-02.html",
+      "sourceSha256": "291b48f030ca3c1cc54bbe1a595a6d1151f33b36ad43860387fd1acf49a14579"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-08.html",
+      "sourceSha256": "58565eb831f846478e0c4c27506015252c7d5db45751ab98a1e68c5140211ccc"
+    },
+    {
+      "path": "gap/drafts/f-img-page-03.html",
+      "sourceSha256": "25e2d35b8231614f63444a7aa8d6ab49593c4111d3d9d85624ce5d1ff194c069"
+    },
+    {
+      "path": "gap/drafts/f-wb-route-01.html",
+      "sourceSha256": "c2814c786d9604f28773d9f3086c19a4f5489e44af8428a2e2171e82eee24103"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-08.html",
+      "sourceSha256": "ae8cd03259a0671e5156f7fca6114a0ea6a04bf9b55e06e2db31494d9e7bc003"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-10.html",
+      "sourceSha256": "190ed991a27d5f967fcd4bcac6c281ebec227638543e062c189dd56b55af9b34"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-06.html",
+      "sourceSha256": "19914c92f8e84c1aa8172dcd172654d82cead9f9bf76ce6cbbe364db0f0e62e8"
+    },
+    {
+      "path": "gap/drafts/f-wb-banner-04.html",
+      "sourceSha256": "372681b1acf7554ace512e62e0d9f6ee17442c9521d053ef5c3d38ea2690f9bc"
+    },
+    {
+      "path": "gap/drafts/f-img-env-03.html",
+      "sourceSha256": "576b4dbf98e0fe54f573a0838b0d8f2914e1479db161588f920f9cb628efa306"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-08.html",
+      "sourceSha256": "38cad66403c96ff36a6f8da48068d9959f0d415fa609c9f7159a073980c5bc1a"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-09.html",
+      "sourceSha256": "07038ac03e161de4e243260a9bb72de6462b42cfd4f8a568bc6ade1f160f1fdd"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-05.html",
+      "sourceSha256": "59ba7427165807577cc843cd60904ff3dcca10bf5c09d006d3aa7454ddfebe1d"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-03.html",
+      "sourceSha256": "5ed6fb2cec99cee77320eef9a6f2c524e340c7f762986431f997edb93519b787"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-02.html",
+      "sourceSha256": "4b112fe00810fdbaa59652db32cc3efd16893d20a85f62ad7adc745d5fc9a116"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-05.html",
+      "sourceSha256": "34cfec23a3a4f273a71aa0f783d9a1a9a7bb11891fc10d1aa1602e4509934347"
+    },
+    {
+      "path": "gap/drafts/f-img-register-01.html",
+      "sourceSha256": "48160660c09dea49891e5d4d6dd2ab5a54e97f2287fd1b6a6dbd6e14fd640d27"
+    },
+    {
+      "path": "gap/drafts/f-crd-revoke-02.html",
+      "sourceSha256": "7d03f7af2f3faae381be1988906087eed76fd51b450c0038dd955d6c4647ae49"
+    },
+    {
+      "path": "gap/drafts/f-sys-conn-03.html",
+      "sourceSha256": "a5257eadb4c2f2ebf3a7f44be4a0cc1cc404fd99cf1b611d47dc9f48112ac8bd"
+    },
+    {
+      "path": "gap/drafts/f-wb-cmdk-01.html",
+      "sourceSha256": "2e54024a0bbee7c4ea5e857e6493073b012acd916dd5acfa30648141ccb30ff8"
+    },
+    {
+      "path": "gap/drafts/f-sbx-relaunch-02.html",
+      "sourceSha256": "dc981b41964010e7a71c6bfb6cf6ac4875ee71c05c8c358814c9969b9eb38396"
+    },
+    {
+      "path": "gap/drafts/f-prj-info-05.html",
+      "sourceSha256": "bc131ac537441338d78491764f24f040a95acf292a6078a813817bf77dedad1a"
+    },
+    {
+      "path": "gap/drafts/f-sbx-stopstart-04.html",
+      "sourceSha256": "996a0c8fc8434e09f6fea870472dd46a9b69884fd8d63f2805f26533acdfee85"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-03.html",
+      "sourceSha256": "065e06c61eb20e27c913533836f8e75ecc8c36d71493260b3507f3873c06c5c6"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-03.html",
+      "sourceSha256": "3d90c0f4bf1d5209a538258ccf5af93f932fa02f4382abc0bf81a04a80886c22"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-02.html",
+      "sourceSha256": "f44157241fd571e7700b7d0927448152d66232f205faf2b3c83165cf9059f823"
+    },
+    {
+      "path": "gap/drafts/f-prj-retained-01.html",
+      "sourceSha256": "a2a3a32e343e4ef9c808ebd473194d345baf66d26222e021e5574ea5a8cb036e"
+    },
+    {
+      "path": "gap/drafts/f-wb-shell-01.html",
+      "sourceSha256": "dae77fd58d32de624feb17382ec3dddf0a85b04303f08d0dc2631b1434cb8c2c"
+    },
+    {
+      "path": "gap/drafts/f-wb-banner-03.html",
+      "sourceSha256": "9e3acad6a84ec8cf3884268f6f7f185f3dc9ff444287a0765dd23546c670285e"
+    },
+    {
+      "path": "gap/drafts/f-img-state-01.html",
+      "sourceSha256": "7d7b45cbbee62b21bde4c28d51945668d83a463c06b73158ae267fe4288aa13f"
+    },
+    {
+      "path": "gap/drafts/f-dep-init-01.html",
+      "sourceSha256": "643225b14b9f9ea2b07a25929a7b943aab303dacd530fd465fa02a557209ac8c"
+    },
+    {
+      "path": "gap/drafts/f-img-version-02.html",
+      "sourceSha256": "5ca99fcde44d3a92e2b100fd4be861093cba5b8f093633b5be003687c995a910"
+    },
+    {
+      "path": "gap/drafts/f-img-preset-02.html",
+      "sourceSha256": "3c1bb9152d5fdf14765506187471542e55068f881f1e8e8cf5f320f03190c4d8"
+    },
+    {
+      "path": "gap/drafts/f-sys-diag-06.html",
+      "sourceSha256": "53d14282e1d2c2bc90ef501b45eabbc83f002aeae5c14c4b74f248b2cae83b6d"
+    },
+    {
+      "path": "gap/drafts/f-img-preset-03.html",
+      "sourceSha256": "b5558afb03802f358c2869e26fb20d75e8f4635a05d1f69bd96b3418f9c4b96d"
+    },
+    {
+      "path": "gap/drafts/f-img-version-03.html",
+      "sourceSha256": "12ed82d73b6174cf06eb7fab4a9ea23b5dcf5d5cab2bb6c2202e5f2a62287a15"
+    },
+    {
+      "path": "gap/drafts/f-wb-banner-02.html",
+      "sourceSha256": "c4f0f4d1383e1b06f42b10d3be637cc74a49f062df0cdab35adcf89367d9108d"
+    },
+    {
+      "path": "gap/drafts/f-lch-startup-01.html",
+      "sourceSha256": "8476638c022841b79c0582f9ca05f5684979d50bb4bd93ba2be2c7a61dcefb56"
+    },
+    {
+      "path": "gap/drafts/f-crd-git-01.html",
+      "sourceSha256": "95bec8d1a8f142da18550d1ca80c95792a88d9774ee856bd7c9ee06768f4daac"
+    },
+    {
+      "path": "gap/drafts/f-prj-clone-03.html",
+      "sourceSha256": "3de9862802c496527e7a0f72db061c8a8f438b6d0f3f9e18471c0a022b3bd942"
+    },
+    {
+      "path": "gap/drafts/f-wb-live-01.html",
+      "sourceSha256": "37c153f162d8cfe18db35c864fc2b458f4727ed1a8fb00be06e9d438feffeca0"
+    },
+    {
+      "path": "gap/drafts/f-prj-create-02.html",
+      "sourceSha256": "be4cf775454cb0ac2bcbdbf9b5e38c4460ff3253180e229b9602a67ac4d4385a"
+    },
+    {
+      "path": "gap/drafts/f-auth-panel-02.html",
+      "sourceSha256": "b3400ea8a91032b13aba4f0fe0eb3c8090535a43f569971939ea8d12278b24ec"
+    },
+    {
+      "path": "gap/drafts/f-sbx-headless-06.html",
+      "sourceSha256": "89b9cf2c6365ecd034670f02a0688f216b0cd0481070e27b23b649729f62abd3"
+    },
+    {
+      "path": "gap/drafts/f-prj-info-04.html",
+      "sourceSha256": "043c69248885e4818dd5fe07969f3e9bc598d17fb7c4b07925342133acd7f9c4"
+    },
+    {
+      "path": "gap/drafts/f-sbx-relaunch-03.html",
+      "sourceSha256": "7dac94ab2b3aa37516cf74d9645ceb4a6eccd247399776486142ef7b198a5773"
+    },
+    {
+      "path": "gap/drafts/f-sys-conn-02.html",
+      "sourceSha256": "9b1634b154a4b41e85cd0ce5d9a3adcaca6e422054507173fc4fd0240f5e67cf"
+    },
+    {
+      "path": "gap/drafts/f-crd-revoke-03.html",
+      "sourceSha256": "8d855e41f0ec4ebd80394511bbf03fa4507df30649cc496b0684a6fb9611e13d"
+    },
+    {
+      "path": "gap/drafts/f-sys-audit-04.html",
+      "sourceSha256": "1e4f6dd8d76ab7c0f32a73c96fd5c2a871bcebb2840182faca6190c4325f03d4"
+    },
+    {
+      "path": "gap/drafts/f-wb-welcome-02.html",
+      "sourceSha256": "c4e52ebd0c8e92c6c7fc142bbb224a729453b31cdb9fe00079c46cc8ca1c00f4"
+    },
+    {
+      "path": "gap/drafts/f-aut-rules-03.html",
+      "sourceSha256": "5b0c23422955fdbf3693753c073065acefc5187c87e6ee2d77f3bd09d1195fba"
+    },
+    {
+      "path": "gap/drafts/f-lch-form-02.html",
+      "sourceSha256": "36d54b5a9a2ca172fec374852e2d2640d51c3771835880ac9798442a423cc7ac"
+    },
+    {
+      "path": "gap/drafts/assets/gap-shared.css",
+      "sourceSha256": "ff22e7a310f9096de6029c67e756af00dce37a5c4e4edecd6cd0b97645def778"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l1b-prj.css",
+      "sourceSha256": "36b27a291185c5143620cee4b85a7b553a27195ffb4c2c311c92ad346dd111de"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l5b-sys.css",
+      "sourceSha256": "b9d214f489943cb13baafddd116090b1e20697ccbce3848386968b29bcff3056"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l6b-aut.css",
+      "sourceSha256": "60ecf29c676bb2d18f151406f6da27f8267d5fa02d990dfa8304b590589367de"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l2a-lch.css",
+      "sourceSha256": "632907c4bad4a9171d79ff52c7dfa949908e5270a3a6881bd50eb95e193a00d0"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l4a-img.css",
+      "sourceSha256": "43a0e7482541030c2a8f6230151a4fdb53c03a0786688b6c9fa949368c484c06"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l3a-auth.css",
+      "sourceSha256": "f779d07ef13c4201c1d5207556e2d38eb8be443b10f81a0bcd58c7f7b3fb5e67"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l1a-prj.css",
+      "sourceSha256": "6f7c6ac363acb31523eb0a65e5647468209b22795ce788575fbb7a706e057b4d"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l5a-sys.css",
+      "sourceSha256": "a11afc3085f8b3cedccdb4af028ae8d1fa2fdc4cb249438efcadaf7388126edc"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l2b-sbx.css",
+      "sourceSha256": "36d97d74776a7872d524a8f649d50eb2a60e6b57e06d1064177c5542402cbac0"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l5c-dep.css",
+      "sourceSha256": "a5617e7ea884da01203b95cb6ae565cf65ebc340e7eccdda504daa87175e9435"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l4b-img.css",
+      "sourceSha256": "003277ac3d414ccf5ea982299d36388e4a3b92ae935879f64b4355149bd3326c"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l3b-crd.css",
+      "sourceSha256": "491691c4d2b036bca140023bd5a4d37c00a06e73b4aa11a9931ee5d2ecc85eae"
+    },
+    {
+      "path": "gap/drafts/assets/pages/l6a-wb.css",
+      "sourceSha256": "6f91ba62258fea8c92c3dfe74ffade092190e5765ef8c9eeed1d2dc72a0e599e"
+    },
+    {
+      "path": "pilot/assets/components-v2.css",
+      "sourceSha256": "a8ddb4730570f0cc009b0ed699d555a6ea969699a66c43cc9ae6e9d942cd8520"
+    },
+    {
+      "path": "pilot/assets/tokens-v2.css",
+      "sourceSha256": "ddd45cd0db28bfbf977e58f4ab54ea5f366fe67f6eb03f906703d236a76f19b8"
+    },
+    {
+      "path": "pilot/assets/LICENSES.md",
+      "sourceSha256": "56705bebb62fd46be9450e3b6f6599a38efd3dcb7e5c3440c4f45124b5714a0d"
+    },
+    {
+      "path": "pilot/assets/fonts/Geist-Variable.woff2",
+      "sourceSha256": "a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8"
+    },
+    {
+      "path": "pilot/assets/fonts/GeistMono-Variable.woff2",
+      "sourceSha256": "fba8f577f38a2bbcbe818efa6348dd58f36303a10b8737c42fefad275be563ab"
+    },
+    {
+      "path": "pilot/assets/fonts/LICENSE.txt",
+      "sourceSha256": "930853ee1daa68554d9e35c8a9175affb74f699fad9a5da6ee5ebe76379d9137"
+    },
+    {
+      "path": "pilot/assets/pages/p2.css",
+      "sourceSha256": "a377f3cc587dedf7bc78aa2736f13da7519c40fa9492840160eab684df930c55"
+    },
+    {
+      "path": "pilot/assets/pages/p5.css",
+      "sourceSha256": "531142e6080874ea24ff9b63b70cce9e125f4e71f565a944db714c5e76d61642"
+    },
+    {
+      "path": "pilot/assets/pages/p7.css",
+      "sourceSha256": "12392cf5396b0a3d253332c86b6e6fb235529f45dd72f2e694319089c8e12af6"
+    },
+    {
+      "path": "pilot/assets/pages/foundation.css",
+      "sourceSha256": "3c8b479801ad896fc5e35c604c2f0fd3d2f74c5ced37943c1cd367c4ade5ee19"
+    }
+  ],
+  "normalizations": [
+    "gap/product/SBX.md：仅失败阶段从错误Markdown链接改为括号说明"
+  ]
+}

@@ -1,0 +1,602 @@
+[
+  {
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-dark-1440.png",
+      "new-task-custom-image-dark-1440.png",
+      "startup-image-dark-1440.png",
+      "failure-image-dark-1440.png",
+      "image-task-source-dark-1440.png",
+      "preset-disable-confirmation-dark-1440.png",
+      "preset-disabled-dark-1440.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  },
+  {
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-dark-1024.png",
+      "new-task-custom-image-dark-1024.png",
+      "startup-image-dark-1024.png",
+      "failure-image-dark-1024.png",
+      "image-task-source-dark-1024.png",
+      "preset-disable-confirmation-dark-1024.png",
+      "preset-disabled-dark-1024.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "shortViewportFixedFooter": {
+        "bodyScrollable": true,
+        "bodyScrollTop": 267,
+        "visible": true,
+        "cancelLeft": true,
+        "stable": true
+      },
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-dark-390.png",
+      "new-task-custom-image-dark-390.png",
+      "new-task-short-viewport-dark-390.png",
+      "startup-image-dark-390.png",
+      "failure-image-dark-390.png",
+      "image-task-source-dark-390.png",
+      "preset-disable-confirmation-dark-390.png",
+      "preset-disabled-dark-390.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-short-viewport": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  },
+  {
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-light-1440.png",
+      "new-task-custom-image-light-1440.png",
+      "startup-image-light-1440.png",
+      "failure-image-light-1440.png",
+      "image-task-source-light-1440.png",
+      "preset-disable-confirmation-light-1440.png",
+      "preset-disabled-light-1440.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 1440,
+        "viewportWidth": 1440,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  },
+  {
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-light-1024.png",
+      "new-task-custom-image-light-1024.png",
+      "startup-image-light-1024.png",
+      "failure-image-light-1024.png",
+      "image-task-source-light-1024.png",
+      "preset-disable-confirmation-light-1024.png",
+      "preset-disabled-light-1024.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 1024,
+        "viewportWidth": 1024,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  },
+  {
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "checks": {
+      "overviewProjectAndDefaultImageGate": true,
+      "customImageWarningAndOptions": true,
+      "shortViewportFixedFooter": {
+        "bodyScrollable": true,
+        "bodyScrollTop": 267,
+        "visible": true,
+        "cancelLeft": true,
+        "stable": true
+      },
+      "submittedCurrentReferenceAndStartupSnapshot": true,
+      "failureLockedSnapshotAndDiagnostics": true,
+      "originalManifestLocatesCurrentCardAndFocus": true,
+      "taskSourceDismissesWithoutPersistence": true,
+      "presetConfirmationCancelAndConfirm": true
+    },
+    "screenshots": [
+      "new-task-disabled-preset-light-390.png",
+      "new-task-custom-image-light-390.png",
+      "new-task-short-viewport-light-390.png",
+      "startup-image-light-390.png",
+      "failure-image-light-390.png",
+      "image-task-source-light-390.png",
+      "preset-disable-confirmation-light-390.png",
+      "preset-disabled-light-390.png"
+    ],
+    "layout": {
+      "new-task-disabled-preset": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-custom-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "new-task-short-viewport": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 0
+      },
+      "startup-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "failure-image": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 0
+      },
+      "image-task-source": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      },
+      "preset-disable-confirmation": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 1,
+        "imageCards": 4
+      },
+      "preset-disabled": {
+        "documentWidth": 390,
+        "viewportWidth": 390,
+        "horizontalOverflow": false,
+        "dialogCount": 0,
+        "imageCards": 4
+      }
+    },
+    "errors": [],
+    "mutations": [
+      {
+        "method": "POST",
+        "path": "/api/sandboxes",
+        "input": {
+          "projectId": "review-api",
+          "runtime": "codex",
+          "initialPrompt": "整理发布流程",
+          "image": "docker.io/acme/ml-agent:v2"
+        }
+      },
+      {
+        "method": "PATCH",
+        "path": "/api/images/preset-current",
+        "input": {
+          "isActive": false
+        }
+      }
+    ],
+    "taskImageNavigationUrl": "http://localhost:3100/settings/images?fromTask=review-failed-task&taskName=%E8%BF%81%E7%A7%BB%E6%9E%84%E5%BB%BA%E8%84%9A%E6%9C%AC&symptom=%E6%B2%A1%E8%83%BD%E6%8A%8A%E9%95%9C%E5%83%8F%E6%8B%89%E4%B8%8B%E6%9D%A5%EF%BC%88%E7%BD%91%E7%BB%9C%E4%B8%8D%E9%80%9A%EF%BC%8C%E6%88%96%E8%80%85%E9%95%9C%E5%83%8F%E5%90%8D%E5%86%99%E9%94%99%E4%BA%86%EF%BC%89&project=review-api&image=custom-old&imageRef=docker.io%2Facme%2Fml-agent%3Av1"
+  }
+]

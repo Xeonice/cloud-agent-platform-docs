@@ -1,0 +1,165 @@
+{
+  "verifiedAt": "2026-10-05T11:03:03.979Z",
+  "status": "passed",
+  "scope": "Current approved migration; implementation review, browser fixtures, and actual test executions are distinct.",
+  "summary": {
+    "requirements": 247,
+    "acceptanceCriteria": 1016,
+    "acStatuses": {
+      "closed": 1011,
+      "deferred": 2,
+      "superseded": 3
+    },
+    "openImplementationACs": [],
+    "design": {
+      "approvedDomainDrafts": 172,
+      "statuses": {
+        "browser-passed": 170,
+        "non-ui-verified": 1,
+        "not-applicable-current-emission": 1
+      },
+      "unfinishedScenarios": [],
+      "browserCombinations": 1020,
+      "sharedComponents": "f-shared-components.html is the imported component reference, not an additional route state."
+    }
+  },
+  "tests": {
+    "api": {
+      "files": 41,
+      "passed": 160,
+      "failed": 0,
+      "skipped": 0
+    },
+    "web": {
+      "files": 17,
+      "passed": 78,
+      "failed": 0,
+      "skipped": 0
+    },
+    "storybook": {
+      "files": 97,
+      "passed": 540,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "realCross": {
+    "actualScenarios": 1,
+    "passedScenarios": 1,
+    "failedScenarios": 0,
+    "skippedScenarios": 0,
+    "runtimeExpectSteps": 31
+  },
+  "sourceHashVerification": [
+    {
+      "report": "api/acceptance/execution-report.json",
+      "hashesMatched": 41,
+      "mismatches": 0
+    },
+    {
+      "report": "artifacts/migration-audit/web-execution-report.json",
+      "hashesMatched": 6,
+      "mismatches": 0
+    },
+    {
+      "report": "artifacts/migration-audit/cross-execution-report.json",
+      "hashesMatched": 7,
+      "mismatches": 0
+    }
+  ],
+  "webRetirement": {
+    "headRemoved": 141,
+    "temporaryRemoved": 14,
+    "remaining": 0
+  },
+  "finalDocumentHashes": {
+    "IMPLEMENTATION-STATUS.md": "b79de1c2ee43a0ccf9ecf6ca2cd59703ef5cac607d66604fc261383db3ed0bf6",
+    "docs/frontend/07-前端目录结构与视图逻辑分离.md": "ab1090304a1d40464f1439c324b6edc841537b0332b432287edfbc905aebdbdf",
+    "docs/frontend/15-前端状态管理.md": "da8e45252db0e3c0dfc8ea77c8d3d345b0440dcfc30af39edc139f5f4eedf07b",
+    "docs/frontend/28-前端类型详细设计.md": "157402048f22e6797cf383c1d02f3f3d6d166fc7af132f2d9ca519b67e208ef1",
+    "docs/shared/10-接口契约与类型共享.md": "96b1fbff83a0211cf7061c359e4e3d289bafd318bec4b488fe3e01c36abfa30c",
+    "docs/backend/02-MCP与OpenAPI双协议.md": "c3eb6912c50a4f3b1f47319db3c9e8d5c5aa0f35adce504c9c2e994055b72e33",
+    "docs/backend/27-接口暴露设计（DDD到API与MCP）.md": "1fc6f1803a16cdf8ffe79c15d4dc892bd45e9707bbb283ba36bc8dbe2f7785f0"
+  },
+  "checks": [
+    {
+      "name": "docs",
+      "command": "PATH=/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin:$PATH pnpm docs:check",
+      "exitCode": 0,
+      "output": "\n> cloud-agent-platform-docs@0.2.3 docs:check /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发\n> node scripts/docs-check.mjs\n\n▶ docs:check —— 文档一致性门禁（权威定义：docs/shared/09-工程化规范.md §2.4）\n  仓库：/Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发\n\nA. 文档内部检查（不依赖 submodule，始终跑）\n  ✔ A1 相对链接可达       1143 条站内链接全部命中\n  ✔ A2 章节引用存在       2655 条 §引用全部命中（逐级下探口径）\n  ✔ A3 README 清单完整    69 篇文档 / 4 份索引，双向一致\n  ✔ A4 能力目录对账       10 §6 = 68 个端点，27 §2–§9 = 68 个端点，集合相等\n\nB. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）\n  ✔ A5 错误码对账         源码 89 个码，10 §6.8 表 89 行，集合相等\n  ✔ B1 端点集合覆盖       openapi 70 条 paths，排除传输层 3 条，余 67 条全部 ⊆ 10 §6\n  ✔ B2 MCP tool 面对账    代码注册 14 个 tool，02 §5.2 = 14 设计 / 14 已注册，集合相等（0 个 ⏳ 不参与判定），3 处计数句同源\n  ✔ B6 未实现端点已标注   10 §6 共 66 个端点，其中 1 个已标 ⏳，其余全部在 openapi 中\n  ✔ B3 openapi 跨仓一致   两份 openapi.json 逐字节相同（sha256 bf18ebd4ddb4…）\n  ✔ B4 WS 协议跨仓对账    两仓 canonical 一致（861 字符）\n  ✔ B5 SSE 协议跨仓对账   两仓 canonical 一致（833 字符）\n  ✔ B7 保留 env 跨仓对账  后端 12 名 + 2 前缀，前端全部覆盖\n\nC. 文档 ↔ 部署产物对账（compose；缺失即 skip，不判失败）\n  ✔ C1 compose 骨架对账   骨架 3 个服务（0 个 ⏳）/ 真 compose 3 个，插值默认值 2 条，服务集合与插值默认值均一致\n\n✔ docs:check 通过：13 项检查全绿。\n"
+    },
+    {
+      "name": "migration",
+      "command": "PATH=/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin:$PATH pnpm migration:check:complete",
+      "exitCode": 0,
+      "output": "\n> cloud-agent-platform-docs@0.2.3 migration:check:complete /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发\n> node scripts/check-design-migration.mjs --require-complete\n\n{\n  \"specificationRequirements\": 247,\n  \"requirementsWithoutACReviewed\": 4,\n  \"specificationACs\": 1016,\n  \"reviewedACs\": 1016,\n  \"missingACReviews\": 0,\n  \"openImplementationACs\": 0,\n  \"approvedDrafts\": 172,\n  \"ownedDrafts\": 172,\n  \"unfinishedDraftScenarios\": 0,\n  \"browserCombinationsVerified\": 1020,\n  \"importedFilesVerified\": 211,\n  \"missingLedgers\": [],\n  \"note\": \"Implementation review and actual test/visual execution are separate evidence categories.\"\n}\n"
+    },
+    {
+      "name": "rootDiff",
+      "command": "git diff --check",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "name": "apiDiff",
+      "command": "git -C api diff --check",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "name": "webDiff",
+      "command": "git -C web diff --check",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "name": "migrationScriptSyntax",
+      "command": "node --check scripts/check-design-migration.mjs",
+      "exitCode": 0,
+      "output": ""
+    },
+    {
+      "name": "reportScriptSyntax",
+      "command": "node --check scripts/summarize-design-migration.mjs",
+      "exitCode": 0,
+      "output": ""
+    }
+  ],
+  "visualSpotReview": {
+    "method": "Root inspected the actual local screenshot files with view_image; selected-state review, not an all-frame pixel-diff assertion.",
+    "screenshots": [
+      {
+        "path": "artifacts/design-shell-project-v2-delete-focus-final-24/f-prj-delete-01-light-390-project-delete-ready-consequences.png",
+        "observation": "Consequences and actions readable at 390px, cancel visibly focused; pointer/Escape assertions have separate browser report."
+      },
+      {
+        "path": "artifacts/design-shell-project-v2-final-mobile-light390/f-wb-shell-01-light-390-initial-loading-skeleton.png",
+        "observation": "Shared narrow sidebar, header and overview loading skeleton visible without clipped primary controls."
+      },
+      {
+        "path": "artifacts/design-image-system-v2/provider-failure-final/f-sys-conn-03-light-390.png",
+        "observation": "Actual failure explanations and retry/diagnosis controls visible; loading skeleton removed and unknown events retained."
+      },
+      {
+        "path": "artifacts/design-shell-project-v2-v3-dark390/f-lch-form-10-dark-390-image-options-invalid-disabled.png",
+        "observation": "Dark narrow task form preserves runtime/project context, unusable-image guidance and fixed footer actions."
+      }
+    ]
+  },
+  "apiRetirementReadOnlyAudit": {
+    "report": "api/acceptance/legacy-retirement-plan.json",
+    "headFilesRemoved": 241,
+    "remaining": 0,
+    "adoptedRegressionMappingsExisting": 25,
+    "verifiedBy": "image_backend read-only audit; root separately verified API report source hashes."
+  },
+  "productionTestServer": "Temporary production preview port 3100 stopped after verification; no original provider session resumed or modified.",
+  "publication": "No commits, pushes or deployment performed.",
+  "evidencePersistence": {
+    "manifestScreenshotFiles": 1092,
+    "ignoredByGit": 0,
+    "bytes": 103557434,
+    "check": "Actual git check-ignore --stdin on every manifest screenshot, including variants",
+    "policy": "Only final evidence directories exempted from original PNG cache ignore; no staging/commit performed."
+  }
+}

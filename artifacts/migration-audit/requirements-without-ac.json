@@ -1,0 +1,49 @@
+[
+  {
+    "id": "REQ-SYS-051",
+    "status": "not-required-current-version",
+    "source": "docs/design-v2/gap/product/SYS.md",
+    "verification": "source-decision-review",
+    "reason": "源规格明确v1.5起且当前版本不要求；Q-SYS-14按DEC-0003不考虑升级与备份流程，本轮不制造占位或假实现。",
+    "evidence": [
+      "docs/design-v2/gap/product/SYS.md",
+      "docs/design-v2/gap/product/open-questions.md"
+    ]
+  },
+  {
+    "id": "REQ-DIA-015",
+    "status": "closed",
+    "source": "docs/design-v2/gap/product/SYS.md",
+    "verification": "code-review",
+    "reason": "WsLoopbackCheck注册于真实诊断序列，检测实际监听端口的engine.io open握手；结果明确是传输回环边界，不冒称每个namespace的已认证业务订阅。",
+    "evidence": [
+      "api/apps/api/src/platform/system/diagnostics/checks/ws-loopback.check.ts",
+      "api/apps/api/src/platform/system/system.module.ts"
+    ]
+  },
+  {
+    "id": "REQ-DIA-019",
+    "status": "closed",
+    "source": "docs/design-v2/gap/product/SYS.md",
+    "verification": "test-passed-plus-code-review",
+    "reason": "Q-DIA-01已选纳入第九项，清单以服务端首帧为准；真实AuthHelperCheck检查登录环境和CLI兼容性，production诊断注册该项，新验收覆盖失败/可用/版本结果。",
+    "evidence": [
+      "docs/design-v2/gap/product/open-questions.md",
+      "api/apps/api/src/platform/system/diagnostics/checks/auth-helper.check.ts",
+      "api/apps/api/src/platform/system/system.module.ts",
+      "api/acceptance/sys/service/auth-helper-diagnosis.spec.ts"
+    ]
+  },
+  {
+    "id": "REQ-WB-043",
+    "status": "implementation-ahead",
+    "source": "docs/design-v2/gap/product/WB.md",
+    "verification": "code-review",
+    "reason": "源稿将分享深链标计划中；本轮为WB040的地址恢复与错误回退实现了taskId查询恢复，并保留本机选择。此项没有遗漏，记录实现先行，不能伪称源稿已要求发布分享能力。",
+    "evidence": [
+      "web/src/hooks/workbench/useWorkbenchRoute.ts",
+      "web/src/hooks/sandbox/useSandboxRestore.ts",
+      "web/src/containers/workbench/WorkbenchContainer.tsx"
+    ]
+  }
+]

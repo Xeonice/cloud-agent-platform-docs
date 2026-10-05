@@ -4,6 +4,24 @@
 # 原型自测过程中的截图
 *.png
 
+# 最终迁移manifest引用的截图是完成门禁的输入；仅保留最终证据目录。
+!artifacts/design-credentials-v2/*.png
+!artifacts/design-image-system-v2/final-latest/*.png
+!artifacts/design-image-system-v2/provider-failure-final/*.png
+!artifacts/design-image-system-v2/runner-manifest-check/*.png
+!artifacts/design-image-system-v2/sys-final/*.png
+!artifacts/design-shell-project-v2-delete-focus-final-24/*.png
+!artifacts/design-shell-project-v2-final-destroy-mobile-dark390/*.png
+!artifacts/design-shell-project-v2-final-destroy-mobile-light390/*.png
+!artifacts/design-shell-project-v2-final-mobile-dark390/*.png
+!artifacts/design-shell-project-v2-final-mobile-light390/*.png
+!artifacts/design-shell-project-v2-v3-dark1024/*.png
+!artifacts/design-shell-project-v2-v3-dark1440/*.png
+!artifacts/design-shell-project-v2-v3-dark390/*.png
+!artifacts/design-shell-project-v2-v3-light1024/*.png
+!artifacts/design-shell-project-v2-v3-light1440/*.png
+!artifacts/design-shell-project-v2-v3-light390/*.png
+
 # 系统/编辑器
 .DS_Store
 
@@ -16,3 +34,5 @@ node_modules/
 # 一起带进版本库（CI 上还会多一个 `playwright-report/`，因为那边挂了 html reporter）。
 e2e-contract/test-results/
 e2e-contract/playwright-report/
+
+e2e-contract/artifacts/

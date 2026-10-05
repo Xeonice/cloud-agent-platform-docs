@@ -1,0 +1,55 @@
+/* foundation.html 专用：样张页的版式（只用 token，不写字面颜色）。不属于组件库，别的页面不要引用。 */
+.fd { min-width: 1024px; padding: 40px 40px 80px; background: var(--canvas); color: var(--foreground); }
+.fd-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; max-width: 1760px; }
+.fd-title { font: var(--text-heading-32); letter-spacing: var(--tracking-heading); }
+.fd-lead { max-width: 880px; margin-top: 8px; font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.fd-toc { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 20px; max-width: 1200px; }
+.fd-sec { margin-top: 48px; max-width: 1760px; }
+.fd-sec__head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.fd-sec__title { font: var(--text-heading-20); letter-spacing: var(--tracking-heading); }
+.fd-sec__ref { font: var(--text-label-12); color: var(--foreground-subtle); }
+.fd-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: var(--radius-xl); box-shadow: var(--shadow-ring); overflow: hidden; }
+.fd-cell { min-width: 0; padding: 24px; background: var(--canvas); color: var(--foreground); }
+.fd-cell + .fd-cell { border-left: 1px solid var(--border-subtle); }
+.fd-cell__label { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; font: var(--text-label-12-strong); color: var(--foreground-muted); }
+.fd-stack { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.fd-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.fd-row--top { align-items: flex-start; }
+.fd-item { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.fd-cap { font: var(--text-label-12); color: var(--foreground-subtle); }
+.fd-sub { font: var(--text-label-12-strong); color: var(--foreground-muted); }
+/* 色板 */
+.fd-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px 16px; }
+.fd-swatch { display: grid; grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; align-items: center; min-width: 0; }
+.fd-swatch__chip { grid-row: span 2; width: 36px; height: 36px; border-radius: var(--radius-md); box-shadow: var(--shadow-ring); }
+.fd-swatch__name { font: var(--text-mono-12); color: var(--foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-swatch__value { font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+.fd-status { width: 100%; border-collapse: separate; border-spacing: 0; font: var(--text-label-12); }
+.fd-status th { padding: 0 8px 8px 0; text-align: left; font-weight: var(--weight-medium); color: var(--foreground-muted); white-space: nowrap; }
+.fd-status td { padding: 6px 8px 6px 0; vertical-align: middle; white-space: nowrap; }
+.fd-ansi { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px 10px; padding: 12px 16px; border-radius: var(--radius-md); background: var(--term-bg); font: 400 13px/18px var(--font-terminal); }
+.fd-ansi span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 字阶 */
+.fd-type { display: grid; grid-template-columns: 148px minmax(0, 1fr); gap: 4px 16px; align-items: baseline; }
+.fd-type__name { font: var(--text-mono-12); color: var(--foreground-muted); }
+.fd-type__spec { grid-column: 1; font: var(--text-label-12); color: var(--foreground-subtle); }
+.fd-type__sample { grid-column: 2; grid-row: span 2; min-width: 0; }
+/* 外壳局部（侧栏宽 256） */
+.fd-sidebar { width: var(--shell-sidebar-w); padding: 8px 0; border-radius: var(--radius-md); background: var(--canvas); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.fd-sidebar .nav { padding-top: 0; }
+.fd-sidebar .sidebar__scroll { overflow: visible; }
+/* 浮层局部 */
+.fd-overlay-demo { position: relative; height: 200px; border-radius: var(--radius-md); overflow: hidden; background: var(--canvas); box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.fd-overlay-demo__term { position: absolute; inset: 0 0 0 120px; background: var(--term-bg); color: var(--term-fg); padding: 12px 16px; font: 400 13px/18px var(--font-terminal); }
+.fd-overlay-demo__card { position: relative; z-index: 2; width: 260px; padding: 16px; border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-modal); font: var(--text-label-14-strong); }
+.fd-menu-host { position: relative; display: flex; align-items: flex-start; gap: 24px; flex-wrap: wrap; }
+.fd-term { height: 168px; border-radius: 0; }
+.fd-termwrap { border-radius: var(--radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.fd-shellstrip { display: flex; flex-direction: column; border-radius: var(--radius-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--border-subtle); }
+.fd-tooltips { display: flex; gap: 32px; align-items: center; padding: 16px 0 8px; }
+
+/* 窄于 1280 时左右两格改上下排 */
+@media (max-width: 1279px) {
+  .fd-pair { grid-template-columns: minmax(0, 1fr); }
+  .fd-cell + .fd-cell { border-left: 0; border-top: 1px solid var(--border-subtle); }
+}

@@ -1,0 +1,5 @@
+
+> agent-platform-web@0.1.0 test /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
+> vitest run --config vitest.acceptance.config.ts "--reporter=json" "--outputFile=../artifacts/migration-audit/web-acceptance-execution.json"
+
+JSON report written to /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/artifacts/migration-audit/web-acceptance-execution.json

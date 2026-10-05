@@ -1,0 +1,1554 @@
+[
+  {
+    "id": "AC-PRJ-001.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/views/workbench/AppSidebar.view.tsx:290",
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:91",
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:182",
+      "只读核对：web/src/views/project/NewProjectForm.view.tsx:70"
+    ],
+    "reason": "项目分区图标打开同一弹层，默认 Git；普通入口未设仓库焦点，名称自动聚焦。"
+  },
+  {
+    "id": "AC-PRJ-001.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:35",
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:125"
+    ],
+    "reason": "总览新建项目能打开同一弹层，但仍是直达按钮，缺少「新建 ⌄」菜单路径。"
+  },
+  {
+    "id": "AC-PRJ-001.3",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/hooks/workbench/useCommandPalette.ts:149",
+      "只读核对：web/src/lib/workbench/filterCommands.ts:5"
+    ],
+    "reason": "名称前缀匹配优于同义词；搜索新建或创建项目将新建项目排在动作组首位并打开同一弹层。"
+  },
+  {
+    "id": "AC-PRJ-001.4",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:64",
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:125",
+      "只读核对：web/src/containers/project/NewProjectContainer.tsx:41"
+    ],
+    "reason": "欢迎态两个来源入口复用弹层；空项目预选空来源并按现有番号最大值加一，空实例得到 1。"
+  },
+  {
+    "id": "AC-PRJ-002.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/NewProjectForm.view.tsx:67"
+    ],
+    "reason": "名称输入没有 maxLength 或截断，45 字可以完整粘贴。"
+  },
+  {
+    "id": "AC-PRJ-002.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/NewProjectForm.view.tsx:109"
+    ],
+    "reason": "仓库输入下缺少私有仓提示及 aria-describedby 关联。"
+  },
+  {
+    "id": "AC-PRJ-004.7",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/CloneProgress.view.tsx:62"
+    ],
+    "reason": "克隆进度有 status 区域，但返回按钮仍包含在同一 live 区域内。"
+  },
+  {
+    "id": "AC-PRJ-004.8",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/stores/createProjectCloneSlice.ts:48"
+    ],
+    "reason": "已用时仍从页面收到第一帧计时，刷新后无法恢复真正克隆开始时刻。"
+  },
+  {
+    "id": "AC-PRJ-005.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/CloneProgress.view.tsx:56",
+      "只读核对：web/src/views/project/CloneProgress.view.tsx:107"
+    ],
+    "reason": "完成文案和打开项目按钮已有，完成结果未使用 role=status 播报。"
+  },
+  {
+    "id": "AC-PRJ-005.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/stores/createProjectCloneSlice.ts:34",
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:81",
+      "只读核对：web/src/views/project/ProjectGroupHeader.view.tsx:109"
+    ],
+    "reason": "完成帧只写克隆投影，不失效项目列表，徽标未保证立即消失；当前任务不切换已有，缺原位播报及项目可用轻提示。"
+  },
+  {
+    "id": "AC-PRJ-005.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/project/NewProjectContainer.tsx:88",
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:322",
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:76"
+    ],
+    "reason": "回程条按原项目 id 重试并返回工作台，但凭证入口没有定位 Git 分区。"
+  },
+  {
+    "id": "AC-PRJ-006.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/project/NewProjectContainer.tsx:27",
+      "只读核对：web/src/containers/project/NewProjectContainer.tsx:68"
+    ],
+    "reason": "空项目提交成功仍先种入 done 进度视图，需再点打开项目。"
+  },
+  {
+    "id": "AC-PRJ-010.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:106"
+    ],
+    "reason": "选中克隆中项目只显示一句提示，没有克隆进度主区。"
+  },
+  {
+    "id": "AC-PRJ-010.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/project/ProjectRecoveryContainer.tsx:39",
+      "只读核对：web/src/views/project/ProjectGroupMenu.view.tsx:120",
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:162"
+    ],
+    "reason": "主区和菜单有重试，总览失败卡缺少动作，三处尚未共用错误句与禁用态。"
+  },
+  {
+    "id": "AC-PRJ-010.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:162"
+    ],
+    "reason": "项目卡只有状态与计数，没有失败说明及按失败码分流的恢复动作。"
+  },
+  {
+    "id": "AC-PRJ-011.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectGroupHeader.view.tsx:103"
+    ],
+    "reason": "徽标与任务计数已有，徽标位于计数之后，缺少目标读屏名称。"
+  },
+  {
+    "id": "AC-PRJ-011.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectGroupHeader.view.tsx:65"
+    ],
+    "reason": "未就绪项目折叠箭头仍可操作，没有不展开及原因播报。"
+  },
+  {
+    "id": "AC-PRJ-011.4",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/views/workbench/AppSidebar.view.tsx:333",
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:111"
+    ],
+    "reason": "未就绪空组不显示发起第一个任务，入口守卫在点击时判就绪，不留下待完成后自动弹出的请求。"
+  },
+  {
+    "id": "AC-PRJ-012.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:106"
+    ],
+    "reason": "克隆主区未接进度卡、项目名、百分比或明细。"
+  },
+  {
+    "id": "AC-PRJ-012.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:106"
+    ],
+    "reason": "克隆主区未接进度未知、明细及慢提示。"
+  },
+  {
+    "id": "AC-PRJ-012.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:106"
+    ],
+    "reason": "刷新选中克隆项目只显示静态一句，没有主区进度未知视图。"
+  },
+  {
+    "id": "AC-PRJ-013.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectGroupMenu.view.tsx:106",
+      "只读核对：web/src/views/project/ProjectGroupMenu.view.tsx:156"
+    ],
+    "reason": "菜单主要条目已有，取消克隆缺少保留项目附注。"
+  },
+  {
+    "id": "AC-PRJ-013.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectGroupMenu.view.tsx:180",
+      "只读核对：web/src/hooks/project/useProjects.ts:94"
+    ],
+    "reason": "失败可留在菜单并显示 alert，未知取消错误沿用删除失败兜底文案。"
+  },
+  {
+    "id": "AC-PRJ-013.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对：api/packages/modules/project/src/application/clone-project.workflow.ts:97",
+      "只读核对：api/packages/modules/project/test/unit/clone-cancel-queued.spec.ts:1"
+    ],
+    "reason": "排队取消会移出队列、写 failed/INTERRUPTED 并推送；有定点回归文件，本轮未重跑。"
+  },
+  {
+    "id": "AC-PRJ-014.7",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectGroupMenu.view.tsx:120",
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:194",
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:162"
+    ],
+    "reason": "菜单没有收到失败码，权限失败仍给重试且缺配置凭证；总览卡也未接恢复动作。"
+  },
+  {
+    "id": "AC-PRJ-016.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:139"
+    ],
+    "reason": "顶栏已可聚焦并拦截未就绪项目，克隆中原因仍为通用「项目尚未就绪」。"
+  },
+  {
+    "id": "AC-PRJ-016.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/AppFrameContainer.tsx:139"
+    ],
+    "reason": "顶栏已拦截克隆失败，但缺少要求的失败专属原因和恢复指路。"
+  },
+  {
+    "id": "AC-PRJ-016.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/containers/sandbox/SandboxTerminalContainer.tsx:514",
+      "只读核对：web/src/views/sandbox/NewSandboxPanel.view.tsx:249"
+    ],
+    "reason": "项目下拉原生 option 对克隆中与失败项目均 disabled。"
+  },
+  {
+    "id": "AC-PRJ-020.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:114"
+    ],
+    "reason": "项目信息已有常驻栏，缺分支 chip、四行信息浮层、打开态与初始焦点。"
+  },
+  {
+    "id": "AC-PRJ-020.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:114"
+    ],
+    "reason": "没有窄顶栏 ⓘ 入口或同一浮层定位。"
+  },
+  {
+    "id": "AC-PRJ-020.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:121",
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:134"
+    ],
+    "reason": "空项目信息与创建时间已有且无拉取按钮，缺 chip 与浮层结构。"
+  },
+  {
+    "id": "AC-PRJ-020.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:126"
+    ],
+    "reason": "未填分支仍显示「—」，没有「远端默认分支」。"
+  },
+  {
+    "id": "AC-PRJ-020.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:114"
+    ],
+    "reason": "没有浮层及 Esc、外部点击关闭与焦点归还链路。"
+  },
+  {
+    "id": "AC-PRJ-021.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:136"
+    ],
+    "reason": "拉取按钮有 title/aria-label，但缺可见作用范围说明及 aria-describedby。"
+  },
+  {
+    "id": "AC-PRJ-021.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:136"
+    ],
+    "reason": "常驻栏按钮可禁用并改字，缺两处按钮同步、转圈及指定 status 播报。"
+  },
+  {
+    "id": "AC-PRJ-021.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/lib/sandbox/sandboxErrorCopy.ts:156"
+    ],
+    "reason": "BRANCH_NOT_FOUND 建议句仍写「重新同步」。"
+  },
+  {
+    "id": "AC-PRJ-022.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useProjectBranches.ts:89",
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:114"
+    ],
+    "reason": "成功会重取项目信息，缺刚刚时间提示和指定成功 status 播报。"
+  },
+  {
+    "id": "AC-PRJ-022.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:153",
+      "只读核对：web/src/hooks/project/useProjectBranches.ts:99"
+    ],
+    "reason": "失败可保留旧数据并显示 alert/配置凭证，缺要求的信息浮层与双按钮链路。"
+  },
+  {
+    "id": "AC-PRJ-022.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useProjectBranches.ts:99"
+    ],
+    "reason": "拉取失败仍复用 cloneFailureGuidance，文案包含克隆且未按拉取场景独立映射。"
+  },
+  {
+    "id": "AC-PRJ-022.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:157",
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:63"
+    ],
+    "reason": "配置凭证能进入凭证页，但未定位 Git 分区。"
+  },
+  {
+    "id": "AC-PRJ-022.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/ProjectInfoBar.view.tsx:114"
+    ],
+    "reason": "没有顶栏拉取与浮层自动展开失败的交互。"
+  },
+  {
+    "id": "AC-PRJ-022.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useProjectBranches.ts:89",
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:179"
+    ],
+    "reason": "缺成功隐藏播报、chip 说明及总览最后拉取更新。"
+  },
+  {
+    "id": "AC-PRJ-030.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/project/ProjectMenuContainer.tsx:101"
+    ],
+    "reason": "成果/规则读取错误只检查 loading，错误时仍归零显示。"
+  },
+  {
+    "id": "AC-PRJ-040.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71",
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:89"
+    ],
+    "reason": "删除框仅提示活跃任务会强制停止；缺列表、成果拦截、两个去处与可聚焦禁用删除。"
+  },
+  {
+    "id": "AC-PRJ-040.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/lib/project/projectDeletion.ts:16"
+    ],
+    "reason": "活跃统计只包含准备中、运行中、等待输入，遗漏空闲与停止中。"
+  },
+  {
+    "id": "AC-PRJ-040.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:89"
+    ],
+    "reason": "没有去停止或销毁出口及树筛选、展开、滚动链路。"
+  },
+  {
+    "id": "AC-PRJ-040.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71"
+    ],
+    "reason": "没有被拦态成果说明或去清理出口。"
+  },
+  {
+    "id": "AC-PRJ-040.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:254"
+    ],
+    "reason": "删除项目不查询活跃任务，也没有活跃任务专属 409 拦截。"
+  },
+  {
+    "id": "AC-PRJ-041.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71"
+    ],
+    "reason": "删除影响说明仍合为任务/工作目录通用一句，缺名字清单、仓库体积、规则历史与完整焦点安排。"
+  },
+  {
+    "id": "AC-PRJ-041.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71"
+    ],
+    "reason": "零任务仍渲染任务删除句，未按实际任务/规则数量裁剪。"
+  },
+  {
+    "id": "AC-PRJ-041.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:254"
+    ],
+    "reason": "项目删除没有销毁下属已停止任务，留下任务记录及代码副本。"
+  },
+  {
+    "id": "AC-PRJ-041.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:272",
+      "只读核对：api/packages/modules/automation/src/infrastructure/persistence/schema/automation.sqlite.ts:16"
+    ],
+    "reason": "事务不删自动化及历史，规则外键 restrict 可使项目删除失败。"
+  },
+  {
+    "id": "AC-PRJ-042.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:100"
+    ],
+    "reason": "克隆中只有去组头取消的说明，缺确认框内取消按钮及要求的删除条目。"
+  },
+  {
+    "id": "AC-PRJ-042.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:100"
+    ],
+    "reason": "删除确认中没有取消克隆动作链路。"
+  },
+  {
+    "id": "AC-PRJ-043.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:115",
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:193"
+    ],
+    "reason": "删除/取消按钮会禁用，外层未传 busy，关闭/遮罩/Esc 仍可关；缺转圈及 status。"
+  },
+  {
+    "id": "AC-PRJ-043.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/project/ProjectMenuContainer.tsx:64",
+      "只读核对：web/src/hooks/project/useProjects.ts:94",
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:108"
+    ],
+    "reason": "网络失败框保留并恢复按钮，缺要求的网络文案与项目原样保留说明。"
+  },
+  {
+    "id": "AC-PRJ-043.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:265",
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:272"
+    ],
+    "reason": "目录在事务之前删除，外键失败无法保留目录且未映射专属 409。"
+  },
+  {
+    "id": "AC-PRJ-044.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useProjects.ts:138",
+      "只读核对：api/packages/modules/project/src/application/project-application.service.ts:254"
+    ],
+    "reason": "项目/任务列表会失效且选中态清除，但后端未删除下属任务，孤儿仍可出现在树及命令列表。"
+  },
+  {
+    "id": "AC-PRJ-044.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useProjects.ts:144",
+      "只读核对：web/src/containers/workbench/WorkbenchContainer.tsx:115"
+    ],
+    "reason": "清除选中后回总览已有，缺已删除项目名称的顶部提示与播报。"
+  },
+  {
+    "id": "AC-PRJ-050.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/app/settings/system/page.tsx:30"
+    ],
+    "reason": "系统状态容器未传清理成果回调，按钮无法打开跨项目成果视图。"
+  },
+  {
+    "id": "AC-PRJ-050.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71"
+    ],
+    "reason": "删除项目未接成果拦截/去清理入口。"
+  },
+  {
+    "id": "AC-PRJ-050.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/sandbox/SandboxTerminalContainer.tsx:292",
+      "只读核对：api/packages/modules/sandbox/src/application/sandbox-application.service.ts:774"
+    ],
+    "reason": "后端能登记手动保留成果，任务销毁完成提示与成果链接入口尚未接入。"
+  },
+  {
+    "id": "AC-PRJ-050.5",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/hooks/workbench/useCommandPalette.ts:272"
+    ],
+    "reason": "按各项目真实成果数生成成果命令，显示项目名/份数并打开对应项目列表。"
+  },
+  {
+    "id": "AC-PRJ-050.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:65",
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:87",
+      "只读核对：web/src/views/project/DeleteProjectConfirm.view.tsx:71"
+    ],
+    "reason": "成果列表/空态及删除确认仍含「工作目录」等旧称。"
+  },
+  {
+    "id": "AC-PRJ-051.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/lib/project/retainedVolumeModel.ts:53",
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:113"
+    ],
+    "reason": "成果行取来源任务 id 缩写，未使用登记时任务名快照。"
+  },
+  {
+    "id": "AC-PRJ-051.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:115"
+    ],
+    "reason": "不足一天可显示警告颜色/期限，缺三角图标警告徽标。"
+  },
+  {
+    "id": "AC-PRJ-053.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:155"
+    ],
+    "reason": "删除确认仍嵌在列表行内，缺同对话框替换、指定影响条目及取消初始焦点。"
+  },
+  {
+    "id": "AC-PRJ-053.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:178"
+    ],
+    "reason": "取消能返回普通行，未归还焦点到该行删除按钮。"
+  },
+  {
+    "id": "AC-PRJ-053.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/project/useRetainedVolumes.ts:71"
+    ],
+    "reason": "删除后更新项目成果查询和合计，未使系统资源/成果占用查询失效。"
+  },
+  {
+    "id": "AC-PRJ-054.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:74"
+    ],
+    "reason": "列表失败显示 alert 且不误出空态，但缺固定失败句和重试按钮。"
+  },
+  {
+    "id": "AC-PRJ-054.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/project/RetainedVolumesPanel.view.tsx:74",
+      "只读核对：web/src/containers/project/RetainedVolumesContainer.tsx:25"
+    ],
+    "reason": "成果错误态没有重试入口或重试进度。"
+  },
+  {
+    "id": "AC-PRJ-055.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/automation/src/application/automation.scheduler.ts:349",
+      "只读核对：api/packages/modules/sandbox/src/application/sandbox-application.service.ts:774"
+    ],
+    "reason": "自动化 finished 只记终态，未销毁收尾并登记按规则保留期的自动化产物。"
+  },
+  {
+    "id": "AC-PRJ-056.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/app/settings/system/page.tsx:30",
+      "只读核对：web/src/containers/project/RetainedVolumesContainer.tsx:8"
+    ],
+    "reason": "清理按钮无回调，成果容器只支持指定项目，没有跨项目分组/合计。"
+  },
+  {
+    "id": "AC-PRJ-056.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/project/RetainedVolumesContainer.tsx:8"
+    ],
+    "reason": "没有跨项目成果范围选择与副标题/合计过滤。"
+  },
+  {
+    "id": "AC-PRJ-056.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/project/RetainedVolumesContainer.tsx:8",
+      "只读核对：web/src/hooks/project/useRetainedVolumes.ts:71"
+    ],
+    "reason": "没有跨项目分组删除链路，删除未刷新系统资源占用。"
+  },
+  {
+    "id": "AC-AUTH-001.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/credential/CredentialsContainer.tsx:16",
+      "只读核对：web/src/views/settings/AuthMethodRadioRow.view.tsx:130"
+    ],
+    "reason": "面板在目标卡最后一行并选对应标签，触发按钮缺 aria-expanded/aria-controls。"
+  },
+  {
+    "id": "AC-AUTH-001.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/sandbox/NewSandboxPanel.view.tsx:231",
+      "只读核对：web/src/views/sandbox/NewSandboxPanel.view.tsx:593",
+      "只读核对：web/src/containers/sandbox/SandboxTerminalContainer.tsx:315"
+    ],
+    "reason": "任务弹层头/页脚固定、正文滚动已有，面板展开没有 scrollIntoView nearest。"
+  },
+  {
+    "id": "AC-AUTH-002.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/sandbox/NewSandboxPanel.view.tsx:586",
+      "只读核对：web/src/views/sandbox/NewSandboxPanel.view.tsx:606"
+    ],
+    "reason": "闸门阻止发起且显示原因，但主按钮 native disabled，不能键盘聚焦或关联两句原因。"
+  },
+  {
+    "id": "AC-AUTH-003.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:136"
+    ],
+    "reason": "帐号分支挂载时 effect 立即 begin，缺显式开始登录空闲态。"
+  },
+  {
+    "id": "AC-AUTH-003.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:106",
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:136"
+    ],
+    "reason": "切换标签会重挂帐号分支并自动 begin。"
+  },
+  {
+    "id": "AC-AUTH-003.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:136"
+    ],
+    "reason": "没有开始帐号登录按钮，自动 effect 启动会话。"
+  },
+  {
+    "id": "AC-AUTH-003.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:246",
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:109"
+    ],
+    "reason": "卸载可停本地轮询，缺后端取消接口与会话/进程回收请求。"
+  },
+  {
+    "id": "AC-AUTH-003.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:136",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:200"
+    ],
+    "reason": "初始化面板没有目标空闲态说明，挂载就自动开始。"
+  },
+  {
+    "id": "AC-AUTH-004.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:133",
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:235"
+    ],
+    "reason": "首次查询失败即改变 UI，重试重新 begin 换码，没有三次失败阈值及同码立即查询。"
+  },
+  {
+    "id": "AC-AUTH-006.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/wizard/auth/SetupTokenAuth.view.tsx:39",
+      "只读核对：web/src/views/wizard/auth/SetupTokenAuth.view.tsx:59",
+      "只读核对：api/packages/modules/runtime/src/infrastructure/adapters/claude-code/claude-code.adapter.ts:251"
+    ],
+    "reason": "结构、纯文本说明及遮罩提交已有，等待句仍使用 ⏳ 字符，baseline 点名的 DR-26 图标迁移未完成。"
+  },
+  {
+    "id": "AC-AUTH-006.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:88",
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:148"
+    ],
+    "reason": "拒绝错误仍将后端 message 原样放入面板。"
+  },
+  {
+    "id": "AC-AUTH-006.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:243"
+    ],
+    "reason": "第一次 completeAuth 失败即 dispose 并删除会话，后续正确码不能复用同一面板登录。"
+  },
+  {
+    "id": "AC-AUTH-007.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:155"
+    ],
+    "reason": "API Key 拒绝能留面板并展示 details，但标题使用后端原句，缺固定前端标题。"
+  },
+  {
+    "id": "AC-AUTH-007.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:74"
+    ],
+    "reason": "没有 details 时 reasonsFromError 仍生成一条兜底原因，不是仅标题。"
+  },
+  {
+    "id": "AC-AUTH-007.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/credential/CredentialsContainer.tsx:27",
+      "只读核对：web/src/containers/sandbox/SandboxTerminalContainer.tsx:317",
+      "只读核对：web/src/views/wizard/auth/ApiKeyAuth.view.tsx:84"
+    ],
+    "reason": "凭证卡传厂商；新建任务闸门未传 vendor，去处句仍是泛指厂商。"
+  },
+  {
+    "id": "AC-AUTH-008.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:149",
+      "只读核对：web/src/hooks/credential/useRuntimeAuthPanel.ts:72"
+    ],
+    "reason": "已有已连上文案，但无 role=status，成功回调立即收起，未等 2 秒和 Runtime 重取。"
+  },
+  {
+    "id": "AC-AUTH-008.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthPanel.ts:72",
+      "只读核对：web/src/containers/sandbox/SandboxTerminalContainer.tsx:292"
+    ],
+    "reason": "指令保留，但成功立即收面板、Runtime 未刷新前闸门会回到未配置入口，发起仍禁用。"
+  },
+  {
+    "id": "AC-AUTH-008.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthMutations.ts:36",
+      "只读核对：web/src/app/providers.tsx:55"
+    ],
+    "reason": "共享成功 toast 文案已有，Toaster 未接主题状态，无法满足跟随当前主题。"
+  },
+  {
+    "id": "AC-AUTH-008.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/credential/src/application/runtime-credential.service.ts:151"
+    ],
+    "reason": "保存 API Key 不替已有失效/删除帐号方式更新 activeAuthMethod，闸门可仍在。"
+  },
+  {
+    "id": "AC-AUTH-010.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:109",
+      "只读核对：api/packages/modules/runtime/src/application/auth-session.store.ts:33"
+    ],
+    "reason": "每次 beginAuth 都创建新 helper/session，没有同 Runtime 单会话锁。"
+  },
+  {
+    "id": "AC-AUTH-010.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:125",
+      "只读核对：api/packages/modules/runtime/src/application/auth-session.store.ts:42"
+    ],
+    "reason": "Auth 会话登记无全局并发上限或可区分的容量拒绝码。"
+  },
+  {
+    "id": "AC-AUTH-010.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:246",
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:109"
+    ],
+    "reason": "前端只有停止轮询，后端没有取消登录会话接口。"
+  },
+  {
+    "id": "AC-AUTH-010.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/runtime/src/application/auth-session.store.ts:51",
+      "只读核对：api/packages/modules/runtime/src/application/auth-session.store.ts:89"
+    ],
+    "reason": "过期查询只返回 undefined，清扫仅 tombstone；无人访问的活会话/进程没有周期回收。"
+  },
+  {
+    "id": "AC-AUTH-011.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:257"
+    ],
+    "reason": "helper 失败有原因和重试，缺去系统状态诊断入口。"
+  },
+  {
+    "id": "AC-AUTH-011.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthFlow.ts:88"
+    ],
+    "reason": "鉴权错误 message 原样透出，英文原句或错误码可上屏。"
+  },
+  {
+    "id": "AC-CRD-001.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:55",
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:96"
+    ],
+    "reason": "删除标题已有，缺当前在用副标题与删除并销毁 N 个任务按钮。"
+  },
+  {
+    "id": "AC-CRD-001.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:96"
+    ],
+    "reason": "按钮不编数量，但仍为「确认删除」，未改为「删除凭证」。"
+  },
+  {
+    "id": "AC-CRD-001.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/lib/credential/runtimeCredential.ts:121",
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:78",
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:306"
+    ],
+    "reason": "确认框/提示仍写「重启」「吊销」。"
+  },
+  {
+    "id": "AC-CRD-002.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useAffectedTasks.ts:37",
+      "只读核对：web/src/lib/credential/affectedTasks.ts:12",
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:78"
+    ],
+    "reason": "清单按 runtime 前端自算，不按凭证绑定；遗漏空闲且只列任务名、不列 Agent/状态。"
+  },
+  {
+    "id": "AC-CRD-002.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:73"
+    ],
+    "reason": "读取失败有未知提示且不会说没有任务，缺标题说明、重试读取及指定按钮。"
+  },
+  {
+    "id": "AC-CRD-002.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:73",
+      "只读核对：web/src/hooks/credential/useAffectedTasks.ts:37"
+    ],
+    "reason": "没有同框重试读取动作。"
+  },
+  {
+    "id": "AC-CRD-002.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:89"
+    ],
+    "reason": "有无任务说明，缺不会销毁任何任务与绑定清单来源。"
+  },
+  {
+    "id": "AC-CRD-002.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:48"
+    ],
+    "reason": "手写对话框没有取消初始焦点、焦点圈或 Esc 关闭。"
+  },
+  {
+    "id": "AC-CRD-003.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/sandbox/src/application/workflows/provision-sandbox.workflow.ts:518",
+      "只读核对：api/packages/modules/sandbox/src/application/event-handlers/credential-revoked.handler.ts:73"
+    ],
+    "reason": "多 Runtime 镜像会准备并注入两者凭证，删除 Claude 凭证可能销毁 Codex 任务，违背当前产品目标。"
+  },
+  {
+    "id": "AC-CRD-003.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/lib/credential/affectedTasks.ts:12",
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:78"
+    ],
+    "reason": "准备中任务被算进受影响列表，没有拆到删掉之后。"
+  },
+  {
+    "id": "AC-CRD-003.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:60"
+    ],
+    "reason": "有外带 token 无法收回提醒，缺「平台删不掉」条目及要求用词。"
+  },
+  {
+    "id": "AC-CRD-004.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RevokeConfirmDialog.view.tsx:67"
+    ],
+    "reason": "有当前生效方式删除警告，缺另一份 API Key 仍保留及删除后追问的说明。"
+  },
+  {
+    "id": "AC-CRD-004.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useCredentials.ts:285",
+      "只读核对：web/src/lib/credential/runtimeCredential.ts:147",
+      "只读核对：web/src/lib/credential/runtimeCredential.ts:157"
+    ],
+    "reason": "删成功追问已有；标题「切换到API Key」及正文「它的API Key还留着」仍缺要求的 API Key 两侧空格。"
+  },
+  {
+    "id": "AC-CRD-004.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/lib/credential/runtimeCredential.ts:44",
+      "只读核对：web/src/views/settings/AuthMethodRadioRow.view.tsx:110",
+      "只读核对：api/packages/modules/credential/src/application/runtime-credential.service.ts:295"
+    ],
+    "reason": "卡头会变未配置，但删除不清 activeAuthMethod，空行仍可带当前使用徽标/选中状态。"
+  },
+  {
+    "id": "AC-CRD-005.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：api/packages/modules/sandbox/src/application/event-handlers/credential-revoked.handler.ts:73",
+      "只读核对：web/src/lib/sandbox/sandboxLifecycle.ts:76"
+    ],
+    "reason": "后端执行销毁并发事件，前端仍把 destroying 当已停止，受影响清单与计数不能证明一致。"
+  },
+  {
+    "id": "AC-CRD-005.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useCredentials.ts:305"
+    ],
+    "reason": "失败会关框且凭证不变，toast 优先使用后端原句，未固定为前端失败句。"
+  },
+  {
+    "id": "AC-CRD-010.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useCredentials.ts:210",
+      "只读核对：web/src/views/settings/ConfirmDialog.view.tsx:22"
+    ],
+    "reason": "确认前单选不变已有，确认框缺 Agent/当前方式副标题与取消初始焦点。"
+  },
+  {
+    "id": "AC-CRD-010.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useCredentials.ts:223",
+      "只读核对：web/src/views/settings/ConfirmDialog.view.tsx:33",
+      "只读核对：web/src/hooks/credential/useRuntimeAuthMutations.ts:49"
+    ],
+    "reason": "一次 PUT、在途禁用及成功刷新已有；toast 仍为「已切换到API Key」，缺目标句空格。"
+  },
+  {
+    "id": "AC-CRD-010.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：api/packages/modules/runtime/src/application/runtime-application.service.ts:449",
+      "只读核对：web/src/hooks/credential/useCredentials.ts:233"
+    ],
+    "reason": "目标方式被删后后端 409、框关闭且徽标不动，但 toast 原样透出英文后端句。"
+  },
+  {
+    "id": "AC-CRD-010.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/ConfirmDialog.view.tsx:22"
+    ],
+    "reason": "切换确认没有 Esc 处理或右上关闭按钮。"
+  },
+  {
+    "id": "AC-CRD-011.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/credential/src/application/runtime-credential.service.ts:143",
+      "只读核对：api/packages/modules/credential/src/application/runtime-credential.service.ts:151"
+    ],
+    "reason": "新配 API Key 不会替已有 activeAuthMethod 切换，仍沿用帐号登录。"
+  },
+  {
+    "id": "AC-CRD-011.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/packages/modules/credential/src/application/runtime-credential.service.ts:151"
+    ],
+    "reason": "帐号方式删除/过期后保存 API Key 仍不更新已有生效设置，卡片可继续未配置/过期。"
+  },
+  {
+    "id": "AC-CRD-012.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/AuthMethodRadioRow.view.tsx:104"
+    ],
+    "reason": "两张卡帐号单选共享 name=auth-mode-subscription，原生组互相取消。"
+  },
+  {
+    "id": "AC-CRD-020.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:72"
+    ],
+    "reason": "说明句仍写「Agent 的 Runtime 凭证」，未使用目标「Agent 凭证」。"
+  },
+  {
+    "id": "AC-CRD-021.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:269",
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:285"
+    ],
+    "reason": "保存失败表单保留，toast 仍使用后端原句。"
+  },
+  {
+    "id": "AC-CRD-022.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/GitCredentialCard.view.tsx:107",
+      "只读核对：api/packages/modules/credential/src/infrastructure/git/git-auth.materializer.ts:84",
+      "只读核对：api/packages/modules/credential/src/application/dto/credential.mapper.ts:20"
+    ],
+    "reason": "卡面支持 knownHosts 展示，但成功克隆没有将主机指纹写回凭证 metadata 的链路。"
+  },
+  {
+    "id": "AC-CRD-026.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:306"
+    ],
+    "reason": "Git 删除直接发 DELETE，没有指定确认框、影响分类或初始焦点。"
+  },
+  {
+    "id": "AC-CRD-026.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:306"
+    ],
+    "reason": "没有按 Git 白名单域计算受影响项目清单。"
+  },
+  {
+    "id": "AC-CRD-026.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:306"
+    ],
+    "reason": "DELETE 成功会更新凭证列表，但无确认框且成功句仍是凭证已吊销。"
+  },
+  {
+    "id": "AC-CRD-026.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:311"
+    ],
+    "reason": "失败凭证不变，但 toast 使用吊销失败及后端原句。"
+  },
+  {
+    "id": "AC-CRD-030.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RuntimeCredentialsSection.view.tsx:83",
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:101"
+    ],
+    "reason": "Agent 与 Git 各只有一块固定 h24 骨架，未与真实卡数和高度一致。"
+  },
+  {
+    "id": "AC-CRD-030.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/RuntimeCredentialsSection.view.tsx:83",
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:101"
+    ],
+    "reason": "加载态缺正在读取两类列表的读屏 status，骨架未声明隐藏。"
+  },
+  {
+    "id": "AC-CRD-032.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/settings/RuntimeCredentialsSection.view.tsx:98"
+    ],
+    "reason": "无匹配文案已有，缺搜索结果 live/status 播报。"
+  },
+  {
+    "id": "AC-CRD-033.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/settings/AuthMethodRadioRow.view.tsx:104"
+    ],
+    "reason": "两 Agent 帐号登录单选共享原生 name，无法同时可靠选中。"
+  },
+  {
+    "id": "AC-CRD-034.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/project/NewProjectContainer.tsx:88",
+      "只读核对：web/src/views/settings/GitCredentialsSection.view.tsx:76"
+    ],
+    "reason": "凭证回程条已有，但路由只到凭证页，没有定位 Git 分区。"
+  },
+  {
+    "id": "AC-CRD-034.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:322"
+    ],
+    "reason": "失败保留回程条，toast 未固定重试克隆失败前端句。"
+  },
+  {
+    "id": "AC-CRD-034.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/project/ProjectRecoveryContainer.tsx:33",
+      "只读核对：web/src/hooks/credential/useGitCredentialManager.ts:198"
+    ],
+    "reason": "已有项目恢复跳转没有保存 repoUrl，测试连接只能读 pending URL，无法使用该项目仓库。"
+  },
+  {
+    "id": "AC-ACC-001.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:52"
+    ],
+    "reason": "全新未配置库不会生成/保存口令或开启口令门，也没有首次 stdout 横幅。"
+  },
+  {
+    "id": "AC-ACC-001.2",
+    "status": "closed",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:52"
+    ],
+    "reason": "已存在 stored hash 启动只打印 ENABLED via stored 信息，不打印明文。"
+  },
+  {
+    "id": "AC-ACC-001.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:119",
+      "只读核对：api/apps/api/src/platform/access-passcode/access-passcode.service.ts:67"
+    ],
+    "reason": "现有保存路径只存哈希且日志不含明文，但首次启动横幅路径未实现，无法闭合该场景。"
+  },
+  {
+    "id": "AC-ACC-002.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.guard.ts:27"
+    ],
+    "reason": "没有回环免口令配置分支或地址判定。"
+  },
+  {
+    "id": "AC-ACC-003.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/access/AccessGateContainer.tsx:13",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:58"
+    ],
+    "reason": "口令门是暗色覆盖层，children 仍挂载，工作台/向导 DOM 与请求未隔离。"
+  },
+  {
+    "id": "AC-ACC-003.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/access/useAccessGate.ts:35",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:55",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:58"
+    ],
+    "reason": "解锁后重判初始化已有，但首次 401 仍先放行 children，解锁前工作台已挂载。"
+  },
+  {
+    "id": "AC-ACC-003.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/access/useAccessGate.ts:85",
+      "只读核对：web/src/containers/access/AccessGateContainer.tsx:13"
+    ],
+    "reason": "401 可重新锁定，但仍为盖在已挂载内容上的口令层，缺完整全屏门替换。"
+  },
+  {
+    "id": "AC-ACC-004.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/access/UnlockForm.view.tsx:35"
+    ],
+    "reason": "标题、说明、焦点字段和空值禁用已有，缺口令来源说明。"
+  },
+  {
+    "id": "AC-ACC-004.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/access/UnlockForm.view.tsx:31",
+      "只读核对：web/src/views/access/UnlockForm.view.tsx:52"
+    ],
+    "reason": "提交会 trim、禁用输入并显示验证中，缺按钮转圈。"
+  },
+  {
+    "id": "AC-ACC-004.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/access/UnlockForm.view.tsx:59",
+      "只读核对：web/src/hooks/access/useAccessGate.ts:50"
+    ],
+    "reason": "输入保留并可重试，缺字段错误态，原因优先使用后端原句。"
+  },
+  {
+    "id": "AC-ACC-005.2",
+    "status": "closed",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.guard.ts:68",
+      "只读核对：api/apps/api/src/platform/access-passcode/access.controller.ts:78"
+    ],
+    "reason": "普通保护请求只返回要求口令而不记失败，仅错误解锁提交累计失败。"
+  },
+  {
+    "id": "AC-ACC-005.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/access/useAccessGate.ts:50",
+      "只读核对：web/src/views/access/UnlockForm.view.tsx:65"
+    ],
+    "reason": "可显示接口错误并保留输入，未解析 retryAfterSec、换固定句或锁定期禁用解锁。"
+  },
+  {
+    "id": "AC-ACC-007.1",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/access-passcode.service.ts:31",
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:165"
+    ],
+    "reason": "regenerate 未实现让既有浏览器失效参数、签名轮换、当前浏览器新会话或选项审计。"
+  },
+  {
+    "id": "AC-ACC-007.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/access-passcode.service.ts:63",
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:165"
+    ],
+    "reason": "不存在失效参数的固定部署密钥 409 零副作用校验。"
+  },
+  {
+    "id": "AC-ACC-007.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/access-passcode/passcode.service.ts:52",
+      "只读核对：api/README.md:1"
+    ],
+    "reason": "没有首次口令横幅及同时让浏览器失效参数说明；后端也未实现该参数。"
+  },
+  {
+    "id": "AC-DEP-002.2",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/init/AppBootGate.tsx:35",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:58",
+      "只读核对：web/src/containers/access/AccessGateContainer.tsx:13"
+    ],
+    "reason": "init 401 上报锁定后仍 fail-open 渲染 children，口令层下有工作台 DOM/查询。"
+  },
+  {
+    "id": "AC-DEP-002.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/access/useAccessGate.ts:35",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:55",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:58"
+    ],
+    "reason": "解锁后可重取并进入向导，首次 init 401 仍先挂工作台，baseline 的前置泄漏未修。"
+  },
+  {
+    "id": "AC-DEP-003.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:89",
+      "只读核对：web/src/views/init/ResourceConfirm.view.tsx:90"
+    ],
+    "reason": "无耗时承诺，但页头和第五步仍写「设置 → 系统状态」，baseline 点名的去处限定未改。"
+  },
+  {
+    "id": "AC-DEP-004.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/lib/system/initWizardModel.ts:83",
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:114"
+    ],
+    "reason": "模型区分未达成并显示三角，但缺走过没有完成的读屏文字。"
+  },
+  {
+    "id": "AC-DEP-004.5",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:85",
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:94"
+    ],
+    "reason": "五个步骤名已有，缺第 N/5 步总提示与当前格 aria-current=step。"
+  },
+  {
+    "id": "AC-DEP-006.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/ConnectivityItem.view.tsx:44",
+      "只读核对：web/src/lib/system/connectivityVerdict.ts:79",
+      "只读核对：api/apps/api/src/platform/system/diagnostics/connectivity.probe.ts:322"
+    ],
+    "reason": "hint 整段不截断且 kind 标签已改，后端 hint 原句仍有镜像仓库并原样上屏。"
+  },
+  {
+    "id": "AC-DEP-007.3",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/lib/system/connectivityVerdict.ts:34"
+    ],
+    "reason": "离线判定只看模型 API 全 !ok，未排除 timedOut，超时仍误判离线。"
+  },
+  {
+    "id": "AC-DEP-007.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：api/apps/api/src/platform/system/initialization.service.ts:93"
+    ],
+    "reason": "POST init 同样将模型 API 超时视为离线，没有确认时仍返回 409。"
+  },
+  {
+    "id": "AC-DEP-008.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/OfflineNotice.view.tsx:36",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:65"
+    ],
+    "reason": "离线有 alert 和未确认禁用下一步，缺目标标题且结论在确认条重复。"
+  },
+  {
+    "id": "AC-DEP-009.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/system/ProxyConfigForm.view.tsx:89",
+      "只读核对：web/src/hooks/system/useInitWizard.ts:497",
+      "只读核对：web/src/hooks/system/useInitWizard.ts:524"
+    ],
+    "reason": "保存失败位置/alert 已有，但超时使用后端或 Error 原句，没有固定前端句。"
+  },
+  {
+    "id": "AC-DEP-009.4",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/views/system/ProxyConfigForm.view.tsx:84"
+    ],
+    "reason": "示例仍放在普通段落里的字面反引号，并带警告 emoji。"
+  },
+  {
+    "id": "AC-DEP-009.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:93"
+    ],
+    "reason": "代理说明硬编码上一步有目标连不上，全绿回退也会显示。"
+  },
+  {
+    "id": "AC-DEP-010.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:132",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:135"
+    ],
+    "reason": "五行等待文案已有，下一步未在镜像结论未到时禁用，也缺检查完成页脚句。"
+  },
+  {
+    "id": "AC-DEP-010.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/lib/system/presetImageChain.ts:132",
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:132"
+    ],
+    "reason": "链停止后剩余项是 pending，整轮 isChecking 尚 true 时仍显示检查中并转圈。"
+  },
+  {
+    "id": "AC-DEP-010.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:136"
+    ],
+    "reason": "五行顺序/名称已有，标题仍为第 N 步（共 5 步），未用项。"
+  },
+  {
+    "id": "AC-DEP-011.2",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/system/usePresetImageProvision.ts:85",
+      "只读核对：web/src/hooks/system/usePresetImageProvision.ts:116",
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:227"
+    ],
+    "reason": "百分比、条和每秒用时已有，阶段字符串又追加百分比造成重复。"
+  },
+  {
+    "id": "AC-DEP-011.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/system/usePresetImageProvision.ts:99",
+      "只读核对：web/src/hooks/system/usePresetImageProvision.ts:135",
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:250"
+    ],
+    "reason": "失败保留阶段与 alert，准备可重试且不自动再开；出口仍错误引导代理解决镜像下载。"
+  },
+  {
+    "id": "AC-DEP-012.1",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/PresetImageCheck.view.tsx:302",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:138",
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:143"
+    ],
+    "reason": "卡内 alert 与跳过按钮已有，页脚重复后果，按钮没有 aria-describedby。"
+  },
+  {
+    "id": "AC-DEP-013.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:189",
+      "只读核对：web/src/containers/credential/AuthGateContainer.tsx:136"
+    ],
+    "reason": "行内面板及收起按钮已有，但帐号分支自动 begin，未停在空闲态。"
+  },
+  {
+    "id": "AC-DEP-013.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/views/init/SubscriptionSetup.view.tsx:131",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:175",
+      "只读核对：web/src/views/init/InitWizardShell.view.tsx:143"
+    ],
+    "reason": "卡内说明已有，页脚仍重复，跳过按钮没有描述关联。"
+  },
+  {
+    "id": "AC-DEP-013.6",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/credential/useRuntimeAuthPanel.ts:72",
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:175"
+    ],
+    "reason": "刷新后能显示配置身份并变下一步，但立即收面板，没有已连上停留或等待 Runtime 重取。"
+  },
+  {
+    "id": "AC-DEP-014.5",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:231"
+    ],
+    "reason": "资源步骤说明仍出现「进度条的分母」。"
+  },
+  {
+    "id": "AC-DEP-015.1",
+    "status": "closed",
+    "evidence": [
+      "只读核对：web/src/hooks/system/useInitWizard.ts:432",
+      "只读核对：web/src/containers/init/AppBootGate.tsx:55",
+      "只读核对：web/src/views/workbench/WorkbenchOverview.view.tsx:64"
+    ],
+    "reason": "确认写入后更新 initialized 缓存，向导卸载；无项目显示欢迎态，没有初始化完成 toast。"
+  },
+  {
+    "id": "AC-DEP-015.4",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/containers/init/InitWizardContainer.tsx:224",
+      "只读核对：web/src/views/init/ResourceConfirm.view.tsx:84"
+    ],
+    "reason": "壳上不再有下一步，但确认按钮和说明放在正文且按钮在左，未接页脚右端布局。"
+  },
+  {
+    "id": "AC-DEP-016.3",
+    "status": "partial",
+    "evidence": [
+      "只读核对：web/src/hooks/system/useInitWizard.ts:409",
+      "只读核对：web/src/views/init/InitErrorPanel.view.tsx:20"
+    ],
+    "reason": "专属 409 不放行，但原样上后端句，缺回到联网检查并重跑的动作。"
+  },
+  {
+    "id": "AC-DEP-016.6",
+    "status": "open",
+    "evidence": [
+      "只读核对：web/src/hooks/system/useInitWizard.ts:524"
+    ],
+    "reason": "非信封错误使用 Error.message，TypeError 的 Failed to fetch 可以上屏。"
+  }
+]

@@ -1,0 +1,97 @@
+<!doctype html>
+<!--
+  id: f-dep-init-06
+  页面: 21-8 部署与初始化 · 初始化向导 · 第 2 步 代理配置（联网有失败项时才进流程）
+  状态: 用户填好 HTTP_PROXY / HTTPS_PROXY / NO_PROXY 点了 [保存并重新检测]，保存请求超时：表单里按钮之上一句「保存失败：这次请求超时了，可以再试一次。」（红圆叉 + 正文色，role="alert"）；分隔线下面仍是第 1 步本轮的联网结果（ghcr.io 超时）；页脚 [上一步] [跳过，下一步]
+  对应 v1 稿件: g8-06（design-drafts/g8-init-access/g8-06-step2-proxy.html；预览 design-drafts/previews/g8-06.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳 .wiz、步骤条 .wiz-steps、检查行 .dep-checks 同 f-dep-init-02（l5c-dep.css §2–§4；简报 §5.5）
+    - 表单字段与 P5 出网代理卡（f-sys-conn-01…04）同写法：环境变量名做标签 → 等宽 13/500（.field__label--mono）、输入框 36 封顶 480、表单说明 .form-note 14 次要灰
+    - 失败句 .dep-msg--fail：圆叉图标红 + 句子正文色（= l5a-sys.css .l5a-msg，P6），放在触发按钮之上（UX-DS-305）
+    - 表单是自己的容器（form）：[保存并重新检测] primary 32 与页脚条的 [跳过，下一步] 分属两个容器，各 ≤ 1 个实心主按钮（P7；lint W6 只提示同屏 2 个）
+    - 内容比 1440×900 视口高：另出整页图（data-shoot="full"），视口图停在顶部
+    - W4 评审修正（notes/consistency.md §8）：向导根 .wiz 由 <div> 改成 <main>：向导是这时页面上唯一的内容，品牌行落进主区地标（axe region；原型 #proto-wiz 加 role="main" 是同一处理），对话框仍是 role="dialog" aria-modal，版式不变（评审 R2-18）
+  与 v1 的差异（逐条；「需看稿」= 形态变化）:
+    W1–W8 同 f-dep-init-02 头注释（外壳、品牌行、步骤条、卡头步骤名、页脚条、「系统状态」路径、检查行、颜色），这里不重复。
+    1. 表单说明里的「`http://user:pass@host`」：反引号原样上屏 → 行内代码（.code，等宽），去掉反引号（DR-25 推荐「去掉反引号，改成等宽内联样式」；P5 的 f-sys-conn-* 仍照现状带反引号，同一个组件，上提与接线时两处一起改，见 notes/dep.md §8）。
+    2. 页脚那句「保存只写配置，不会结束初始化。」去掉：与按钮旁「只保存配置，不会结束初始化 —— 放行在最后一步。」说的是同一件事（DR-25「重复的句子只保留一处」，留按钮旁那句）。需看稿（小）。
+    3. 保存失败句：整句红字 → 圆叉图标红 + 句子正文色（P6）；文字照 v1（失败原因按错误码查表：TIMEOUT 那句，不拼后端原始 message——UX-DS-402，v1 已改）。
+    4. 表单与下面的联网结果之间加一条贯穿卡宽的分隔线（两块内容：先填、再看结果）。需看稿（小）。
+  示例数据来源: v1 g8-06 同值（代理 http://127.0.0.1:7890、NO_PROXY localhost,127.0.0.1；联网结果同 f-dep-init-04，时刻「2 分钟前」）
+  流程: F-DEP-INIT（REQ-DEP-009、REQ-DEP-004）
+  口径依据: P21-8 L25-26（Step 2：检测失败时展开，否则可跳过）；F21-8 §5（保存代理 → PUT /api/system/settings 只存配置、不放行 → 再重跑 Step 1）；DR-25；UX-DS-402 / DR-33（按码出人话）；实现 web/src/views/system/ProxyConfigForm.view.tsx:62-104（字段、说明、失败句、按钮与旁注）、web/src/containers/init/InitWizardContainer.tsx:88-124（第 2 步：footerNote、nextLabel「跳过，下一步」）、web/src/hooks/system/useInitWizard.ts:358-375（只发 PUT /settings，成功后 startRun(false) 重检）、web/src/lib/system/initWizardModel.ts:148-160（三个都空 = 清空代理）
+  另一变体（冷却中 / 保存中）: 一轮检测刚开始的 3 秒内 [保存并重新检测] 与 [重新检测] 都禁用，分别显示「保存并重新检测（3s）」「检测中…」；保存请求在途时按钮 is-loading「保存中…」（PARAM.INIT_RECHECK_THROTTLE_S）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-dep-init-06" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-dep-init-06 第 2 步 代理配置 · 保存失败</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5c-dep.css">
+</head>
+<body>
+<div class="frame">
+  <main class="wiz">
+    <div class="wiz__brand"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></div>
+    <!-- 向导本体：模态对话框（BlockingDialog）——没有关闭按钮、不接 Esc、点外面不关；外壳与工作台根本不挂（AppBootGate 只渲染向导） -->
+    <section class="wiz__dialog" role="dialog" aria-modal="true" aria-labelledby="wiz-title" aria-describedby="wiz-desc" data-testid="init-wizard">
+      <header class="wiz__head">
+        <div class="wiz__head-main">
+          <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+        </div>
+        <p class="wiz__count">第 <b>2</b> / 5 步</p>
+      </header>
+        <ol class="wiz-steps" aria-label="初始化步骤" data-testid="init-wizard-steps">
+          <li class="wiz-steps__item" data-testid="init-step-connectivity" data-state="done"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label"><span class="icon i-check" aria-hidden="true"></span>联网检查<span class="u-sr-only">（已完成）</span></span></li>
+          <li class="wiz-steps__item" data-testid="init-step-proxy" data-state="current" aria-current="step"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">代理配置</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-preset-image"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">沙箱镜像</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-subscription"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">模型帐号</span></li>
+          <li class="wiz-steps__item" data-testid="init-step-resource"><span class="wiz-steps__bar" aria-hidden="true"></span><span class="wiz-steps__label">本机资源</span></li>
+        </ol>
+      <div class="wiz__card">
+        <div class="wiz__body">
+          <div class="wiz__step-head"><h2 class="wiz__step-title">代理配置</h2><p class="wiz__step-desc">上一步有目标连不上。内网环境通常需要配置代理；配好后点 [保存并重新检测]。</p></div>
+          <form class="dep-proxy" aria-label="代理配置" data-testid="proxy-config-form">
+            <div class="fields">
+              <label class="field"><span class="field__label field__label--mono">HTTP_PROXY</span><input class="input" name="httpProxy" value="http://127.0.0.1:7890" placeholder="http://127.0.0.1:7890" spellcheck="false" autocomplete="off"></label>
+              <label class="field"><span class="field__label field__label--mono">HTTPS_PROXY</span><input class="input" name="httpsProxy" value="http://127.0.0.1:7890" placeholder="http://127.0.0.1:7890" spellcheck="false" autocomplete="off"></label>
+              <label class="field"><span class="field__label field__label--mono">NO_PROXY</span><input class="input" name="noProxy" value="localhost,127.0.0.1" placeholder="localhost,127.0.0.1,.internal" spellcheck="false" autocomplete="off"></label>
+            </div>
+            <p class="form-note">三个都留空 = 清空代理配置。<span class="icon icon--inline i-triangle-alert tone-warn" aria-hidden="true"></span>代理串里如果带用户名密码（<code class="code">http://user:pass@host</code>），它会被存进平台配置 —— 审计日志只记 host，但请确认这台机器上存它是可以接受的。</p>
+            <p class="dep-msg dep-msg--fail" role="alert" data-testid="proxy-error"><span class="icon i-circle-x" aria-hidden="true"></span><span>保存失败：这次请求超时了，可以再试一次。</span></p>
+            <div class="dep-actions"><button class="btn btn--primary btn--32" type="submit">保存并重新检测</button><span class="dep-actions__note">只保存配置，不会结束初始化 —— 放行在最后一步。</span></div>
+          </form>
+          <div class="dep-divider" role="presentation"></div>
+          <section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="partial">
+            <div class="dep-verdict">
+              <p class="dep-msg dep-msg--warn" role="status" data-testid="connectivity-verdict"><span class="icon i-triangle-alert" aria-hidden="true"></span><span>有镜像下载源超时未响应 —— 模型 API 都连得上，Agent 可用；受影响的只是下载新镜像。超时不等于连不上：一条时快时慢的链路会周期性超过这次检查的超时时限，重跑一次看它是否稳定。</span></p>
+              <button class="btn btn--secondary btn--32" type="button">重新检测</button>
+            </div>
+            <ul class="list check-list dep-checks">
+            <li class="list__row" data-testid="connectivity-item-api.openai.com" data-ok="true" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.openai.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__meta dep-push">182ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>连得上</span></span></div>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-api.anthropic.com" data-ok="true" data-timed-out="false" data-model-api="true">
+              <div class="check-row__head"><span class="check-row__title">api.anthropic.com</span><span class="dep-value" data-testid="connectivity-kind">模型 API</span><span class="check-row__meta dep-push">236ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>连得上</span></span></div>
+            </li>
+            <li class="list__row" data-testid="connectivity-item-ghcr.io" data-ok="false" data-timed-out="true" data-model-api="false">
+              <div class="check-row__head"><span class="check-row__title">ghcr.io</span><span class="dep-value" data-testid="connectivity-kind">镜像下载源</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--timeout"><span class="icon i-clock" aria-hidden="true"></span>超时未响应</span></span></div>
+              <p class="dep-hint">这不等于连不上：ghcr.io（预制镜像所在的镜像下载源（由 SANDBOX_DEFAULT_IMAGE 推出））7000ms 内未完成 TLS 握手，而一条时快时慢的链路会周期性越过超时时限，Agent 用的是长连接，在这种链路上通常照样能用。重跑一次看它稳不稳定：偶发多半只是慢，可以直接往下走；每次都这样就按不通处理（内网常见形态是「网络通、但要走代理」，在系统设置里填 HTTPS_PROXY 后重试）</p>
+            </li>
+            </ul>
+            <p class="dep-checked-at" data-testid="connectivity-checked-at">上次检测：2026-10-02 09:14:05（2 分钟前）（本轮刚检测）</p>
+          </section>
+        </div>
+        <footer class="wiz__footer">
+          <div class="wiz__actions"><button class="btn btn--secondary" type="button">上一步</button><button class="btn btn--primary" type="button">跳过，下一步</button></div>
+        </footer>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

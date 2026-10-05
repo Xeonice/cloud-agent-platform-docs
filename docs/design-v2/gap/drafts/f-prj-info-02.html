@@ -1,0 +1,152 @@
+<!doctype html>
+<!--
+id: f-prj-info-02
+  页面: 21-1 工作台 · 项目信息浮层（空项目：顶栏 chip「空项目」→ 浮层卡）
+  状态: acme-api 克隆失败后选了「改为空项目」，现在是就绪的空项目、还没有任务（主区与树照 P6）；点顶栏 chip「空项目」打开浮层：「仓库：空项目（没有关联仓库）」+「创建于 2026/10/2 10:05:12」；没有 [拉取最新代码]、没有页脚。卡里没有可操作的控件，打开后焦点落在卡本身（tabindex="-1"），Esc / 点外面关闭并还焦点给 chip。
+  对应 v1 稿件: 无（新设计）。内容按现状只读条的空项目分支（ProjectInfoBar.view.tsx:109-134：「空项目（没有关联仓库）」+「创建于」）；主区与树照 pilot/p6-empty-no-task.html；浮层容器同 f-prj-info-01
+  体现的 v2 要点:
+    - 浮层卡 .popover 去掉页脚（README §5.2「空项目：去掉页脚」）；.kv 两行
+    - 主区空态 .empty--fill.empty--viewport（P6）；顶栏「新任务」按 P6 规则降为次按钮（主区空态里有同名实心按钮，foundation §1.4 创建入口）
+    - 树：只选了项目 → 项目行是唯一当前项（.tree-project.is-current）+ 组下「发起第一个任务」（P6 同写法）
+    - W4 评审修正（notes/consistency.md §8）：树里克隆失败 / 克隆中、还没有任务的项目（acme-api / infra-scripts）折叠箭头画成不可用：aria-disabled + title 写原因 + 禁用色（REQ-PRJ-011；禁用色规则从 l1a-prj §4 上提 gap-shared §11，评审 R2-02）
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要用户确认）:
+    1. 顶栏：空项目没有分支，chip 写「空项目」（i-info 图标；Git 项目是 git-branch + 分支名）；没有 [拉取最新代码]（空项目不能拉取：现状 canSync 只给就绪的 Git 项目，后端对空项目 409）。chip 文案是新增可见文字，需看稿。
+    2. 卡里两行：现状只读条把「空项目（没有关联仓库）」写成一句灰字、「最后拉取」一格换成「创建于」（F21-6 §9.2 表格最后一行）→ 同一张 .kv 里的「仓库」「创建于」两行，文字不变。需看稿。
+    3. 没有页脚（没有动作，也就没有作用范围说明）。
+    4. 主区与树：照 P6（项目下还没有任务），项目名换成 acme-api；acme-api 置顶为当前项目、徽标「克隆失败」已消失。
+    5. 外壳整体换成 P1 方案 A（逐条差异与「需看稿」见 pilot/p1-workbench-waiting.html 头注释第 1–21 条，这里不重复）；实例菜单按 Q-DS-34 默认 A 去掉「文档」（aria-label「实例菜单：系统状态、外观、快捷键」，README §2 第 1 条）。
+  示例数据来源: 原型示例世界（pilot/proto/proto.js PROJECTS / tasks；README §7）+ plan.json conventions.sample_world 增补（acme-web 两个新任务、各项目的保留下来的成果与自动化规则条数）。acme-api（原型：克隆失败 · 网络错误）走 F-PRJ-CLONE「改为空项目」之后的样子（与 prj-a 的 f-prj-clone-07 同一刻）；「创建于」取 v1 g7-07 信息条里的 2026/10/2 10:05:12（g7-07 没有 updatedAt 时这一格显示的就是创建时间）
+  流程: F-PRJ-INFO（REQ-PRJ-020）
+  口径依据: plan F-PRJ-INFO REQ-PRJ-020（空项目写「空项目（没有关联仓库）」+ 创建于，无拉取）；现状 ProjectInfoBar.view.tsx:109-112（空项目最后一格显示创建时间）、:121-123、:136（空项目不给按钮）；api Project.assertCanSync（非就绪或空项目 409 INVALID_STATE，project-application.service.ts:383-390）；P6 创建入口规则
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-prj-info-02">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-prj-info-02 项目信息浮层 · 空项目</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l1b-prj.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span><span class="badge badge--20 badge--info" aria-hidden="true">2 等待你输入</span><span class="u-sr-only" role="status">2 个任务等待你输入</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__sep" role="separator"></div>
+
+      <section class="sidebar__section" aria-labelledby="sb-projects">
+        <div class="sidebar__section-head">
+          <h2 class="sidebar__section-title" id="sb-projects">项目</h2>
+          <div class="sidebar__section-tools">
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="按状态筛选任务" title="按状态筛选任务：全部"><span class="icon icon--14 i-list-filter" aria-hidden="true"></span></button>
+            <button class="btn btn--tertiary btn--24 btn--icon" type="button" aria-label="新建项目" title="新建项目"><span class="icon icon--14 i-folder-plus" aria-hidden="true"></span></button>
+          </div>
+        </div>
+        <div class="sidebar__scroll">
+          <nav class="tree" aria-label="项目分组任务树">
+            <section class="tree-group">
+              <div class="tree-project is-current">
+                <button class="tree-project__toggle" type="button" aria-label="收起分组" aria-expanded="true" title="收起 acme-api"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button" aria-current="true"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">acme-api</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="acme-api 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+              <button class="tree-empty" type="button" title="在 acme-api 中发起第一个任务">发起第一个任务<span class="icon icon--14 i-arrow-right" aria-hidden="true"></span></button>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" title="展开 示例项目"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">示例项目</span><span class="tree-project__count">3</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="示例项目 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" title="展开 acme-web"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">acme-web</span><span class="tree-project__count">7</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="acme-web 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" title="展开 docs-site"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">docs-site</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="docs-site 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+            <section class="tree-group">
+              <div class="tree-project">
+                <button class="tree-project__toggle" type="button" aria-label="展开分组" aria-expanded="false" aria-disabled="true" title="正在克隆，分组里还没有内容"><span class="icon i-chevron-down" aria-hidden="true"></span></button>
+                <button class="tree-project__select" type="button"><span class="icon i-folder" aria-hidden="true"></span><span class="tree-project__name">infra-scripts</span><span class="badge badge--20 badge--warn">克隆中</span><span class="tree-project__count">0</span></button>
+                <button class="btn btn--tertiary btn--24 btn--icon tree-project__menu" type="button" aria-label="项目菜单" title="infra-scripts 的项目菜单" aria-haspopup="menu"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+              </div>
+            </section>
+          </nav>
+        </div>
+      </section>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="u-sr-only">工作台：acme-api</h1>
+        <div class="header__lead">
+          <nav class="u-min-w-0" aria-label="当前位置">
+            <ol class="crumbs">
+              <li class="crumbs__item"><button class="crumb" type="button" aria-current="page" aria-haspopup="menu" aria-expanded="false" aria-label="切换项目（当前 acme-api）" title="切换项目；菜单首项：在左侧树中定位当前项目"><span class="icon i-folder" aria-hidden="true"></span><span class="crumb__label">acme-api</span><span class="icon crumb__switch i-chevrons-up-down" aria-hidden="true"></span></button></li>
+            </ol>
+          </nav>
+        </div>
+        <div class="header__actions">
+          <button class="chip header__hide-below-960 is-open" aria-expanded="true" aria-controls="pi" type="button" aria-haspopup="dialog" aria-label="项目信息：空项目（没有关联仓库） · 创建于 2026/10/2 10:05:12" title="空项目（没有关联仓库） · 创建于 2026/10/2 10:05:12"><span class="icon i-info" aria-hidden="true"></span>空项目</button>
+          <button class="btn btn--tertiary btn--32 btn--icon header__show-below-960 is-open" aria-expanded="true" aria-controls="pi" type="button" aria-haspopup="dialog" aria-label="项目信息：空项目（没有关联仓库） · 创建于 2026/10/2 10:05:12" title="项目信息"><span class="icon i-info" aria-hidden="true"></span></button>
+          <button class="btn btn--secondary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">新任务</span></button>
+          <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="更多操作" title="更多操作"><span class="icon i-ellipsis" aria-hidden="true"></span></button>
+        </div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="empty empty--fill empty--viewport">
+          <div class="empty__icon"><span class="icon i-square-terminal" aria-hidden="true"></span></div>
+          <h2 class="empty__title">「acme-api」下还没有任务</h2>
+          <p class="empty__desc"><span class="u-nowrap">点「新任务」发起一个 ——</span> <span class="u-nowrap">填了指令，Agent 启动时就开始执行。</span></p>
+          <div class="empty__actions">
+            <button class="btn btn--primary" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span>新任务</button>
+            <button class="link" type="button" aria-haspopup="dialog" title="打开 acme-api 的自动化规则">设置自动化规则<span class="icon i-arrow-right" aria-hidden="true"></span></button>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 项目信息浮层卡：画框层（.frame 的直接子元素，与菜单同层）；非模态对话框（不写 aria-modal），打开后焦点进第一个控件；Esc / 点外面关闭并把焦点还给触发器（顶栏 chip，顶栏 < 960 时是 ⓘ） -->
+  <div class="popover l1b-pop--empty" id="pi" role="dialog" aria-labelledby="pi-t" tabindex="-1">
+    <div class="popover__head"><h2 class="popover__title" id="pi-t">acme-api</h2><p class="popover__desc">项目信息</p></div>
+    <div class="popover__body">
+      <dl class="kv"><dt>仓库</dt><dd>空项目（没有关联仓库）</dd><dt>创建于</dt><dd>2026/10/2 10:05:12</dd></dl>
+    </div>
+  </div>
+</div>
+</body>
+</html>

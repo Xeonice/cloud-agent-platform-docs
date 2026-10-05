@@ -1,0 +1,199 @@
+/*
+ * 系统状态组 C（dep）· 页面局部样式——F-DEP-INIT（启动检查与初始化向导）
+ * 用在：f-dep-init-01…14（gap/drafts/）；说明见 ../../notes/dep.md
+ *
+ * 样式链（顺序固定）：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → assets/pages/l5c-dep.css（本文件）
+ * 约束：只用 tokens-v2 的变量（颜色一律 token，亮暗两套自动切换）；字阶只用 14 / 13 / 12（标题 20 / 24），禁 11、10；不改 pilot/assets/*-v2.css；
+ *       能用 components-v2 / gap-shared 表达的不在这里重写（检查行 .check-list / .check-row、徽标、提示条 .note、字段、线性进度 .progress 都用共享类）。
+ * lint W4「属于 l5-sys 组却挂了 l5c-dep.css」是编排把 L5 拆成子组造成的命名不符，忽略（同 sys-a / sys-b）。
+ *
+ *   §1 启动检查中 .boot（整屏一句；工作台与向导都不挂）
+ *   §2 向导外壳 .wiz（外壳之外、整屏阻断：品牌行 → 页头 → 步骤条 → 向导卡；简报 §5.5）
+ *   §3 步骤条 .wiz-steps（「第 N / 5 步」+ 细进度条 + 步骤名；取代 v1 的 4px 圆角描边 chip）
+ *   §4 向导卡里的检查行（components-v2 §16 .check-list 的向导用法：整行贯穿卡宽、状态徽标列定宽右齐）
+ *   §5 卡内的句子：结论句 .dep-msg、提示原文 .dep-hint、检测时刻 .dep-checked-at、动作行 .dep-actions
+ *   §6 代理表单（第 2 步；字段与 P5 出网代理卡同写法）
+ *   §7 预置镜像「下载到本机」块 .l4b-provision ——= l4b-img.css §3 同名同值副本（img-b 已提上提，见 notes/dep.md §7）
+ *   §8 Agent 登录面板 .auth-panel ——= l3a-auth.css §2 用到的部分，同名同值副本（crd-a 已提上提）
+ *   §9 窄屏（< 640）与高对比
+ */
+
+:root {
+  --dep-wiz-w: var(--w-form);   /* 向导列宽 768（简报 §5.5「卡片居中，宽 640–768」；= v1 max-w-3xl） */
+  --dep-wiz-pad: 24px;          /* 向导卡内边距；检查行左右也是 24，与卡内文字对齐 */
+  --dep-status-w: 96px;         /* 行尾状态徽标列（「超时未响应」20 高徽标约 92） */
+  --dep-action-w: 88px;         /* 第 4 步行尾动作列（[去配置] / [收起] / [重新授权]，28 高） */
+}
+
+/* ==========================================================================
+   §1 启动检查中 .boot（AppBootGate pending 分支：整屏只有居中一句，role="status"；此刻工作台与向导都不挂——防闪现）
+   v2：画布底 + 前缀转圈 16（加载中写法，UX-DS-204）+ 14 次要灰
+   ========================================================================== */
+.boot { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 24px; background: var(--canvas); font: var(--text-copy-14); color: var(--foreground-muted); text-align: center; }
+.boot > .icon { color: var(--foreground-muted); }
+/* W4（评审 R2-18）：.boot 外面包一层主区地标 <main class="boot-main">（+ 读屏 h1），这一层接过 .boot 原来在画框里的 flex 位置（同原型 proto.css .proto-boot） */
+.boot-main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ==========================================================================
+   §2 向导外壳 .wiz
+   画框里水平居中的一列（宽 768）：品牌行（与口令门 .gate、侧栏实例菜单同一个 Logo 与名称）→ 页头（h1 heading-24 + 一句说明，右侧「第 N / 5 步」）
+   → 步骤条（§3）→ 向导卡（唯一一张表面卡：surface、r12、raised 阴影；卡头 heading-20 步骤名 + 说明；页脚条 = 嵌入区底 + 上 1px 线）。
+   竖直方向靠上（上距 48），不做竖直居中：五步内容高矮不一，居中会让品牌行、页头与步骤条每换一步上下跳一次；靠上时它们钉在原位，只有卡片往下长。
+   内容比视口高时（第 3 步、1024 / 390）整列在 .wiz 里滚动。
+   ========================================================================== */
+.wiz { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 48px 24px 64px; overflow: auto; background: var(--canvas); }
+.wiz__brand { display: inline-flex; align-items: center; gap: 8px; color: var(--foreground); }
+/* 向导本体：模态对话框（role="dialog" aria-modal="true"，名称 = h1，描述 = 页头说明；照 v1 / 现状 BlockingDialog）——没有关闭按钮、不接 Esc */
+.wiz__dialog { display: flex; flex-direction: column; gap: 20px; width: var(--dep-wiz-w); max-width: 100%; min-width: 0; }
+.wiz__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; min-width: 0; }
+.wiz__head-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.wiz__title { font: var(--text-heading-24); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.wiz__desc { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+/* 「第 N / 5 步」：14 次要灰 tabular，当前序号正文色 500；与 h1 首行居中对齐（(32 − 20) / 2 = 6） */
+.wiz__count { flex: none; margin-top: 6px; font: var(--text-label-14); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wiz__count > b { font-weight: var(--weight-medium); color: var(--foreground); }
+
+.wiz__card { --focus-gap: var(--surface); display: flex; flex-direction: column; min-width: 0; background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-raised); }
+.wiz__body { display: flex; flex-direction: column; gap: 20px; min-width: 0; padding: var(--dep-wiz-pad); }
+.wiz__step-head { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wiz__step-title { font: var(--text-heading-20); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.wiz__step-desc { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+/* 一步里的一块内容（联网检查 / 代理表单 / 镜像检查 / 模型帐号 / 本机资源）：块内 12 */
+.wiz__section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+/* 页脚条：左边一句（13 次要灰，这一步的结论或后果），右边 [上一步] secondary + 主动作 primary（默认 36，简报 §5.5「md 36」） */
+.wiz__footer { --focus-gap: var(--surface-inset); display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; row-gap: 8px; min-height: 61px; padding: 12px var(--dep-wiz-pad); background: var(--surface-inset); border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-xl) var(--radius-xl); }
+.wiz__note { flex: 1 1 240px; min-width: 0; font: var(--text-copy-13); color: var(--foreground-muted); }
+.wiz__actions { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+
+/* ==========================================================================
+   §3 步骤条 .wiz-steps（简报 §5.5：「第 N / 5 步」+ 细进度条，取代 4px 圆角描边的步骤 chip；UX-DS-144 的三色线索仍不在本轮）
+   五格等分：每格 = 4 高细条 + 12 步骤名。状态写在 data-state 上（现状 initSteps 的四个字段：current / done / skipped / active）：
+     done     走过且达成 —— 条正文色、名前 12 勾（次要灰）
+     current  当前 —— 条正文色、名正文色 500，li 写 aria-current="step"
+     skipped  走过但没达成（第 3 / 4 步点了 [稍后配置]）—— 条琥珀、名前 12 三角（琥珀）；本轮 14 张稿没有画到，接线照此
+     （缺省）  还没走到；以及「不进流程」的代理配置（active = false：联网全通过时）—— 条 = 分隔线色，名后缀「（可跳过）」
+   条本身 aria-hidden；步骤语义在 <ol aria-label="初始化步骤"> 与 aria-current 上
+   ========================================================================== */
+.wiz-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); column-gap: 8px; margin: 0; padding: 0; list-style: none; }
+.wiz-steps__item { --step-bar: var(--border); display: flex; flex-direction: column; gap: 8px; min-width: 0; font: var(--text-label-12); color: var(--foreground-muted); }
+.wiz-steps__bar { display: block; height: 4px; border-radius: var(--radius-full); background: var(--step-bar); }
+.wiz-steps__label { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.wiz-steps__label > .icon { flex: none; width: 12px; height: 12px; color: var(--foreground-muted); }
+.wiz-steps__item[data-state="done"] { --step-bar: var(--foreground); }
+.wiz-steps__item[data-state="current"] { --step-bar: var(--foreground); font: var(--text-label-12-strong); color: var(--foreground); }
+.wiz-steps__item[data-state="skipped"] { --step-bar: var(--status-warn-solid); }
+.wiz-steps__item[data-state="skipped"] .wiz-steps__label > .icon { color: var(--status-warn-fg); }
+
+/* ==========================================================================
+   §4 向导卡里的检查行（components-v2 §16 .check-list / .check-row；与诊断卡 f-sys-diag-* 同一组件）
+   向导用法 .dep-checks：整行贯穿卡宽（左右外扩 24、行内边距 12 24：分隔线顶到卡边，文字与卡内其余文字对齐）；
+   首行 = 标题（允许折行，不截断——镜像检查的标题带「第 N 项（共 5 项）」）+ 分类徽标 + 行尾（耗时 12 → 状态徽标列 96 右齐 → 动作列）；
+   结论句 / 提示原文 / 详情块与标题左对齐（向导的行没有 ①② 序号列，不缩进 24）
+   ========================================================================== */
+.dep-checks { margin: 0 calc(-1 * var(--dep-wiz-pad)); border-bottom: 1px solid var(--border); }
+.dep-checks > .list__row { gap: 6px; padding: 12px var(--dep-wiz-pad); }
+.dep-checks .check-row__head { flex-wrap: wrap; row-gap: 4px; }
+.dep-checks .check-row__title { flex: 0 1 auto; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+/* 「第 2 项（共 5 项） · 」前缀：14 常规次要灰，标题本身仍 14/500（文字照 v1 一字不改，只把序号那半句降一档） */
+.dep-ord { font-weight: var(--weight-regular); color: var(--foreground-muted); }
+.dep-checks .check-row__result, .dep-checks .check-row__note { padding-left: 0; }
+.dep-checks .check-row__result { color: var(--foreground); }
+.dep-checks .check-row__detail { margin: 2px 0 0; }
+/* 列表是卡里最后一块内容时，它的下边线让给页脚条的上边线（不出现两条相隔 24 的平行线） */
+.wiz__body > .wiz__section:last-child > .dep-checks:last-child { border-bottom: 0; margin-bottom: calc(-1 * var(--dep-wiz-pad)); }
+/* 行尾第一个元素用它把后面的整组推到右端 */
+.dep-push { margin-left: auto; }
+/* 状态徽标列：定宽、右齐（同 sys-b l5b-sys.css §3.1 的 .check-row__status 定宽列，向导里没有展开列，所以右齐让行尾对成一条线） */
+.check-row__status { flex: none; display: flex; align-items: center; justify-content: flex-end; width: var(--dep-status-w); }
+/* 第 4 步行尾的动作列（定宽：有没有动作，状态徽标都对成一列） */
+.dep-row-action { flex: none; display: flex; align-items: center; justify-content: flex-end; width: var(--dep-action-w); }
+.dep-row-action > .btn { margin-block: -2px; } /* 28 按钮不把 24 高的首行撑高：有没有动作，行高都是 48 */
+/* 行里的次要值：Agent 的打码身份、资源的读数（14 次要灰 tabular，可折行） */
+.dep-value { flex: 0 1 auto; min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+/* 详情块里的错误码一行（12 次要灰 + 12 等宽码；同结果卡 .empty__code 的写法，排在详情最后） */
+.dep-code-line { margin-top: 2px; font: var(--text-label-12); color: var(--foreground-muted); }
+.dep-code-line > .code { font-size: var(--fs-12); line-height: var(--lh-12); }
+/* 第 4 步：登录面板就地展开在那一行里（行内上距 6），面板分支内容封顶 480（同 l3a-auth.css §3 卡里的面板位：宽宿主里整宽主按钮不横贯整行） */
+.dep-checks .auth-panel { margin-top: 2px; }
+.dep-checks .auth-panel__slot { max-width: 480px; }
+
+/* ==========================================================================
+   §5 卡内的句子
+   ========================================================================== */
+/* 结论句 / 结果句：图标带色调、句子正文色（P6；= l5a-sys.css §2 .l5a-msg 同值，sys-b 的 .sysb-diag-alert 同一件——sys-a / sys-b 已提上提「卡内结果句」） */
+.dep-msg { --tone-fg: var(--foreground-muted); display: flex; align-items: flex-start; gap: 8px; min-width: 0; margin: 0; font: var(--text-copy-14-zh); color: var(--foreground); }
+.dep-msg > .icon { flex: none; margin-top: 3px; color: var(--tone-fg); }
+.dep-msg--muted { color: var(--foreground-muted); }
+.dep-msg--warn { --tone-fg: var(--status-warn-fg); }
+.dep-msg--fail { --tone-fg: var(--status-fail-fg); }
+.dep-msg strong { font-weight: var(--weight-medium); color: var(--foreground); }
+/* 结论行：结论句在左、[重新检测] 在右；句子首行与 32 按钮居中（(32 − 22) / 2 = 5） */
+.dep-verdict { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-width: 0; }
+.dep-verdict > .dep-msg { flex: 1 1 auto; padding-top: 5px; }
+.dep-verdict > .btn { flex: none; }
+/* 后端提示原文（整段、不截断：这一行的全部价值就在它里面）：14 次要灰 */
+.dep-hint { font: var(--text-copy-14-zh); color: var(--foreground-muted); overflow-wrap: anywhere; }
+/* 「上次检测：…」——这份结果的时刻（12 次要灰 tabular） */
+.dep-checked-at { font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+/* 动作行：按钮 + 一句 13 次要灰附注（[我知道，继续]、[保存并重新检测]） */
+.dep-actions { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; min-width: 0; }
+.dep-actions__note { min-width: 0; font: var(--text-copy-13); color: var(--foreground-muted); }
+
+/* ==========================================================================
+   §6 代理表单（第 2 步）：字段写法与 P5 出网代理卡相同（环境变量名做标签 → 等宽 13/500；输入框封顶 480）
+   ========================================================================== */
+.dep-proxy { display: flex; flex-direction: column; gap: 16px; min-width: 0; margin: 0; }
+.dep-proxy .fields { gap: 16px; }
+.dep-proxy .input { max-width: 480px; }
+.dep-proxy .form-note > .code { white-space: nowrap; }
+.dep-divider { height: 1px; margin: 4px calc(-1 * var(--dep-wiz-pad)); background: var(--border); }
+
+/* ==========================================================================
+   §7 预置镜像「下载到本机」块（F-IMG-PRESET 的块，初始化向导第 3 步复用）
+   = l4b-img.css §3 同名同值副本：sys 组不能挂 l4b-img.css（lint W4），img-b 已在 shared_css_requests 里提了上提；上提后删掉这一节，标记不用改。
+   结构：.card__inset.l4b-provision → __head（一句为什么；向导里没有镜像页的稿注「暂行 · DR-36」）→ __row（[准备镜像] + 「来源 → 去向 · 约 N MB」）→ .progress（gap-shared §4）
+   ========================================================================== */
+.l4b-provision { gap: 12px; }
+.l4b-provision__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.l4b-provision__why { min-width: 0; }
+.l4b-provision__row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; min-width: 0; }
+.l4b-provision__plan { min-width: 0; font: var(--text-copy-13); color: var(--foreground-muted); overflow-wrap: anywhere; }
+.l4b-provision > .progress:has(> .progress__track) { max-width: 560px; }
+
+/* ==========================================================================
+   §8 Agent 登录面板（F-AUTH-PANEL 的面板，初始化向导第 4 步是它的第三处宿主）
+   = l3a-auth.css §2 用到的部分，同名同值副本（crd-a 已在 shared_css_requests 里提了「登录面板整件」上提）；上提后删掉这一节，标记不用改。
+   向导里的面板不带一次性说明与 [管理所有凭证] 页脚（现状向导不传这两个 prop，REQ-AUTH-001 AC .1）
+   ========================================================================== */
+.auth-panel { --focus-gap: var(--surface-inset); display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: var(--radius-lg); background: var(--surface-inset); color: var(--foreground); text-align: left; }
+.auth-panel__head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.auth-panel__title { font: var(--text-heading-14); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.auth-panel .tabs { margin-top: -4px; }
+.auth-panel__hint { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.auth-panel__slot { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.auth-idle { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.auth-help { font: var(--text-copy-13); color: var(--foreground-muted); }
+
+/* ==========================================================================
+   §9 窄屏（< 640；Q-DS-18 A：390 只保证不溢出、不重叠）与高对比
+   ========================================================================== */
+@media (max-width: 639px) {
+  :root { --dep-wiz-pad: 16px; --dep-status-w: auto; --dep-action-w: auto; }
+  .wiz { gap: 16px; padding: 24px 16px 40px; }
+  .wiz__head { flex-direction: column; gap: 8px; }
+  .wiz__count { margin-top: 0; }
+  .wiz-steps { column-gap: 4px; }
+  .wiz__step-title { font: var(--text-heading-16); letter-spacing: var(--tracking-heading); }
+  .dep-verdict { flex-direction: column; gap: 8px; }
+  .dep-verdict > .dep-msg { padding-top: 0; }
+  .wiz__actions { flex-wrap: wrap; justify-content: flex-end; }
+  .l4b-provision__head { flex-direction: column; gap: 6px; }
+  .auth-panel { padding: 12px; }
+}
+@media (forced-colors: active) {
+  .wiz__card, .auth-panel { outline: 1px solid CanvasText; outline-offset: -1px; }
+  .wiz__footer, .dep-checks, .dep-checks > .list__row + .list__row { border-color: CanvasText; }
+  .wiz-steps__bar { forced-color-adjust: none; background: GrayText; }
+  .wiz-steps__item[data-state="done"] .wiz-steps__bar, .wiz-steps__item[data-state="current"] .wiz-steps__bar { background: CanvasText; }
+  .wiz-steps__item[data-state="skipped"] .wiz-steps__bar { background: Highlight; }
+}

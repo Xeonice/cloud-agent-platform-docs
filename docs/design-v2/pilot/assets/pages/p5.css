@@ -1,0 +1,30 @@
+/*
+ * P5 系统状态 · 页面专用样式：只写这一页的版式（栅格、宽度、栏宽的容器查询）；颜色只用 token。
+ * 组件都已上提到 components-v2.css（评审修正轮）：.kpi / .usage / .meter（用量卡）、.list--stack / .list__line / .list__note / .check-line（卡内多行列表）、
+ * .card__row（说明 + 动作）、.card__toolbar（卡内筛选条）、.log（审计紧凑行）、.status-label、.input--date、.code--fail、.field__label--mono、
+ * .form-note、.icon--inline / .icon-line、.section-head__meta、.contract-note、.check-list / .check-row（诊断项，补充样张用）。
+ */
+
+/* ---- 看板：两栏，左窄右宽（与 P2 / Vercel Overview 同构：左列 clamp(340, 32%, 404)，评审 VL-25）；列距 24 = 卡距；每栏是分区堆叠（分区之间 32）；
+        诊断、审计流占整行（高度会跳变，UX-DS-042）。左窄以后左右两栏的高度差从 287 降到约 130（1440 宽）、从 246 降到约 90（1920 宽） ---- */
+.p5-board { display: grid; grid-template-columns: clamp(340px, 32%, 404px) minmax(0, 1fr); column-gap: var(--card-gap); row-gap: var(--section-gap); align-items: start; } /* items-start：卡片高度由内容决定，不拉齐（现状 page.tsx 的纪律） */
+.p5-board__col { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; container: p5-col / inline-size; }
+.p5-board__full { grid-column: 1 / -1; }
+
+/* 分区标题行右侧的一句说明（沙箱环境：健康统计窗口与阈值）：栏宽 < 480 时挪到标题下一行、左对齐，标题行与另一栏的标题保持同一水平线 */
+.p5-board .section-head__title { flex: none; white-space: nowrap; }
+@container p5-col (max-width: 479px) {
+  .p5-board .section-head:has(.section-head__meta) { flex-wrap: wrap; row-gap: 4px; }
+  .p5-board .section-head__meta { flex-basis: 100%; text-align: left; }
+}
+
+/* ---- 宽度封顶（评审 VL-07：1920 宽时右栏 796，代理输入框被拉到 764，而一个代理 URL 只需要约 200） ---- */
+.p5-proxy .input { max-width: 480px; }
+/* 审计筛选条里的下拉与日期框宽度 */
+.p5-select { width: 112px; }
+.p5-date { width: 208px; }
+
+/* 窄屏（< 640）：看板改单列 */
+@media (max-width: 639px) {
+  .p5-board { grid-template-columns: minmax(0, 1fr); }
+}

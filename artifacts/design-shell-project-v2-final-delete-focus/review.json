@@ -1,0 +1,713 @@
+[
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-01-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-02",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-02-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/images",
+        "/api/projects/p-web/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-03",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-03-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-infra/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-infra/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-04",
+    "theme": "dark",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-04-dark-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/projects",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "dark",
+    "width": 1024,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-01-dark-1024-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-02",
+    "theme": "dark",
+    "width": 1024,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-02-dark-1024-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-web/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-03",
+    "theme": "dark",
+    "width": 1024,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-03-dark-1024-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-infra/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-infra/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-04",
+    "theme": "dark",
+    "width": 1024,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-04-dark-1024-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "dark",
+    "width": 390,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-01-dark-390-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "driverViewport": 1024,
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-02",
+    "theme": "dark",
+    "width": 390,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-02-dark-390-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "driverViewport": 1024,
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-web/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-03",
+    "theme": "dark",
+    "width": 390,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-03-dark-390-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "driverViewport": 1024,
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-infra/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-infra/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-04",
+    "theme": "dark",
+    "width": 390,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-04-dark-390-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "driverViewport": 1024,
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "light",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-01-light-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-02",
+    "theme": "light",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-02-light-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/projects/p-web/branches",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-web/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-web/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-03",
+    "theme": "light",
+    "width": 1440,
+    "status": "failed",
+    "states": [
+      {
+        "state": "failure",
+        "screenshot": "f-prj-delete-03-light-1440-failure.png",
+        "checks": [
+          "viewport-horizontal-overflow",
+          "dialog-horizontal-overflow"
+        ]
+      }
+    ],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Timeout 15000ms exceeded.",
+    "activeElementAtFailure": "<body class=\"font-sans antialiased\" data-scroll-locked=\"1\" style=\"pointer-events: none;\"><span data-radix-focus-guard=\"\" tabindex=\"0\" data-aria-hidden=\"true\" aria-hidden=\"true\" style=\"outline: none; opacity: 0; position: fixed; pointer-events: none;\"></span><div hidden=\"\" data-aria-hidden=\"true\" aria-hidden=\"true\"><!--$--><!--/$--></div><div class=\"flex h-dvh bg-background text-foreground\"><aside id=\"workbench-sidebar\" aria-label=\"侧栏\" class=\"flex shrink-0 flex-col border-r border-[var(--v2-border-subtle)] w-12 sm:w-[256px]\"><div class=\"flex h-14 items-center gap-2 px-2 sm:px-4\" data-aria-hidden=\"true\" aria-hidden=\"true\"><a class=\"flex min-w-0 flex-1 items-center gap-2\" aria-label=\"Agent 管理平台，回到工作台\" href=\"/\"><span aria-hidden=\"true\" class=\"flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground\">A</span><span class=\"hidden truncate text-sm font-medium sm:inline\">Agent 管理平台</span></a><button class=\"items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:shadow-[var(--v2-focus-ring)] disabled:pointer-events-none disabled:opacity-50 [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-muted hidden size-7 sm:inline-flex\" aria-label=\"实例菜单：系统状态、外观、快捷键\" data-testid=\"nav-settings-menu-trigger\" type=\"button\" id=\"radix-_r_0_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-wid",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/projects/p-infra/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-infra/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-04",
+    "theme": "light",
+    "width": 1440,
+    "status": "failed",
+    "states": [],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures",
+    "failure": "page.waitForFunction: Target page, context or browser has been closed",
+    "requests": {
+      "reads": [
+        "/api/system/init-status",
+        "/api/automations/attention",
+        "/api/system/resources",
+        "/api/runtimes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/health",
+        "/api/providers",
+        "/api/images",
+        "/api/sandboxes",
+        "/api/projects",
+        "/api/sandboxes",
+        "/api/images",
+        "/api/projects/p-example/deletion-preview",
+        "/api/retained-volumes",
+        "/api/projects/p-example/automations"
+      ],
+      "writes": [],
+      "socketNamespaces": [
+        "/events"
+      ]
+    }
+  },
+  {
+    "frame": "f-prj-delete-01",
+    "theme": "light",
+    "width": 1024,
+    "status": "running",
+    "states": [],
+    "unexpected": [],
+    "errors": [],
+    "verification": "production-browser-fixtures"
+  }
+]

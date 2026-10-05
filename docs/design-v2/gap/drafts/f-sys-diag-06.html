@@ -1,0 +1,310 @@
+<!doctype html>
+<!--
+  id: f-sys-diag-06
+  页面: 21-5 系统状态（/settings/system，看板页）· 诊断分区（视口图停在诊断卡；资源、连接、沙箱环境、出网代理四张卡与审计流 = P5，往上 / 往下滚可见，整页图另出）
+  状态: 9 项全部正常，全部收起；汇总「9 项全部正常 · 整轮 1.4s」（role="status"；为零的档不写）
+  对应 v1 稿件: g6-11（design-drafts/g6-system/g6-11-diag-all-ok.html；预览 design-drafts/previews/g6-11.dark.png / .light.png）
+  体现的 v2 要点:
+    - 外壳与看板 = P5（pilot/p5-system-status.html；foundation §1.2）：全高侧栏 256（「系统状态」当前页，设置类页面「任务」导航不带等待徽标）+ 只盖主区的顶栏 56（可见 h1）；两栏看板，诊断、审计流各占整行；四张卡逐字同 P5
+    - 诊断项 = 卡内列表行（components-v2 §16 .check-list / .check-row，写法同 pilot previews/_work/p5/p5-diag-rows.html）：一张卡 + 行间 1px，不再一项一框；首行 = 序号（aria-hidden）+ 标题 14/500 + 耗时 / 时限 12 + 状态徽标 + 展开按钮；结论句 14 与标题左对齐；展开的详情放行内嵌入块（不加环），命令 = 等宽代码 + 24「复制」
+    - 卡内行徽标 20（foundation §1.4）：正常 check · 提示 info（蓝，不是警告）· 警告 triangle-alert · 失败 x · 超时未响应 clock（紫，不是红）· 检查中… loader-circle · 未返回 虚线 circle；状态列与展开列定宽，徽标成一列、耗时右对齐成一列（l5b-sys.css §3.1）
+    - 卡内首行 = 本轮状态句（与 P5「尚未运行。…」同位）+ 右侧「导出日志 / 重新诊断」（主动作在右端）；状态句 role="status"（中断那句 role="alert"）：诊断结论在原位播报，不走轻提示（UX-DS-508、gap README §5.1）
+    - 每个容器实心主按钮 ≤ 1：诊断卡 1 个（重新诊断 / 诊断中…）、出网代理卡「保存」1 个（同屏 2 个，与 P5 同，lint W6 提示）
+    - 视口图停在诊断分区：稿件专用 .sysb-scroll-target + 分区上方 24 的空锚点 .sysb-scroll-anchor（CSS scroll-initial-target，l5b-sys.css §2，不进实现、接线不拷）
+    - W4 评审修正（notes/consistency.md §8）：连接卡「终端连接」一行挂的「正常」徽标是换皮沿用的现状口径（T-21）；AC-SYS-040.4 / 040.6（只报数量、不挂「正常」，首屏 REST 写「未知」）待 Q-SYS-21 拍板，原型已按 AC 画——拍板认可后删掉这枚徽标（评审 R2-32，登记在 notes/consistency.md §8.3）
+    - W4 评审修正（notes/consistency.md §8）：出网代理卡页脚「只保存配置，不会结束初始化 —— 放行在最后一步。」是向导第 2 步才成立的句子（实现 ProxyConfigForm 写死、两处共用），在系统状态页没有意义；改成本页语境的一句（例「只保存，不会马上重新检测…」）要动实现，评审 R2-03 列为待拍板，本稿保持现状、登记在 notes/consistency.md §8.3
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要你确认）:
+    1. 外壳、看板与资源 / 连接 / 沙箱环境 / 出网代理四张卡、审计流 = P5（它们与 v1 的差异见 P5 头注释 1–19 条，需看稿项已随 P5 送看）；实例菜单 aria-label 去掉「文档」（Q-DS-34 按默认 A）。
+    2. 诊断卡头：「诊断」标题移到卡外做分区标签；按钮顺序「重新诊断 / 导出日志」→「导出日志 / 重新诊断」（主动作在右端，同 P5 第 12 条）；sm 12px → 32 档 14px；两个按钮放卡内首行右侧。
+    3. 诊断项：每项一个描边子框（.subrow）→ 卡内列表行（行间 1px）；序号 ①–⑨ 保留（aria-hidden），第 ⑨ 项也有序号（现状只备 ①–⑧）。需看稿（同 p5-diag-rows 第 1 条）。
+    4. 状态徽标：序号后的 pill → 首行右侧定宽状态列（20 高徽标，foundation §1.4），耗时 / 时限 12 次要灰在它左边右对齐；「展开详情 ⌄ / 收起 ⌃」整行宽的下划线 disclosure → 首行最右 24 tertiary + 后置 chevron（仍包在 h3 里、aria-expanded 不变）；没有展开内容的行留同宽空位，徽标成一列（p5-diag-rows 里徽标随按钮宽度左右错开，本稿修正）。需看稿。
+    5. 汇总句：卡底 12 → 卡内首行左侧 14 次要灰，加 role="status"（同 f-sys-diag-04 第 5 条）。需看稿。
+    6. 第 ⑧ 项步骤句「项」不是「步」（同 f-sys-diag-04 第 7 条）。
+    7. 结论句：14 正文色 → 14 次要灰、与标题左对齐（缩进 24，同 p5-diag-rows）；文字不变。
+    8. 出网代理卡说明（W2 一致性，notes/consistency.md）：v1 / P5「拉取沙箱镜像、访问模型接口都走这里。连得上但很慢（镜像下载中途断掉）也该配一个 —— …」→「联网检查会走这组代理；镜像下载和沙箱里的 Agent 现在还不读它。检查只测得出「能不能连上」，测不出带宽。」（Q-SYS-16 默认 A，与实现 connectivity.probe.ts:170 一致；镜像页 / 向导的失败出路句同步改成不承诺代理）。需看文案。
+    9. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-SYS-23 A / Q-SBX-03 A：本机资源卡「保留卷占用 …」→「成果占用 …」；审计记录「保留工作区卷（…）」→「保留成果（…）」；沙箱环境能力「挂载工作区目录」→「挂载代码副本」（三组同物异名统一，只改可见文字；接口字段 retainedVolumes、data-testid 不动；系统状态页原来叫「保留卷」的例外取消）。
+  示例数据来源: 诊断 9 项与 v1 同一份（端口 3000 / pid 41235 / lsof 命令、各项耗时、「整轮 …」都是示例值）；「超时时限 10s」= 首帧 start.timeoutMs 的示例值（PARAM.DIAG_ITEM_TIMEOUT_MS 现值 10000，api/apps/api/src/platform/system/diagnostics/diagnostics.service.ts:38）；页面其余部分 = P5（g6-02 示例世界，「今天」= 2026-10-02）；W2 一致性（notes/consistency.md）：资源卡是场景「资源：正常」，按统一示例世界推导——已登记 8 个任务（acme-web 5 个未异常的 + 示例项目 3 个已停止；异常不占名额）、「本机最多 11 个」为待契约示例值（DR-08）、保留卷 4.2 GB（3 份成果合计 · 0.8%）· 最早一份不足 1 天后清理；Claude Code 凭证未配置；审计 105 = TIMEOUT · 10m 0s、103 = 创建项目 infra-scripts（与超时卡、项目详情对齐）；出网代理说明里的地址改成行内代码（DR-25）
+  流程: F-SYS-DIAG（REQ-DIA-001、REQ-DIA-002、REQ-DIA-003、REQ-DIA-040、REQ-AUD-006；产品说明 gap/product/_parts/sys-b.md）
+  口径依据: Q-DS-21 A（定稿词：超时未响应、第 N 项；第 ⑤ 项标签「联网检查（模型 API / 镜像下载源）」）；Q-DIA-01 ① + UX-DS-312（按实现 9 项，第 ⑨ 项也有序号；format-pilot 待裁决，按现状）；UX-DS-308 / DR-22（中断保留已到结果、写 k/N）；UX-DS-508（异步结论原位播报）；PARAM.DIAG_ITEM_TIMEOUT_MS（首帧下发，界面不写死）；Q-DS-34 按默认 A（实例菜单去掉「文档」）；实现 web/src/views/system/DiagnosticsCard.view.tsx:59-128、web/src/views/system/DiagnosticItem.view.tsx:44-206、web/src/lib/system/diagnoseModel.ts:98-231、web/src/lib/system/diagnosticsDisclosure.ts:36-38（ok / info 默认收起，其余默认展开）；用户拍板 2026-10-04（Q-SYS-23 A：资源卡「成果占用」、按钮 [清理成果]、其余处叫「保留下来的成果」；Q-SBX-03 A：代码副本）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-sys-diag-06" data-shoot="full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-sys-diag-06 系统状态 · 诊断 9 项全部正常（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l5b-sys.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">系统状态</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <!-- 看板页满宽；两栏（与 P2 / Vercel Overview 同构：左窄右宽，评审 VL-25）：左列 资源 + 连接，右列 沙箱环境 + 出网代理；诊断与审计流各占整行（page.tsx：grid items-start lg:grid-cols-2） -->
+          <div class="content__inner p5-board" data-testid="system-status-grid">
+
+            <div class="p5-board__col" data-testid="system-status-column-left">
+              <!-- 本机资源水位：对照 Vercel Usage 卡（卡外分区标签 → 卡内 KPI 行 + 次按钮 → 每项一个嵌入块）；与 P2「本机资源」同一组件（.kpi / .usage / .meter，评审 VL-05） -->
+              <section class="section" aria-labelledby="resource-pool-heading">
+                <div class="section-head"><h2 class="section-head__title" id="resource-pool-heading">本机资源水位</h2></div>
+                <div class="card card--usage">
+                  <div class="card__body">
+                    <!-- Q-SYS-02 ③（D9）：主数字「还能再发 N 个任务」——按配额登记计算，与新建任务时的检查同一口径；实时占用率降为次要信息 -->
+                    <div class="card__head" data-testid="resource-headroom">
+                      <p class="kpi"><span>还能再发</span><span class="kpi__value">3</span><span>个任务</span></p>
+                      <div class="card__head-end">
+                        <span class="contract-note" title="待契约（DR-08）：这个数要由后端按准入规则给（capacity.remainingTasks / registeredTasks），前端不自己算">待契约 · DR-08</span>
+                        <button class="btn btn--secondary btn--24" type="button">刷新</button>
+                      </div>
+                    </div>
+                    <p class="card__desc">按配额登记计算：已登记 <span class="u-nowrap">8 个任务</span>（含已停止的），本机最多 <span class="u-nowrap">11 个</span>。下面的实时占用率只作参考。</p>
+                    <ul class="usage">
+                      <li class="usage__item" data-testid="resource-gauge-cpu">
+                        <div class="usage__row"><span class="usage__name"><span class="icon i-cpu" aria-hidden="true"></span>CPU</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="usage__value">3.1 / 10 核（31%）</span></div>
+                        <span class="meter" role="progressbar" aria-label="CPU 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="31"><span class="meter__bar" style="width: 31%"></span></span>
+                      </li>
+                      <li class="usage__item" data-testid="resource-gauge-ram">
+                        <div class="usage__row"><span class="usage__name"><span class="icon i-memory-stick" aria-hidden="true"></span>内存</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="usage__value">11.5 / 32 GB（35.9%）</span></div>
+                        <span class="meter" role="progressbar" aria-label="内存 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36"><span class="meter__bar" style="width: 35.9%"></span></span>
+                      </li>
+                      <li class="usage__item" data-testid="resource-gauge-disk">
+                        <div class="usage__row"><span class="usage__name"><span class="icon i-hard-drive" aria-hidden="true"></span>磁盘</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="usage__value">210 / 500 GB（42%）</span></div>
+                        <span class="usage__path" title="/srv/agent-platform/data">/srv/agent-platform/data</span>
+                        <span class="meter" role="progressbar" aria-label="磁盘 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="42"><span class="meter__bar" style="width: 42%"></span></span>
+                      </li>
+                    </ul>
+                    <div class="usage">
+                      <p class="usage__item usage__item--row" data-testid="resource-overall"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="u-nowrap"><span class="u-medium u-fg">资源充足</span> <span class="u-muted">·</span></span><span class="u-muted">留出 15% 不拿去跑任务（上面的进度条分母仍然是总容量）</span></p>
+                      <div class="usage__item usage__item--stack" data-testid="retained-volumes">
+                        <span class="icon-line"><span class="icon i-gift" aria-hidden="true"></span><span>成果占用 4.2 GB（3 个 · 占数据目录（DATA_ROOT）的 0.8%）</span></span>
+                        <span class="icon-line icon-line--muted"><span class="icon i-clock" aria-hidden="true"></span><span>最早的成果不足 1 天后清理</span></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <!-- 连接状态：一张卡 + 行间 1px（v1 三行各带行首 pill） -->
+              <section class="section" aria-labelledby="connection-status-heading">
+                <div class="section-head"><h2 class="section-head__title" id="connection-status-heading">连接状态</h2></div>
+                <div class="card">
+                  <ul class="list list--stack">
+                    <li class="list__row" data-testid="connection-row-rest">
+                      <div class="list__line"><span class="list__name">REST</span><span class="list__desc">正常（本页数据刚取回）</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></div>
+                    </li>
+                    <li class="list__row" data-testid="connection-row-events">
+                      <div class="list__line"><span class="list__name">WS /events</span><span class="list__desc">本页未测量</span><span class="badge badge--20 badge--unknown"><span class="icon i-circle" aria-hidden="true"></span>未知</span></div>
+                      <p class="list__note">/events 只在工作台挂载（本页不另开一条连接：那测的是新连接通不通，不是工作台那条）；通道断连时工作台会自行退避重连，无需在此干预</p>
+                    </li>
+                    <li class="list__row" data-testid="connection-row-terminals">
+                      <div class="list__line"><span class="list__name">终端连接</span><span class="list__desc">0 个终端会话</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></div>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+            </div>
+
+            <div class="p5-board__col" data-testid="system-status-column-right">
+              <!-- 沙箱环境状态：两个描边子行 → 一张卡 + 行分隔；窗口与阈值读自接口（UX-DS-070） -->
+              <section class="section" aria-labelledby="sandbox-env-status-heading">
+                <div class="section-head"><h2 class="section-head__title" id="sandbox-env-status-heading">沙箱环境状态</h2><span class="section-head__meta">健康统计窗口：最近 1 小时（阈值 &gt;1% 警告 · &gt;10% 故障）</span></div>
+                <div class="card">
+                  <ul class="list list--stack">
+                    <li class="list__row" data-testid="sandbox-env-row-boxlite">
+                      <div class="list__line"><span class="list__name">boxlite（微 VM）</span><span class="badge badge--20 badge--neutral">默认</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></div>
+                      <span class="list__desc">最近 1h 失败率 0%（0/14）</span>
+                      <span class="list__desc">能力：交互式终端 · 挂载代码副本 · 状态变化推送 · 无人值守任务</span>
+                    </li>
+                    <li class="list__row" data-testid="sandbox-env-row-aio">
+                      <div class="list__line"><span class="list__name">aio（容器运行时）</span><span class="badge badge--20 badge--unknown"><span class="icon i-circle" aria-hidden="true"></span>无样本</span></div>
+                      <span class="list__desc">无样本（最近 1h 这个环境没有创建过任务）</span>
+                      <span class="list__desc">能力：交互式终端 · 挂载代码副本 · 运行中调整资源 · 暂停 / 恢复 · 状态变化推送 · 无人值守任务</span>
+                    </li>
+                    <li class="list__row">
+                      <div class="list__group">
+                        <h3 class="list__name">Agent</h3>
+                        <ul class="list__group">
+                          <li class="check-line" data-testid="runtime-row-codex"><span class="badge badge--20 badge--ok badge--icon" role="img" aria-label="凭证已配置"><span class="icon i-check" aria-hidden="true"></span></span><span><span class="u-fg">Codex（OpenAI）</span>· 凭证已配置 · 授权方式 oauth-device · api-key</span></li>
+                          <!-- Claude Code 凭证未配置：示例世界（plan conventions.sample_world：Claude Code 两种都未配置，与 P3 / 原型一致）；停用徽标 = 灰底实心方块（Q-DS-15 ②A，g6-12）；W2 与 f-sys-conn-* / f-sys-resource-* 同源 -->
+                          <li class="check-line" data-testid="runtime-row-claude-code"><span class="badge badge--20 badge--inactive badge--icon" role="img" aria-label="凭证未配置"><span class="icon i-square-filled" aria-hidden="true"></span></span><span><span class="u-fg">Claude Code（Anthropic）</span>· 凭证未配置 · 授权方式 setup-token · api-key</span></li>
+                        </ul>
+                      </div>
+                    </li>
+                    <li class="list__row">
+                      <div class="list__group">
+                        <h3 class="list__name">镜像读取方式</h3>
+                        <ul class="list__desc">
+                          <li data-testid="image-spec-oci">oci（默认）</li>
+                        </ul>
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </section>
+
+              <!-- 出网代理：设置卡写法（正文 + 页脚条）；T-1 的「去灰底」在 v2 里就是统一的表面卡 -->
+              <section class="section" aria-labelledby="proxy-settings-heading" data-testid="proxy-settings-card">
+                <div class="section-head"><h2 class="section-head__title" id="proxy-settings-heading">出网代理</h2></div>
+                <form class="card p5-proxy" data-testid="proxy-config-form">
+                  <div class="card__body">
+                    <p class="card__desc card__desc--zh">联网检查会走这组代理；镜像下载和沙箱里的 Agent 现在还不读它。检查只测得出「能不能连上」，测不出带宽。</p>
+                    <div class="fields u-mt-4">
+                      <label class="field">
+                        <span class="field__label field__label--mono">HTTP_PROXY</span>
+                        <input class="input" name="httpProxy" value="" placeholder="http://127.0.0.1:7890" spellcheck="false" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span class="field__label field__label--mono">HTTPS_PROXY</span>
+                        <input class="input" name="httpsProxy" value="" placeholder="http://127.0.0.1:7890" spellcheck="false" autocomplete="off">
+                      </label>
+                      <label class="field">
+                        <span class="field__label field__label--mono">NO_PROXY</span>
+                        <input class="input" name="noProxy" value="" placeholder="localhost,127.0.0.1,.internal" spellcheck="false" autocomplete="off">
+                      </label>
+                    </div>
+                    <!-- 现状此处是 ⚠️ emoji；稿件不用 emoji，换成同义的 triangle-alert 内联图标（warn token） -->
+                    <p class="form-note">三个都留空 = 清空代理配置。<span class="icon icon--inline i-triangle-alert tone-warn" aria-hidden="true"></span>代理串里如果带用户名密码（<code class="code">http://user:pass@host</code>），它会被存进平台配置 —— 审计日志只记 host，但请确认这台机器上存它是可以接受的。</p>
+                  </div>
+                  <div class="card__footer">
+                    <span class="card__footer-help">只保存配置，不会结束初始化 —— 放行在最后一步。</span>
+                    <div class="card__footer-end"><button class="btn btn--primary btn--32" type="submit">保存</button></div>
+                  </div>
+                </form>
+              </section>
+            </div>
+
+            <!-- 诊断 · 9 项全部正常：全部收起，汇总走「N 项全部正常」那一支 -->
+            <section class="section p5-board__full sysb-scroll-target" aria-labelledby="diagnostics-heading" data-testid="system-status-diagnostics-row">
+              <span class="sysb-scroll-anchor" aria-hidden="true"></span>
+              <div class="section-head"><h2 class="section-head__title" id="diagnostics-heading">诊断</h2></div>
+              <div class="card">
+                <div class="card__row">
+                  <p class="card__desc" role="status" data-testid="diagnose-summary">9 项全部正常 · 整轮 1.4s</p>
+                  <div class="card__row-end">
+                    <button class="btn btn--secondary btn--32" type="button">导出日志</button>
+                    <button class="btn btn--primary btn--32" type="button">重新诊断</button>
+                  </div>
+                </div>
+                <ul class="list check-list sysb-checks">
+                  <li class="list__row" data-testid="diagnostic-item-container-runtime" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">①</span><span class="check-row__title">容器服务可达</span><span class="check-row__meta">14ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">容器服务可达</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-dev-kvm" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">②</span><span class="check-row__title">轻量虚拟机沙箱可用</span><span class="check-row__meta">3ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">轻量虚拟机沙箱可用</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-disk-space" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">③</span><span class="check-row__title">磁盘余量</span><span class="check-row__meta">12ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">磁盘余量充足</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-port-conflict" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">④</span><span class="check-row__title">端口占用</span><span class="check-row__meta">64ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">端口没有冲突</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-outbound-network" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">⑤</span><span class="check-row__title">联网检查（模型 API / 镜像下载源）</span><span class="check-row__meta">1.3s</span><span class="check-row__meta">超时时限 10s</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">外网都能连上</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-ws-loopback" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">⑥</span><span class="check-row__title">实时推送自检</span><span class="check-row__meta">9ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">实时推送正常</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-data-root-fs" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">⑦</span><span class="check-row__title">数据目录文件系统</span><span class="check-row__meta">22ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">秒级复制加速可用</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-preset-image" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">⑧</span><span class="check-row__title">预制镜像就绪</span><span class="check-row__meta">431ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">预制镜像就绪，可以立即发起任务</span>
+                    <span class="check-row__note">前 4 项已通过，已到第 5 项（共 5 项） · 有没有下载到本机（没下载只影响首个任务的耗时）</span>
+                  </li>
+                  <li class="list__row" data-testid="diagnostic-item-auth-helper" data-status="ok" data-expanded="false">
+                    <div class="check-row__head"><span class="check-row__ord" aria-hidden="true">⑨</span><span class="check-row__title">帐号登录环境</span><span class="check-row__meta">6ms</span><span class="check-row__status"><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span></span><h3 class="check-row__toggle"><button class="btn btn--tertiary btn--24" type="button" aria-expanded="false">展开详情<span class="icon icon--14 i-chevron-down btn__trail" aria-hidden="true"></span></button></h3></div>
+                    <span class="check-row__result">帐号登录可用</span>
+                  </li>
+                </ul>
+              </div>
+            </section>
+
+            <!-- 审计流：占整行；一张卡 = 筛选条 + 紧凑行（32）+ 底部「加载更早的记录」 -->
+            <section class="section p5-board__full" aria-labelledby="audit-stream-heading" data-testid="system-status-audit-row">
+              <div class="section-head"><h2 class="section-head__title" id="audit-stream-heading">审计流</h2></div>
+              <div class="card log">
+                <div class="card__toolbar" role="group" aria-label="审计流筛选">
+                  <label class="card__toolbar-item"><span>类别</span><span class="select select--32 p5-select"><select class="select__control" aria-label="类别"><option selected>全部</option><option>任务</option><option>项目</option><option>凭证</option><option>镜像</option><option>系统</option></select><span class="icon i-chevron-down select__icon" aria-hidden="true"></span></span></label>
+                  <label class="card__toolbar-item card__toolbar-item--toggle"><input class="switch" type="checkbox" role="switch"><span>仅告警</span></label>
+                  <label class="card__toolbar-item"><span>起</span><input class="input input--32 input--date p5-date" type="datetime-local" aria-label="起始时间"></label>
+                  <label class="card__toolbar-item"><span>止</span><input class="input input--32 input--date p5-date" type="datetime-local" aria-label="结束时间"></label>
+                </div>
+                <ul class="log__list">
+                  <li class="log__row">
+                    <div class="log__main"><span class="log__caret" aria-hidden="true"></span><time class="log__time">14:28:59.588</time><span class="status-label"><span class="status-dot status-dot--info" aria-hidden="true"></span>信息</span><span class="log__summary">任务状态 准备中 → 运行中</span><span class="log__meta"><span>沙箱环境事件</span></span></div>
+                    <div class="log__end"><button class="btn btn--tertiary btn--24" type="button">查看该任务完整时间线</button></div>
+                  </li>
+                  <li class="log__row">
+                    <button class="log__main" type="button" aria-expanded="false"><span class="icon icon--14 i-chevron-right log__caret" aria-hidden="true"></span><time class="log__time">14:27:59.912</time><span class="status-label"><span class="status-dot status-dot--info" aria-hidden="true"></span>信息</span><span class="log__summary">创建任务「修一下登录态刷新」</span><span class="log__meta"><span>4.2s</span><span>成功</span><span>调度器</span></span></button>
+                    <div class="log__end"><button class="btn btn--tertiary btn--24" type="button">查看该任务完整时间线</button></div>
+                  </li>
+                  <li class="log__row">
+                    <div class="log__main"><span class="log__caret" aria-hidden="true"></span><time class="log__time">14:21:00.000</time><span class="status-label"><span class="status-dot status-dot--info" aria-hidden="true"></span>信息</span><span class="log__summary">保存凭证 Codex · API Key</span><span class="log__meta"><span>用户</span></span></div>
+                  </li>
+                  <li class="log__row">
+                    <button class="log__main" type="button" aria-expanded="false"><span class="icon icon--14 i-chevron-right log__caret" aria-hidden="true"></span><time class="log__time">14:16:00.000</time><span class="status-label"><span class="status-dot status-dot--fail" aria-hidden="true"></span>错误</span><span class="log__summary">创建任务「升级依赖到 Node 22」失败</span><span class="log__meta"><span>10m 0s</span><span>失败</span><code class="code code--fail">TIMEOUT</code><span>调度器</span></span></button>
+                    <div class="log__end"><button class="btn btn--tertiary btn--24" type="button">查看该任务完整时间线</button></div>
+                  </li>
+                  <li class="log__row">
+                    <button class="log__main" type="button" aria-expanded="false"><span class="icon icon--14 i-chevron-right log__caret" aria-hidden="true"></span><time class="log__time">14:08:00.000</time><span class="status-label"><span class="status-dot status-dot--warn" aria-hidden="true"></span>警告</span><span class="log__summary">校验镜像 docker.io/acme/ml-agent:v1.0：有警告</span><span class="log__meta"><span>系统</span></span></button>
+                  </li>
+                  <li class="log__row">
+                    <div class="log__main"><span class="log__caret" aria-hidden="true"></span><time class="log__time">13:53:00.000</time><span class="status-label"><span class="status-dot status-dot--info" aria-hidden="true"></span>信息</span><span class="log__summary">创建项目 infra-scripts</span><span class="log__meta"><span>用户</span></span></div>
+                  </li>
+                  <li class="log__row">
+                    <div class="log__main"><span class="log__caret" aria-hidden="true"></span><time class="log__time">13:35:00.000</time><span class="status-label"><span class="status-dot status-dot--warn" aria-hidden="true"></span>警告</span><span class="log__summary">诊断完成：1 项失败 · 1 项警告</span><span class="log__meta"><span>用户</span></span></div>
+                  </li>
+                  <li class="log__row">
+                    <div class="log__main"><span class="log__caret" aria-hidden="true"></span><time class="log__time">13:27:00.000</time><span class="status-label"><span class="status-dot status-dot--info" aria-hidden="true"></span>信息</span><span class="log__summary">保留成果（磁盘 1288490188 字节 / 下载 0 字节）</span><span class="log__meta"><span>用户</span></span></div>
+                    <div class="log__end"><button class="btn btn--tertiary btn--24" type="button">查看该任务完整时间线</button></div>
+                  </li>
+                </ul>
+                <div class="list__more"><button class="btn btn--tertiary btn--32" type="button">加载更早的记录</button></div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

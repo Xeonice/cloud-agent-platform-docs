@@ -1,0 +1,161 @@
+<!doctype html>
+<!--
+id: f-prj-retained-05
+  页面: 21-5 系统状态 → 保留下来的成果（跨项目视图：「本机资源水位」卡里的 [清理保留卷] 打开同一个对话框，范围「全部项目」）
+  状态: 磁盘 88%（警告）时系统状态出现 [清理成果]，点开：标题「保留下来的成果」、副标题「全部项目」；一句说明；范围选择「全部项目」（下拉：全部项目 / 每个有成果的项目）+ 合计「共 3 个 · 占用 4.2 GB · 全部下载 1.1 GB」；按项目分组（组按项目顺序：示例项目 2 个 · 占用 3.7 GB、acme-web 1 个 · 占用 512 MB），组内按到期先后，行与 f-prj-retained-01 相同；底部读法。焦点在范围选择上；关掉后回到 [清理成果]。
+    背景只画入口所在的那张资源卡（磁盘警告 + 保留卷汇总 + [清理保留卷]）；告警态的完整画法以 L5（F-SYS-RESOURCE）定稿为准。
+  对应 v1 稿件: 无（新设计，Q-DS-33 默认 A）；行与列表取 g2-16，入口取 g6-05（design-drafts/g6-system/g6-05-*.html 的 [清理保留卷]）；背景外壳照 pilot/p5-system-status.html
+  体现的 v2 要点:
+    - 对话框 512；列表不套卡（对话框自带一层环，再套卡就是两层描边，lint E5）：列表上下各一条 1px 线 + 行间 1px（.list.list--stack；v1 一行一个描边卡，foundation §3.10「不再一行一框」）
+    - 遮罩同 P4；底层外壳与跳转链接 inert + aria-hidden（现状 AppDialog 是 Radix Dialog，打开时会把对话框以外的节点设成 aria-hidden，同效；P4 只写了 inert）
+    - 行：gift 图标 + 来源任务名（14/500）+ 行尾倒计时（快到期：warn 徽标 20 + triangle-alert；其余 12 次要灰文字）；两行 14 次要灰元信息（来源 · 保留时间 / 占用 · 下载）；动作 [下载（…）]（原生 <a download>，secondary 28 + download 图标）+ [删除]（danger-tertiary 28：进入二次确认的入口，foundation §3.1）
+    - 数字 tabular（.l1b-num），不用等宽；字阶 20 / 14 / 13 / 12
+    - 范围选择 .select.select--32（原生 select，可访问名「范围」）+ 合计同一行（.l1b-scope）；组头 = folder 图标 + 项目名 14/500 + 「N 个 · 占用 X」14 次要灰；组与组之间 16
+    - 背景：设置页外壳（P5：侧栏不挂树、「系统状态」为当前页）+ 资源卡（.card--usage / .usage / .meter--warn 同 P5）
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要用户确认）:
+    1. 新增跨项目视图：范围选择 + 按项目分组的组头。需看稿。
+    2. 新增一句说明「按项目分组；删掉一份，马上腾出它「占用」那么多磁盘。到期的由后台自动清理。」（新增可见文字，需看稿）。
+    3. 背景系统状态页：资源卡数字按示例世界写（保留卷占用 4.2 GB（3 个 · 占数据目录（DATA_ROOT）的 0.8%）、最早的成果不足 1 天后清理），磁盘 440 / 500 GB（88%）取 g6-05 的百分比；[清理保留卷] 按现状写法常驻在保留卷汇总块里。需看稿（与 L5 定稿对齐）。
+    4. 行的写法同 f-prj-retained-01 第 2–6 条。
+    5. 用户拍板 2026-10-04（notes/consistency.md §9） · Q-SYS-23 A / Q-SBX-03 A：底层系统状态页 本机资源卡「保留卷占用 …」→「成果占用 …」；按钮 [清理保留卷] → [清理成果]（三组同物异名统一，只改可见文字；接口字段 retainedVolumes、data-testid 不动；系统状态页原来叫「保留卷」的例外取消）。
+  示例数据来源: v1 g2-16 的三行（按 plan 示例世界分给示例项目 2 份、acme-web 1 份）+ 本组新增的三个来源任务名；系统状态卡的其余数字同 P5（还能再发 3 个、CPU 31%、内存 35.9%）；W2 一致性（notes/consistency.md）：#11 那份按 f-aut-rules-07 的 7 天保留期改为保留于 2026/9/27 03:18:05 · 还需 1 天（合计与排序不变）；背景资源卡：CPU / 内存 / 名额是场景「资源：正常」（名额按统一示例世界：已登记 8 个、本机最多 11 个），磁盘 440 / 500 GB（88%）取场景「资源：保留卷过量」的磁盘值让 [清理保留卷] 出现，保留卷没有越线、按示例世界 3 份成果推导 4.2 GB（与下面的列表同一组数）
+  流程: F-PRJ-RETAINED（REQ-PRJ-056）
+  口径依据: Q-DS-33 默认 A（打开「保留下来的成果」弹层的跨项目视图：顶部范围「全部项目」、按项目分组，GET /api/retained-volumes 不带 projectId）；BACKLOG DR-27（[清理保留卷] 现状点了没反应）；api retained-volume.service.ts:94-101（不带 projectId = 全部项目）、packages/contracts/src/schemas/project.schema.ts:158；现状 web/src/lib/system/resourceModel.ts:153（按钮在磁盘或保留卷不是正常时出现）、web/src/views/system/ResourcePoolCard.view.tsx:179-183、web/src/hooks/project/useRetainedVolumes.ts:64-66（现状只按项目查）；用户拍板 2026-10-04（Q-SYS-23 A：资源卡「成果占用」、按钮 [清理成果]、其余处叫「保留下来的成果」；Q-SBX-03 A：代码副本）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-prj-retained-05">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-prj-retained-05 保留下来的成果 · 全部项目</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l1b-prj.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main" inert aria-hidden="true">跳到主区</a>
+  <div class="shell" inert aria-hidden="true">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">系统状态</h1>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner l1b-sys-col">
+            <section class="section" aria-labelledby="resource-pool-heading">
+              <div class="section-head"><h2 class="section-head__title" id="resource-pool-heading">本机资源水位</h2></div>
+              <div class="card card--usage">
+                <div class="card__body">
+                  <div class="card__head">
+                    <p class="kpi"><span>还能再发</span><span class="kpi__value">3</span><span>个任务</span></p>
+                    <div class="card__head-end">
+                      <span class="contract-note" title="待契约（DR-08）：这个数要由后端按准入规则给，前端不自己算">待契约 · DR-08</span>
+                      <button class="btn btn--secondary btn--24" type="button">刷新</button>
+                    </div>
+                  </div>
+                  <p class="card__desc">按配额登记计算：已登记 <span class="u-nowrap">8 个任务</span>（含已停止的），本机最多 <span class="u-nowrap">11 个</span>。下面的实时占用率只作参考。</p>
+                  <ul class="usage">
+                    <li class="usage__item">
+                      <div class="usage__row"><span class="usage__name"><span class="icon i-cpu" aria-hidden="true"></span>CPU</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="usage__value">3.1 / 10 核（31%）</span></div>
+                      <span class="meter" role="progressbar" aria-label="CPU 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="31"><span class="meter__bar" style="width: 31%"></span></span>
+                    </li>
+                    <li class="usage__item">
+                      <div class="usage__row"><span class="usage__name"><span class="icon i-memory-stick" aria-hidden="true"></span>内存</span><span class="badge badge--20 badge--ok"><span class="icon i-check" aria-hidden="true"></span>正常</span><span class="usage__value">11.5 / 32 GB（35.9%）</span></div>
+                      <span class="meter" role="progressbar" aria-label="内存 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="36"><span class="meter__bar" style="width: 35.9%"></span></span>
+                    </li>
+                    <li class="usage__item">
+                      <div class="usage__row"><span class="usage__name"><span class="icon i-hard-drive" aria-hidden="true"></span>磁盘</span><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>警告</span><span class="usage__value">440 / 500 GB（88%）</span></div>
+                      <span class="usage__path" title="/srv/agent-platform/data">/srv/agent-platform/data</span>
+                      <span class="meter" role="progressbar" aria-label="磁盘 使用率" aria-valuemin="0" aria-valuemax="100" aria-valuenow="88"><span class="meter__bar meter__bar--warn" style="width: 88%"></span></span>
+                    </li>
+                  </ul>
+                  <div class="usage">
+                    <div class="usage__item usage__item--stack">
+                      <span class="icon-line"><span class="icon i-gift" aria-hidden="true"></span><span>成果占用 4.2 GB（3 个 · 占数据目录（DATA_ROOT）的 0.8%）</span></span>
+                      <span class="icon-line icon-line--muted"><span class="icon i-clock" aria-hidden="true"></span><span>最早的成果不足 1 天后清理</span></span>
+                      <div class="btn-row"><button class="btn btn--secondary btn--28" type="button" aria-haspopup="dialog">清理成果</button></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="overlay">
+    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-t">
+      <div class="dialog__header">
+        <h2 class="dialog__title" id="dlg-t">保留下来的成果</h2>
+        <p class="dialog__subtitle">全部项目</p>
+      </div>
+      <div class="dialog__body">
+        <p class="l1b-rv-intro">按项目分组；删掉一份，马上腾出它「占用」那么多磁盘。到期的由后台自动清理。</p>
+        <div class="l1b-scope">
+          <div class="select select--32"><select class="select__control" aria-label="范围"><option selected>全部项目</option><option>示例项目</option><option>acme-web</option></select><span class="icon select__icon i-chevron-down" aria-hidden="true"></span></div>
+          <p class="l1b-rv-totals">共 3 个 · 占用 <span class="l1b-num">4.2 GB</span> · 全部下载 <span class="l1b-num">1.1 GB</span></p>
+        </div>
+        <div class="l1b-groups">
+          <section class="l1b-group" aria-label="示例项目：2 个，占用 3.7 GB">
+            <h3 class="l1b-group-head"><span class="icon i-folder" aria-hidden="true"></span>示例项目<span class="l1b-group-head__meta">2 个 · 占用 3.7 GB</span></h3>
+            <ul class="list list--stack l1b-rv-list" aria-label="示例项目 保留下来的成果">
+            <li class="list__row l1b-rv">
+              <div class="list__line"><span class="l1b-rv__lead"><span class="icon i-gift" aria-hidden="true"></span></span><span class="list__name l1b-rv__name" title="来源任务 c8d2f14a-3b6e-4f0a-9d21-5e7c0b8a1f36">改一处示例代码</span><span class="badge badge--20 badge--warn"><span class="icon i-triangle-alert" aria-hidden="true"></span>不足 1 天</span></div>
+              <p class="l1b-rv__meta">销毁任务时保留 · 保留于 2026/9/2 18:20:41</p>
+              <p class="l1b-rv__meta">占用 <span class="l1b-num">1.6 GB</span> · 下载 <span class="l1b-num">412 MB</span></p>
+              <div class="btn-row l1b-rv__actions"><a class="btn btn--secondary btn--28" href="#" download><span class="icon i-download" aria-hidden="true"></span>下载（412 MB）</a><button class="btn btn--danger-tertiary btn--28" type="button" aria-haspopup="dialog">删除</button></div>
+            </li>
+            <li class="list__row l1b-rv">
+              <div class="list__line"><span class="l1b-rv__lead"><span class="icon i-gift" aria-hidden="true"></span></span><span class="list__name l1b-rv__name" title="来源任务 7f3a1c2e-9d08-4b7f-a6e1-0c2d4f6b8a93">补一份示例 README</span><span class="l1b-rv__left">还需 27 天</span></div>
+              <p class="l1b-rv__meta">销毁任务时保留 · 保留于 2026/9/29 10:12:00</p>
+              <p class="l1b-rv__meta">占用 <span class="l1b-num">2.1 GB</span> · 下载 <span class="l1b-num">618 MB</span></p>
+              <div class="btn-row l1b-rv__actions"><a class="btn btn--secondary btn--28" href="#" download><span class="icon i-download" aria-hidden="true"></span>下载（618 MB）</a><button class="btn btn--danger-tertiary btn--28" type="button" aria-haspopup="dialog">删除</button></div>
+            </li>
+            </ul>
+          </section>
+          <section class="l1b-group" aria-label="acme-web：1 个，占用 512 MB">
+            <h3 class="l1b-group-head"><span class="icon i-folder" aria-hidden="true"></span>acme-web<span class="l1b-group-head__meta">1 个 · 占用 512 MB</span></h3>
+            <ul class="list list--stack l1b-rv-list" aria-label="acme-web 保留下来的成果">
+            <li class="list__row l1b-rv">
+              <div class="list__line"><span class="l1b-rv__lead"><span class="icon i-gift" aria-hidden="true"></span></span><span class="list__name l1b-rv__name" title="来源任务 a91e07d3-6c4b-4e19-8f02-1d7a9b3c5e60">每天凌晨跑一遍回归 #11</span><span class="l1b-rv__left">还需 1 天</span></div>
+              <p class="l1b-rv__meta">自动化产物 · 保留于 2026/9/27 03:18:05</p>
+              <p class="l1b-rv__meta">占用 <span class="l1b-num">512 MB</span> · 下载 <span class="l1b-num">96 MB</span></p>
+              <div class="btn-row l1b-rv__actions"><a class="btn btn--secondary btn--28" href="#" download><span class="icon i-download" aria-hidden="true"></span>下载（96 MB）</a><button class="btn btn--danger-tertiary btn--28" type="button" aria-haspopup="dialog">删除</button></div>
+            </li>
+            </ul>
+          </section>
+        </div>
+        <p class="l1b-rv-legend">「占用」是宿主磁盘实占（删掉能拿回的空间）；「下载」是打包成 tar 的大小（.gitignore 命中的不打包，.git 保留）。</p>
+      </div>
+      <button class="btn btn--tertiary btn--28 btn--icon dialog__close" type="button" aria-label="关闭"><span class="icon i-x" aria-hidden="true"></span></button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,140 @@
+<!doctype html>
+<!--
+  id: f-img-page-02
+  页面: 21-4 镜像管理（/settings/images）· 首次加载
+  状态: 第一次进入镜像页、列表还没回来：页头（h1 + [注册新镜像]）与工具行（搜索 + 分段过滤）照常可用；「已注册的 OCI 镜像」下面两张卡片骨架（卡头名称条 + 胶囊位 / 坐标条 / 右侧徽标位 → 结论胶囊 + 一句 → 三行键值 → 运行参数块 → 动作行）；读屏只念一句「正在读取镜像…」
+  对应 v1 稿件: g5-15b（design-drafts/g5-images/g5-15b-loading.html；预览 design-drafts/previews/g5-15b.dark.png / g5-15b.light.png）
+  体现的 v2 要点:
+    - 骨架（foundation §3.14、UX-DS-304 / T-7「高度接近真实内容」）：用 v2 镜像卡的材质与几何（.card.card--lg、内边距 24、块间 12、嵌入块 r6）排骨架块；底色 --skeleton，静态稿停在脉冲中点 .7（共享规则 [data-draft-id] .skeleton，P6b 同法）
+    - 读屏：列表 aria-busy="true" + 视觉隐藏 role="status"「正在读取镜像…」，骨架块 aria-hidden（P6b 同写法）
+    - 页头与工具行不置灰（v1 / 现状：照常可用）
+  与 v1 的差异（逐条；「需看稿」= 形态变化，要你确认）:
+    1. 外壳与页面结构：同 f-img-register-01 第 1 条（P7）。需看稿（随 P7）。
+    2. 骨架形态：v1 / 现状 ImageCardSkeleton 四条（16×160 标题、12×256 坐标、48×100% 结论块、12×208 元信息，卡片 1px 描边 p-4、整卡脉冲）→ 按 v2 卡片几何排：卡头两行 + 右侧徽标位、结论胶囊 + 一句、三行键值（键列 102、与真实「运行的版本：」同宽）、运行参数嵌入块（两条）、动作行（三个 32 高按钮位）；卡片材质同真实卡（表面 + 环、r6、内边距 24）。高度从 ~150 到 ~330，与真实卡（~340）接近，数据回来时不跳。需看稿。
+    3. 骨架色与动效：bg-muted 2s 脉冲 → --skeleton（亮 ≈ #e6e6e6 / 暗 #1a1a1a）、1.5s；静态稿 .7。
+    4. 读屏：新增列表 aria-busy 与一句「正在读取镜像…」（v1 / 现状没有，读屏用户此前听不到任何反馈；P6b 同写法）。不可见改动。
+  不变: 页头与工具行可用；两张骨架；骨架 aria-hidden；不出现任何空态句（加载期不是「没有镜像」）
+  示例数据来源: 无数据（加载期）；页头与工具行照 P7
+  流程: F-IMG-PAGE（REQ-IMG-050–059；本稿覆盖 REQ-IMG-050）
+  口径依据: 换皮规则 T-21；T-7 / UX-DS-304（列表与卡片首次加载用骨架、高度接近真实内容）；P6b（骨架写法、读屏句）；P21-4 L91（加载中 → 骨架屏）；实现 web/src/containers/image/ImagesContainer.tsx:89-94、web/src/views/image/ImageCard.view.tsx:50-64（ImageCardSkeleton）、web/src/hooks/image/useImages.ts:894-896（loading = query.isPending）；原型接线按 F-WB-SHELL 路由规则：直开 #images 先出本页骨架 600ms（plan.json wiring.per_flow）
+-->
+<html lang="zh-CN" data-theme="dark" data-draft-id="f-img-page-02">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>f-img-page-02 首次加载骨架（v2 补全稿）</title>
+<link rel="stylesheet" href="../../pilot/assets/tokens-v2.css">
+<link rel="stylesheet" href="../../pilot/assets/components-v2.css">
+<link rel="stylesheet" href="assets/gap-shared.css">
+<link rel="stylesheet" href="assets/pages/l4a-img.css">
+</head>
+<body>
+<div class="frame">
+  <a class="skip-link" href="#main">跳到主区</a>
+  <div class="shell">
+    <aside class="sidebar" id="sidebar" aria-label="侧栏">
+      <div class="sidebar__top">
+        <div class="scope">
+          <a class="scope__home" href="#" title="回到工作台"><span class="scope__logo" aria-hidden="true">A</span><span class="scope__name">Agent 管理平台</span><span class="badge badge--20 badge--neutral">本机</span></a>
+          <button class="btn btn--tertiary btn--28 btn--icon scope__menu" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="实例菜单：系统状态、外观、快捷键" title="实例菜单"><span class="icon i-chevrons-up-down" aria-hidden="true"></span></button>
+        </div>
+        <button class="find" type="button" aria-haspopup="dialog" aria-keyshortcuts="Meta+K" aria-label="查找任务、项目与动作（⌘K）"><span class="icon i-search" aria-hidden="true"></span><span class="find__text">查找…</span><span class="kbd" aria-hidden="true">⌘K</span></button>
+      </div>
+
+      <nav class="nav" aria-label="主导航">
+        <a class="nav-item" href="#"><span class="icon i-square-terminal" aria-hidden="true"></span><span class="nav-item__label">任务</span></a>
+        <a class="nav-item" href="#"><span class="icon i-key-round" aria-hidden="true"></span><span class="nav-item__label">凭证管理</span></a>
+        <a class="nav-item is-current" href="#" aria-current="page"><span class="icon i-package" aria-hidden="true"></span><span class="nav-item__label">镜像管理</span></a>
+        <a class="nav-item" href="#"><span class="icon i-activity" aria-hidden="true"></span><span class="nav-item__label">系统状态</span></a>
+      </nav>
+
+      <div class="sidebar__footer">
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-haspopup="menu" aria-label="外观" title="外观：跟随系统 / 亮色 / 暗色"><span class="icon i-sun-moon" aria-hidden="true"></span></button>
+        <button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-label="快捷键" title="快捷键"><span class="icon i-keyboard" aria-hidden="true"></span></button>
+        <div class="sidebar__footer-end"><button class="btn btn--tertiary btn--32 btn--icon" type="button" aria-keyshortcuts="Meta+B" aria-expanded="true" aria-controls="sidebar" aria-label="收起侧栏" title="收起侧栏（⌘B）"><span class="icon i-panel-left-close" aria-hidden="true"></span></button></div>
+      </div>
+    </aside>
+
+    <div class="shell__main">
+      <header class="header">
+        <h1 class="header__title">镜像管理</h1>
+        <div class="header__actions"><button class="btn btn--primary btn--32" type="button" aria-haspopup="dialog"><span class="icon i-plus" aria-hidden="true"></span><span class="btn__label">注册新镜像</span></button></div>
+      </header>
+
+      <main class="main" id="main">
+        <div class="content">
+          <div class="content__inner sections">
+
+            <div class="page-toolbar p7-toolbar">
+              <label class="input-group"><span class="icon i-search" aria-hidden="true"></span><input class="input-group__control" type="search" aria-label="搜索镜像" placeholder="按名称或坐标搜索" value=""></label>
+              <div class="segmented" role="group" aria-label="状态过滤">
+                <button class="segmented__item" type="button" aria-pressed="true">全部</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-check" aria-hidden="true"></span>有效</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-triangle-alert" aria-hidden="true"></span>警告</button>
+                <button class="segmented__item" type="button" aria-pressed="false"><span class="icon i-x" aria-hidden="true"></span>无效</button>
+              </div>
+            </div>
+
+            <section class="section" aria-labelledby="img-list">
+              <div class="section-head section-head--16">
+                <h2 class="section-head__title" id="img-list">已注册的 OCI 镜像</h2>
+              </div>
+
+              <div class="stack stack--16" aria-busy="true">
+                <span class="u-sr-only" role="status">正在读取镜像…</span>
+                <div class="card card--lg" data-testid="image-card-skeleton" aria-hidden="true">
+                  <div class="card__body">
+                    <div class="card__head">
+                      <div class="card__head-main l4a-sk__head">
+                        <div class="l4a-sk__line"><span class="skeleton" style="width: 184px; height: 14px"></span><span class="skeleton skeleton--pill" style="width: 40px; height: 20px"></span></div>
+                        <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 232px"></span></div>
+                      </div>
+                      <span class="skeleton skeleton--pill" style="width: 72px; height: 24px"></span>
+                    </div>
+                    <div class="l4a-sk__line"><span class="skeleton skeleton--pill" style="width: 76px; height: 20px"></span><span class="skeleton skeleton--text" style="width: 64px"></span></div>
+                    <div class="l4a-sk__kv">
+                      <span class="skeleton" style="width: 40px"></span><span class="skeleton" style="width: 176px"></span>
+                      <span class="skeleton" style="width: 80px"></span><span class="skeleton" style="width: 248px"></span>
+                      <span class="skeleton" style="width: 40px"></span><span class="skeleton" style="width: 312px"></span>
+                    </div>
+                    <div class="card__inset">
+                      <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 72px"></span></div>
+                      <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 152px"></span></div>
+                    </div>
+                    <div class="l4a-sk__btns"><span class="skeleton" style="width: 84px"></span><span class="skeleton" style="width: 84px"></span><span class="skeleton" style="width: 56px"></span></div>
+                  </div>
+                </div>
+                <div class="card card--lg" data-testid="image-card-skeleton" aria-hidden="true">
+                  <div class="card__body">
+                    <div class="card__head">
+                      <div class="card__head-main l4a-sk__head">
+                        <div class="l4a-sk__line"><span class="skeleton" style="width: 168px; height: 14px"></span><span class="skeleton skeleton--pill" style="width: 40px; height: 20px"></span></div>
+                        <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 200px"></span></div>
+                      </div>
+                      <span class="skeleton skeleton--pill" style="width: 72px; height: 24px"></span>
+                    </div>
+                    <div class="l4a-sk__line"><span class="skeleton skeleton--pill" style="width: 76px; height: 20px"></span><span class="skeleton skeleton--text" style="width: 64px"></span></div>
+                      <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 328px"></span></div>
+                    <div class="l4a-sk__kv">
+                      <span class="skeleton" style="width: 40px"></span><span class="skeleton" style="width: 72px"></span>
+                      <span class="skeleton" style="width: 80px"></span><span class="skeleton" style="width: 248px"></span>
+                      <span class="skeleton" style="width: 40px"></span><span class="skeleton" style="width: 232px"></span>
+                    </div>
+                    <div class="card__inset">
+                      <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 72px"></span></div>
+                      <div class="l4a-sk__line"><span class="skeleton skeleton--text" style="width: 320px"></span></div>
+                    </div>
+                    <div class="l4a-sk__btns"><span class="skeleton" style="width: 84px"></span><span class="skeleton" style="width: 84px"></span><span class="skeleton" style="width: 56px"></span><span class="skeleton" style="width: 56px"></span></div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+</div>
+</body>
+</html>

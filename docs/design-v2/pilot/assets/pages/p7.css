@@ -1,0 +1,35 @@
+/*
+ * P7 镜像管理 · 页面专用样式：只写这一页的版式（卡内几行的排列）；颜色只用 token。
+ * 卡片材质、徽标、键值、嵌入块、按钮、分段控件都用共享类（.card--lg / .badge / .kv / .card__inset / .btn / .segmented）。
+ */
+
+/* 卡头左侧：第一行「镜像名 + 预置 / 自定义」，第二行完整坐标（次要灰）；右侧是启用状态徽标 */
+.p7-name { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; min-width: 0; }
+.p7-name > .card__title { min-width: 0; overflow-wrap: anywhere; }
+.p7-ref { min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+
+/* 验证结论：徽标（卡内行 20）+ 一句次要灰；有原因时下面接圆点清单与动作 */
+.p7-verdict { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.p7-verdict__line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: var(--text-copy-14); color: var(--foreground-muted); }
+
+/* 「运行的版本」一格：版本号 + 两个文字按钮 + 解析时间，窄时折行 */
+.p7-identity { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 2px; }
+.p7-identity__time { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground-muted); }
+
+/* 运行参数（嵌入块，不加环）：第一行 标题 + 右侧「编辑环境变量」，第二行环境变量摘要 */
+.p7-params { gap: 6px; }
+.p7-params__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
+.p7-params__summary { min-width: 0; font: var(--text-copy-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+
+/* 历史版本（卡片页脚条）：左边一行版本信息，右边动作 */
+.p7-history { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 4px; min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); }
+.p7-history__label { display: inline-flex; align-items: center; gap: 6px; }
+.p7-history__label > .icon { width: var(--icon-14); height: var(--icon-14); }
+.p7-history__list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.p7-history__row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
+
+/* 窄屏（< 640）：卡头徽标折到名称下面，工具行的分段控件整行 */
+@media (max-width: 639px) {
+  .p7-card-head { flex-wrap: wrap; }
+  .p7-toolbar > .segmented { flex: 1 1 100%; justify-content: space-between; }
+}

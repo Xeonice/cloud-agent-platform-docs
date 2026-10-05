@@ -1,0 +1,446 @@
+[
+  {
+    "theme": "dark",
+    "width": 1440,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "collapsedRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-dark-1440.png",
+      "command-new-dark-1440.png",
+      "command-empty-dark-1440.png",
+      "command-disabled-dark-1440.png",
+      "shortcuts-dark-1440.png",
+      "images-dark-1440.png",
+      "credentials-dark-1440.png",
+      "system-dark-1440.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 256,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(0, 0, 0)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  },
+  {
+    "theme": "dark",
+    "width": 1024,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "collapsedRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-dark-1024.png",
+      "command-new-dark-1024.png",
+      "command-empty-dark-1024.png",
+      "command-disabled-dark-1024.png",
+      "shortcuts-dark-1024.png",
+      "images-dark-1024.png",
+      "credentials-dark-1024.png",
+      "system-dark-1024.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 256,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(0, 0, 0)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  },
+  {
+    "theme": "dark",
+    "width": 390,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "mobileRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-dark-390.png",
+      "command-new-dark-390.png",
+      "command-empty-dark-390.png",
+      "command-disabled-dark-390.png",
+      "shortcuts-dark-390.png",
+      "images-dark-390.png",
+      "credentials-dark-390.png",
+      "system-dark-390.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 48,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(0, 0, 0)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(0, 0, 0)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  },
+  {
+    "theme": "light",
+    "width": 1440,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "collapsedRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-light-1440.png",
+      "command-new-light-1440.png",
+      "command-empty-light-1440.png",
+      "command-disabled-light-1440.png",
+      "shortcuts-light-1440.png",
+      "images-light-1440.png",
+      "credentials-light-1440.png",
+      "system-light-1440.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 256,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(250, 250, 250)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  },
+  {
+    "theme": "light",
+    "width": 1024,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "collapsedRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-light-1024.png",
+      "command-new-light-1024.png",
+      "command-empty-light-1024.png",
+      "command-disabled-light-1024.png",
+      "shortcuts-light-1024.png",
+      "images-light-1024.png",
+      "credentials-light-1024.png",
+      "system-light-1024.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 256,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(250, 250, 250)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 256,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  },
+  {
+    "theme": "light",
+    "width": 390,
+    "status": "passed",
+    "checks": {
+      "initialLayout": true,
+      "mobileRail48": true,
+      "commandSearchOrder": [
+        "command-new-project",
+        "command-new-task"
+      ],
+      "emptySearch": true,
+      "disabledClearEnter": true,
+      "escapeRestoresFocus": true,
+      "shortcutsEntry": true,
+      "sharedSidebarAcrossSettings": true
+    },
+    "screenshots": [
+      "workbench-light-390.png",
+      "command-new-light-390.png",
+      "command-empty-light-390.png",
+      "command-disabled-light-390.png",
+      "shortcuts-light-390.png",
+      "images-light-390.png",
+      "credentials-light-390.png",
+      "system-light-390.png"
+    ],
+    "errors": [],
+    "mutations": [],
+    "layout": {
+      "sidebarCount": 1,
+      "sidebarWidth": 48,
+      "headerHeight": 56,
+      "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+      "background": "rgb(250, 250, 250)",
+      "horizontalOverflow": false,
+      "pageHeight": 900
+    },
+    "settings": [
+      {
+        "path": "/settings/images",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/credentials",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      },
+      {
+        "path": "/settings/system",
+        "sameSidebar": true,
+        "sidebarCount": 1,
+        "sidebarWidth": 48,
+        "headerHeight": 56,
+        "fontFamily": "Geist, \"PingFang SC\", \"Hiragino Sans GB\", \"Microsoft YaHei\", \"Noto Sans CJK SC\", \"Noto Sans SC\", system-ui, sans-serif",
+        "background": "rgb(250, 250, 250)",
+        "horizontalOverflow": false,
+        "pageHeight": 900
+      }
+    ]
+  }
+]
