@@ -24,6 +24,12 @@ AC 台账中 1011 条为当前实现已核对，3 条互斥分支由明确裁决
 
 产品页面、前端实现页与测试策略均已更新，过时 HTML 原型已退休；设计原稿保留来源与必要的历史引用规范化记录。OpenAPI、生成类型和跨仓契约随实现同步。
 
+## Mac mini 部署进展（2026-10-06）
+
+后端新增精确 HTTP/WS Origin 校验、可信本机代理处理及鉴权部署探针。Mac mini 已安装专属 launchd CI/CD controller，匹配指定发布分支的成功 push CI 后进行本机原生构建；首次生产版本 `134433f…` 已在独立的 `3101` 和生产数据目录运行，原 `3100` 预览任务保留。控制器只在生产空闲且持久格式兼容时自动切换。
+
+Vercel 最新前端 `1ab5b18…` 已发布至 `agent.douglasdong.com`，生产 API 通过专属 Cloudflare Tunnel 接入 `agent-api.douglasdong.com`。正式浏览器解锁、受保护 REST、WebSocket、真实 VM 生命周期与后续 guest HTTPS 检查均通过；生产模型账号尚未配置，未调用真实 LLM。自动部署、缓存、人工维护与恢复命令见 [Mac mini 部署](docs/macmini-deployment.md)，实际状态与实跑记录见 [部署控制面](artifacts/deployment-preconfiguration/control-plane.json)和[部署验证](artifacts/deployment-preconfiguration/verification.json)。用户级 LaunchAgent 仍依赖该用户登录。
+
 ## 验收口径
 
 代码逐项审查、组件/协议测试、浏览器状态检查是不同证据。AC 台账保留 Given/When/Then 和执行等级；不能把 1016 条代码审查写成 1016 条端到端测试。明确由已选产品裁决替代或延期的分支保留理由。

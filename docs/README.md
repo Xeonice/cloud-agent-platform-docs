@@ -11,6 +11,8 @@
 
 本轮产品行为与视觉以 [2026-10 新版设计](./design-v2/README.md) 为准；[领域规格索引](./design-v2/gap/product/README.md) 保留完整 REQ/AC，原逐页文档的旧结论由该版本替代。当前代码与实际验证见[主仓状态](../IMPLEMENTATION-STATUS.md)。
 
+Mac mini 后端的构建、发布和服务管理见 [Mac mini 部署](./macmini-deployment.md)。
+
 ## 目录结构
 
 ```

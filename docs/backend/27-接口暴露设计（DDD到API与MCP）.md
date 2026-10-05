@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **68 条能力 path / 78 个 operation**（2026-10 按当前清单核对：**67 条 path / 77 个 operation 已实现**，含新增 `GET /api/automations/attention`；另 1 条 `POST /api/system/backup` 为 ⏳ 预留。排除 3 条 MCP 传输路径；`POST /api/system/diagnose` 的 SSE 响应计入此 HTTP 清单，也在下行单列） | 10 §6.1–6.6 |
+| REST 端点 | **69 条能力 path / 79 个 operation**（2026-10 按当前清单核对：**68 条 path / 78 个 operation 已实现**，含 `GET /api/automations/attention` 与部署运维探针 `GET /api/deployment/status`；另 1 条 `POST /api/system/backup` 为 ⏳ 预留。排除 3 条 MCP 传输路径；`POST /api/system/diagnose` 的 SSE 响应计入此 HTTP 清单，也在下行单列） | 10 §6.1–6.6 |
 | MCP tools | **14 设计 / 14 已注册**（本迭代把最后四个补齐——它们的 REST 端点此前也不存在，所以是「先做端点、再包壳」两层一起落地，见 §2） | 02 §5.2 |
 | WS 通道 | **3**（`/events`、`/terminal`、`/tasks`） | 10 §6.7 |
 | WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
@@ -327,7 +327,8 @@
 | `listProviders`（运维看板） | `GET /api/system/providers` | | 已注册 provider/runtime/imageSpec + capabilities + 健康/失败率 | — | 统一名（P1-6）。**✅ 2026-08-28 落地**；⏳ 「最近 testkit 结果」**没有产出方**（testkit 跑在 CI 里，运行期一份结果都没有 —— 编一个恒 null 的字段只会多一格永远空着的卡）。⚠️ `healthy` 不是「刚探测过它活着」：`SandboxProvider` 契约里没有健康探测方法，这里用的是 `sandboxes` 表里最近 1h 的成败；`sampleSize: 0` 是「这一小时没人用过它」而不是「正常」。**与 §2 的 `GET /api/providers` 是两个端点**：那个只列 sandbox provider 的 `name/capabilities/isDefault` 供创建链路选档（已落地），本条范围更宽（含 runtime/imageSpec 与健康），供 P21-5 系统状态页。**✅ `imageSpec` 那一档的注册表已经有了**（本句此前写的是「裸 Symbol、连注册表都不存在」，现在是反的）：`IMAGE_SPEC_REGISTRY` 有接口、有实现、有 DI 绑定、有第三方注入点（04 §8），`list()` 就是本端点要列的那一档。「provider / runtime / 镜像三层可注册」（19 §1 原则 5）**三层都是活的**；本端点也随本轮落地了 |
 | `getProviderLogs` | `GET /api/system/providers/:id/logs` | 懒读取 | `{ lines, unavailableReason? }` | — | runtime.log 真实20行、写入脱敏、不可读取明说原因 |
 | `unlock`（访问口令提交） | `POST /api/access/unlock` | `{ passcode }` | `{ unlocked: true }` + `Set-Cookie: ap_session`（签名 `HttpOnly`，7 天） | `PASSCODE_INVALID`(401)、`PASSCODE_LOCKED`(429，含 `retryAfterSec`) | **MVP**（审计 P0-3）。**不进 MCP**（§1.2 判据②：凭证提交面）。未启用口令时直接回 `{ unlocked:true }`；连续 5 次错锁 5 分钟，**与 Guard 共用同一把锁**（11 §3.1）。⚠️ **四条路径全部进审计流**（`category: 'system'`，13 §2.8.2 / 11 §3.1）：这是纯安全事件，此前只有一行运行日志。⛔ 口令本身与任何投影（长度/前缀/hash）不进 `summary`/`detail` |
-| `health` | `GET /api/health` | | `{ ok: true }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
+| `health` | `GET /api/health` | | `{ status: 'ok', uptimeSec: number }` | — | **豁免访问口令 Guard 的两个端点之一**（另一个是上一行的 `POST /api/access/unlock`——它就是提交点） |
+| `status`（部署探针） | `GET /api/deployment/status` | 无参数；正常访问口令鉴权（session 或 Bearer） | `DeploymentStatusDto`：`ready` / `idle` / `draining` + `readiness` 三项 + 活动 HTTP/WS/授权计数 + 七项 `blockers`，精确契约见 10 §6.6.2 | 正常 Guard 错误；计数读取异常使用统一错误信封 | **只读运维能力，不进 MCP**。检查 DB、默认 provider/原生 SDK、内置镜像注册状态；不创建 VM、不拉取镜像、不写库。所有活动计数及 blockers 归零才为 idle，启用规则也阻止切换；维护文件存在或检查异常即 draining。部署编排见 [Mac mini 部署](../macmini-deployment.md) |
 | （v1.5 占位） | `POST /api/system/backup` · `GET /api/system/version` | | | | 备份不含 master key 与凭证密文（05 §4.2） |
 
 **SSE 消费提示**：`openapi-typescript` 只能生成响应 content-type，**帧类型要手写**并与 WS 协议文件同放（10 §6.7）。用 `fetch` + `ReadableStream`（需要 POST body，`EventSource` 不支持）。

@@ -1,16 +1,16 @@
 {
-  "schemaVersion": 1,
-  "checkedAt": "2026-10-05T18:47:24.363Z",
+  "schemaVersion": 2,
+  "checkedAt": "2026-10-05T19:55:26.406Z",
   "topology": {
     "frontend": "https://agent.douglasdong.com",
     "api": "https://agent-api.douglasdong.com",
-    "backendOrigin": "http://127.0.0.1:3100",
+    "backendOrigin": "http://127.0.0.1:3101",
     "frontendProvider": "Vercel",
     "backendRuntime": "Mac mini / Darwin ARM64 / Node 22",
     "backendProxy": "Cloudflare Tunnel"
   },
   "vercel": {
-    "status": "preconfigured; production build READY/STAGED; custom domain not promoted",
+    "status": "production READY/PROMOTED; domain assigned to latest Git deployment",
     "team": "xeonices-projects",
     "projectId": "prj_XYIzK6r7LgRrV5NHCwWff489J73r",
     "projectName": "agent-platform-web",
@@ -22,9 +22,9 @@
     "buildCommand": "pnpm build",
     "installCommand": "pnpm install --frozen-lockfile",
     "packageManager": "pnpm@9.15.0",
-    "gitAutomaticDeployments": false,
+    "gitAutomaticDeployments": true,
     "previewDeployments": false,
-    "autoAssignCustomDomains": false,
+    "autoAssignCustomDomains": true,
     "environment": [
       {
         "key": "ENABLE_EXPERIMENTAL_COREPACK",
@@ -65,42 +65,55 @@
         ]
       }
     ],
-    "deploymentCount": 1,
     "domain": {
       "name": "agent.douglasdong.com",
       "verified": true,
       "dnsConfigured": true,
       "configuredBy": "CNAME",
-      "recommendedCNAME": "3395830a2fd9acf4.vercel-dns-016.com."
+      "recommendedCNAME": "3395830a2fd9acf4.vercel-dns-016.com.",
+      "deploymentId": "dpl_5CTNChRCzUdoXM6p3dgmrjLgcmoX"
     },
     "deployment": {
-      "id": "dpl_1egGo8ZyHcnjbXK6grd9UW7Hv6wg",
-      "url": "agent-platform-bu1dr3gb0-xeonices-projects.vercel.app",
+      "id": "dpl_5CTNChRCzUdoXM6p3dgmrjLgcmoX",
+      "url": "agent-platform-mduaqu2qw-xeonices-projects.vercel.app",
       "source": "git",
       "readyState": "READY",
-      "readySubstate": "STAGED",
-      "sourceCommit": "2c70f86e6ad3d46e3926b74ac6c5a6b667f1a0b8",
+      "readySubstate": "PROMOTED",
+      "sourceCommit": "1ab5b18c1e3d8c173ceef5728e690af8c605df88",
       "aliases": [
         "agent-platform-web-xeonices-projects.vercel.app",
-        "agent-platform-web-git-feat-design-v2-58eaac-xeonices-projects.vercel.app"
+        "agent-platform-web-git-feat-design-v2-58eaac-xeonices-projects.vercel.app",
+        "agent.douglasdong.com"
       ],
-      "customDomainAssigned": false
+      "customDomainAssigned": true
     },
     "gitDeploymentControl": {
       "source": "web/vercel.json",
       "git": {
-        "deploymentEnabled": false
+        "deploymentEnabled": {
+          "**": false,
+          "feat/design-v2-migration": true
+        }
       },
-      "upstreamCommit": "5ad3833714336d6c96e793593b011243875dd081",
+      "upstreamCommit": "1ab5b18c1e3d8c173ceef5728e690af8c605df88",
       "projectGitHubDeploymentNotifications": "enabled",
       "note": "gitProviderOptions.createDeployments controls GitHub notification objects, not Vercel automatic builds"
     },
     "deploymentHistory": {
-      "beforeFirstSourcePush": 0,
-      "afterNode22SourcePush": 1,
-      "afterRepositoryPausePush": 1,
-      "explicitSkippedEventObserved": false
-    }
+      "previousStagedGitDeployment": "dpl_1egGo8ZyHcnjbXK6grd9UW7Hv6wg",
+      "blockedCliDeployments": [
+        "dpl_6JZh8jFF7GkXk88VVCfbR1ksV45u",
+        "dpl_GoFsjMM3Wq2hqAgcuGr9zxTJJLNY"
+      ],
+      "blockedReason": "Vercel CLI commit-author authorization; no build ran",
+      "latestGitSourceCommit": "1ab5b18c1e3d8c173ceef5728e690af8c605df88"
+    },
+    "cliUpload": {
+      "beforeBytes": 367065866,
+      "afterBytes": 3219582,
+      "scope": "CLI only; excludes local Next acceptance outputs"
+    },
+    "deploymentCount": 4
   },
   "cloudflare": {
     "zone": "douglasdong.com",
@@ -129,14 +142,16 @@
       "enabled": true
     },
     "backendTunnel": {
-      "status": "not created or running",
+      "status": "created; healthy connector loaded; HTTPS route verified",
       "name": "agent-platform-api",
-      "plannedConfig": {
+      "id": "b59b8cc0-571a-46ec-bf21-1a01b78670a4",
+      "connectorId": "09fce7fc-8784-4ad7-8f44-91f1656e562c",
+      "config": {
         "config": {
           "ingress": [
             {
               "hostname": "agent-api.douglasdong.com",
-              "service": "http://127.0.0.1:3100"
+              "service": "http://127.0.0.1:3101"
             },
             {
               "service": "http_status:404"
@@ -144,17 +159,15 @@
           ]
         }
       },
-      "plannedDns": {
+      "dns": {
         "type": "CNAME",
         "name": "agent-api.douglasdong.com",
-        "content": "<new-tunnel-uuid>.cfargotunnel.com",
+        "content": "b59b8cc0-571a-46ec-bf21-1a01b78670a4.cfargotunnel.com",
         "proxied": true,
-        "ttl": 1
+        "ttl": 1,
+        "status": "created with public hostname route; public HTTPS resolution verified"
       },
-      "apiWritePermissionsIfUsingDedicatedToken": [
-        "Account: Cloudflare Tunnel Edit",
-        "Zone douglasdong.com: DNS Edit"
-      ]
+      "tokenStorage": "private owner-only file outside Git; --token-file"
     }
   },
   "existingAssetsPreserved": {
@@ -195,34 +208,68 @@
     ],
     "worker": "cap-release-cache / releases.cap.douglasdong.com; unchanged; cache implementation not yet audited"
   },
-  "remainingBeforePublishing": [
-    "Implement HTTP CORS with credential support, OPTIONS, X-Schema-Hash exposure and exact frontend Origin checks",
-    "Implement WebSocket handshake Origin allowlist and trusted local proxy client-IP handling",
-    "Prepare native API release with fixed persistent data and BoxLite directories, single-instance launchd service and readiness check",
-    "Create dedicated backend Tunnel and its DNS; start only after authenticated API verification",
-    "Choose an isolated Preview frontend/API environment before enabling Preview deployments",
-    "Verify the staged frontend against the published, authenticated API before promoting it or enabling Git deployments"
-  ],
+  "remainingBeforePublishing": [],
   "validation": {
     "domainOwnershipVerified": true,
     "dnsConfigured": true,
+    "productionBackendReady": true,
+    "matchingPushCiPassed": true,
+    "macNativeBuildPassed": true,
+    "existingLocalApiAndTaskNotRestarted": true,
+    "backendNotPublished": false,
     "vercelProjectChecks": {
       "correctProject": true,
       "node22": true,
       "previewDisabled": true,
-      "customDomainAutoAssignmentDisabled": true,
-      "customDomainNotAssigned": true,
+      "customDomainAutoAssignmentDisabled": false,
+      "customDomainNotAssigned": false,
+      "productionBranchGitBuildEnabled": true,
       "stagedBuildReady": true,
-      "noCurrentProductionTarget": true,
-      "upstreamRepositoryPauseVerified": true,
-      "deploymentCountDidNotIncreaseAfterPause": true
+      "latestProductionPromoted": true
     },
-    "existingLocalApiAndTaskNotRestarted": true,
-    "backendNotPublished": true
+    "publicApiAuthenticationVerified": true,
+    "publicHttpAndWebSocketVerified": true,
+    "browserUnlockAndProtectedRestVerified": true
   },
-  "sourceWebCommit": "5ad3833714336d6c96e793593b011243875dd081",
+  "sourceWebCommit": "1ab5b18c1e3d8c173ceef5728e690af8c605df88",
   "evidence": {
     "cloudflareCache": "cloudflare-cache.jpg",
-    "cloudflareDns": "cloudflare-dns.jpg"
-  }
+    "cloudflareDns": "cloudflare-dns.jpg",
+    "cloudflareTunnelPublished": "cloudflare-tunnel-published.jpg",
+    "frontendProduction": "frontend-production.jpg"
+  },
+  "backend": {
+    "status": "production API publicly reachable through dedicated Tunnel",
+    "sourceCommit": "134433f47912f7172faae50ea3285d010f6a3425",
+    "ciRunId": 37362932121,
+    "nativeRelease": "Darwin ARM64 / Node 22.23.3",
+    "dataRoot": "/Users/douglasdong/agent-platform/production",
+    "activatedAt": "2026-10-05T19:27:40.378Z",
+    "readinessVerified": true,
+    "actualVmCreationVerified": true,
+    "previewPreserved": true,
+    "guestHttpsVerified": true
+  },
+  "cicd": {
+    "installed": true,
+    "label": "com.douglasdong.agent-platform.cicd",
+    "apiLabel": "com.douglasdong.agent-platform.api",
+    "serviceKind": "user LaunchAgent; requires user login",
+    "intervalSeconds": 180,
+    "repository": "Xeonice/agent-platform-api",
+    "branch": "feat/design-v2-migration",
+    "workflow": "ci.yml",
+    "pushCiRequired": true,
+    "minimumCommit": "134433f47912f7172faae50ea3285d010f6a3425",
+    "deployEnabled": true,
+    "idleGate": true,
+    "schemaAndBoxLiteChangesRequireReview": true,
+    "trustedLocalController": true,
+    "githubSelfHostedRunner": false,
+    "manualMaintenancePreserved": true,
+    "installedToolVersion": "47-test controller including owned maintenance markers"
+  },
+  "remainingOperationalValidation": [
+    "Configure a production model account before starting an LLM task"
+  ]
 }

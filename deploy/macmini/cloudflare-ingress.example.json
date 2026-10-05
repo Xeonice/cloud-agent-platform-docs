@@ -1,0 +1,13 @@
+{
+  "config": {
+    "ingress": [
+      {
+        "hostname": "agent-api.douglasdong.com",
+        "service": "http://127.0.0.1:3101"
+      },
+      {
+        "service": "http_status:404"
+      }
+    ]
+  }
+}

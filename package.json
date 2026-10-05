@@ -2,13 +2,14 @@
   "name": "cloud-agent-platform-docs",
   "version": "0.2.3",
   "private": true,
-  "description": "云 Agent 管理平台 · 文档主仓（docs/ + api/web 两个 submodule）。只承载文档一致性门禁，不发布、不构建产物。",
+  "description": "云 Agent 管理平台 · 文档主仓（docs/ + api/web 两个 submodule），承载文档门禁与 Mac mini 部署工具。应用构建产物仍由子仓生成。",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.11.0"
   },
   "scripts": {
+    "deploy:macmini:test": "node --test deploy/macmini/controller.test.mjs",
     "docs:check": "node scripts/docs-check.mjs",
     "migration:check": "node scripts/check-design-migration.mjs",
     "migration:report": "node scripts/summarize-design-migration.mjs",
