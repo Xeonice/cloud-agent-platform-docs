@@ -1,0 +1,199 @@
+{
+  "schemaVersion": 1,
+  "kind": "actual-gui-tunnel-lifecycle",
+  "startedAt": "2026-10-05T23:50:32.753Z",
+  "installerSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
+  "review": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007f",
+  "events": [
+    {
+      "at": "2026-10-05T23:50:33.048Z",
+      "name": "actual-preflight-passed",
+      "activeWS": 2,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+      "tunnelPid": 67490,
+      "productionApiPid": 64657,
+      "previewApiPid": null
+    },
+    {
+      "at": "2026-10-05T23:50:33.120Z",
+      "name": "exact-owned-admission-held",
+      "admissionHeld": true,
+      "draining": true,
+      "ready": true,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425"
+    },
+    {
+      "at": "2026-10-05T23:50:33.185Z",
+      "name": "reviewed-gui-tunnel-bootout-returned"
+    },
+    {
+      "at": "2026-10-05T23:50:33.246Z",
+      "name": "actual-launchd-exit-probe",
+      "process": {
+        "pid": 67490,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared"
+      },
+      "listeners": [
+        {
+          "pid": 67490,
+          "command": "cloudflared",
+          "uid": 501
+        }
+      ],
+      "job": {
+        "pid": 67490,
+        "program": "/opt/homebrew/bin/cloudflared",
+        "state": "SIGTERMed"
+      }
+    },
+    {
+      "at": "2026-10-05T23:51:04.225Z",
+      "name": "actual-launchd-exit-probe",
+      "process": null,
+      "listeners": [],
+      "job": null
+    },
+    {
+      "at": "2026-10-05T23:51:04.226Z",
+      "name": "original-job-pid-and-metrics-fully-gone",
+      "exitWaitMs": 31040
+    },
+    {
+      "at": "2026-10-05T23:51:14.372Z",
+      "name": "strict-ten-second-quiet-passed",
+      "idle": true,
+      "draining": true,
+      "ready": true,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425"
+    },
+    {
+      "at": "2026-10-05T23:51:14.467Z",
+      "name": "strict-quiet-owner-gate-passed",
+      "idle": true,
+      "draining": true,
+      "ready": true,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425"
+    },
+    {
+      "at": "2026-10-05T23:51:14.528Z",
+      "name": "exit-confirmed-before-bootstrap"
+    },
+    {
+      "at": "2026-10-05T23:51:14.533Z",
+      "name": "original-gui-tunnel-bootstrapped"
+    },
+    {
+      "at": "2026-10-05T23:51:15.648Z",
+      "name": "restored-authenticated-readiness",
+      "ready": true,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+      "released": false
+    },
+    {
+      "at": "2026-10-05T23:51:15.719Z",
+      "name": "exact-owned-barrier-released",
+      "ready": true,
+      "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+      "released": true
+    },
+    {
+      "at": "2026-10-05T23:51:16.556Z",
+      "name": "actual-lifecycle-passed",
+      "productionApiPid": 64657,
+      "previewApiPid": null,
+      "tunnel": {
+        "pid": 72608,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared",
+        "domain": "gui/501",
+        "program": "/opt/homebrew/bin/cloudflared",
+        "job": {
+          "pid": 72608,
+          "program": "/opt/homebrew/bin/cloudflared",
+          "state": "running"
+        },
+        "process": {
+          "pid": 72608,
+          "uid": 501,
+          "command": "/opt/homebrew/bin/cloudflared"
+        },
+        "listeners": [
+          {
+            "pid": 72608,
+            "command": "cloudflared",
+            "uid": 501
+          }
+        ]
+      },
+      "publicHealth": 200,
+      "maintenanceAbsent": true,
+      "productionApiUnchanged": true,
+      "previewUnchanged": true
+    }
+  ],
+  "systemInstallValidated": false,
+  "before": {
+    "productionApiPid": 64657,
+    "previewApiPid": null,
+    "tunnel": {
+      "pid": 67490,
+      "uid": 501,
+      "command": "/opt/homebrew/bin/cloudflared",
+      "domain": "gui/501",
+      "program": "/opt/homebrew/bin/cloudflared",
+      "job": {
+        "pid": 67490,
+        "program": "/opt/homebrew/bin/cloudflared",
+        "state": "running"
+      },
+      "process": {
+        "pid": 67490,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared"
+      },
+      "listeners": [
+        {
+          "pid": 67490,
+          "command": "cloudflared",
+          "uid": 501
+        }
+      ]
+    }
+  },
+  "exitWaitMs": 31040,
+  "after": {
+    "productionApiPid": 64657,
+    "previewApiPid": null,
+    "tunnel": {
+      "pid": 72608,
+      "uid": 501,
+      "command": "/opt/homebrew/bin/cloudflared",
+      "domain": "gui/501",
+      "program": "/opt/homebrew/bin/cloudflared",
+      "job": {
+        "pid": 72608,
+        "program": "/opt/homebrew/bin/cloudflared",
+        "state": "running"
+      },
+      "process": {
+        "pid": 72608,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared"
+      },
+      "listeners": [
+        {
+          "pid": 72608,
+          "command": "cloudflared",
+          "uid": 501
+        }
+      ]
+    },
+    "publicHealth": 200,
+    "maintenanceAbsent": true,
+    "productionApiUnchanged": true,
+    "previewUnchanged": true
+  },
+  "state": "passed",
+  "finishedAt": "2026-10-05T23:51:16.556Z"
+}

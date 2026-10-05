@@ -1,14 +1,14 @@
 {
   "status": "passed",
-  "verifiedAt": "2026-10-05T23:33:38.088Z",
+  "verifiedAt": "2026-10-05T23:45:42.629Z",
   "command": [
     "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
     "deploy/macmini/install-system-services.mjs",
     "preflight",
-    "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007d"
+    "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007e"
   ],
   "exitCode": 0,
-  "sourceSha256": "3f8ce7ddf30415b7d2851651505be76ebccb020495d818b3c62b96ee13d692d3",
+  "sourceSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
   "snapshot": {
     "state": "preflight",
     "ready": true,
@@ -33,17 +33,22 @@
     },
     "sha": "134433f47912f7172faae50ea3285d010f6a3425",
     "dedicatedTunnelLoaded": true,
-    "dedicatedTunnelPid": 58098,
+    "dedicatedTunnelPid": 67490,
     "dedicatedTunnelOwnership": {
       "launchProgram": "/opt/homebrew/bin/cloudflared",
+      "job": {
+        "pid": 67490,
+        "program": "/opt/homebrew/bin/cloudflared",
+        "state": "running"
+      },
       "process": {
-        "pid": 58098,
+        "pid": 67490,
         "uid": 501,
         "command": "/opt/homebrew/bin/cloudflared"
       },
       "listeners": [
         {
-          "pid": 58098,
+          "pid": 67490,
           "command": "cloudflared",
           "uid": 501
         }

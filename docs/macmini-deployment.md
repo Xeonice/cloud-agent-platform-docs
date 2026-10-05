@@ -8,17 +8,17 @@ Mac mini 负责三个仓库的服务发现、测试、原生构建、前端预�
 
 管理入口为本机 [Jenkins](http://127.0.0.1:8080/)，仅监听 loopback，不增加公网管理域名。入口需要独立 Jenkins 管理员登录，与平台的访问口令不同。登录凭证保存在本机 `~/.local/share/agent-platform-jenkins-tools/admin-login.json`，管理员 API token 在同目录 `admin-api.json`；均为 `0600`，不要复制到仓库、构建参数或报告。
 
-| Jenkins job | 职责与触发 |
-| --- | --- |
-| `agent-platform-ci-discovery` | 每两分钟发现三个固定仓库的分支和 PR；生产提交组合变化时触发统一发布 |
-| `agent-platform-native-ci` | API 非生产分支和 PR 的原生静态、acceptance、构建及协议门禁 |
-| `agent-platform-web` | 前端全部门禁、Storybook 交互、预构建和下载包；只生成产物 |
-| `agent-platform-contract` | 文档及浏览器到 Nest、fresh SQLite 的跨仓验收；每天北京时间 03:00 重验 main 的精确 gitlinks |
-| `agent-platform-api` | 固定可信生产分支原生 CI、空闲门禁、备份、切换和运行快照，由统一发布调用 |
-| `agent-platform-release` | 固定三个 SHA，验证上述子构建，上传并启用 Vercel 前端，再上传并发布 GitHub Release |
-| `agent-platform-service-monitor` | 每五分钟归档 API、Tunnel、发布状态与脱敏日志，并生成可读 HTML 报告 |
-| `agent-platform-mutation` | 北京时间 02:00 全量趋势；PR changed 模式报告，不阻断发布 |
-| `agent-platform-sandbox-images` | Dockerfile 变化检查；`sandbox-image-v*` 标签或手动参数发布两种 Linux 架构的 GHCR 镜像 |
+| Jenkins job                      | 职责与触发                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `agent-platform-ci-discovery`    | 每两分钟发现三个固定仓库的分支和 PR；生产提交组合变化时触发统一发布                        |
+| `agent-platform-native-ci`       | API 非生产分支和 PR 的原生静态、acceptance、构建及协议门禁                                 |
+| `agent-platform-web`             | 前端全部门禁、Storybook 交互、预构建和下载包；只生成产物                                   |
+| `agent-platform-contract`        | 文档及浏览器到 Nest、fresh SQLite 的跨仓验收；每天北京时间 03:00 重验 main 的精确 gitlinks |
+| `agent-platform-api`             | 固定可信生产分支原生 CI、空闲门禁、备份、切换和运行快照，由统一发布调用                    |
+| `agent-platform-release`         | 固定三个 SHA，验证上述子构建，上传并启用 Vercel 前端，再上传并发布 GitHub Release          |
+| `agent-platform-service-monitor` | 每五分钟归档 API、Tunnel、发布状态与脱敏日志，并生成可读 HTML 报告                         |
+| `agent-platform-mutation`        | 北京时间 02:00 全量趋势；PR changed 模式报告，不阻断发布                                   |
+| `agent-platform-sandbox-images`  | Dockerfile 变化检查；`sandbox-image-v*` 标签或手动参数发布两种 Linux 架构的 GHCR 镜像      |
 
 源码入口为 [Jenkins pipelines](../deploy/jenkins/)。这些是维护者安装的固定流水线，不执行 PR 提供的 Jenkinsfile。Jenkins controller 的 executors 为零；`mac-ci` 与 `mac-deploy` 使用独立账户和工作目录。PR 只在无生产凭证的 CI 账户中执行；生产构建限于可信固定发布分支。
 
@@ -46,14 +46,14 @@ API、Web 和 root 的旧 GitHub Actions workflow 在 Jenkins 对应任务实际
 
 系统安装器 [install-system-services.mjs](../deploy/macmini/install-system-services.mjs) 将以下任务安装至 `/Library/LaunchDaemons/`，使用固定绝对程序路径和 KeepAlive，不依赖 Orca 终端或用户 shell 初始化。Jenkins 和 CI 是隐藏、禁用交互登录的专属账户；API、Tunnel、可信部署 agent 和构建 Docker 保留现有数据 owner `douglasdong`。
 
-| launchd label 后缀（前缀 `com.douglasdong.agent-platform.`） | 运行账户与用途 |
-| --- | --- |
-| `jenkins` | `_agentplatformjenkins`；controller home `/Users/Shared/agent-platform-jenkins` |
-| `jenkins-ci-agent` | `_agentplatformci`；无生产凭证，home `/Users/Shared/agent-platform-ci` |
-| `jenkins-deploy-agent` | `douglasdong`；固定生产发布工具 |
-| `api` | `douglasdong`；唯一生产 API，端口 `3101` |
-| `tunnel` | `douglasdong`；现有专属 Cloudflare connector |
-| `build-docker` | `douglasdong`；专属 `agent-platform-build` Colima profile，不切换用户默认 Docker context |
+| launchd label 后缀（前缀 `com.douglasdong.agent-platform.`） | 运行账户与用途                                                                           |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `jenkins`                                                    | `_agentplatformjenkins`；controller home `/Users/Shared/agent-platform-jenkins`          |
+| `jenkins-ci-agent`                                           | `_agentplatformci`；无生产凭证，home `/Users/Shared/agent-platform-ci`                   |
+| `jenkins-deploy-agent`                                       | `douglasdong`；固定生产发布工具                                                          |
+| `api`                                                        | `douglasdong`；唯一生产 API，端口 `3101`                                                 |
+| `tunnel`                                                     | `douglasdong`；现有专属 Cloudflare connector                                             |
+| `build-docker`                                               | `douglasdong`；专属 `agent-platform-build` Colima profile，不切换用户默认 Docker context |
 
 Node 固定为 `22.23.3`，Jenkins LTS 为 `2.580.1`，Java 为 OpenJDK 21。Node 22/bin 中安装 corepack 的 pnpm/pnpx 命令入口，使嵌套包脚本也使用正确工具链。公共 CI 工具、agent.jar 和固定 Vercel CLI `62.2.0` 安装到 root-owned `/Library/Application Support/AgentPlatform`；生产 secrets 与数据库不可被 CI 账户读取。插件版本记录见 [plugins.lock.json](../deploy/jenkins/plugins.lock.json)。
 
@@ -69,15 +69,15 @@ apply 先只读核对生产 readiness、HTTP、授权会话与全部数据库 bl
 
 在 Jenkins 每个构建可查看 Console Output、阶段结果、完整 SHA、门禁报告和 artifacts。`Service status and logs` HTML 提供健康、真实版本、部署 blockers、PID、launchd 状态与日志链接。监控的五分钟快照保留十四天，报告仅包含每种日志末尾的有限行数和已脱敏字段；本机完整原始日志仍在私有服务目录中，不把快照称为完整日志。
 
-| 内容 | 本机路径 |
-| --- | --- |
-| 原始 API、Tunnel、构建及部署 agent 日志 | `~/.local/share/agent-platform-deploy/logs/` |
-| 当前受管 PID/SHA | 同目录根的 `runtime-state.json` |
-| 最近发布结果 | 同目录根的 `status.json` |
-| 系统切换步骤、备份及恢复记录 | 同目录根的 `system-services-state.json` 和 `backups/launchd-cutover-*` |
-| Jenkins controller 日志、构建记录与 artifacts | `/Users/Shared/agent-platform-jenkins/`（controller 私有） |
-| 隔离 CI agent 日志 | `/Users/Shared/agent-platform-ci/agent.log` |
-| 统一发布资产和上传 receipt | 私有 deploy root 下的 `project-releases/`、`web-releases/`，实际路径以 manifest/receipt 为准 |
+| 内容                                          | 本机路径                                                                                     |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 原始 API、Tunnel、构建及部署 agent 日志       | `~/.local/share/agent-platform-deploy/logs/`                                                 |
+| 当前受管 PID/SHA                              | 同目录根的 `runtime-state.json`                                                              |
+| 最近发布结果                                  | 同目录根的 `status.json`                                                                     |
+| 系统切换步骤、备份及恢复记录                  | 同目录根的 `system-services-state.json` 和 `backups/launchd-cutover-*`                       |
+| Jenkins controller 日志、构建记录与 artifacts | `/Users/Shared/agent-platform-jenkins/`（controller 私有）                                   |
+| 隔离 CI agent 日志                            | `/Users/Shared/agent-platform-ci/agent.log`                                                  |
+| 统一发布资产和上传 receipt                    | 私有 deploy root 下的 `project-releases/`、`web-releases/`，实际路径以 manifest/receipt 为准 |
 
 使用 Node 22 查看状态或暂停发现器，不停止生产服务：
 
@@ -134,15 +134,15 @@ service-root/
 
 runtime 必须显式设置以下配置。口令及其他秘密保存在 release 目录之外，文件权限为 `0600`、父目录为 `0700`；日志含构建、测试和 API 输出，程序不得记录口令、token 或主密钥，运维也不应将完整日志复制到公开报告。
 
-| 配置 | 本轮用途 |
-| --- | --- |
-| `HOST=127.0.0.1` | 只接收本机 Tunnel 或本机直接访问 |
-| `PORT=3101` | 与现有预览 API `3100` 分开 |
-| `DATA_ROOT` | 固定的生产数据绝对路径 |
-| `DATABASE_URL` | 生产 `platform.db` 的固定绝对路径 |
-| `BOXLITE_HOME` | 固定的生产 BoxLite 绝对路径 |
-| `MIGRATIONS_DIR` | 当前 release 内的 `drizzle` 绝对路径 |
-| `APP_COMMIT` | 当前完整发布 SHA |
+| 配置                    | 本轮用途                                         |
+| ----------------------- | ------------------------------------------------ |
+| `HOST=127.0.0.1`        | 只接收本机 Tunnel 或本机直接访问                 |
+| `PORT=3101`             | 与现有预览 API `3100` 分开                       |
+| `DATA_ROOT`             | 固定的生产数据绝对路径                           |
+| `DATABASE_URL`          | 生产 `platform.db` 的固定绝对路径                |
+| `BOXLITE_HOME`          | 固定的生产 BoxLite 绝对路径                      |
+| `MIGRATIONS_DIR`        | 当前 release 内的 `drizzle` 绝对路径             |
+| `APP_COMMIT`            | 当前完整发布 SHA                                 |
 | `SANDBOX_DEFAULT_IMAGE` | 保持出厂默认选择，不能固定为另一 provider 的镜像 |
 
 首次生产启动使用空的新数据目录。不得复制现有预览数据库的活动任务记录，再让新实例的启动恢复逻辑接管它们。后端默认的数据与迁移目录都与 cwd 有关，未显式配置会使 symlink 切换产生另一份数据库或找错迁移目录；实际解析见 [env.ts](../api/apps/api/src/platform/config/env.ts) 和 [drizzle.connection.ts](../api/apps/api/src/platform/persistence/drizzle.connection.ts)。
@@ -218,6 +218,8 @@ SSE 保持 `Content-Type: text/event-stream`，Cloudflare Tunnel 据此直接输
 
 历史生产部署已有 API acceptance 196 项、Web acceptance 102 项、跨仓协议、真实 BoxLite 生命周期及公网 cookie/REST/SSE/WebSocket 验证，详见 [历史部署验证](../artifacts/deployment-preconfiguration/verification.json)。这些结果不等于新 Jenkins 全量 Release 已完成。
 
-本轮完整部署回归为 213 项，实际 Node 22/macOS ARM64 执行全部通过、没有跳过；覆盖 controller、系统迁移、monitor、公共工具、前端打包、API 可移植包、镜像、mutation、App 和 Release/discovery。文档 13 项门禁及九个 pipeline 的离线 Groovy 语法编译通过。API 可移植原生包已在不同目录解压并实际载入 SQLite 和 BoxLite SDK；临时 Jenkins 构建已通过原生门禁和脱敏运行报告。
+本轮完整部署回归为 215 项，实际 Node 22/macOS ARM64 执行全部通过、没有跳过；覆盖 controller、系统迁移、monitor、公共工具、前端打包、API 可移植包、镜像、mutation、App 和 Release/discovery。文档 13 项门禁及九个 pipeline 的离线 Groovy 语法编译通过。API 可移植原生包已在不同目录解压并实际载入 SQLite 和 BoxLite SDK；临时 Jenkins 构建已通过原生门禁和脱敏运行报告。
 
-第二次人工系统切换遇到旧 Tunnel 在三十秒退出截止处释放端口的竞态，已恢复原服务；退出等待已修正为同时验证原 PID 和监听释放，最多九十秒，不强杀进程。[实际退出诊断](../artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json)、[源实现验证](../artifacts/jenkins-system-cutover-source-verification.json)及 [实际只读 preflight](../artifacts/jenkins-system-cutover-live-preflight.json)记录了修正边界。正式系统服务状态、完整项目 Jenkins build、线上 SHA 和 Release digest 在切换后补充实际证据；源回归和离线编译不是正式发布成功。
+人工系统切换先后遇到三十秒退出截止竞态及 launchd job 在停止期间仍可读取的中间状态。原服务已恢复，等待逻辑改为同时验证原 job、PID 和监听全部移除，最多九十秒，不强杀进程。[实际退出诊断](../artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json)、[launchd 中间态诊断](../artifacts/jenkins-system-cutover-launchd-boundary-diagnosis.json)、[源实现验证](../artifacts/jenkins-system-cutover-source-verification.json)及 [实际只读 preflight](../artifacts/jenkins-system-cutover-live-preflight.json)记录了修正边界。
+
+修复后已在真实 GUI Tunnel 上完成 [完整生命周期验证](../artifacts/jenkins-system-cutover-live-lifecycle.json)：bootout 返回后原 job 状态为 SIGTERMed，约 31 秒后三者全部消失；严格空闲十秒后恢复原 GUI 配置，metrics、鉴权 readiness、公网健康均通过，精确释放自有维护屏障。原生产 API PID 和 SHA 未变；`3100` 在验证前后均无监听，未对预览采取操作。`reviewg` 用于下一次正式安装。系统服务、完整项目 Jenkins build、线上 SHA 和 Release digest 仍需在切换后补充；此次 Tunnel 验证与源回归不能表示正式部署已完成。

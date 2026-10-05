@@ -1,15 +1,15 @@
 {
   "status": "passed",
-  "verifiedAt": "2026-10-05T23:33:38.088Z",
+  "verifiedAt": "2026-10-05T23:51:16.556Z",
   "runtime": {
     "node": "v22.23.3",
     "platform": "darwin",
     "arch": "arm64"
   },
-  "scope": "Source implementation and temporary filesystem regressions only; no installed services, private review, runtime secrets or production data were changed.",
+  "scope": "Source implementation and temporary filesystem regressions, plus the separately executed parent-owned real UID501 GUI Tunnel lifecycle recorded below. This subagent changed no installed services, private review, runtime secrets or production data.",
   "sourceHashes": {
-    "deploy/macmini/install-system-services.mjs": "3f8ce7ddf30415b7d2851651505be76ebccb020495d818b3c62b96ee13d692d3",
-    "deploy/macmini/install-system-services.test.mjs": "7527c009116fbb1b0dfabc717073759bd5bea5c2b375570191639757a51b3daa",
+    "deploy/macmini/install-system-services.mjs": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
+    "deploy/macmini/install-system-services.test.mjs": "99d8bba6c4403c216f6d862b96ed2d88ea835178b964ce06419465ac5a5e9e5f",
     "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
     "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
     "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380"
@@ -25,13 +25,13 @@
   },
   "execution": {
     "files": 7,
-    "tests": 102,
-    "passed": 102,
+    "tests": 104,
+    "passed": 104,
     "failed": 0,
     "skipped": 0,
     "exitCode": 0,
     "log": "artifacts/jenkins-system-cutover-source-tests.log",
-    "newInstallerTests": 17,
+    "newInstallerTests": 19,
     "publicBuildToolsTests": 7,
     "formatExitCode": 0,
     "syntaxExitCode": 0,
@@ -51,15 +51,45 @@
       "install/start system services",
       "authenticated readiness and exact-owner barrier release"
     ],
-    "earlyRecovery": "When API was never stopped, restore only the originally loaded and stopped GUI Tunnel; do not stop/restart API. Readiness precedes exact-owner admission release. Any failure or replaced manual marker preserves maintenance.",
+    "earlyRecovery": "When API was never stopped, restore only the originally loaded/stopped dedicated GUI Tunnel: wait for the old job/process/metrics removal before bootstrap, then metrics readiness, authenticated API readiness, exact-owner release. A printable terminating job is not treated as an already restored ready service. Unknown replacement or ownership change preserves maintenance.",
     "stoppedApiRecovery": "Existing full system-to-GUI rollback path retained; API stage determined by actual GUI loaded state after bootout. Ownership loss preserves live services for operator review.",
     "preview3100Excluded": true,
     "legacyGuiTunnelCompatibility": "Semantic fixed-field validation accepts the observed legacy GUI plist without EnvironmentVariables/ProcessType, or current exact explicit values. Fixed UUID b59b8cc0-571a-46ec-bf21-1a01b78670a4 / agent-api.douglasdong.com / http://127.0.0.1:3101 metadata required. Unknown launchd fields, alternate user/home/executable/token path/target refuse.",
-    "tunnelGracefulExit": "Capture fixed-label original PID, exact executable/UID501 and all metrics listener owners before bootout. Wait at most 90 seconds for both original process disappearance and metrics release; verify maintenance ownership every iteration and fail on unrelated owners or reloaded service. No signal/force-kill fallback. Recovery refuses duplicate Tunnel while the original still exits; system-to-GUI rollback uses the same exit guard."
+    "tunnelGracefulExit": "Read-only capture of fixed-label original PID, exact executable/UID501 and all metrics owners. Probe tracks structured launchd job {pid,program,state}; same original job/PID remaining printable during bootout/SIGTERM is allowed to finish. Wait at most 90 seconds until launchd registry entry, original process and metrics listener are all gone, while exact barrier ownership and process/listener/job identity remain valid. Different PID/program/owner refuses. No signal/force-kill fallback."
   },
   "publicVercelReuse": "Existing fixed root-owned public CLI tree is reusable only when the same reviewed manifest matches all bytes, complete entry set, exact modes, contained links and ownership. Mismatch refuses without deleting existing tree.",
   "mutationRegression": "Invalid pinned-request assertion is independent of the trusted deploy UID versus isolated CI UID; no skipped test or identity relaxation.",
-  "evidenceLimit": "Actual current read-only preflight validates launchctl program, ps PID/UID/executable and all lsof metrics listener owners with the same capture used before bootout. Ready=true, WS=2, all other blockers zero, operatorEligible=true. User operator reviewd failure/rollback diagnosed from trace and shutdown log, without service mutation by this agent. New graceful-exit branch tested with real temporary barriers and injected process/listener snapshots/clock; no new live shutdown was executed. Prepare a fresh reviewe from frozen source.",
+  "evidenceLimit": "Source/tests and actual GUI Tunnel lifecycle passed against the same frozen installer SHA. The actual probe observed the old SIGTERMed job/PID/listener remain after bootout and all disappear after31,040ms; ten-second strict quiet/gate then fixed GUI bootstrap/authenticated readiness/exact-owner release passed. API PID64657 and SHA134433 were unchanged, HTTPS200 and maintenance absent at end. Preview3100 was absent before and after; no preview operations were performed. Privileged system installation and later installer stages remain unvalidated and require a new reviewed snapshot.",
   "liveReadOnlyPreflight": "artifacts/jenkins-system-cutover-live-preflight.json",
-  "tunnelExitDiagnosis": "artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json"
+  "tunnelExitDiagnosis": "artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json",
+  "liveCutoverValidation": {
+    "status": "actual-lifecycle-pass",
+    "evidence": "artifacts/jenkins-system-cutover-live-lifecycle.json",
+    "artifactSha256": "962420ac7b8b1c6d19bc485321e8611dde2d53ac24822e49c6dd849c0769beef",
+    "installerSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
+    "review": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007f",
+    "startedAt": "2026-10-05T23:50:32.753Z",
+    "finishedAt": "2026-10-05T23:51:16.556Z",
+    "originalTunnelPid": 67490,
+    "restoredTunnelPid": 72608,
+    "exitWaitMs": 31040,
+    "launchdIntermediateState": "SIGTERMed",
+    "strictQuietSeconds": 10,
+    "productionApiPidBefore": 64657,
+    "productionApiPidAfter": 64657,
+    "productionApiSha": "134433f47912f7172faae50ea3285d010f6a3425",
+    "productionApiUnchanged": true,
+    "preview3100": {
+      "before": null,
+      "after": null,
+      "actionsPerformed": false,
+      "note": "No preview service existed at either sample; unchanged does not mean running."
+    },
+    "publicHealth": 200,
+    "maintenanceAbsent": true,
+    "systemInstallValidated": false,
+    "boundary": "Actual UID501 GUI Tunnel hold/bootout/exit/strict-quiet/gate/bootstrap/readiness/exact-owner-release was validated. No API restart, schema migration, privileged installer, root helper/system services installation or Jenkins system startup was tested by this lifecycle."
+  },
+  "launchdBoundaryDiagnosis": "artifacts/jenkins-system-cutover-launchd-boundary-diagnosis.json",
+  "systemInstallValidated": false
 }

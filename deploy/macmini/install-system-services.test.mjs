@@ -19,6 +19,8 @@ import {
   dedicatedTunnelExited,
   waitDedicatedTunnelExit,
   tunnelListenerMetadata,
+  tunnelJobMetadata,
+  restoreTunnelAfterExit,
 } from "./install-system-services.mjs";
 import { DEPLOY_ROOT, servicePlist } from "./system-services.mjs";
 import { releaseMaintenanceBarrier } from "./lib.mjs";
@@ -524,7 +526,7 @@ const tunnelIdentity = {
 const liveTunnelSnapshot = () => ({
   process: { ...tunnelIdentity },
   listeners: [{ pid: tunnelIdentity.pid, uid: 501, command: "cloudflared" }],
-  jobLoaded: false,
+  job: null,
 });
 
 test("actual macOS lsof process fields include mandatory fd records; ownership parser keeps all process owners and rejects malformed records", () => {
@@ -550,6 +552,49 @@ test("actual macOS lsof process fields include mandatory fd records; ownership p
     assert.throws(() => tunnelListenerMetadata(bad), /Cannot inspect/);
 });
 
+test("launchd job metadata keeps the original PID while printable, and missing PID still requires registry removal", () => {
+  const running = tunnelJobMetadata(
+    "gui/501/com.douglasdong.agent-platform.tunnel = {\n\tstate = running\n\tprogram = /opt/homebrew/bin/cloudflared\n\tpid = 12345\n}\n",
+  );
+  assert.deepEqual(running, {
+    pid: 12345,
+    program: tunnelIdentity.command,
+    state: "running",
+  });
+  assert.equal(
+    dedicatedTunnelExited(tunnelIdentity, {
+      ...liveTunnelSnapshot(),
+      job: running,
+    }),
+    false,
+  );
+  const pending = tunnelJobMetadata(
+    "gui/501/com.douglasdong.agent-platform.tunnel = {\n\tstate = not running\n\tprogram = /opt/homebrew/bin/cloudflared\n}\n",
+  );
+  assert.equal(pending.pid, null);
+  assert.equal(
+    dedicatedTunnelExited(tunnelIdentity, {
+      process: null,
+      listeners: [],
+      job: pending,
+    }),
+    false,
+  );
+  assert.equal(
+    dedicatedTunnelExited(tunnelIdentity, {
+      process: null,
+      listeners: [],
+      job: null,
+    }),
+    true,
+  );
+  assert.throws(
+    () =>
+      tunnelJobMetadata("state = running\nprogram = /bin/other\npid = 12345\n"),
+    /ownership changed/,
+  );
+});
+
 test("dedicated Tunnel's real thirty-second graceful boundary is allowed; original PID and metrics must both release before quiet/backup", async (t) => {
   const f = await barrierFixture(t);
   f.setHeld(
@@ -568,7 +613,14 @@ test("dedicated Tunnel's real thirty-second graceful boundary is allowed; origin
       return {
         process: clock < 30_250 ? { ...tunnelIdentity } : null,
         listeners: clock < 30_000 ? liveTunnelSnapshot().listeners : [],
-        jobLoaded: false,
+        job:
+          clock < 32_000
+            ? {
+                pid: tunnelIdentity.pid,
+                program: tunnelIdentity.command,
+                state: "running",
+              }
+            : null,
       };
     },
     f.owns,
@@ -579,13 +631,13 @@ test("dedicated Tunnel's real thirty-second graceful boundary is allowed; origin
       },
     },
   );
-  assert.equal(clock, 31_000);
+  assert.equal(clock, 32_000);
   assert.equal(sampled.includes(30_000), true);
   assert.equal(f.owns(), true);
   await fs.writeFile(join(f.root, "quiet-gate-can-begin"), String(clock));
   assert.equal(
     await fs.readFile(join(f.root, "quiet-gate-can-begin"), "utf8"),
-    "31000",
+    "32000",
   );
 });
 
@@ -600,7 +652,7 @@ test("metrics closing first never permits replacing a still-live PID; PID exitin
       async () => ({
         process: clock < pidEnds ? { ...tunnelIdentity } : null,
         listeners: clock < metricsEnd ? liveTunnelSnapshot().listeners : [],
-        jobLoaded: false,
+        job: null,
       }),
       async () => true,
       {
@@ -616,7 +668,7 @@ test("metrics closing first never permits replacing a still-live PID; PID exitin
     dedicatedTunnelExited(tunnelIdentity, {
       process: null,
       listeners: [],
-      jobLoaded: false,
+      job: null,
     }),
     true,
   );
@@ -636,7 +688,10 @@ test("unknown listener, changed PID ownership/executable or reloaded GUI job ref
     { process: { ...tunnelIdentity, uid: 0 } },
     { process: { ...tunnelIdentity, command: "/bin/other" } },
     { process: { ...tunnelIdentity, pid: 9999 } },
-    { jobLoaded: true },
+    { job: { pid: 9999, program: tunnelIdentity.command, state: "running" } },
+    {
+      job: { pid: tunnelIdentity.pid, program: "/bin/other", state: "running" },
+    },
   ])
     await assert.rejects(
       waitDedicatedTunnelExit(
@@ -684,12 +739,91 @@ test("ninety-second exit timeout or barrier replacement preserves admission; a s
   await assert.rejects(
     waitDedicatedTunnelExit(
       tunnelIdentity,
-      async () => ({ process: null, listeners: [], jobLoaded: false }),
+      async () => ({ process: null, listeners: [], job: null }),
       f.owns,
     ),
     /ownership changed/,
   );
   assert.equal(await fs.readFile(f.path, "utf8"), "manual replacement");
+});
+
+test("recovery waits for the same old terminating job/process/listener removal before bootstrap and readiness, and never bootstraps over an unknown replacement", async (t) => {
+  const f = await barrierFixture(t);
+  f.setHeld(
+    await holdCutoverAdmission(f.path, f.heldPath, async () => ({
+      ...status(),
+      sha,
+      draining: Boolean(await fs.lstat(f.path).catch(() => null)),
+    })),
+  );
+  let clock = 0;
+  const events = [];
+  await restoreTunnelAfterExit({
+    waitForExit: () =>
+      waitDedicatedTunnelExit(
+        tunnelIdentity,
+        async () => ({
+          process: clock < 30_000 ? { ...tunnelIdentity } : null,
+          listeners: clock < 30_000 ? liveTunnelSnapshot().listeners : [],
+          job:
+            clock < 31_000
+              ? {
+                  pid: tunnelIdentity.pid,
+                  program: tunnelIdentity.command,
+                  state: "running",
+                }
+              : null,
+        }),
+        f.owns,
+        {
+          now: () => clock,
+          sleep: async (ms) => {
+            clock += ms;
+          },
+        },
+      ),
+    bootstrap: async () => {
+      assert.equal(clock, 31_000);
+      events.push("bootstrap-fixed-gui");
+      await fs.writeFile(join(f.root, "restored"), String(clock));
+    },
+    ready: async () => {
+      assert.equal(
+        await fs.readFile(join(f.root, "restored"), "utf8"),
+        "31000",
+      );
+      events.push("ready");
+    },
+  });
+  assert.deepEqual(events, ["bootstrap-fixed-gui", "ready"]);
+  assert.equal(f.owns(), true);
+  events.length = 0;
+  await assert.rejects(
+    restoreTunnelAfterExit({
+      waitForExit: () =>
+        waitDedicatedTunnelExit(
+          tunnelIdentity,
+          async () => ({
+            ...liveTunnelSnapshot(),
+            job: {
+              pid: 9999,
+              program: tunnelIdentity.command,
+              state: "running",
+            },
+          }),
+          f.owns,
+        ),
+      bootstrap: async () => {
+        events.push("unexpected bootstrap");
+      },
+      ready: async () => {
+        events.push("unexpected ready");
+      },
+    }),
+    /ownership changed/,
+  );
+  assert.deepEqual(events, []);
+  assert.equal(f.owns(), true);
 });
 
 test("pre-API failure restores only an originally loaded/stopped Tunnel before readiness and exact-owner admission release", async (t) => {

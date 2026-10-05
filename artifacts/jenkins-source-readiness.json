@@ -1,12 +1,12 @@
 {
-  "state": "source-and-review-verified",
-  "verifiedAt": "2026-10-05T23:35:49.348Z",
+  "state": "source-review-and-actual-gui-lifecycle-verified",
+  "verifiedAt": "2026-10-05T23:53:30.575Z",
   "node": "v22.23.3",
   "platform": "darwin",
   "arch": "arm64",
   "deploymentRegression": {
-    "tests": 213,
-    "passed": 213,
+    "tests": 215,
+    "passed": 215,
     "failed": 0,
     "skipped": 0,
     "command": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs"
@@ -25,10 +25,24 @@
     "pushed": true
   },
   "review": {
-    "name": "system-review-20261007e",
+    "name": "system-review-20261007g",
     "fixedFiles": 22,
     "wholeVercelSnapshotVerified": true,
-    "readOnlyNativeOwnershipPreflight": true
+    "readOnlyNativeOwnershipPreflight": true,
+    "actualGuiLifecycle": {
+      "passed": true,
+      "exitWaitMs": 31040,
+      "originalJobProcessAndMetricsFullyGone": true,
+      "strictTenSecondQuiet": true,
+      "authenticatedReadiness": true,
+      "exactOwnedBarrierReleased": true,
+      "publicHealth": 200,
+      "apiPidUnchanged": true,
+      "previewBefore": null,
+      "previewAfter": null,
+      "previewActions": 0,
+      "proof": "jenkins-system-cutover-live-lifecycle.json"
+    }
   },
   "githubApp": {
     "appId": 5204009,
@@ -38,5 +52,10 @@
     "branchProtectionMigrated": false
   },
   "servicesInstalled": false,
-  "jenkinsReleasePublished": false
+  "jenkinsReleasePublished": false,
+  "trustedSourceSnapshot": {
+    "files": 49,
+    "matchedWorkspace": true,
+    "installerSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b"
+  }
 }

@@ -376,6 +376,16 @@ export async function recoverUnstoppedApi({
   }
 }
 
+export async function restoreTunnelAfterExit({
+  waitForExit,
+  bootstrap,
+  ready,
+}) {
+  await waitForExit();
+  await bootstrap();
+  await ready();
+}
+
 const DEDICATED_TUNNEL = Object.freeze({
   tunnelId: "b59b8cc0-571a-46ec-bf21-1a01b78670a4",
   hostname: "agent-api.douglasdong.com",
@@ -481,6 +491,7 @@ const SAFE_WORKER_REASONS = new Set([
   "Existing GUI Tunnel differs from the fixed dedicated production service; no services were stopped",
   "Cannot inspect the original dedicated Tunnel process",
   "Cannot inspect dedicated Tunnel metrics ownership",
+  "Cannot inspect the dedicated Tunnel launchd job",
   "Dedicated Tunnel process or metrics ownership changed; no replacement Tunnel or API was started",
   "Invalid internal worker command",
 ]);
@@ -539,7 +550,7 @@ async function internalWorker() {
   if (commandName === "preflight") {
     const snapshot = await readCutoverStatus(base, headers, sha);
     const tunnelLoaded = await validatedGuiTunnel(original);
-    const tunnelIdentity = tunnelLoaded ? captureGuiTunnel() : null;
+    const tunnelIdentity = tunnelLoaded ? captureDedicatedTunnel() : null;
     const eligible = await operatorPreflight(
       async () => snapshot,
       tunnelLoaded,
@@ -556,6 +567,7 @@ async function internalWorker() {
         dedicatedTunnelOwnership: tunnelIdentity
           ? {
               launchProgram: tunnelIdentity.program,
+              job: tunnelIdentity.job,
               process: tunnelIdentity.process,
               listeners: tunnelIdentity.listeners,
             }
@@ -934,11 +946,49 @@ function tunnelListeners() {
   return tunnelListenerMetadata(result.stdout);
 }
 
-function tunnelExitState(identity, domain = gui) {
+export function tunnelJobMetadata(stdout) {
+  const pidText = /^\s*pid = ([0-9]+)$/m.exec(stdout)?.[1];
+  const pid = pidText === undefined ? null : Number(pidText);
+  const program = /^\s*program = (.+)$/m.exec(stdout)?.[1];
+  const state = /^\s*state = (.+)$/m.exec(stdout)?.[1];
+  if (
+    program !== TUNNEL_EXECUTABLE ||
+    typeof state !== "string" ||
+    (pid !== null && (!Number.isSafeInteger(pid) || pid < 1))
+  )
+    throw new Error(TUNNEL_OWNERSHIP_ERROR);
+  return { pid, program, state };
+}
+
+function tunnelJob(domain) {
+  if (domain !== gui && domain !== "system")
+    throw new Error(TUNNEL_OWNERSHIP_ERROR);
+  const result = spawnSync(
+    "/bin/launchctl",
+    ["print", `${domain}/${LABELS.tunnel}`],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if (
+    !result.error &&
+    result.status !== 0 &&
+    /Could not find service|No such process/.test(result.stderr)
+  )
+    return null;
+  if (result.error || result.status !== 0)
+    throw new Error("Cannot inspect the dedicated Tunnel launchd job");
+  return tunnelJobMetadata(result.stdout);
+}
+
+export function probeDedicatedTunnelExit(identity, domain = gui) {
+  if (identity.domain !== undefined && identity.domain !== domain)
+    throw new Error(TUNNEL_OWNERSHIP_ERROR);
   return {
     process: tunnelProcess(identity.pid),
     listeners: tunnelListeners(),
-    jobLoaded: loaded(domain, LABELS.tunnel),
+    job: tunnelJob(domain),
   };
 }
 
@@ -948,7 +998,11 @@ export function dedicatedTunnelExited(identity, snapshot) {
     identity.pid < 1 ||
     identity.uid !== SERVICE_UID ||
     identity.command !== TUNNEL_EXECUTABLE ||
-    typeof snapshot?.jobLoaded !== "boolean" ||
+    snapshot?.job === undefined ||
+    (snapshot.job !== null &&
+      (snapshot.job?.program !== TUNNEL_EXECUTABLE ||
+        typeof snapshot.job?.state !== "string" ||
+        (snapshot.job?.pid !== null && snapshot.job?.pid !== identity.pid))) ||
     !Array.isArray(snapshot.listeners) ||
     (snapshot.process !== null &&
       (snapshot.process?.pid !== identity.pid ||
@@ -959,38 +1013,50 @@ export function dedicatedTunnelExited(identity, snapshot) {
         listener.pid !== identity.pid ||
         listener.uid !== SERVICE_UID ||
         listener.command !== "cloudflared",
-    ) ||
-    snapshot.jobLoaded
+    )
   )
     throw new Error(TUNNEL_OWNERSHIP_ERROR);
-  return snapshot.process === null && snapshot.listeners.length === 0;
+  // bootout is asynchronous: the original job/PID remains printable while
+  // cloudflared handles SIGTERM. Its removal is part of the exit gate too.
+  return (
+    snapshot.job === null &&
+    snapshot.process === null &&
+    snapshot.listeners.length === 0
+  );
 }
 
-function captureGuiTunnel(domain = gui, { requireMetrics = true } = {}) {
+export function captureDedicatedTunnel(
+  domain = gui,
+  { requireMetrics = true } = {},
+) {
   if (domain !== gui && domain !== "system")
     throw new Error(TUNNEL_OWNERSHIP_ERROR);
-  const output = command("/bin/launchctl", [
-    "print",
-    `${domain}/${LABELS.tunnel}`,
-  ]);
-  const pid = Number(/^\s*pid = ([0-9]+)$/m.exec(output)?.[1]);
-  const program = /^\s*program = (.+)$/m.exec(output)?.[1];
+  const job = tunnelJob(domain);
+  const pid = job?.pid;
+  const program = job?.program;
   if (!Number.isSafeInteger(pid) || pid < 1 || program !== TUNNEL_EXECUTABLE)
     throw new Error(TUNNEL_OWNERSHIP_ERROR);
-  const identity = { pid, uid: SERVICE_UID, command: TUNNEL_EXECUTABLE };
-  const snapshot = tunnelExitState(identity, domain);
+  const identity = {
+    pid,
+    uid: SERVICE_UID,
+    command: TUNNEL_EXECUTABLE,
+    domain,
+  };
+  const snapshot = probeDedicatedTunnelExit(identity, domain);
   if (
     program !== TUNNEL_EXECUTABLE ||
-    !snapshot.jobLoaded ||
+    !snapshot.job ||
+    snapshot.job.pid !== pid ||
     snapshot.process === null ||
     (requireMetrics && snapshot.listeners.length === 0)
   )
     throw new Error(TUNNEL_OWNERSHIP_ERROR);
   // Use the same strict process/listener ownership check, before bootout too.
-  dedicatedTunnelExited(identity, { ...snapshot, jobLoaded: false });
+  dedicatedTunnelExited(identity, snapshot);
   return {
     ...identity,
     program,
+    job: snapshot.job,
     process: snapshot.process,
     listeners: snapshot.listeners,
   };
@@ -1118,7 +1184,7 @@ async function apply() {
       "Expected exactly one existing GUI production API and no system API/Tunnel",
     );
   const oldTunnelLoaded = await validatedGuiTunnel(original);
-  if (oldTunnelLoaded) captureGuiTunnel();
+  if (oldTunnelLoaded) captureDedicatedTunnel();
   if (!oldTunnelLoaded && (await portOpen(20241)))
     throw new Error(
       "Unmanaged process owns the dedicated Tunnel metrics port; no services were stopped",
@@ -1207,14 +1273,14 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
     // behind its own admission barrier until every counter is strictly zero.
     if (oldTunnelLoaded) {
       await validatedGuiTunnel(original);
-      oldTunnelIdentity = captureGuiTunnel();
+      oldTunnelIdentity = captureDedicatedTunnel();
       state.oldTunnelPid = oldTunnelIdentity.pid;
       oldTunnelStopped = true;
       await stopJob(gui, LABELS.tunnel);
       await stage("waiting-gui-tunnel-exit");
       await waitDedicatedTunnelExit(
         oldTunnelIdentity,
-        () => tunnelExitState(oldTunnelIdentity),
+        () => probeDedicatedTunnelExit(oldTunnelIdentity),
         stillOwnsBarrier,
       );
     }
@@ -1441,13 +1507,13 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
           JSON.parse(await ownerFile(join(DEPLOY_ROOT, "runtime-state.json"))),
         );
         const systemTunnel = loaded("system", LABELS.tunnel)
-          ? captureGuiTunnel("system", { requireMetrics: false })
+          ? captureDedicatedTunnel("system", { requireMetrics: false })
           : null;
         await stopJob("system", LABELS.tunnel);
         if (systemTunnel)
           await waitDedicatedTunnelExit(
             systemTunnel,
-            () => tunnelExitState(systemTunnel, "system"),
+            () => probeDedicatedTunnelExit(systemTunnel, "system"),
             stillOwnsBarrier,
           );
         for (const name of tools) {
@@ -1480,28 +1546,30 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
           tunnelWasStopped: oldTunnelStopped,
           restartTunnel: async () => {
             await verifyGuiTunnelPlist(original);
-            if (!loaded(gui, LABELS.tunnel)) {
-              if (
-                oldTunnelIdentity &&
-                !dedicatedTunnelExited(
+            if (!oldTunnelIdentity) throw new Error(TUNNEL_OWNERSHIP_ERROR);
+            await restoreTunnelAfterExit({
+              waitForExit: () =>
+                waitDedicatedTunnelExit(
                   oldTunnelIdentity,
-                  tunnelExitState(oldTunnelIdentity),
-                )
-              )
-                throw new Error(
-                  "Original dedicated Tunnel is still exiting; no replacement Tunnel was started",
-                );
-              launch([
-                "bootstrap",
-                gui,
-                join(
-                  SERVICE_HOME,
-                  "Library/LaunchAgents",
-                  `${LABELS.tunnel}.plist`,
+                  () => probeDedicatedTunnelExit(oldTunnelIdentity),
+                  stillOwnsBarrier,
                 ),
-              ]);
-            } else captureGuiTunnel();
-            await httpReady("http://127.0.0.1:20241/ready");
+              bootstrap: async () => {
+                await verifyGuiTunnelPlist(original);
+                if (loaded(gui, LABELS.tunnel))
+                  throw new Error(TUNNEL_OWNERSHIP_ERROR);
+                launch([
+                  "bootstrap",
+                  gui,
+                  join(
+                    SERVICE_HOME,
+                    "Library/LaunchAgents",
+                    `${LABELS.tunnel}.plist`,
+                  ),
+                ]);
+              },
+              ready: () => httpReady("http://127.0.0.1:20241/ready"),
+            });
           },
           hasBarrier: barrier,
           ready: () => userWorker("ready", 120_000),

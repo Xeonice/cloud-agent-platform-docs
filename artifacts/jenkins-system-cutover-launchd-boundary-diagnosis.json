@@ -1,0 +1,178 @@
+{
+  "status": "source-fixed-actual-gui-lifecycle-passed",
+  "verifiedAt": "2026-10-05T23:45:42.629Z",
+  "observedOperatorReview": "system-review-20261007e",
+  "trace": {
+    "state": "operator-recovered-gui",
+    "error": "Dedicated Tunnel process or metrics ownership changed; no replacement Tunnel or API was started",
+    "recoveryError": "Service did not become ready: /ready",
+    "archive": "/Users/douglasdong/.local/share/agent-platform-deploy/backups/launchd-cutover-1791243389635-0e40df22-36d9-4439-9dfa-dbd15daa52c8",
+    "events": [
+      {
+        "state": "polling-retired",
+        "at": "2026-10-05T23:36:29.642Z"
+      },
+      {
+        "state": "holding-admission-barrier",
+        "at": "2026-10-05T23:36:29.642Z"
+      },
+      {
+        "state": "waiting-gui-tunnel-exit",
+        "at": "2026-10-05T23:36:29.793Z"
+      },
+      {
+        "state": "failed-recovering",
+        "at": "2026-10-05T23:36:29.858Z"
+      },
+      {
+        "state": "operator-recovery-required",
+        "at": "2026-10-05T23:37:15.022Z"
+      },
+      {
+        "state": "operator-recovered-gui",
+        "at": "2026-10-05T23:39:57.990Z"
+      }
+    ],
+    "oldTunnelPid": 58098,
+    "previewUntouched": true
+  },
+  "originalFailureObservation": {
+    "guiLoaded": false,
+    "originalPid58098Present": false,
+    "metricsListener20241Present": false,
+    "maintenanceExactReviewOwner": true,
+    "maintenanceOwnerUid": 501,
+    "maintenanceMode": "600"
+  },
+  "shutdownLogSafeMarkers": [
+    {
+      "time": "2026-10-05T23:36:29Z",
+      "marker": "Initiating graceful shutdown due to signal terminated"
+    },
+    {
+      "time": "2026-10-05T23:36:59Z",
+      "marker": "Metrics server stopped"
+    },
+    {
+      "time": "2026-10-05T23:36:59Z",
+      "marker": "Tunnel server stopped"
+    }
+  ],
+  "launchdLogSafeMarkers": [
+    {
+      "time": "2026-10-06 07:36:59.795551+0800",
+      "marker": "service inactive: com.douglasdong.agent-platform.tunnel"
+    },
+    {
+      "time": "2026-10-06 07:36:59.795561+0800",
+      "marker": "removing service: com.douglasdong.agent-platform.tunnel"
+    }
+  ],
+  "rootCause": "bootout returned while the same old job/PID remained printable for the 30s SIGTERM grace interval. The former unconditional jobLoaded rejection failed after65ms, and the recovery loaded branch waited /ready without later bootstrapping after registry removal. Earlier mocked snapshots preset jobLoaded=false and missed this actual intermediate state.",
+  "recoveredReadOnlyOwnership": {
+    "launchProgram": "/opt/homebrew/bin/cloudflared",
+    "job": {
+      "pid": 67490,
+      "program": "/opt/homebrew/bin/cloudflared",
+      "state": "running"
+    },
+    "process": {
+      "pid": 67490,
+      "uid": 501,
+      "command": "/opt/homebrew/bin/cloudflared"
+    },
+    "listeners": [
+      {
+        "pid": 67490,
+        "command": "cloudflared",
+        "uid": 501
+      }
+    ]
+  },
+  "currentPreflight": {
+    "state": "preflight",
+    "ready": true,
+    "idle": false,
+    "draining": false,
+    "readiness": {
+      "database": true,
+      "provider": true,
+      "image": true
+    },
+    "activeWS": 2,
+    "inFlightHTTP": 0,
+    "credentialAuth": 0,
+    "blockers": {
+      "sandboxes": 0,
+      "agentTasks": 0,
+      "automationRuns": 0,
+      "enabledAutomations": 0,
+      "resourceAllocations": 0,
+      "cloningProjects": 0,
+      "projectCleanupJobs": 0
+    },
+    "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+    "dedicatedTunnelLoaded": true,
+    "dedicatedTunnelPid": 67490,
+    "dedicatedTunnelOwnership": {
+      "launchProgram": "/opt/homebrew/bin/cloudflared",
+      "job": {
+        "pid": 67490,
+        "program": "/opt/homebrew/bin/cloudflared",
+        "state": "running"
+      },
+      "process": {
+        "pid": 67490,
+        "uid": 501,
+        "command": "/opt/homebrew/bin/cloudflared"
+      },
+      "listeners": [
+        {
+          "pid": 67490,
+          "command": "cloudflared",
+          "uid": 501
+        }
+      ]
+    },
+    "operatorEligible": true,
+    "requiresTunnelDisconnect": true,
+    "previewUntouched": true
+  },
+  "sourceSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
+  "newRegressionTests": 2,
+  "newInstallerTotal": 19,
+  "fullRelatedTests": 104,
+  "passed": 104,
+  "failed": 0,
+  "skipped": 0,
+  "writeLifecycleVerification": "Parent actual reviewf GUI lifecycle passed; privileged system installer remains unvalidated.",
+  "liveCutoverValidation": {
+    "status": "actual-lifecycle-pass",
+    "evidence": "artifacts/jenkins-system-cutover-live-lifecycle.json",
+    "artifactSha256": "962420ac7b8b1c6d19bc485321e8611dde2d53ac24822e49c6dd849c0769beef",
+    "installerSha256": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
+    "review": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007f",
+    "startedAt": "2026-10-05T23:50:32.753Z",
+    "finishedAt": "2026-10-05T23:51:16.556Z",
+    "originalTunnelPid": 67490,
+    "restoredTunnelPid": 72608,
+    "exitWaitMs": 31040,
+    "launchdIntermediateState": "SIGTERMed",
+    "strictQuietSeconds": 10,
+    "productionApiPidBefore": 64657,
+    "productionApiPidAfter": 64657,
+    "productionApiSha": "134433f47912f7172faae50ea3285d010f6a3425",
+    "productionApiUnchanged": true,
+    "preview3100": {
+      "before": null,
+      "after": null,
+      "actionsPerformed": false,
+      "note": "No preview service existed at either sample; unchanged does not mean running."
+    },
+    "publicHealth": 200,
+    "maintenanceAbsent": true,
+    "systemInstallValidated": false,
+    "boundary": "Actual UID501 GUI Tunnel hold/bootout/exit/strict-quiet/gate/bootstrap/readiness/exact-owner-release was validated. No API restart, schema migration, privileged installer, root helper/system services installation or Jenkins system startup was tested by this lifecycle."
+  },
+  "systemInstallValidated": false
+}
