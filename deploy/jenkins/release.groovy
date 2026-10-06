@@ -16,13 +16,15 @@ pipeline {
     RELEASE_TOOL = '/opt/agent-platform/tools/project-release.mjs'
     WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
     MONITOR_TOOL = '/opt/agent-platform/tools/api-container.mjs'
-    RELEASE_REQUIRED = 'false'
-    RELEASE_READY = 'true'
   }
   stages {
     stage('Discover and pin complete project') {
       agent { label 'agent-platform-linux-deploy' }
       steps {
+        script {
+          env.RELEASE_REQUIRED = 'false'
+          env.RELEASE_READY = 'true'
+        }
         sh '"$NODE22" "$RELEASE_TOOL" plan "$TAG" > project-plan.json'
         script {
           def plan = readJSON(file: 'project-plan.json')

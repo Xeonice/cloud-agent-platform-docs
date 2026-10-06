@@ -17,10 +17,16 @@ pipeline {
     NODE22 = '/usr/local/bin/node'
     PUBLIC_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
     TRUSTED_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
-    CONTRACT_CHILD_NUMBER = ''
-    CONTRACT_CHILD_RESULT = 'NOT_RUN'
   }
   stages {
+    stage('Initialize CI state') {
+      steps {
+        script {
+          env.CONTRACT_CHILD_NUMBER = ''
+          env.CONTRACT_CHILD_RESULT = 'NOT_RUN'
+        }
+      }
+    }
     stage('Prepare public production build settings') {
       when { expression { params.REF == 'refs/heads/feat/design-v2-migration' } }
       agent { label 'agent-platform-linux-deploy' }
@@ -101,7 +107,8 @@ pipeline {
         script {
           def fullSha = { value -> value ==~ /[a-f0-9]{40}/ ? value : null }
           def childNumber = env.CONTRACT_CHILD_NUMBER ==~ /[1-9][0-9]*/ ? env.CONTRACT_CHILD_NUMBER.toInteger() : null
-          def childResult = env.CONTRACT_CHILD_RESULT in ['SUCCESS', 'FAILURE', 'UNSTABLE', 'ABORTED', 'NOT_BUILT', 'NOT_RUN', 'WAITING', 'INCOMPLETE'] ? env.CONTRACT_CHILD_RESULT : 'INCOMPLETE'
+          def recordedChildResult = env.CONTRACT_CHILD_RESULT ?: 'NOT_RUN'
+          def childResult = recordedChildResult in ['SUCCESS', 'FAILURE', 'UNSTABLE', 'ABORTED', 'NOT_BUILT', 'NOT_RUN', 'WAITING', 'INCOMPLETE'] ? recordedChildResult : 'INCOMPLETE'
           def report = [
             schemaVersion: 1,
             job: 'agent-platform-web',

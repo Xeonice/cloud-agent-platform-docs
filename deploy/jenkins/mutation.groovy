@@ -19,12 +19,14 @@ pipeline {
     NODE22 = '/usr/local/bin/node'
     CI_TOOL = '/opt/agent-platform/tools/jenkins-ci.mjs'
     MUTATION_TOOL = '/opt/agent-platform/tools/mutation.mjs'
-    CHECKOUT_READY = 'false'
-    MUTATION_READY = 'false'
   }
   stages {
     stage('Resolve pinned source') {
       steps {
+        script {
+          env.CHECKOUT_READY = 'false'
+          env.MUTATION_READY = 'false'
+        }
         catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE', catchInterruptions: false) {
           deleteDir()
           script {
