@@ -11,6 +11,8 @@ import {
   LINUX_DEPLOY,
   jenkinsTransport,
   canonicalJenkinsLocation,
+  sameJenkinsBuildUrl,
+  publicJenkinsStatusUrl,
 } from "./deployment-platform.mjs";
 import {
   verifyDockerSaveArchive,
@@ -330,6 +332,61 @@ test("Jenkins transport reaches only the fixed host gateway while provenance sta
   );
 });
 
+test("protected public Jenkins metadata maps to local transport without changing historical receipts", () => {
+  const local = buildUrl(JOBS.web, 7),
+    publicUrl = "https://jenkins.douglasdong.com/job/agent-platform-web/7/";
+  assert.equal(sameJenkinsBuildUrl(publicUrl, local), true);
+  assert.equal(canonicalJenkinsLocation(publicUrl, LINUX_DEPLOY), local);
+  assert.equal(
+    jenkinsTransport(
+      publicUrl + "artifact/web-artifacts/manifest.json",
+      LINUX_DEPLOY,
+    ),
+    "http://host.lima.internal:8080/job/agent-platform-web/7/artifact/web-artifacts/manifest.json",
+  );
+  for (const origin of [
+    "https://jenkins.douglasdong.com",
+    "http://127.0.0.1:8080",
+  ]) {
+    const malicious = origin + "//example.invalid/path";
+    assert.throws(
+      () => jenkinsTransport(malicious, LINUX_DEPLOY),
+      /transport path/,
+    );
+    assert.throws(() => canonicalJenkinsLocation(malicious, LINUX_DEPLOY));
+    assert.throws(() => publicJenkinsStatusUrl(malicious, JOBS.web));
+  }
+  assert.equal(publicJenkinsStatusUrl(local, JOBS.web), publicUrl);
+  assert.equal(publicJenkinsStatusUrl(publicUrl, JOBS.web), publicUrl);
+  assert.equal(
+    publicJenkinsStatusUrl(
+      "http://127.0.0.1:8080/job/agent-platform-web/",
+      JOBS.web,
+    ),
+    "https://jenkins.douglasdong.com/job/agent-platform-web/",
+  );
+  for (const forbidden of [
+    "https://jenkins.douglasdong.com.evil.invalid/job/agent-platform-web/7/",
+    "http://jenkins.douglasdong.com/job/agent-platform-web/7/",
+    "https://user:secret@jenkins.douglasdong.com/job/agent-platform-web/7/",
+    publicUrl + "?",
+    publicUrl + "#",
+    publicUrl + "?next=https://evil.invalid",
+    "https://jenkins.douglasdong.com/job/other/7/",
+    "https://jenkins.douglasdong.com/job/agent-platform-web/8/",
+    "https://jenkins.douglasdong.com/job/agent-platform-api/7/",
+    "https://jenkins.douglasdong.com/job/other/../agent-platform-web/7/",
+    "https://jenkins.douglasdong.com/job/agent-platform-web/%37/",
+  ])
+    assert.equal(sameJenkinsBuildUrl(forbidden, local), false);
+  for (const forbidden of [
+    publicUrl + "?token=x",
+    publicUrl + "#",
+    "https://evil.invalid/job/agent-platform-web/7/",
+  ])
+    assert.throws(() => publicJenkinsStatusUrl(forbidden, JOBS.web));
+});
+
 test("Docker29 OCI index image ID is verified through the ARM64 manifest/config chain, not mistaken for config ID", async (t) => {
   const root = await fixture(t);
   const image = await dockerSaveFixture(root);
@@ -392,7 +449,7 @@ test("legacy Docker-save validates immutable config ID; wrong architecture, miss
   }
 });
 
-test("trusted Linux runner verifies actual Jenkins SUCCESS at the gateway and preserves canonical three-SHA evidence", async (t) => {
+test("trusted Linux runner accepts actual public Jenkins metadata at the gateway and preserves canonical three-SHA evidence", async (t) => {
   const root = await fixture(t),
     tools = join(root, "tools");
   await fs.mkdir(tools, { mode: 0o700 });
@@ -434,7 +491,7 @@ test("trusted Linux runner verifies actual Jenkins SUCCESS at the gateway and pr
         number: 8,
         result,
         building: false,
-        url: buildUrl(JOBS.contract, 8),
+        url: "https://jenkins.douglasdong.com/job/agent-platform-contract/8/",
         actions: [
           {
             parameters: Object.entries(buildParameters("contract", plan)).map(
@@ -558,7 +615,7 @@ test("API evidence requires the matching private root/API receipt and refuses st
   );
 });
 
-test("Linux discovery queues exact commits through the gateway and stores canonical queue provenance", async (t) => {
+test("Linux discovery consumes public queue/build metadata through the gateway and posts protected status links", async (t) => {
   const root = await fixture(t),
     tools = join(root, "tools");
   await fs.mkdir(tools, { mode: 0o700 });
@@ -578,7 +635,9 @@ test("Linux discovery queues exact commits through the gateway and stores canoni
   });
   let queued = 0,
     layoutChecks = 0;
-  const requests = [];
+  const requests = [],
+    statuses = [];
+  let pending = [];
   const discover = createDiscoverer({
     tools,
     deployRoot: root,
@@ -593,16 +652,43 @@ test("Linux discovery queues exact commits through the gateway and stores canoni
       { ref: "refs/heads/main", sha: commits[repo] },
     ],
     pulls: async () => [],
-    status: async () => {},
+    status: async (item) => statuses.push(item),
     fetch: async (url, options) => {
       requests.push({ url, options });
       if (url.endsWith("buildWithParameters"))
         return new Response(null, {
           status: 201,
           headers: {
-            location: `http://host.lima.internal:8080/queue/item/${++queued}/`,
+            location: `https://jenkins.douglasdong.com/queue/item/${++queued}/`,
           },
         });
+      const location = new URL(url).pathname;
+      const item = pending.find(
+        (entry, index) =>
+          location === `/queue/item/${index + 1}/api/json` ||
+          location === `/job/${entry.job}/${index + 1}/api/json`,
+      );
+      if (item) {
+        const number = pending.indexOf(item) + 1,
+          publicUrl = `https://jenkins.douglasdong.com/job/${item.job}/${number}/`;
+        return Response.json(
+          location.startsWith("/queue/")
+            ? { executable: { url: publicUrl } }
+            : {
+                number,
+                url: publicUrl,
+                building: false,
+                result: "SUCCESS",
+                actions: [
+                  {
+                    parameters: Object.entries(item.params).map(
+                      ([name, value]) => ({ name, value }),
+                    ),
+                  },
+                ],
+              },
+        );
+      }
       return Response.json(
         url.includes("queue/api/json") ? { items: [] } : { builds: [] },
       );
@@ -632,6 +718,25 @@ test("Linux discovery queues exact commits through the gateway and stores canoni
     ({ job }) => job === "agent-platform-native-ci",
   );
   assert.deepEqual(native.params, { SHA: commits.api, REF: "refs/heads/main" });
+  pending = state.pending;
+  assert.equal((await discover()).errors.length, 0);
+  const complete = await discover();
+  assert.equal(complete.errors.length, 0);
+  assert.equal(complete.completed.length, 3);
+  assert.equal(queued, 3);
+  assert.equal(statuses.filter((item) => item.state === "success").length, 3);
+  assert.equal(
+    statuses.every((item) =>
+      item.targetUrl.startsWith("https://jenkins.douglasdong.com/job/"),
+    ),
+    true,
+  );
+  assert.equal(
+    requests.every(({ url }) =>
+      url.startsWith("http://host.lima.internal:8080/"),
+    ),
+    true,
+  );
 });
 
 test("new Linux trusted pipelines preserve executor release before child waits and use container monitor CLI", async () => {

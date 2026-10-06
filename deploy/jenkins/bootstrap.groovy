@@ -19,6 +19,10 @@ import java.nio.file.attribute.PosixFilePermissions
 
 def j = Jenkins.get()
 def root = j.rootDir.toPath()
+def controllerMode = System.getenv('AGENT_PLATFORM_CONTROLLER_MODE')
+def location = System.getenv('AGENT_PLATFORM_JENKINS_URL') ?: JenkinsLocationConfiguration.get().getUrl() ?: 'http://127.0.0.1:8080/'
+def allowedLocations = controllerMode == 'lab' ? ['http://127.0.0.1:18080/'] : ['http://127.0.0.1:8080/', 'https://jenkins.douglasdong.com/']
+if (!(location in allowedLocations)) throw new IllegalStateException('An exact approved Jenkins URL is required')
 def settings = new groovy.json.JsonSlurper().parse(root.resolve('bootstrap-settings.json').toFile())
 def secretDir = root.resolve('bootstrap-secrets')
 Files.createDirectories(secretDir)
@@ -43,7 +47,7 @@ if (!Files.exists(secretDir.resolve('admin-api.json'))) {
 }
 j.setNumExecutors(0)
 j.setSlaveAgentPort(-1)
-JenkinsLocationConfiguration.get().setUrl('http://127.0.0.1:8080/')
+JenkinsLocationConfiguration.get().setUrl(location)
 [
     [name: 'mac-deploy', label: 'agent-platform-deploy', remote: settings.deployAgentRoot],
     [name: 'mac-ci', label: 'agent-platform-ci', remote: '/Users/Shared/agent-platform-ci/agent'],

@@ -14,6 +14,7 @@ import {
   validateDockerHost,
   validateMigrationManifest,
   resolveControllerMode,
+  resolveControllerUrl,
   CONTROLLER_HOST,
   BUILD_HOST,
 } from "./controller.mjs";
@@ -194,6 +195,120 @@ test("migrated controller defaults to paused migration but supports validated ac
     "${CONTROLLER_MODE:-migration}",
   );
   validateControllerCompose(production, "migration");
+});
+
+test("the fixed public Jenkins root URL does not expose controller ports or change its Home and isolated CI routes", async () => {
+  const production = await config("compose.controller.json"),
+    publicConfig = structuredClone(production);
+  publicConfig.services.controller.environment.AGENT_PLATFORM_JENKINS_URL =
+    "https://jenkins.douglasdong.com/";
+  assert.doesNotThrow(() =>
+    validateControllerCompose(publicConfig, "migration"),
+  );
+  assert.deepEqual(
+    publicConfig.services.controller.ports,
+    production.services.controller.ports,
+  );
+  assert.deepEqual(
+    publicConfig.services.controller.volumes,
+    production.services.controller.volumes,
+  );
+  assert.deepEqual(publicConfig.volumes, production.volumes);
+  const lab = await config("compose.lab.json");
+  lab.services.controller.environment.AGENT_PLATFORM_JENKINS_URL =
+    "https://jenkins.douglasdong.com/";
+  assert.throws(() => validateControllerCompose(lab, "lab"), /environment/);
+  validateCiCompose(await config("compose.ci.json"));
+});
+
+test("controller URL selection keeps the lab private and admits only exact formal local or protected public origins", async () => {
+  for (const mode of ["migration", "active"]) {
+    assert.equal(resolveControllerUrl("", mode), "http://127.0.0.1:8080/");
+    for (const url of [
+      "http://127.0.0.1:8080/",
+      "https://jenkins.douglasdong.com/",
+    ])
+      assert.equal(resolveControllerUrl(url, mode), url);
+    for (const url of [
+      "http://127.0.0.1:18080/",
+      "http://jenkins.douglasdong.com/",
+      "https://jenkins.douglasdong.com",
+      "https://jenkins.douglasdong.com:443/",
+      "https://jenkins.douglasdong.com/path/",
+      "https://jenkins.douglasdong.com/?origin=local",
+      "https://jenkins.douglasdong.com/#anchor",
+      "https://other.douglasdong.com/",
+      "https://jenkins.douglasdong.com.evil.invalid/",
+      "https://user:do-not-log-credential@jenkins.douglasdong.com/",
+      "https://jenkins.douglasdong.com/\n",
+      null,
+      false,
+    ])
+      assert.throws(() => resolveControllerUrl(url, mode), /exact approved/);
+  }
+  assert.equal(resolveControllerUrl("", "lab"), "http://127.0.0.1:18080/");
+  assert.equal(
+    resolveControllerUrl("http://127.0.0.1:18080/", "lab"),
+    "http://127.0.0.1:18080/",
+  );
+  for (const url of [
+    "http://127.0.0.1:8080/",
+    "https://jenkins.douglasdong.com/",
+  ])
+    assert.throws(() => resolveControllerUrl(url, "lab"), /exact approved/);
+  assert.throws(() => resolveControllerUrl("", "unknown"), /URL mode/);
+
+  const production = await config("compose.controller.json");
+  assert.equal(
+    production.services.controller.environment.AGENT_PLATFORM_JENKINS_URL,
+    "${AGENT_PLATFORM_JENKINS_URL:-http://127.0.0.1:8080/}",
+  );
+  for (const url of [
+    "${UNREVIEWED_PUBLIC_URL}",
+    "https://other.douglasdong.com/",
+  ]) {
+    const changed = structuredClone(production);
+    changed.services.controller.environment.AGENT_PLATFORM_JENKINS_URL = url;
+    assert.throws(
+      () => validateControllerCompose(changed, "migration"),
+      /environment/,
+    );
+  }
+});
+
+test("the actual controller check CLI validates explicit public selection before any service operation and rejects credential-bearing overrides without echoing them", () => {
+  const run = (extra = {}) =>
+    spawnSync(process.execPath, [join(source, "controller.mjs"), "check"], {
+      cwd: "/",
+      env: { PATH: "/usr/bin:/bin", ...extra },
+      encoding: "utf8",
+      timeout: 20000,
+    });
+  const baseline = run();
+  assert.equal(baseline.status, 0);
+  assert.equal(
+    JSON.parse(baseline.stdout).controllerUrl,
+    "http://127.0.0.1:8080/",
+  );
+  const selected = run({
+    CONTROLLER_MODE: "active",
+    AGENT_PLATFORM_JENKINS_URL: "https://jenkins.douglasdong.com/",
+  });
+  assert.equal(selected.status, 0);
+  const result = JSON.parse(selected.stdout);
+  assert.equal(result.controllerMode, "active");
+  assert.equal(result.controllerUrl, "https://jenkins.douglasdong.com/");
+  assert.equal(result.servicesStarted, false);
+  const operand = "https://user:do-not-log-credential@jenkins.douglasdong.com/";
+  const refused = run({
+    CONTROLLER_MODE: "active",
+    AGENT_PLATFORM_JENKINS_URL: operand,
+  });
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /exact approved controller URL/);
+  assert.ok(
+    !refused.stdout.includes(operand) && !refused.stderr.includes(operand),
+  );
 });
 
 test("controller image uses the actual verified Node and Jenkins base digests", async () => {

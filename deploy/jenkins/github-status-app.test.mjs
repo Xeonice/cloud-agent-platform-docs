@@ -222,6 +222,10 @@ test("real private-file guards refuse wrong owner, public mode, symlinks and ove
 test("actual App/installation identity and permissions are checked before issuing narrowly scoped memory-only token", async () => {
   const f = await fixture();
   await f.app.postStatus(APP_REPOSITORIES[0], "a".repeat(40), statusBody());
+  assert.equal(
+    JSON.parse(f.remote.calls.at(-1).options.body).target_url,
+    "https://jenkins.douglasdong.com/job/agent-platform-native-ci/12/",
+  );
   assert.deepEqual(
     f.remote.calls.map((call) => call.path),
     [
@@ -382,6 +386,30 @@ test("status helper cannot send credentials to arbitrary repositories, contexts 
     [
       APP_REPOSITORIES[0],
       { ...statusBody(), target_url: "https://evil.invalid/" },
+    ],
+    [
+      APP_REPOSITORIES[0],
+      {
+        ...statusBody(),
+        target_url:
+          "https://jenkins.douglasdong.com/job/agent-platform-web/12/",
+      },
+    ],
+    [
+      APP_REPOSITORIES[0],
+      {
+        ...statusBody(),
+        target_url:
+          "https://jenkins.douglasdong.com/job/agent-platform-native-ci/12/?token=x",
+      },
+    ],
+    [
+      APP_REPOSITORIES[0],
+      {
+        ...statusBody(),
+        target_url:
+          "https://user@jenkins.douglasdong.com/job/agent-platform-native-ci/12/",
+      },
     ],
   ])
     await assert.rejects(f.app.postStatus(repo, "a".repeat(40), body));

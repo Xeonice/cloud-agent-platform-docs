@@ -15,7 +15,7 @@
       ],
       "environment": {
         "AGENT_PLATFORM_CONTROLLER_MODE": "${CONTROLLER_MODE:-migration}",
-        "AGENT_PLATFORM_JENKINS_URL": "http://127.0.0.1:8080/"
+        "AGENT_PLATFORM_JENKINS_URL": "${AGENT_PLATFORM_JENKINS_URL:-http://127.0.0.1:8080/}"
       },
       "volumes": [
         { "type": "volume", "source": "home", "target": "/var/jenkins_home" }

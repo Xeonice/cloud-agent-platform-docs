@@ -1,3 +1,7 @@
+import {
+  sameJenkinsBuildUrl,
+  publicJenkinsStatusUrl,
+} from "./deployment-platform.mjs";
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -141,7 +145,7 @@ export function validateSuccessfulBuild(kind, request, build) {
   }
   requireGate(
     build?.number === request.builds[kind] &&
-      build.url === buildUrl(kind, request.builds[kind]) &&
+      sameJenkinsBuildUrl(build.url, buildUrl(kind, request.builds[kind])) &&
       build.building === false &&
       build.result === "SUCCESS" &&
       same(parameters, buildParameters(kind, request)),
@@ -235,7 +239,10 @@ function validateStatus(value, kind, request, config, id) {
       (!id || value.id === id) &&
       value.state === "success" &&
       value.context === APP_CONTEXTS[REPOS[kind].name] &&
-      value.target_url === buildUrl(kind, request.builds[kind]) &&
+      sameJenkinsBuildUrl(
+        value.target_url,
+        buildUrl(kind, request.builds[kind]),
+      ) &&
       value.creator?.type === "Bot" &&
       value.creator.login === `${config.slug}[bot]`,
     "actual App status ID, creator, context and formal build URL",
@@ -373,7 +380,10 @@ export function createCutover(options = {}) {
             context: APP_CONTEXTS[REPOS[kind].name],
             description:
               "Formal Jenkins CI and pinned cross-repository gates passed",
-            target_url: buildUrl(kind, request.builds[kind]),
+            target_url: publicJenkinsStatusUrl(
+              buildUrl(kind, request.builds[kind]),
+              REPOS[kind].job,
+            ),
           }),
         },
         fetcher,
@@ -515,7 +525,10 @@ export function createCutover(options = {}) {
         cross.child?.job === REPOS.project.job &&
         cross.child.number === request.builds.project &&
         cross.child.result === "SUCCESS" &&
-        cross.child.url === buildUrl("project", request.builds.project),
+        sameJenkinsBuildUrl(
+          cross.child.url,
+          buildUrl("project", request.builds.project),
+        ),
       "Web child is the same actually successful contract build",
     );
     requireGate(

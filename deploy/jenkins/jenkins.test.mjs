@@ -311,6 +311,12 @@ test("project key uses all three pinned commits and matches web immutable cache 
 test("Jenkins gate proof requires actual SUCCESS and the exact source combination", () => {
   const plan = { commits };
   validateBuild(build("web", 7, plan), "web", 7, plan);
+  const publicBuild = build("web", 7, plan);
+  publicBuild.url = "https://jenkins.douglasdong.com/job/agent-platform-web/7/";
+  validateBuild(publicBuild, "web", 7, plan);
+  assert.throws(() =>
+    validateBuild({ ...publicBuild, number: 8 }, "web", 7, plan),
+  );
   const wrong = build("web", 7, plan);
   wrong.actions[0].parameters.find((p) => p.name === "API_SHA").value =
     "d".repeat(40);
@@ -526,7 +532,7 @@ test("complete package uses three actual pinned Git archives and immutable web b
     root: f.root,
     identity,
     buildNumber: 10,
-    buildUrl: buildUrl(JOBS.release, 10),
+    buildUrl: "https://jenkins.douglasdong.com/job/agent-platform-release/10/",
     head: async (spec) =>
       source[
         Object.keys(REPOSITORIES).find(
@@ -534,7 +540,15 @@ test("complete package uses three actual pinned Git archives and immutable web b
         )
       ],
     jenkins: async (kind, number, plan) => ({
-      result: build(kind, number, plan),
+      result: {
+        ...build(kind, number, plan),
+        url:
+          "https://jenkins.douglasdong.com/job/" +
+          JOBS[kind] +
+          "/" +
+          number +
+          "/",
+      },
       get: async (path) => {
         if (kind === "web") return manifest;
         if (path === "artifact/ci.json")
@@ -589,6 +603,11 @@ test("complete package uses three actual pinned Git archives and immutable web b
     },
   });
   const result = await run("package", f.planPath, "6", "7", "8");
+  assert.equal(
+    result.manifest.jenkins.release.url,
+    "https://jenkins.douglasdong.com/job/agent-platform-release/10/",
+  );
+  await verifyPackage(result.assetsPath, f.plan);
   const extracted = join(origin, "extracted");
   await fs.mkdir(extracted);
   await exec("/usr/bin/tar", [

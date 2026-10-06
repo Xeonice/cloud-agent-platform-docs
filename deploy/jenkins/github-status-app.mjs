@@ -1,3 +1,4 @@
+import { publicJenkinsStatusUrl } from "./deployment-platform.mjs";
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, resolve } from "node:path";
@@ -359,24 +360,10 @@ export function createStatusApp(options = {}) {
         )
       )
         throw new Error("Unreviewed GitHub status source");
-      const target = new URL(body.target_url);
-      if (
-        target.origin !== "http://127.0.0.1:8080" ||
-        target.username ||
-        target.password ||
-        target.search ||
-        target.hash ||
-        !(
-          target.pathname === "/job/" + JOBS[repo] + "/" ||
-          new RegExp("^/job/" + JOBS[repo] + "/[1-9][0-9]*/$").test(
-            target.pathname,
-          )
-        )
-      )
-        throw new Error("Untrusted Jenkins status target");
+      const target = publicJenkinsStatusUrl(body.target_url, JOBS[repo]);
       await request("/repos/" + repo + "/statuses/" + sha, await token(), {
         method: "POST",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ ...body, target_url: target }),
       });
       return source();
     },

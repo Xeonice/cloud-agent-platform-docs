@@ -25,7 +25,42 @@ export const MAC_DEPLOY = Object.freeze({
 });
 export const DEPLOYMENT =
   process.platform === "linux" ? LINUX_DEPLOY : MAC_DEPLOY;
-const CANONICAL_JENKINS = "http://127.0.0.1:8080/";
+export const CANONICAL_JENKINS = "http://127.0.0.1:8080/";
+export const PUBLIC_JENKINS = "https://jenkins.douglasdong.com/";
+const JENKINS_JOBS = new Set([
+  "agent-platform-api",
+  "agent-platform-native-ci",
+  "agent-platform-web",
+  "agent-platform-contract",
+  "agent-platform-release",
+  "agent-platform-ci-discovery",
+  "agent-platform-mutation",
+  "agent-platform-sandbox-images",
+  "agent-platform-service-monitor",
+]);
+const METADATA_ORIGINS = [
+  new URL(CANONICAL_JENKINS).origin,
+  new URL(PUBLIC_JENKINS).origin,
+];
+
+function checkedJenkinsUrl(url, origins, allowQuery = false) {
+  const parsed = new URL(url);
+  if (
+    typeof url !== "string" ||
+    url !== parsed.href ||
+    !origins.includes(parsed.origin) ||
+    parsed.username ||
+    parsed.password ||
+    url.includes("#") ||
+    (!allowQuery && url.includes("?"))
+  )
+    throw new Error("Untrusted Jenkins URL");
+  return parsed;
+}
+function fixedJobPath(path, allowJobRoot = false) {
+  const match = /^\/job\/([A-Za-z0-9-]+)\/(?:([1-9][0-9]{0,9})\/)?$/.exec(path);
+  return !!match && JENKINS_JOBS.has(match[1]) && (allowJobRoot || !!match[2]);
+}
 
 export function deploymentContext(
   identity = userInfo(),
@@ -92,36 +127,55 @@ export function deploymentEnvironment(node, home, platform = process.platform) {
   };
 }
 
+// Metadata may advertise the protected public root URL. Credentials and
+// artifact requests always stay on the fixed local controller transport.
 export function jenkinsTransport(url, context = DEPLOYMENT) {
-  const parsed = new URL(url);
-  if (
-    parsed.origin !== new URL(CANONICAL_JENKINS).origin ||
-    parsed.username ||
-    parsed.password ||
-    parsed.hash
-  )
-    throw new Error("Jenkins transport must retain canonical local provenance");
+  const parsed = checkedJenkinsUrl(url, METADATA_ORIGINS, true);
   if (![LINUX_DEPLOY.jenkins, MAC_DEPLOY.jenkins].includes(context.jenkins))
     throw new Error("Unknown Jenkins transport endpoint");
-  return new URL(parsed.pathname + parsed.search, context.jenkins).href;
+  if (parsed.pathname.startsWith("//"))
+    throw new Error("Untrusted Jenkins transport path");
+  const target = new URL(context.jenkins);
+  target.pathname = parsed.pathname;
+  target.search = parsed.search;
+  if (target.origin !== new URL(context.jenkins).origin)
+    throw new Error("Unknown Jenkins transport endpoint");
+  return target.href;
 }
 
 export function canonicalJenkinsLocation(url, context = DEPLOYMENT) {
   jenkinsTransport(CANONICAL_JENKINS, context);
-  const parsed = new URL(url);
+  const parsed = checkedJenkinsUrl(url, [
+    ...METADATA_ORIGINS,
+    new URL(context.jenkins).origin,
+  ]);
   if (
-    parsed.username ||
-    parsed.password ||
-    parsed.search ||
-    parsed.hash ||
-    ![
-      new URL(CANONICAL_JENKINS).origin,
-      new URL(context.jenkins).origin,
-    ].includes(parsed.origin) ||
-    !/^(?:\/queue\/item\/[1-9][0-9]*\/|\/job\/[A-Za-z0-9-]+\/[1-9][0-9]*\/)$/.test(
-      parsed.pathname,
-    )
+    !/^\/queue\/item\/[1-9][0-9]{0,9}\/$/.test(parsed.pathname) &&
+    !fixedJobPath(parsed.pathname)
   )
     throw new Error("Untrusted Jenkins response location");
   return new URL(parsed.pathname, CANONICAL_JENKINS).href;
+}
+
+// Preserve historical receipt bytes: compare the fixed job/build identity,
+// rather than rewriting persisted local URLs when the public root changes.
+export function sameJenkinsBuildUrl(actual, expected) {
+  try {
+    const first = canonicalJenkinsLocation(actual);
+    const second = canonicalJenkinsLocation(expected);
+    return fixedJobPath(new URL(first).pathname) && first === second;
+  } catch {
+    return false;
+  }
+}
+
+export function publicJenkinsStatusUrl(url, job) {
+  const parsed = checkedJenkinsUrl(url, METADATA_ORIGINS);
+  if (
+    !JENKINS_JOBS.has(job) ||
+    !fixedJobPath(parsed.pathname, true) ||
+    !parsed.pathname.startsWith("/job/" + job + "/")
+  )
+    throw new Error("Untrusted Jenkins status target");
+  return new URL(parsed.pathname, PUBLIC_JENKINS).href;
 }

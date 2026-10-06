@@ -8,6 +8,11 @@ export const CONTROLLER_HOST =
   "unix:///Users/douglasdong/.colima/agent-platform-jenkins/docker.sock";
 export const BUILD_HOST =
   "unix:///Users/douglasdong/.colima/agent-platform-build/docker.sock";
+export const PUBLIC_CONTROLLER_URL = "https://jenkins.douglasdong.com/";
+const LOCAL_CONTROLLER_URL = "http://127.0.0.1:8080/";
+const LAB_CONTROLLER_URL = "http://127.0.0.1:18080/";
+const CONTROLLER_URL_EXPRESSION =
+  "${AGENT_PLATFORM_JENKINS_URL:-http://127.0.0.1:8080/}";
 export const MIGRATION_EXCLUSIONS = [
   "plugins",
   "init.groovy",
@@ -91,6 +96,29 @@ export function resolveControllerMode(value = process.env.CONTROLLER_MODE) {
   return mode;
 }
 
+export function resolveControllerUrl(
+  value = process.env.AGENT_PLATFORM_JENKINS_URL,
+  mode = resolveControllerMode(),
+) {
+  requirePolicy(
+    ["lab", "migration", "active"].includes(mode),
+    "Invalid controller URL mode",
+  );
+  const url =
+    value === undefined || value === ""
+      ? mode === "lab"
+        ? LAB_CONTROLLER_URL
+        : LOCAL_CONTROLLER_URL
+      : value;
+  requirePolicy(
+    mode === "lab"
+      ? url === LAB_CONTROLLER_URL
+      : url === LOCAL_CONTROLLER_URL || url === PUBLIC_CONTROLLER_URL,
+    "AGENT_PLATFORM_JENKINS_URL must be an exact approved controller URL",
+  );
+  return url;
+}
+
 export function validateControllerCompose(config, mode) {
   requirePolicy(
     mode === "lab" || mode === "migration",
@@ -144,8 +172,13 @@ export function validateControllerCompose(config, mode) {
   requirePolicy(
     service.environment?.AGENT_PLATFORM_CONTROLLER_MODE ===
       (mode === "lab" ? "lab" : "${CONTROLLER_MODE:-migration}") &&
-      service.environment?.AGENT_PLATFORM_JENKINS_URL ===
-        `http://127.0.0.1:${ports[0].published}/` &&
+      (mode === "lab"
+        ? service.environment?.AGENT_PLATFORM_JENKINS_URL === LAB_CONTROLLER_URL
+        : [
+            LOCAL_CONTROLLER_URL,
+            PUBLIC_CONTROLLER_URL,
+            CONTROLLER_URL_EXPRESSION,
+          ].includes(service.environment?.AGENT_PLATFORM_JENKINS_URL)) &&
       Object.keys(service.environment).length === 2,
     "Controller environment is outside the fixed policy",
   );
@@ -467,6 +500,7 @@ export async function checkConfiguration() {
       await fs.readFile(join(source, "../jenkins/plugins.lock.json"), "utf8"),
     ),
   );
+  const controllerMode = resolveControllerMode();
   return {
     status: "configuration-verified",
     jenkins: lock.jenkins,
@@ -476,7 +510,8 @@ export async function checkConfiguration() {
     buildDockerHost: BUILD_HOST,
     servicesStarted: false,
     defaultControllerMode: "migration",
-    controllerMode: resolveControllerMode(),
+    controllerMode,
+    controllerUrl: resolveControllerUrl(undefined, controllerMode),
   };
 }
 

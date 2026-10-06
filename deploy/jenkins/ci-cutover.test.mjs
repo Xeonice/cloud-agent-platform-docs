@@ -288,6 +288,29 @@ async function fixture(t) {
 }
 const writes = (calls) => calls.filter((call) => call.method !== "GET");
 
+test("public Jenkins build metadata and cross-child URLs retain exact source cutover gates", async (t) => {
+  const f = await fixture(t);
+  for (const value of Object.values(f.builds))
+    value.url = value.url.replace(
+      "http://127.0.0.1:8080/",
+      "https://jenkins.douglasdong.com/",
+    );
+  f.cross.child.url = f.cross.child.url.replace(
+    "http://127.0.0.1:8080/",
+    "https://jenkins.douglasdong.com/",
+  );
+  assert.equal(
+    (await f.tool.preview(f.requestPath)).state,
+    "previewed-no-remote-mutations",
+  );
+  assert.equal(writes(f.calls).length, 0);
+  f.builds.web.url += "?redirect=evil";
+  await assert.rejects(
+    f.tool.preview(f.requestPath),
+    /canonical completed SUCCESS/,
+  );
+});
+
 test("preview is readonly, binds real formal three-SHA evidence and exposes only the narrow App-specific patches plus six fixed workflows", async (t) => {
   const f = await fixture(t),
     preview = await f.tool.preview(f.requestPath);

@@ -13,6 +13,7 @@ import {
   assertDeploymentLayout,
   jenkinsTransport,
   canonicalJenkinsLocation,
+  publicJenkinsStatusUrl,
 } from "./deployment-platform.mjs";
 import {
   REPOSITORIES,
@@ -93,15 +94,7 @@ export function validRequest(item) {
 }
 export function isTrustedJenkinsLocation(location, job) {
   try {
-    const url = new URL(location);
-    if (
-      url.origin !== new URL(JENKINS).origin ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      return false;
+    const url = new URL(canonicalJenkinsLocation(location));
     if (/^\/queue\/item\/[1-9][0-9]*\/$/.test(url.pathname)) return true;
     const match = /^\/job\/([A-Za-z0-9-]+)\/[1-9][0-9]*\/$/.exec(url.pathname);
     return (
@@ -280,7 +273,10 @@ export function createDiscoverer(overrides = {}) {
         state: item.state,
         context: item.context,
         description: item.description,
-        target_url: item.targetUrl,
+        target_url: publicJenkinsStatusUrl(
+          item.targetUrl,
+          DISCOVERY_JOBS[item.repo],
+        ),
       };
       if ((await statusApp.source()).kind === "github-app")
         return statusApp.postStatus(
@@ -409,7 +405,7 @@ export function createDiscoverer(overrides = {}) {
         sha: item.sha,
         context: STATUS_CONTEXTS[item.repo],
         state: result,
-        targetUrl,
+        targetUrl: publicJenkinsStatusUrl(targetUrl, item.job),
         description:
           result === "pending"
             ? "Native Jenkins verification queued"

@@ -50,6 +50,14 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service status and logs` 页面、Console Output、Artifacts 和 fingerprint 可追溯结果。Docker 的 restart policy 管理进程退出恢复；健康检查和监控记录失健康状态。容器日志为旋转的 `json-file`，报告按私有口令与 token 脱敏。
 
+## 公网 Jenkins 与 Cloudflare Zero Trust
+
+公网管理入口为 <https://jenkins.douglasdong.com/>，通过已有 `agent-platform-api` Tunnel 转发到 `http://192.168.5.2:8080`。该地址是 runtime VM 访问 Mac 上 Jenkins loopback 转发的固定网关；runtime VM 自己的 `127.0.0.1:8080` 不是 Jenkins。原有 `agent-api.douglasdong.com` 路由与最终 `http_status:404` 保留。
+
+整域由独立 Cloudflare Access 自托管应用保护，使用 `jenkins-owner-only` 精确邮箱白名单、One-time PIN 和六小时会话。先建立 Access 应用与策略，再发布 Tunnel 路由和 DNS；源站路由同时启用 `access.required`，绑定既有团队与该应用的 AUD，在转发前验证 Access JWT。管理员在 Cloudflare One 的 Access 应用和策略中维护邮箱白名单。通过 Access 后仍需 Jenkins 原有账号登录，Jenkins 的匿名限制与 CSRF 保持生效。[Access 配置](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)、[Tunnel JWT 校验](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/)。
+
+生产 controller 显式设置 `AGENT_PLATFORM_JENKINS_URL=https://jenkins.douglasdong.com/`，让页面、构建和新 GitHub 状态链接使用公网地址。它仍只发布 Mac loopback 8080。三个 Linux agent 的 `JENKINS_URL` 保持 `http://host.lima.internal:8080/`，内部认证、API 和产物下载继续走固定本地通道，不依赖浏览器 Access 会话。构建校验只接受固定公网地址和历史本地地址对应的同一作业、构建号与精确提交，历史收据保持可验证。lab 仍只使用本地 18080。
+
 ## 完全在本机打包并上传
 
 统一发布使用三仓精确 SHA。API 下载包为 `agent-platform-api-linux-arm64.tgz`，包含 Docker-save 镜像、`release.json` 和说明；前端有 production prebuilt、源码和 Storybook；另有三仓源码包、发布清单与 `SHA256SUMS`。数据库、口令、私钥、token 和生产工作区不进入下载包。

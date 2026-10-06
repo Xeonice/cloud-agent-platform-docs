@@ -19,6 +19,7 @@ import {
   assertDeploymentLayout,
   deploymentEnvironment,
   jenkinsTransport,
+  sameJenkinsBuildUrl,
 } from "./deployment-platform.mjs";
 
 export const ROOT = DEPLOYMENT.root;
@@ -115,7 +116,7 @@ export function validateBuild(value, kind, number, plan) {
     value?.number !== Number(number) ||
     value.result !== "SUCCESS" ||
     value.building !== false ||
-    value.url !== buildUrl(JOBS[kind], number)
+    !sameJenkinsBuildUrl(value.url, buildUrl(JOBS[kind], number))
   )
     throw new Error(
       "Required Jenkins build is not the matching completed SUCCESS",
@@ -589,8 +590,10 @@ export async function verifyPackage(folder, plan) {
     );
   for (const kind of ["api", "web", "contract", "release"])
     if (
-      manifest.jenkins?.[kind]?.url !==
-      buildUrl(JOBS[kind], manifest.jenkins[kind].number)
+      !sameJenkinsBuildUrl(
+        manifest.jenkins?.[kind]?.url,
+        buildUrl(JOBS[kind], manifest.jenkins?.[kind]?.number),
+      )
     )
       throw new Error(
         "Package Jenkins provenance has an untrusted job/build URL",
@@ -952,7 +955,7 @@ export function createReleaseRunner(overrides = {}) {
     if (
       !record ||
       record.key !== plan.key ||
-      record.url !== buildUrl(JOBS.web, record.number)
+      !sameJenkinsBuildUrl(record.url, buildUrl(JOBS.web, record.number))
     )
       throw new Error("Retained web receipt differs from project plan");
     const cache = join(folder, "web-ci-artifacts");
@@ -1051,7 +1054,7 @@ export function createReleaseRunner(overrides = {}) {
       if (
         !["api", "web", "contract"].includes(kind) ||
         record.key !== plan.key ||
-        record.url !== buildUrl(JOBS[kind], record.number)
+        !sameJenkinsBuildUrl(record.url, buildUrl(JOBS[kind], record.number))
       )
         throw new Error("Saved build provenance differs from plan");
       try {
@@ -1108,7 +1111,10 @@ export function createReleaseRunner(overrides = {}) {
       !Number.isSafeInteger(report.child.number) ||
       report.child.number < 1 ||
       report.child.result !== "SUCCESS" ||
-      report.child.url !== buildUrl(JOBS.contract, report.child.number) ||
+      !sameJenkinsBuildUrl(
+        report.child.url,
+        buildUrl(JOBS.contract, report.child.number),
+      ) ||
       !exactKeys(report.parameters, Object.keys(parameters)) ||
       Object.entries(parameters).some(
         ([name, value]) => report.parameters[name] !== value,
@@ -1555,7 +1561,7 @@ export function createReleaseRunner(overrides = {}) {
         );
       const number = Number(overrides.buildNumber ?? process.env.BUILD_NUMBER),
         url = overrides.buildUrl ?? process.env.BUILD_URL;
-      if (url !== buildUrl(JOBS.release, number))
+      if (!sameJenkinsBuildUrl(url, buildUrl(JOBS.release, number)))
         throw new Error(
           "Packaging must identify its actual fixed Jenkins release build",
         );

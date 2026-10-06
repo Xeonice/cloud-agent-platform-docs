@@ -15,6 +15,10 @@ def j = Jenkins.get()
 def root = j.rootDir.toPath()
 def mode = System.getenv('AGENT_PLATFORM_CONTROLLER_MODE')
 if (!(mode in ['lab', 'migration', 'active'])) throw new IllegalStateException('Invalid controller mode')
+def location = System.getenv('AGENT_PLATFORM_JENKINS_URL')
+def allowedLocations = mode == 'lab' ? ['http://127.0.0.1:18080/'] : ['http://127.0.0.1:8080/', 'https://jenkins.douglasdong.com/']
+if (!(location in allowedLocations))
+    throw new IllegalStateException('An exact approved Jenkins URL is required')
 
 // This policy applies to fresh and imported Home volumes; it never resets imported keys or users.
 j.setNumExecutors(0)
@@ -71,9 +75,6 @@ if (mode == 'migration') {
         if (computer != null) computer.setTemporarilyOffline(true, new OfflineCause.ByCLI('Container migration requires explicit agent activation'))
     }
 }
-def location = System.getenv('AGENT_PLATFORM_JENKINS_URL')
-if (!location || !(location ==~ /^http:\/\/127\.0\.0\.1:(18080|8080)\/$/))
-    throw new IllegalStateException('A fixed loopback Jenkins URL is required')
 JenkinsLocationConfiguration.get().setUrl(location)
 j.setInstallState(InstallState.INITIAL_SETUP_COMPLETED)
 j.save()
