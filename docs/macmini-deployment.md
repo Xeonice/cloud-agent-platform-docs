@@ -6,7 +6,7 @@ Mac mini 负责三个仓库的发现、测试、构建、打包和上传。前�
 
 | 专属 Colima profile | Docker 服务 | 职责 |
 | --- | --- | --- |
-| `agent-platform-jenkins` | Jenkins controller | 持久 Home、70 个锁定插件、零内置 executor、本机 `8080` 管理入口 |
+| `agent-platform-jenkins` | Jenkins controller | 持久 Home、73 个锁定插件、零内置 executor、本机 `8080` 管理入口 |
 | `agent-platform-build` | Linux ARM64 CI、Linux AMD64 Web CI | 无生产凭据和 Docker socket；AMD64 使用 Rosetta；执行后端、文档、跨仓浏览器和前端门禁 |
 | `agent-platform-runtime` | API/BoxLite、cloudflared、CoreDNS、可信 Linux deploy agent | VZ ARM64 nested virtualization，6 CPU/16 GiB；独立生产数据、私有发布凭据、Docker 管理与发布 |
 
@@ -57,6 +57,8 @@ Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service statu
 整域由独立 Cloudflare Access 自托管应用保护，使用 `jenkins-owner-only` 精确邮箱白名单、One-time PIN 和六小时会话。先建立 Access 应用与策略，再发布 Tunnel 路由和 DNS；源站路由同时启用 `access.required`，绑定既有团队与该应用的 AUD，在转发前验证 Access JWT。管理员在 Cloudflare One 的 Access 应用和策略中维护邮箱白名单。通过 Access 后仍需 Jenkins 原有账号登录，Jenkins 的匿名限制与 CSRF 保持生效。[Access 配置](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)、[Tunnel JWT 校验](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/)。
 
 生产 controller 显式设置 `AGENT_PLATFORM_JENKINS_URL=https://jenkins.douglasdong.com/`，让页面、构建和新 GitHub 状态链接使用公网地址。它仍只发布 Mac loopback 8080。三个 Linux agent 的 `JENKINS_URL` 保持 `http://host.lima.internal:8080/`，内部认证、API 和产物下载继续走固定本地通道，不依赖浏览器 Access 会话。构建校验只接受固定公网地址和历史本地地址对应的同一作业、构建号与精确提交，历史收据保持可验证。lab 仍只使用本地 18080。
+
+Jenkins 默认使用简体中文 `zh_CN`。镜像锁定 Locale、Chinese (Simplified) Localization 及 Localization Support 插件；启动配置保存 `systemLocale=zh_CN`、`ignoreAcceptLanguage=true` 和 `allowUserPreferences=false`，使浏览器语言、个人偏好和容器重建保持统一的中文界面。原有任务名称与构建输出保留原文。配置保存在持久 Home 的 `locale.xml`。[Locale 插件](https://plugins.jenkins.io/locale/)、[简体中文资源](https://plugins.jenkins.io/localization-zh-cn/)。
 
 ## 完全在本机打包并上传
 

@@ -10,6 +10,7 @@ import hudson.slaves.OfflineCause
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermissions
 import java.security.SecureRandom
+import hudson.plugins.locale.PluginImpl
 
 def j = Jenkins.get()
 def root = j.rootDir.toPath()
@@ -37,6 +38,16 @@ lock.plugins.each { plugin ->
     if (actual[plugin.name].version != plugin.version || !actual[plugin.name].isActive())
         throw new IllegalStateException("Pinned controller plugin is unavailable: ${plugin.name}")
 }
+
+// Use the pinned Locale API so fresh and imported Homes keep the same UI language after rebuilds.
+def locale = PluginImpl.get()
+locale.setSystemLocale('zh_CN')
+locale.setIgnoreAcceptLanguage(true)
+locale.setAllowUserPreferences(false)
+locale.save()
+if (locale.getSystemLocale() != 'zh_CN' || !locale.isIgnoreAcceptLanguage() ||
+    locale.isAllowUserPreferences() || Locale.getDefault().toLanguageTag() != 'zh-CN')
+    throw new IllegalStateException('The reviewed Chinese controller locale is required')
 
 def state = root.resolve('container-state')
 Files.createDirectories(state)
@@ -80,5 +91,5 @@ j.setInstallState(InstallState.INITIAL_SETUP_COMPLETED)
 j.save()
 def ready = state.resolve('ready.json')
 Files.createFile(ready, PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString('rw-------')))
-Files.writeString(ready, groovy.json.JsonOutput.toJson([jenkins: lock.jenkins, javaMajor: lock.javaMajor, mode: mode, plugins: lock.plugins.size(), executors: 0]))
+Files.writeString(ready, groovy.json.JsonOutput.toJson([jenkins: lock.jenkins, javaMajor: lock.javaMajor, mode: mode, plugins: lock.plugins.size(), executors: 0, locale: locale.getSystemLocale(), ignoreAcceptLanguage: locale.isIgnoreAcceptLanguage(), allowUserPreferences: locale.isAllowUserPreferences()]))
 println('Container controller policy verified; authentication required; built-in executors disabled.')

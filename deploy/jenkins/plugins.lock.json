@@ -168,6 +168,21 @@
       "sha256": "666ee900c7e945bea6d633ce6bd1e708902153d1d13b41161a2bbb55f2f8b836"
     },
     {
+      "name": "locale",
+      "version": "641.v84f22d75fd8b_",
+      "sha256": "bc460e95fad4ae09783f151e4480049837ea02de190e4831a69fb6a40a2e0865"
+    },
+    {
+      "name": "localization-support",
+      "version": "1.41.v186a_c1569458",
+      "sha256": "f9ddb45cbc86a8245e5e3041bb5c96c3dfc35d8af001474bc6fd7db6b157b485"
+    },
+    {
+      "name": "localization-zh-cn",
+      "version": "371.v23851f835d6b_",
+      "sha256": "34e2fdd236189d7ed0d7f83fb57f4f0732d93927cf8d471d6e0e2707c9236fa1"
+    },
+    {
       "name": "mailer",
       "version": "534.v1b_36f5864073",
       "sha256": "5426a66a3f879d25fcb4baff678a28422afbabff22cd6e4f0f998fc67a3dc3fa"

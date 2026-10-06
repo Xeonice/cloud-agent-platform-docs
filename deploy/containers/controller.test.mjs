@@ -326,6 +326,78 @@ test("controller image uses the actual verified Node and Jenkins base digests", 
   );
 });
 
+test("Chinese UI adds only the verified Locale and localization dependency closure without changing the existing seventy plugins", async () => {
+  const lock = validatePluginLock(await config("../jenkins/plugins.lock.json"));
+  const additions = [
+    {
+      name: "locale",
+      version: "641.v84f22d75fd8b_",
+      sha256:
+        "bc460e95fad4ae09783f151e4480049837ea02de190e4831a69fb6a40a2e0865",
+    },
+    {
+      name: "localization-support",
+      version: "1.41.v186a_c1569458",
+      sha256:
+        "f9ddb45cbc86a8245e5e3041bb5c96c3dfc35d8af001474bc6fd7db6b157b485",
+    },
+    {
+      name: "localization-zh-cn",
+      version: "371.v23851f835d6b_",
+      sha256:
+        "34e2fdd236189d7ed0d7f83fb57f4f0732d93927cf8d471d6e0e2707c9236fa1",
+    },
+  ];
+  const names = new Set(additions.map((plugin) => plugin.name));
+  assert.deepEqual(
+    lock.plugins.filter((plugin) => names.has(plugin.name)),
+    additions,
+  );
+  const existing = lock.plugins.filter((plugin) => !names.has(plugin.name));
+  assert.equal(existing.length, 70);
+  assert.equal(
+    digest(JSON.stringify(existing)),
+    "b8e4cb581e26dec1f4ecb11f83965e5ffe6bbc8b6848f2016771af3f36c5422a",
+  );
+  assert.equal(lock.plugins.length, 73);
+});
+
+test("Chinese startup policy saves and verifies the official Locale API before readiness and overrides browser and saved user preferences", async () => {
+  const guard = await fs.readFile(
+    join(source, "init.groovy.d/10-container-guard.groovy"),
+    "utf8",
+  );
+  const pluginValidation = guard.indexOf("lock.plugins.each");
+  const configuration = guard.indexOf("def locale = PluginImpl.get()");
+  const readiness = guard.indexOf("Files.createFile(ready,");
+  assert.ok(pluginValidation >= 0 && configuration > pluginValidation);
+  assert.ok(readiness > configuration);
+  const language = guard.slice(configuration, guard.indexOf("def state ="));
+  assert.match(guard, /import hudson\.plugins\.locale\.PluginImpl/);
+  assert.match(language, /locale\.setSystemLocale\('zh_CN'\)/);
+  assert.match(language, /locale\.setIgnoreAcceptLanguage\(true\)/);
+  assert.match(language, /locale\.setAllowUserPreferences\(false\)/);
+  assert.match(language, /locale\.save\(\)/);
+  assert.match(language, /locale\.getSystemLocale\(\) != 'zh_CN'/);
+  assert.match(language, /!locale\.isIgnoreAcceptLanguage\(\)/);
+  assert.match(language, /locale\.isAllowUserPreferences\(\)/);
+  assert.match(
+    language,
+    /Locale\.getDefault\(\)\.toLanguageTag\(\) != 'zh-CN'/,
+  );
+  assert.match(language, /throw new IllegalStateException/);
+  const ready = guard.slice(readiness);
+  assert.match(ready, /locale: locale\.getSystemLocale\(\)/);
+  assert.match(
+    ready,
+    /ignoreAcceptLanguage: locale\.isIgnoreAcceptLanguage\(\)/,
+  );
+  assert.match(
+    ready,
+    /allowUserPreferences: locale\.isAllowUserPreferences\(\)/,
+  );
+});
+
 test("generic CI keeps only its three independent data volumes and file-based agent credential", async () => {
   const ci = await config("compose.ci.json");
   validateCiCompose(ci);
