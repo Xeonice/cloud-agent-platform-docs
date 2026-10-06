@@ -12,7 +12,6 @@ import {
   validateCiCompose,
   validateCiMounts,
   validateDockerHost,
-  validateMigrationManifest,
   resolveControllerMode,
   resolveControllerUrl,
   CONTROLLER_HOST,
@@ -20,7 +19,7 @@ import {
 } from "./controller.mjs";
 import { validatePluginLock, downloadPlugins } from "./plugins.mjs";
 import { assertPrivateEquality, renderPipeline } from "./verify-controller.mjs";
-import { activationScript } from "../jenkins/manage.mjs";
+import { activationScript, runManagement } from "../jenkins/manage.mjs";
 
 const source = dirname(fileURLToPath(import.meta.url));
 const config = async (name) =>
@@ -31,64 +30,6 @@ async function temporary(t) {
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   return dir;
 }
-function manifest() {
-  return {
-    version: 1,
-    archive: {
-      basename: "jenkins-home.tar",
-      sha256: "a".repeat(64),
-      sizeBytes: 8192,
-    },
-    entries: [
-      { path: ".", type: "directory", mode: 0o700 },
-      { path: "./config.xml", type: "file", mode: 0o600, sizeBytes: 20 },
-      {
-        path: "./secrets/master.key",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 256,
-      },
-      {
-        path: "./secrets/hudson.util.Secret",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 256,
-      },
-      {
-        path: "./users/admin/config.xml",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 42,
-      },
-      {
-        path: "./jobs/api/builds/1/build.xml",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 512,
-      },
-      {
-        path: "./jobs/api/builds/lastSuccessfulBuild",
-        type: "symlink",
-        mode: 0o777,
-        linkTarget: "1",
-      },
-      {
-        path: "./init.groovy.d/10-agent-platform.groovy",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 100,
-      },
-      {
-        path: "./plugins/workflow-api.jpi",
-        type: "file",
-        mode: 0o600,
-        sizeBytes: 256,
-      },
-      { path: "./queue.xml", type: "file", mode: 0o600, sizeBytes: 64 },
-    ],
-  };
-}
-
 test("controller lab, migrated controller and CI configurations retain separate volumes and profiles", async () => {
   const result = await checkConfiguration();
   assert.equal(result.status, "configuration-verified");
@@ -619,13 +560,34 @@ test("managed activation checks active mode before state mutation and only clear
   );
   assert.ok(script.includes("computer.getChannel() != null"));
   assert.ok(script.includes("nodesWaitingForConnection:waiting"));
-  for (const name of ["mac-ci", "mac-deploy", "linux-ci", "linux-web-amd64"])
+  for (const name of ["linux-deploy", "linux-ci", "linux-web-amd64"])
     assert.ok(script.includes(`name:'${name}'`));
+  assert.doesNotMatch(script, /mac-ci|mac-deploy/);
   assert.throws(
     () => renderPipeline("@UNKNOWN_PRIVATE_TEMPLATE@"),
     /Unknown fixed/,
   );
   assert.equal(renderPipeline("/usr/local/bin/node"), "/usr/local/bin/node");
+});
+
+test("bootstrap manages only the three current Linux agents and the retired native Home copy action is rejected before credential lookup", async () => {
+  const bootstrap = await fs.readFile(
+    join(source, "../jenkins/bootstrap.groovy"),
+    "utf8",
+  );
+  const agents = bootstrap.slice(
+    bootstrap.indexOf("JenkinsLocationConfiguration.get().setUrl(location)"),
+    bootstrap.indexOf("[name: 'agent-platform-api'"),
+  );
+  assert.deepEqual(
+    [...agents.matchAll(/name: '([^']+)'/g)].map((match) => match[1]),
+    ["linux-deploy", "linux-ci", "linux-web-amd64"],
+  );
+  assert.doesNotMatch(agents, /\/Users\/|deployAgentRoot/);
+  await assert.rejects(
+    runManagement(["copy-bootstrap-credentials"]),
+    /Use status\|sync-pipelines/,
+  );
 });
 
 test("default Docker context and cross-profile daemon use are refused", () => {
@@ -728,55 +690,6 @@ test("plugin installer refuses lock drift, duplicate plugins, URL injection and 
     await fs.readFile(join(dir, "existing.jpi"), "utf8"),
     "untouched",
   );
-});
-
-test("migration plan preserves encryption and build history while excluding executable native bootstrap and queued builds", () => {
-  const result = validateMigrationManifest(manifest());
-  assert.equal(result.status, "prepared-not-imported");
-  assert.equal(result.retainedEntries, 6);
-  assert.equal(result.jobsRequireDisabledBeforeStartup, true);
-  assert.equal(result.activationRequiresExplicitReview, true);
-  assert.ok(result.excluded.includes("init.groovy.d"));
-  assert.ok(result.excluded.includes("plugins"));
-  assert.ok(result.excluded.includes("queue.xml"));
-  assert.ok(!result.excluded.includes("jobs"));
-  assert.ok(!result.excluded.includes("secrets"));
-});
-
-test("Home plan rejects traversal, external links, duplicate archive paths, hardlinks and missing keys", () => {
-  for (const entry of [
-    { path: "../outside", type: "file", sizeBytes: 1 },
-    { path: "/absolute", type: "file", sizeBytes: 1 },
-    { path: "foo/../secret.key", type: "file", sizeBytes: 1 },
-    { path: "link", type: "symlink", linkTarget: "/Users/Shared" },
-    { path: "link", type: "symlink", linkTarget: "../outside" },
-    { path: "config.xml", type: "file", sizeBytes: 1 },
-    { path: "link", type: "hardlink", linkTarget: "config.xml" },
-    { path: "fifo", type: "fifo" },
-  ]) {
-    const changed = manifest();
-    changed.entries.push(entry);
-    assert.throws(() => validateMigrationManifest(changed));
-  }
-  const missing = manifest();
-  missing.entries = missing.entries.filter(
-    (entry) => !entry.path.includes("master.key"),
-  );
-  assert.throws(() => validateMigrationManifest(missing), /encryption keys/);
-});
-
-test("Home export can omit an unused lazily generated hudson.util.Secret without inventing a key", () => {
-  const original = manifest();
-  original.entries = original.entries.filter(
-    (entry) => !entry.path.includes("hudson.util.Secret"),
-  );
-  const before = structuredClone(original);
-  const result = validateMigrationManifest(original);
-  assert.deepEqual(result.encryptionKeys, {
-    masterKeyPresent: true,
-    hudsonUtilSecretPresent: false,
-  });
-  assert.deepEqual(original, before);
 });
 
 test("container entrypoint clears stale readiness before attempting Jenkins startup", async (t) => {

@@ -13,4 +13,4 @@ Runner 启动独立端口 3110/3210、生产 Next.js 构建、完整编译后 Ne
 
 目前实际场景覆盖浏览器空项目创建、任务发起与终端、停止、同一任务重启、镜像快照保持和销毁后移除。全局入口拒绝 request/WS/HAR interception。外部沙箱/OCI 元数据使用受控夹具，终端使用实际 Node 子进程字节流，模型连接目标为本机 TCP；不声称真实 Docker/BoxLite、厂商帐号授权或 native PTY 验收。
 
-实际 Playwright expect 事件、distinct 断言源码位置、场景结果与 SHA-256 保存到主仓 `artifacts/migration-audit/cross-execution-report.json`。失败追踪保留在 `test-results/`；Playwright 原始 JSON 在 `artifacts/acceptance-results.json`。计划 AC 数量不能替代实际场景与断言数量。
+实际 Playwright expect 事件、distinct 断言源码位置、场景结果与 SHA-256 保存到 `artifacts/execution-report.json`。失败追踪保留在 `test-results/`；Playwright 原始 JSON 在 `artifacts/acceptance-results.json`。这些文件由每次验收生成，并由 Jenkins 构建归档，不纳入源代码版本库。计划 AC 数量不能替代实际场景与断言数量。

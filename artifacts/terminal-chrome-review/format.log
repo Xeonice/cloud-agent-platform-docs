@@ -1,9 +1,0 @@
-src/containers/sandbox/SandboxLifecycleContainer.tsx 33ms (unchanged)
-src/containers/sandbox/SandboxTerminalContainer.tsx 34ms (unchanged)
-src/containers/terminal/TerminalTabsContainer.tsx 10ms (unchanged)
-src/containers/terminal/TerminalContainer.tsx 2ms (unchanged)
-src/containers/terminal/TerminalMount.tsx 9ms (unchanged)
-src/views/terminal/TerminalTabBar.view.tsx 4ms
-src/views/terminal/TerminalToolbar.view.tsx 2ms
-src/components/ui/terminal-frame.tsx 2ms (unchanged)
-src/acceptance/task-terminal-chrome.test.tsx 5ms (unchanged)

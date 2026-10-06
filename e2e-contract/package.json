@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Design-v2 real browser to Nest and fresh SQLite acceptance",
+  "description": "Real browser to Nest and fresh SQLite acceptance",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=22"

@@ -9,7 +9,7 @@
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
 > 目录已按归属切分，对应未来拆仓去向：`backend/` 整体归后端仓库，`frontend/` 整体归前端仓库，`shared/` 与 `00` 双仓各持一份（或放独立契约仓）。
 
-本轮产品行为与视觉以 [2026-10 新版设计](./design-v2/README.md) 为准；[领域规格索引](./design-v2/gap/product/README.md) 保留完整 REQ/AC，原逐页文档的旧结论由该版本替代。当前代码与实际验证见[主仓状态](../IMPLEMENTATION-STATUS.md)。
+当前产品行为见 [领域需求索引](./product/requirements/README.md)，REQ/AC 保持稳定编号；适用范围见 [产品裁决](./product/requirements/decisions.md)。当前实现和执行入口见 [主仓状态](../IMPLEMENTATION-STATUS.md)。
 
 Mac mini 后端的构建、发布和服务管理见 [Mac mini 部署](./macmini-deployment.md)。
 
@@ -18,13 +18,13 @@ Mac mini 后端的构建、发布和服务管理见 [Mac mini 部署](./macmini-
 ```
 docs/
 ├── README.md                # 本索引
-├── design-v2/               # 2026-10完整领域规格、172稿＋共享组件与资产
 ├── AUDIT-DECISIONS.md       # 架构审计裁决存档（P0/P1/P2 处置，权威）
 ├── SANDBOX-RUNTIME-DECISIONS.md  # 沙箱运行时架构决策（S1 定基线 ADR：控制面/数据面分离 + provider 选型）
 ├── TASK-LAUNCH-DECISIONS.md # Task 发起链路裁决存档（S5 开工前 6 条：initialPrompt 落库 / 启动即执行 / install 编排 / 无头范围 / 占位 auth.json / $HOME 展开）
 ├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
+│   ├── requirements/        #   当前 11 域 REQ/AC 与产品裁决
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
 │   ├── 20-核心使用链路.md     #   主链路 + §8 页面跳转总图（跨页面导航唯一权威）
 │   ├── 21-页面信息架构与交互.md  # 页面层总览 + 逐页索引

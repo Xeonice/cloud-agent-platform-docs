@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { dirname, join, resolve, posix } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { validatePluginLock } from "./plugins.mjs";
 
@@ -13,18 +13,6 @@ const LOCAL_CONTROLLER_URL = "http://127.0.0.1:8080/";
 const LAB_CONTROLLER_URL = "http://127.0.0.1:18080/";
 const CONTROLLER_URL_EXPRESSION =
   "${AGENT_PLATFORM_JENKINS_URL:-http://127.0.0.1:8080/}";
-export const MIGRATION_EXCLUSIONS = [
-  "plugins",
-  "init.groovy",
-  "init.groovy.d",
-  "workspace",
-  "caches",
-  "logs",
-  "container-state",
-  "queue.xml",
-  "queue.xml.bak",
-];
-
 function requirePolicy(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -393,95 +381,6 @@ export function validateDockerHost(kind, host) {
   return host;
 }
 
-export function validateMigrationManifest(manifest) {
-  requirePolicy(
-    manifest?.version === 1 &&
-      manifest.archive?.basename === "jenkins-home.tar" &&
-      /^[a-f0-9]{64}$/.test(manifest.archive.sha256 ?? "") &&
-      Number.isSafeInteger(manifest.archive.sizeBytes) &&
-      manifest.archive.sizeBytes > 0 &&
-      Array.isArray(manifest.entries),
-    "A reviewed private Jenkins Home export manifest is required",
-  );
-  const paths = new Set();
-  const normalized = [];
-  for (const entry of manifest.entries) {
-    const rawPath = entry.path;
-    requirePolicy(
-      typeof rawPath === "string" &&
-        rawPath.length > 0 &&
-        !rawPath.startsWith("/") &&
-        !rawPath.includes("\\") &&
-        !rawPath.split("/").includes(".."),
-      "Unsafe Home archive path",
-    );
-    const path = rawPath.replace(/^\.\//, "").replace(/\/$/, "");
-    if (path === "." && entry.type === "directory") continue;
-    requirePolicy(
-      path.length > 0 && posix.normalize(path) === path && !paths.has(path),
-      "Unsafe or duplicate Home archive path",
-    );
-    requirePolicy(
-      ["file", "directory", "symlink"].includes(entry.type),
-      "Unsupported Home archive entry",
-    );
-    if (entry.type === "file")
-      requirePolicy(
-        Number.isSafeInteger(entry.sizeBytes) && entry.sizeBytes >= 0,
-        "Home file size metadata is required",
-      );
-    if (entry.type === "symlink") {
-      requirePolicy(
-        typeof entry.linkTarget === "string" &&
-          !entry.linkTarget.startsWith("/") &&
-          !entry.linkTarget.includes("\\"),
-        "External Home symlink is refused",
-      );
-      const target = posix.normalize(
-        posix.join(posix.dirname(path), entry.linkTarget),
-      );
-      requirePolicy(
-        target !== ".." && !target.startsWith("../"),
-        "Home symlink escapes the archive",
-      );
-    }
-    paths.add(path);
-    normalized.push({ ...entry, path });
-  }
-  for (const required of ["config.xml", "secrets/master.key"])
-    requirePolicy(
-      normalized.some(
-        (entry) => entry.path === required && entry.type === "file",
-      ),
-      "Export must preserve configuration and encryption keys",
-    );
-  const retained = normalized.filter(
-    (entry) =>
-      !MIGRATION_EXCLUSIONS.some(
-        (path) => entry.path === path || entry.path.startsWith(`${path}/`),
-      ),
-  );
-  return {
-    status: "prepared-not-imported",
-    archiveSha256: manifest.archive.sha256,
-    entries: manifest.entries.length,
-    retainedEntries: retained.length,
-    excluded: MIGRATION_EXCLUSIONS,
-    jobsRequireDisabledBeforeStartup: true,
-    controllerMode: "migration",
-    targetHomeVolume: "agent-platform-jenkins-home",
-    requiredImage: "jenkins/jenkins:2.580.1-jdk21",
-    activationRequiresExplicitReview: true,
-    encryptionKeys: {
-      masterKeyPresent: true,
-      hudsonUtilSecretPresent: normalized.some(
-        (entry) =>
-          entry.path === "secrets/hudson.util.Secret" && entry.type === "file",
-      ),
-    },
-  };
-}
-
 export async function checkConfiguration() {
   const lab = JSON.parse(
     await fs.readFile(join(source, "compose.lab.json"), "utf8"),
@@ -522,14 +421,8 @@ if (
   const [, , command, file] = process.argv;
   if (command === "check" && !file)
     console.log(JSON.stringify(await checkConfiguration()));
-  else if (command === "migration-plan" && file && process.argv.length === 4)
-    console.log(
-      JSON.stringify(
-        validateMigrationManifest(JSON.parse(await fs.readFile(file, "utf8"))),
-      ),
-    );
   else
     throw new Error(
-      "Usage: controller.mjs check | migration-plan <private-export-manifest.json>; this tool does not start or stop services",
+      "Usage: controller.mjs check; this tool does not start or stop services",
     );
 }

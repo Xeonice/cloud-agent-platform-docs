@@ -175,11 +175,7 @@ export async function projectCI(phase, rootSha, apiSha, webSha, options = {}) {
   }
   if (phase === "deployment-tests") {
     const tests = [];
-    for (const directory of [
-      "deploy/macmini",
-      "deploy/jenkins",
-      "deploy/containers",
-    ]) {
+    for (const directory of ["deploy/jenkins", "deploy/containers"]) {
       const files = await fs
         .readdir(join(source, directory), { withFileTypes: true })
         .catch((error) => {

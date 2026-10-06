@@ -62,7 +62,7 @@ pipeline {
       }
       post {
         always {
-          archiveArtifacts artifacts: 'commits.json,source/e2e-contract/artifacts/acceptance-results.json,source/artifacts/migration-audit/cross-execution-report.json,source/e2e-contract/test-results/**', allowEmptyArchive: true, followSymlinks: false
+          archiveArtifacts artifacts: 'commits.json,source/e2e-contract/artifacts/acceptance-results.json,source/e2e-contract/artifacts/execution-report.json,source/e2e-contract/test-results/**', allowEmptyArchive: true, followSymlinks: false
         }
       }
     }

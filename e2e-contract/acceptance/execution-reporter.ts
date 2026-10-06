@@ -130,7 +130,7 @@ export default class ExecutionReporter implements Reporter {
     };
     const output = resolve(
       root,
-      "artifacts/migration-audit/cross-execution-report.json",
+      "e2e-contract/artifacts/execution-report.json",
     );
     await mkdir(dirname(output), { recursive: true });
     await writeFile(output, JSON.stringify(report, null, 2) + "\n");

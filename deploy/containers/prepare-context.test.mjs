@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import { contextInputs, prepareContext } from "./prepare-context.mjs";
+import { prepareDeployContext } from "./prepare-deploy-context.mjs";
 
 async function fixture(component, callback) {
   const temporary = await fs.mkdtemp(join(tmpdir(), "container-context-test-"));
@@ -96,4 +98,66 @@ test("component names cannot select arbitrary repository files", () => {
     undefined,
   ])
     assert.throws(() => contextInputs(value), /controller or ci/);
+});
+
+test("the current trusted deploy context builds without retired Mac sources and contains every relative tool dependency", async (t) => {
+  const temporary = await fs.mkdtemp(join(tmpdir(), "current-deploy-context-"));
+  t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+  const { context, manifest } = await prepareDeployContext(root, temporary);
+  await assert.rejects(fs.stat(join(context, "macmini")), { code: "ENOENT" });
+  for (const name of [".env", "private", "api", "web"])
+    await assert.rejects(fs.stat(join(context, name)), { code: "ENOENT" });
+  assert.equal(
+    manifest.files.some(({ source }) => source.includes("/macmini/")),
+    false,
+  );
+  const dockerfile = await fs.readFile(
+    join(context, "deploy.Dockerfile"),
+    "utf8",
+  );
+  const copied = [...dockerfile.matchAll(/^COPY ([\w-]+)\/ /gm)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(copied, ["tools", "container-tools"]);
+  for (const directory of copied)
+    assert.equal((await fs.stat(join(context, directory))).isDirectory(), true);
+  const tools = manifest.files.filter(({ target }) =>
+    target.startsWith("tools/"),
+  );
+  assert.ok(tools.length > 0);
+  for (const { target } of tools) {
+    const contents = await fs.readFile(join(context, target), "utf8");
+    for (const match of contents.matchAll(/\bfrom\s+["'](\.[^"']+)["']/g))
+      assert.equal(
+        (await fs.stat(resolve(context, dirname(target), match[1]))).isFile(),
+        true,
+        `Missing public dependency of ${target}`,
+      );
+  }
+});
+
+test("a linked trusted tool directory is refused before a deploy build context is created", async (t) => {
+  const temporary = await fs.mkdtemp(join(tmpdir(), "current-deploy-symlink-"));
+  t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+  const source = join(temporary, "source");
+  await fs.mkdir(join(source, "deploy/containers"), { recursive: true });
+  await fs.writeFile(
+    join(source, "deploy/containers/deploy.Dockerfile"),
+    "public fixture",
+  );
+  const outside = join(temporary, "outside");
+  await fs.mkdir(outside);
+  await fs.writeFile(
+    join(outside, "tool.mjs"),
+    "export const publicTool = true;",
+  );
+  await fs.symlink(outside, join(source, "deploy/jenkins"));
+  await assert.rejects(prepareDeployContext(source, temporary), /symlink/);
+  assert.equal(
+    (await fs.readdir(temporary)).some((name) =>
+      name.startsWith("agent-platform-deploy-context-"),
+    ),
+    false,
+  );
 });

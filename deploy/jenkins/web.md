@@ -68,7 +68,7 @@ native modules; the API image's real VM smoke remains distinct evidence.
 Its actual final `SUCCESS` is required for the whole Web job to succeed.
 
 The archived `web-cross-repository/contract.json` records the Web build number,
-three commits, contract child build number, result, fixed local build URL and
+three commits, contract child build number, result, approved public or local build URL and
 exact requested parameters. It records failures and `not-run` explicitly; local
 unit/Storybook success cannot substitute for this child. The artifact manifest is
 created before this final gate, so consumers must still verify the enclosing
@@ -87,10 +87,9 @@ builds. API packages bind both `ROOT_SHA` and `API_SHA`, using immutable release
 folders named `<ROOT_SHA>-<API_SHA>`. Docker-save validation checks the OCI index
 digest separately from its Linux ARM64 config digest.
 
-The old Web GitHub Actions workflow contained four local jobs and delegated the
-real journey to the umbrella `contract-e2e` workflow. The old main branch check
-configuration also named a Playwright check. Jenkins therefore includes this real
-journey in the Web job's overall result rather than reducing the required scope.
+The `jenkins/web-ci` required status is bound to the dedicated Jenkins GitHub App.
+It includes the real cross repository journey in the Web job's overall result;
+local frontend gates alone cannot produce a successful aggregate status.
 
 After changing this template, synchronize the managed pipelines and refresh the
 bootstrap definitions. Validate the actual Declarative Pipeline with the local

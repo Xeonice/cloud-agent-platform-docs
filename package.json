@@ -9,10 +9,7 @@
     "node": ">=20.11.0"
   },
   "scripts": {
-    "deploy:macmini:test": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs",
-    "docs:check": "node scripts/docs-check.mjs",
-    "migration:check": "node scripts/check-design-migration.mjs",
-    "migration:report": "node scripts/summarize-design-migration.mjs",
-    "migration:check:complete": "node scripts/check-design-migration.mjs --require-complete"
+    "deploy:test": "node --test deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs",
+    "docs:check": "node scripts/docs-check.mjs"
   }
 }

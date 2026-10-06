@@ -1,9 +1,9 @@
-# Jenkins CI migration
+# Jenkins CI
 
-Project checks and deployment are managed by the Mac mini Jenkins pipelines in `deploy/jenkins`.
+项目检查、构建、打包与发布由 Mac mini 上的 Jenkins 管理，流水线位于 `deploy/jenkins`。
 
-The former workflows are preserved unchanged as `docs-check.yml.disabled` and `contract-e2e.yml.disabled`. GitHub Actions does not execute these archive files. The Jenkins contract job performs the documentation and real browser/Nest/SQLite checks, including the daily main check at 03:00 Asia/Shanghai. Jenkins discovery handles branch and pull request changes; the umbrella release job builds, packages and uploads the three-repository release locally.
+Jenkins discovery 跟踪分支和 pull request；contract job 运行文档和真实浏览器/Nest/SQLite 验收，并在每天 03:00 Asia/Shanghai 检查 main。release job 在本机完成三仓构建、打包和上传。GitHub 检查状态由专属 Jenkins GitHub App 回写。
 
-The existing main branch protection currently pins its required check to the GitHub Actions app. Its source must be migrated to the dedicated Jenkins GitHub App after that app's real status results are verified; archiving a workflow does not update this protection rule.
+此目录不包含可执行的 GitHub Actions 工作流。
 
-See [Mac mini maintenance](../../docs/macmini-deployment.md) for setup state, service ownership, artifacts, logs and recovery.
+当前服务、构建产物、日志和恢复入口见 [Mac mini 维护文档](../../docs/macmini-deployment.md)。

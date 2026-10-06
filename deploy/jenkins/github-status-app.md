@@ -1,6 +1,6 @@
 # Jenkins 的 GitHub App 状态来源
 
-此流程只准备新的状态来源。当前 main 的必需检查全部指定 GitHub Actions 的 App ID `15368`；新的 Jenkins App 即使发送同名状态也不能满足旧来源限制。配置脚本不会修改分支保护，不会提交、合并或发布代码。
+当前三个仓库 main 的必需检查使用专属 Jenkins App `5204009`。发现器根据真实 Jenkins 构建结果发布提交状态；下文保留 App 配置和权限核对流程。配置脚本不会修改分支保护，不会提交、合并或发布代码。
 
 ## 1. 注册和安装
 
@@ -51,19 +51,19 @@ node deploy/jenkins/setup-github-app.mjs verify
 
 首次状态发布会验证 App 和 installation，使用 RSA 至少 2048 位的 RS256 JWT 申请受限 token，再核对有效仓库集合。JWT 使用 60 秒时钟偏移，约 9 分钟有效；安装 token 到期前 60 秒刷新。token 和 JWT 不写磁盘、不进入日志或构建产物。[JWT 规则](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-json-web-token-jwt-for-a-github-app)、[受限安装 token](https://docs.github.com/en/rest/apps/apps#create-an-installation-access-token-for-an-app)。
 
-无 App 配置或尚未验证 installation 时，保留 OAuth 状态发布，明确输出 `githubStatusSource.kind: oauth` 和原因。存在配置但身份、权限或文件安全校验失败时不会静默回退；状态保留在私有 outbox。`githubStatusSource.verified` 表示该进程实际验证过当前 App 授权，不表示旧 Actions 来源保护已迁移。
+无 App 配置或尚未验证 installation 时，保留 OAuth 状态发布，明确输出 `githubStatusSource.kind: oauth` 和原因；OAuth 来源不能满足绑定 App 的 main 必需检查。存在配置但身份、权限或文件安全校验失败时不会静默回退；状态保留在私有 outbox。`githubStatusSource.verified` 表示该进程实际验证过当前 App 授权，不替代 GitHub 保护规则的独立核对。
 
-## 3. 人工迁移保护规则
+## 3. 当前保护规则
 
-先让实际 Jenkins 构建以这个 App 在 PR commit 上发布 pending、success、failure，确认真实来源属于新 App，再审阅修改 required checks 的名称和 `app_id`：
+必需状态检查绑定以下名称和固定 App ID `5204009`：
 
-| 仓库 | 当前 Actions 检查                                                       | 新检查               |
-| ---- | ----------------------------------------------------------------------- | -------------------- |
-| API  | `build-test`                                                            | `jenkins/native-ci`  |
-| Web  | 静态检查、单元验收、Storybook 验收、真实跨仓浏览器验收、Next build 五项 | `jenkins/web-ci`     |
-| 主仓 | `文档一致性门禁`                                                        | `jenkins/project-ci` |
+| 仓库 | 必需状态检查         |
+| ---- | -------------------- |
+| API  | `jenkins/native-ci`  |
+| Web  | `jenkins/web-ci`     |
+| 主仓 | `jenkins/project-ci` |
 
-单一状态只有完整 Jenkins job 最终 SUCCESS 才发送；某个中间 gate 的通过不能代替整个 job。所有新必需检查固定来源为**新 App ID**，保留其他保护。不要设为任意 App、`app_id: -1`，也不要删除 required checks 来解除阻挡。[保护规则来源限制](https://docs.github.com/en/rest/branches/branch-protection#update-status-check-protection)。此步骤由用户和 root 执行；本机工具没有 Administration write 权限。
+success 状态只有完整 Jenkins job 最终 SUCCESS 才发送；某个中间 gate 的通过不能代替整个 job。状态绑定真实构建验证过的 SHA 与 REF，Web 和主仓同时核对三仓提交。更换 App 时，应先核验真实状态来源，再由管理员审阅规则变更，保留 strict、reviews 与其他保护；不要设为任意 App、`app_id: -1`，也不要删除 required checks 来解除阻挡。[保护规则来源限制](https://docs.github.com/en/rest/branches/branch-protection#update-status-check-protection)。本机工具没有 Administration write 权限。
 
 ## 4. 本机验收
 

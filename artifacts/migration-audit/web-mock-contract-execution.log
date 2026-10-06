@@ -1,5 +1,0 @@
-
-> agent-platform-web@0.1.0 check:mock-contracts /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
-> tsx scripts/check-mock-contract-anchoring.ts
-
-✅ 替身契约锚定检查通过：60 处响应体全部锚定（豁免 0 处）。

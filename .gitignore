@@ -1,44 +1,11 @@
-# Playwright / 浏览器自测产物
+# 本地浏览器、截图与验收产物
 .playwright-mcp/
-
-# 原型自测过程中的截图
 *.png
-
-# 最终迁移manifest引用的截图是完成门禁的输入；仅保留最终证据目录。
-!artifacts/design-credentials-v2/*.png
-!artifacts/design-image-system-v2/final-latest/*.png
-!artifacts/design-image-system-v2/provider-failure-final/*.png
-!artifacts/design-image-system-v2/runner-manifest-check/*.png
-!artifacts/design-image-system-v2/sys-final/*.png
-!artifacts/design-shell-project-v2-delete-focus-final-24/*.png
-!artifacts/design-shell-project-v2-final-destroy-mobile-dark390/*.png
-!artifacts/design-shell-project-v2-final-destroy-mobile-light390/*.png
-!artifacts/design-shell-project-v2-final-mobile-dark390/*.png
-!artifacts/design-shell-project-v2-final-mobile-light390/*.png
-!artifacts/design-shell-project-v2-v3-dark1024/*.png
-!artifacts/design-shell-project-v2-v3-dark1440/*.png
-!artifacts/design-shell-project-v2-v3-dark390/*.png
-!artifacts/design-shell-project-v2-v3-light1024/*.png
-!artifacts/design-shell-project-v2-v3-light1440/*.png
-!artifacts/design-shell-project-v2-v3-light390/*.png
-
-# Storybook 细节复核：真实原图、对照/叠加图和本轮生产状态证据。
-# initial 文件在各自报告中标为 debug-only，不计入最终验收。
-!artifacts/storybook-project-detail-review/*.png
-!artifacts/terminal-chrome-review/*.png
-!artifacts/design-ui-detail-refinement/*.png
-
-# 系统/编辑器
-.DS_Store
-
-# Node（主仓只有零依赖的 docs:check 脚本，正常不会有 node_modules）
-node_modules/
-
-# 跨仓运行时契约 e2e（e2e-contract/，29 §3.1.1）的跑测产物。
-# ⚠️ `node_modules/` 已被上面那条覆盖，但 playwright 的两个产物目录没有 ——
-# 实测 `git add e2e-contract/` 会把 `test-results/` 里的 `.last-run.json` 与失败快照
-# 一起带进版本库（CI 上还会多一个 `playwright-report/`，因为那边挂了 html reporter）。
+artifacts/
 e2e-contract/test-results/
 e2e-contract/playwright-report/
-
 e2e-contract/artifacts/
+
+# 系统、编辑器与 Node 依赖
+.DS_Store
+node_modules/

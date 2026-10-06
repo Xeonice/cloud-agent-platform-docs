@@ -1,6 +1,0 @@
-# Imported reference demo is byte-preserved and SHA-verified; its original blank
-# lines contain spaces. Do not normalize the source merely for diff whitespace.
-docs/design-v2/gap/drafts/f-shared-components.html whitespace=-blank-at-eol
-
-# Preserve verbatim execution logs, including terminal whitespace.
-artifacts/*.log -whitespace

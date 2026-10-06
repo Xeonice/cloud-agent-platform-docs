@@ -95,12 +95,16 @@ test("Web releases their CI executor before contract waits, and contract runs de
   assert.doesNotMatch(contract, /label 'agent-platform-ci'/);
   assert.match(contract, /deployment-tests/);
   assert.match(contract, /label 'agent-platform-linux-ci'/);
-  assert.ok(
-    contract.indexOf("Complete native deployment regression") <
-      contract.indexOf(
-        "Linux docs and real cross repository browser acceptance",
-      ),
+  const regression = contract.indexOf("stage('Linux deployment regression')");
+  const acceptance = contract.indexOf(
+    "stage('Linux docs and real cross repository browser acceptance')",
   );
+  assert.ok(regression >= 0 && acceptance > regression);
+  assert.match(
+    contract,
+    /source\/e2e-contract\/artifacts\/execution-report\.json/,
+  );
+  assert.doesNotMatch(contract, /artifacts\/migration-audit/);
   assert.match(
     contract,
     /deployment-tests "\$ROOT_SHA" "\$API_SHA" "\$WEB_SHA"/,

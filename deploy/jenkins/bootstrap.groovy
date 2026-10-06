@@ -41,7 +41,7 @@ if (!Files.exists(secretDir.resolve('admin-api.json'))) {
     auth.setAllowAnonymousRead(false)
     j.setAuthorizationStrategy(auth)
     j.setCrumbIssuer(new DefaultCrumbIssuer(true))
-    def token = user.getProperty(ApiTokenProperty.class).tokenStore.generateNewToken('macmini-bootstrap')
+    def token = user.getProperty(ApiTokenProperty.class).tokenStore.generateNewToken('container-bootstrap')
     user.save()
     writeSecret(secretDir.resolve('admin-api.json'), groovy.json.JsonOutput.toJson([username: credential.username, token: token.plainValue]))
 }
@@ -49,8 +49,6 @@ j.setNumExecutors(0)
 j.setSlaveAgentPort(-1)
 JenkinsLocationConfiguration.get().setUrl(location)
 [
-    [name: 'mac-deploy', label: 'agent-platform-deploy', remote: settings.deployAgentRoot],
-    [name: 'mac-ci', label: 'agent-platform-ci', remote: '/Users/Shared/agent-platform-ci/agent'],
     [name: 'linux-deploy', label: 'agent-platform-linux-deploy', remote: '/home/jenkins/agent'],
     [name: 'linux-ci', label: 'agent-platform-linux-ci', remote: '/home/jenkins/agent'],
     [name: 'linux-web-amd64', label: 'agent-platform-web-build', remote: '/home/jenkins/agent']

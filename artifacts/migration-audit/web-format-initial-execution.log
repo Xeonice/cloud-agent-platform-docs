@@ -1,9 +1,0 @@
-
-> agent-platform-web@0.1.0 format:check /Users/douglasdong/orca/workspaces/cloud-agent-platform-docs/初始化一下项目开发/web
-> prettier --check "**/*.{ts,tsx,js,mjs,json,md,css}"
-
-Checking formatting...
-[warn] scripts/design-image-system.fixtures.mjs
-[warn] src/hooks/_shared/useDeepLinkModal.ts
-[warn] Code style issues found in 2 files. Run Prettier with --write to fix.
- ELIFECYCLE  Command failed with exit code 1.

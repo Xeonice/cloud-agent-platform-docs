@@ -4,10 +4,10 @@ Mac mini 负责三个仓库的发现、测试、构建、打包和上传。前�
 
 ## 运行结构
 
-| 专属 Colima profile | Docker 服务 | 职责 |
-| --- | --- | --- |
-| `agent-platform-jenkins` | Jenkins controller | 持久 Home、73 个锁定插件、零内置 executor、本机 `8080` 管理入口 |
-| `agent-platform-build` | Linux ARM64 CI、Linux AMD64 Web CI | 无生产凭据和 Docker socket；AMD64 使用 Rosetta；执行后端、文档、跨仓浏览器和前端门禁 |
+| 专属 Colima profile      | Docker 服务                                                | 职责                                                                                        |
+| ------------------------ | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `agent-platform-jenkins` | Jenkins controller                                         | 持久 Home、73 个锁定插件、零内置 executor、本机 `8080` 管理入口                             |
+| `agent-platform-build`   | Linux ARM64 CI、Linux AMD64 Web CI                         | 无生产凭据和 Docker socket；AMD64 使用 Rosetta；执行后端、文档、跨仓浏览器和前端门禁        |
 | `agent-platform-runtime` | API/BoxLite、cloudflared、CoreDNS、可信 Linux deploy agent | VZ ARM64 nested virtualization，6 CPU/16 GiB；独立生产数据、私有发布凭据、Docker 管理与发布 |
 
 三个 profile 都不挂载 Mac 用户目录、不转发 SSH agent，也不改变用户默认 Docker context。API 内嵌 BoxLite SDK `0.9.7`，任务继续运行在微虚拟机里。API 容器不挂载 Docker socket；可信 deploy agent 可以管理这一个专属 runtime daemon。普通 CI 的 daemon、卷和凭据与它分离。
@@ -22,7 +22,7 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 [Dockerfile.api](../deploy/containers/Dockerfile.api) 在 glibc 2.28 的 Rocky Linux 8 中编译 SQLite，使用 Node `22.23.3`。官方 BoxLite ARM64 companion runtime 的固件需要显式声明 `libc.so.6`；构建严格核对下载和修补前后 SHA256，并设置 `BOXLITE_RUNTIME_DIR`，避免 SDK 覆盖该运行时。证书路径按 BoxLite 的绑定规则处理。
 
-已独立实际验证：KVM、两个 VM、PTY、共享文件、SDK 停止恢复、Docker 容器重建后的磁盘恢复。完整 API 验收还覆盖默认 BoxLite 任务启动、真实终端 WebSocket、独立 guest kernel、持久磁盘、配额不足时的 429 与零额外记录、任务与项目清理。证据：[基础兼容](../artifacts/boxlite-docker-compatibility-verification.json)、[完整 API](../artifacts/api-boxlite-container-acceptance.json)。
+已独立实际验证：KVM、两个 VM、PTY、共享文件、SDK 停止恢复、Docker 容器重建后的磁盘恢复。完整 API 验收还覆盖默认 BoxLite 任务启动、真实终端 WebSocket、独立 guest kernel、持久磁盘、配额不足时的 429 与零额外记录、任务与项目清理。可重跑的独立验证入口为 [BoxLite smoke](../deploy/containers/boxlite-proof/README.md) 与 [API smoke](../deploy/containers/api-smoke.mjs)；后者只允许使用隔离容器的 `3191` 端口和新数据卷。
 
 当前实际通过的 BoxLite 容器策略为 `privileged` 加 `/dev/kvm`。降低权限的第一种尝试被 bwrap 的 proc mount 拒绝，尚未证明最小权限配置。因此生产 runtime 使用独立 VM，并保持无 Mac mount；不能把这次验收描述为最小权限审计。[BoxLite Docker 说明](https://github.com/boxlite-ai/boxlite/blob/main/docs/guides/deployment-patterns.md#docker-container-deployment)、[Colima nested virtualization](https://colima.run/docs/configuration/#nested-virtualization)。
 
@@ -30,17 +30,17 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 所有活动作业使用 Linux agent。管理模板来自固定安装的公开工具；仓库 checkout 作为已钉住的构建输入，不提供发布凭据给 PR 脚本。
 
-| 作业 | 功能 |
-| --- | --- |
-| `agent-platform-native-ci` | Linux ARM64 后端全部既有门禁、实际 SQLite SQL 与 BoxLite NAPI 加载 |
-| `agent-platform-web` | 静态检查、验收、Storybook、Linux AMD64 production prebuilt、跨仓浏览器子作业 |
-| `agent-platform-contract` | 三仓精确 SHA、Linux 部署回归、文档与浏览器→Nest→SQLite 验收 |
-| `agent-platform-api` | 完整后端 CI 子作业、构建 API/BoxLite 镜像、本机打包、空闲检查、备份、替换、恢复与运行报告 |
-| `agent-platform-release` | 三仓统一计划，复核子作业 SUCCESS，上传 Vercel，打包并上传 GitHub Release |
-| `agent-platform-ci-discovery` | 定时发现主分支、PR 与发布版本；GitHub App 写聚合状态；触发统一发布 |
-| `agent-platform-service-monitor` | 每五分钟归档 Docker 状态、健康、镜像、重启次数和脱敏日志 |
-| `agent-platform-mutation` | Linux 隔离节点执行 nightly/full 或 PR changed 的非阻断 mutation |
-| `agent-platform-sandbox-images` | 本机专属 Docker 构建两档、两架构 guest image，并验证 GHCR 匿名 digest |
+| 作业                             | 功能                                                                                      |
+| -------------------------------- | ----------------------------------------------------------------------------------------- |
+| `agent-platform-native-ci`       | Linux ARM64 后端全部既有门禁、实际 SQLite SQL 与 BoxLite NAPI 加载                        |
+| `agent-platform-web`             | 静态检查、验收、Storybook、Linux AMD64 production prebuilt、跨仓浏览器子作业              |
+| `agent-platform-contract`        | 三仓精确 SHA、Linux 部署回归、文档与浏览器→Nest→SQLite 验收                               |
+| `agent-platform-api`             | 完整后端 CI 子作业、构建 API/BoxLite 镜像、本机打包、空闲检查、备份、替换、恢复与运行报告 |
+| `agent-platform-release`         | 三仓统一计划，复核子作业 SUCCESS，上传 Vercel，打包并上传 GitHub Release                  |
+| `agent-platform-ci-discovery`    | 定时发现主分支、PR 与发布版本；GitHub App 写聚合状态；触发统一发布                        |
+| `agent-platform-service-monitor` | 每五分钟归档 Docker 状态、健康、镜像、重启次数和脱敏日志                                  |
+| `agent-platform-mutation`        | Linux 隔离节点执行 nightly/full 或 PR changed 的非阻断 mutation                           |
+| `agent-platform-sandbox-images`  | 本机专属 Docker 构建两档、两架构 guest image，并验证 GHCR 匿名 digest                     |
 
 后端镜像和收据绑定 `ROOT_SHA` 与 `API_SHA`；不可变目录为 `<ROOT_SHA>-<API_SHA>`。相同组合复用已验证的镜像与打包字节，不覆盖旧缓存。Docker 29 的 image ID 可能是 OCI index digest，包验证会核对 index→manifest→config 的实际链和 Linux ARM64，不能把 config digest 误当 image ID。
 
@@ -68,28 +68,26 @@ Vercel 使用 `--prebuilt` 上传已验收字节，不再次远端构建。Jenki
 
 Vercel 项目名为 `agent-platform`，GitHub 前端仓库名为 `agent-platform-web`；生成的部署地址使用前者。校验同时绑定实际项目 ID、team、三仓 SHA、构建号与部署状态，域名提升复用同一已验收部署。
 
-旧 GitHub Actions 的工作流只有在三个新的真实 Jenkins 聚合构建成功后才禁用。main 的必需状态检查绑定专属 Jenkins App `5204009`，保留 strict、reviews 和管理员规则。App 的安装只限三仓；不接受任意 App 来源。管理切换工具为 [ci-cutover.mjs](../deploy/jenkins/ci-cutover.mjs)。
+三个仓库的 CI 已由 Jenkins 执行。main 的必需状态检查绑定专属 Jenkins App `5204009`，保留 strict、reviews 和管理员规则。App 的安装只限三仓；不接受任意 App 来源。状态认证和本机配置见 [GitHub App 配置](../deploy/jenkins/github-status-app.md)。
 
 ## Mac 自动启动
 
 三个标准系统 LaunchDaemon 已安装并实际核对 owner `root`、权限 `0644`、`RunAtLoad` 和固定参数，执行用户为 `douglasdong`。它们只启动专属 Colima Docker 引擎；Jenkins、构建节点、API 和 Tunnel 的生命周期都属于 Docker。原生 Java/Node 应用守护进程不再作为新服务的启动入口。
 
-一次性管理员安装完成后，日常初始化、构建和发布无需在 Terminal 手工运行应用。命令和审阅校验见 [开机自启文档](../artifacts/container-boot-commands.md)，安装证据见 [系统启动项](../artifacts/container-system-boot-verification.json)。配置中的 `StartInterval` 会重试引擎启动，容器使用 `restart: unless-stopped`。整台 Mac 的断电冷启动与 profile 重启是不同验收，证据会分别标识。
+一次性管理员安装完成后，日常构建和发布无需在 Terminal 手工运行应用。系统启动项的源码入口为 [bootstrap-host.mjs](../deploy/containers/bootstrap-host.mjs)：使用 Node 22 执行 `prepare`，生成私有审阅目录、三个 profile 配置摘要和 plist；核对后，由管理员执行该目录中已审阅的脚本并传入 `apply-system`。它只管理三个固定引擎 label，拒绝变化的 profile 配置和已有不同内容的启动项，不安装原生 API、Tunnel 或 Java 服务。
+
+该工具要求 Mac 账号 `douglasdong`、UID `501`，以及三个已配置好的专属 Colima profile。它不新建 profile，不导入生产数据，也不生成应用凭据。新机器应先准备 profile、固定镜像、external named volume 和私有凭据，再安装启动项；日常发布使用 Jenkins 作业。配置中的 `StartInterval` 会重试引擎启动，容器使用 `restart: unless-stopped`。
 
 2026-10-06 已分别实际停止并验证三个 profile 由系统启动项自动拉起；Jenkins 历史、配置和三个 Linux 节点自动恢复，未手工运行 `colima start`、容器启动或初始化命令。测试期间生产域名继续由独立 runtime 服务提供。整机断电冷启动尚未执行。
 
-早期 `system-review-20261007*` 与四个宿主服务 review 已退休，不要再执行。旧 native 源码保留用于历史恢复；Linux 回归会明确列出仅支持实际 Darwin 原生包的退休测试，不伪造 OS 或 native 验收。
+## 备份、恢复与回滚
 
-## 生产数据迁移
+[api-container.mjs](../deploy/containers/api-container.mjs) 保留日常镜像构建、初次接管、部署和监控入口。生产数据只由一个 API 容器使用。替换前先关闭业务写入并等待服务空闲，再停止旧容器，对整个持久 `/data` 卷生成并验证备份；SQLite 的 `.db`、WAL 和相关工作区必须一起保留。私有 runtime 环境、Tunnel 凭据和发布凭据位于独立卷，不进入公开下载包。
 
-SQLite 使用 WAL；只复制 `.db` 会漏数据。[migrate-data.mjs](../deploy/containers/migrate-data.mjs) 使用 SQLite online backup，验证表行数、基线摘要、权限和路径映射，再向空 named volume 导入，重复或非空卷导入被拒绝。环境文件单独转到私有 secrets 卷，数据卷不含发布凭据。
+候选服务的 Docker 健康、版本、数据库、默认 provider 和预制镜像 readiness 全部通过后，才解除维护屏障并写成功收据。失败时验证备份和旧容器身份，恢复数据并等待原版本健康；恢复无法确认时保留维护屏障与 checkpoint，交由管理员核查，不继续发布。不要删除备份、checkpoint、私有收据或生产 named volume 来绕过阻断。
 
-原生 API 没有用户任务，但 BoxLite 内部有预热授权 helper。该 helper 不在任务表里，迁移会在原 API 退出后停止它并保留原 home；目标 Linux API 按需重建。不能把原 BoxLite home 的数据库和 macOS 绝对路径直接搬到 Linux。一般用户 VM 的跨平台磁盘应使用官方导出/导入；独立 Darwin ARM64→Linux ARM64 roundtrip 已验证 marker、PTY、停止恢复和第二个容器重建。证据：[平台数据恢复](../artifacts/native-linux-data-migration-rehearsal.json)、[BoxLite 跨平台恢复](../artifacts/boxlite-darwin-linux-portability-rehearsal.json)。
+Jenkins 的配置、用户、主密钥、插件配置与构建历史保存在独立 external Home 卷；controller 镜像替换会复用该卷。需要独立 Home 备份时，应在作业和队列空闲后停止 controller，再完整备份该卷，并将含密钥的归档保存在私有目录。恢复到空的独立卷后先核对原用户、密钥、历史与锁定插件；不要将 Home 挂载给多个同时运行的 controller，也不要把其中的秘密上传为公开构建产物。
 
-切换前生成最终备份、保持单一生产数据 owner，验证公开健康、原项目与终端。旧数据目录与原 native 发布均保留，不共享给第二个运行时，也不恢复已退休的旧轮询器。
+## 当前验证入口
 
-初次接管已于 2026-10-06 完成：API 与专属 Tunnel 在 Docker 中运行，原项目及基线、口令与会话配置保留。已验证公开 HTTPS 健康、未登录 401、Secure/HttpOnly 会话 cookie、精确 Origin 和拒绝外来 Origin，以及生产 BoxLite 的真实 KVM 虚拟机。失败尝试的完整数据、锁、收据和日志均归档；原 native 启动项保持停用。
-
-## 当前实施证据
-
-[源码与迁移状态](../artifacts/jenkins-source-readiness.json) 记录各阶段实际结果。独立手工烟测与正式 Jenkins 构建是两类证据；手工测试不会被伪装成可发布的 Jenkins SUCCESS。实际服务状态以 Jenkins 运行报告、Docker inspect 和最后一条发布收据为准。
+部署源码回归位于 `deploy/jenkins/*.test.mjs` 与 `deploy/containers/*.test.mjs`，Jenkins 跨仓作业会执行同一套测试。跨仓浏览器报告归档自 `e2e-contract/artifacts/execution-report.json`。独立 smoke 与正式 Jenkins 构建分别记录；实际服务状态以 Jenkins 运行报告、Docker inspect 和最后一条发布收据为准。

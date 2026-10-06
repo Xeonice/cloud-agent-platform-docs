@@ -25,16 +25,9 @@ async function fixture(t, platform = "linux") {
   );
   t.after(() => fs.rm(work, { recursive: true, force: true }));
   const source = join(work, "source");
-  for (const name of [
-    "api",
-    "web",
-    "deploy/macmini",
-    "deploy/jenkins",
-    "deploy/containers",
-  ])
+  for (const name of ["api", "web", "deploy/jenkins", "deploy/containers"])
     await fs.mkdir(join(source, name), { recursive: true });
   for (const name of [
-    "deploy/macmini/native.test.mjs",
     "deploy/jenkins/public.test.mjs",
     "deploy/containers/docker.test.mjs",
   ])
@@ -85,13 +78,20 @@ test("Linux docs executes only the real docs gate, not skipped native deployment
 test("Linux deployment regression executes every deployment source directory", async (t) => {
   const f = await fixture(t);
   await f.invoke("deployment-tests");
-  const command = f.calls.find(x => x.args[0] === "--test");
-  assert.deepEqual(command.args, ["--test", "deploy/containers/docker.test.mjs", "deploy/jenkins/public.test.mjs", "deploy/macmini/native.test.mjs"]);
+  const command = f.calls.find((x) => x.args[0] === "--test");
+  assert.deepEqual(command.args, [
+    "--test",
+    "deploy/containers/docker.test.mjs",
+    "deploy/jenkins/public.test.mjs",
+  ]);
   assert.equal(command.command, "/usr/local/bin/node");
-  assert.equal(projectCiContext("deployment-tests", linuxIdentity, linuxSystem).platform, "linux");
+  assert.equal(
+    projectCiContext("deployment-tests", linuxIdentity, linuxSystem).platform,
+    "linux",
+  );
 });
 
-test("native deployment phase executes tests from all three deployment source directories", async (t) => {
+test("Mac development executes the same current deployment tests and refuses an empty suite", async (t) => {
   const f = await fixture(t, "darwin");
   await f.invoke("deployment-tests");
   const command = f.calls.find((x) => x.args[0] === "--test");
@@ -99,11 +99,10 @@ test("native deployment phase executes tests from all three deployment source di
     "--test",
     "deploy/containers/docker.test.mjs",
     "deploy/jenkins/public.test.mjs",
-    "deploy/macmini/native.test.mjs",
   ]);
   assert.equal(command.command, process.execPath);
   assert.equal(command.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
-  for (const directory of ["macmini", "jenkins", "containers"])
+  for (const directory of ["jenkins", "containers"])
     await fs.rm(join(f.source, "deploy", directory), { recursive: true });
   await assert.rejects(f.invoke("deployment-tests"), /sources are missing/);
 });
