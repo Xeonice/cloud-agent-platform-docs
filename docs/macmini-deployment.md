@@ -8,11 +8,13 @@ Mac mini 负责三个仓库的发现、测试、构建、打包和上传。前�
 | --- | --- | --- |
 | `agent-platform-jenkins` | Jenkins controller | 持久 Home、70 个锁定插件、零内置 executor、本机 `8080` 管理入口 |
 | `agent-platform-build` | Linux ARM64 CI、Linux AMD64 Web CI | 无生产凭据和 Docker socket；AMD64 使用 Rosetta；执行后端、文档、跨仓浏览器和前端门禁 |
-| `agent-platform-runtime` | API/BoxLite、cloudflared、可信 Linux deploy agent | VZ ARM64 nested virtualization，6 CPU/16 GiB；独立生产数据、私有发布凭据、Docker 管理与发布 |
+| `agent-platform-runtime` | API/BoxLite、cloudflared、CoreDNS、可信 Linux deploy agent | VZ ARM64 nested virtualization，6 CPU/16 GiB；独立生产数据、私有发布凭据、Docker 管理与发布 |
 
 三个 profile 都不挂载 Mac 用户目录、不转发 SSH agent，也不改变用户默认 Docker context。API 内嵌 BoxLite SDK `0.9.7`，任务继续运行在微虚拟机里。API 容器不挂载 Docker socket；可信 deploy agent 可以管理这一个专属 runtime daemon。普通 CI 的 daemon、卷和凭据与它分离。
 
 API 与 Tunnel 使用 runtime VM 的 host network，API 仍只监听该 VM 的 `127.0.0.1:3101`。这保留 `API_TRUST_PROXY=cloudflare-loopback` 的真实 loopback peer 约束、精确 HTTPS Origin、访问口令与 Secure cookie。这里的 host network 指 Linux VM；不是 Mac 的网络 namespace。Tunnel token 通过私有文件卷传入，不出现在命令参数、日志或镜像内。
+
+同一 VM 的 CoreDNS 容器只在 `127.0.0.2:53`（避开 Colima 内置 DNS） 提供 DNS，使用 Cloudflare DoH（HTTPS 443、校验证书和 server name）；API、Tunnel 与可信 deploy agent 使用它解析外部域名。它不挂载 Mac 目录或生产凭据，配置烘焙在固定镜像中。这样避开宿主代理对普通 UDP/TCP DNS 的 fake-IP 回答，而无需改动 Mac 全局 DNS。Tunnel 使用标准 `auto` 传输；不固定 Cloudflare edge IP。CoreDNS 的真实 DNS 查询、健康检查、旋转日志和重启策略由 Docker 管理，Jenkins 归档状态。[CoreDNS DoH 配置](https://coredns.io/plugins/forward/)。
 
 API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/14 GiB、严格 CPU 登记、旋转日志和健康检查。Linux 容量探针会读取 cgroup v1/v2 的有效 CPU/RAM 上限。容器内必须显式 `SANDBOX_DEFAULT_PROVIDER=boxlite`；一般 Linux 裸运行仍保留 AIO 默认行为。
 
@@ -44,6 +46,8 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 生产替换先严格检查任务、沙箱、自动化、资源、克隆、清理、授权与正在执行的 HTTP。维护屏障生效后复查，再停止 API、备份一致的持久卷并替换。纯浏览器连接可在重启后恢复；它不会让零任务的服务永远无法发布。数据库 schema fingerprint 改变时停止自动切换，返回迁移审阅状态。失败恢复保留明确 checkpoint；没有成功收据就不会继续前端与 GitHub 发布。
 
+维护屏障只在已知候选容器的 ID、镜像、挂载与版本标签保持一致，且 API readiness 和 Docker `healthy` 同时通过后解除。HTTP 已可用但 Docker 仍 `starting` 时继续等待；失败或超时走原恢复流程，不能把这种状态当作发布成功。
+
 Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service status and logs` 页面、Console Output、Artifacts 和 fingerprint 可追溯结果。Docker 的 restart policy 管理进程退出恢复；健康检查和监控记录失健康状态。容器日志为旋转的 `json-file`，报告按私有口令与 token 脱敏。
 
 ## 完全在本机打包并上传
@@ -51,6 +55,8 @@ Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service statu
 统一发布使用三仓精确 SHA。API 下载包为 `agent-platform-api-linux-arm64.tgz`，包含 Docker-save 镜像、`release.json` 和说明；前端有 production prebuilt、源码和 Storybook；另有三仓源码包、发布清单与 `SHA256SUMS`。数据库、口令、私钥、token 和生产工作区不进入下载包。
 
 Vercel 使用 `--prebuilt` 上传已验收字节，不再次远端构建。Jenkins 验证 production 环境、项目归属、部署 READY、别名指向以及公开 API origin。GitHub Release 先以 draft 上传所有固定资产并逐个校验 SHA256，再正式发布。不可替换既有版本标签或资产。[GitHub Releases](https://github.com/Xeonice/cloud-agent-platform-docs/releases)。
+
+Vercel 项目名为 `agent-platform`，GitHub 前端仓库名为 `agent-platform-web`；生成的部署地址使用前者。校验同时绑定实际项目 ID、team、三仓 SHA、构建号与部署状态，域名提升复用同一已验收部署。
 
 旧 GitHub Actions 的工作流只有在三个新的真实 Jenkins 聚合构建成功后才禁用。main 的必需状态检查绑定专属 Jenkins App `5204009`，保留 strict、reviews 和管理员规则。App 的安装只限三仓；不接受任意 App 来源。管理切换工具为 [ci-cutover.mjs](../deploy/jenkins/ci-cutover.mjs)。
 

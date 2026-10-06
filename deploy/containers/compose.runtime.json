@@ -1,6 +1,32 @@
 {
   "name": "agent-platform-runtime",
   "services": {
+    "dns": {
+      "container_name": "agent-platform-dns",
+      "image": "${DNS_IMAGE:?Provide a verified immutable CoreDNS DoH image}",
+      "platform": "linux/arm64",
+      "network_mode": "host",
+      "user": "1000:1000",
+      "read_only": true,
+      "cap_drop": ["ALL"],
+      "cap_add": ["NET_BIND_SERVICE"],
+      "security_opt": ["no-new-privileges:true"],
+      "cpus": 0.25,
+      "mem_limit": "128m",
+      "pids_limit": 64,
+      "restart": "unless-stopped",
+      "stop_grace_period": "15s",
+      "labels": {
+        "com.agent-platform.role": "runtime-dns"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "5"
+        }
+      }
+    },
     "api": {
       "container_name": "agent-platform-api",
       "image": "${API_IMAGE:?Provide a verified immutable Linux ARM64 API image}",
@@ -9,16 +35,39 @@
       "privileged": true,
       "devices": ["/dev/kvm:/dev/kvm"],
       "volumes": [
-        { "type": "volume", "source": "data", "target": "/data" },
-        { "type": "volume", "source": "api_secrets", "target": "/run/secrets", "read_only": true }
+        {
+          "type": "volume",
+          "source": "data",
+          "target": "/data"
+        },
+        {
+          "type": "volume",
+          "source": "api_secrets",
+          "target": "/run/secrets",
+          "read_only": true
+        }
       ],
       "cpus": 6,
       "mem_limit": "14g",
       "pids_limit": 8192,
       "restart": "unless-stopped",
       "stop_grace_period": "90s",
-      "labels": { "com.agent-platform.role": "production-api" },
-      "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "5" } }
+      "labels": {
+        "com.agent-platform.role": "production-api"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "5"
+        }
+      },
+      "dns": ["127.0.0.2"],
+      "depends_on": {
+        "dns": {
+          "condition": "service_healthy"
+        }
+      }
     },
     "tunnel": {
       "container_name": "agent-platform-tunnel",
@@ -26,8 +75,25 @@
       "platform": "linux/arm64",
       "network_mode": "host",
       "user": "0:0",
-      "command": ["tunnel", "--no-autoupdate", "--metrics", "127.0.0.1:20241", "run", "--token-file", "/run/secrets/tunnel.token"],
-      "volumes": [{ "type": "volume", "source": "tunnel_secrets", "target": "/run/secrets", "read_only": true }],
+      "command": [
+        "tunnel",
+        "--no-autoupdate",
+        "--metrics",
+        "127.0.0.1:20241",
+        "--protocol",
+        "auto",
+        "run",
+        "--token-file",
+        "/run/secrets/tunnel.token"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "tunnel_secrets",
+          "target": "/run/secrets",
+          "read_only": true
+        }
+      ],
       "read_only": true,
       "cap_drop": ["ALL"],
       "security_opt": ["no-new-privileges:true"],
@@ -36,8 +102,22 @@
       "pids_limit": 128,
       "restart": "unless-stopped",
       "stop_grace_period": "45s",
-      "labels": { "com.agent-platform.role": "production-tunnel" },
-      "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "5" } }
+      "labels": {
+        "com.agent-platform.role": "production-tunnel"
+      },
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "5"
+        }
+      },
+      "dns": ["127.0.0.2"],
+      "depends_on": {
+        "dns": {
+          "condition": "service_healthy"
+        }
+      }
     },
     "deploy": {
       "container_name": "agent-platform-linux-deploy",
@@ -47,15 +127,48 @@
       "extra_hosts": ["host.lima.internal:192.168.5.2"],
       "user": "1000:1000",
       "group_add": ["991"],
-      "environment": { "HOME": "/home/jenkins", "JENKINS_URL": "http://host.lima.internal:8080/", "JENKINS_AGENT_NAME": "linux-deploy" },
+      "environment": {
+        "HOME": "/home/jenkins",
+        "JENKINS_URL": "http://host.lima.internal:8080/",
+        "JENKINS_AGENT_NAME": "linux-deploy"
+      },
       "volumes": [
-        { "type": "volume", "source": "deploy_home", "target": "/home/jenkins" },
-        { "type": "volume", "source": "deploy_workspace", "target": "/home/jenkins/agent" },
-        { "type": "volume", "source": "deploy_jenkins", "target": "/home/jenkins/.jenkins" },
-        { "type": "volume", "source": "deploy_state", "target": "/srv/agent-platform/deploy" },
-        { "type": "volume", "source": "deploy_private", "target": "/run/agent-platform/jenkins-tools" },
-        { "type": "volume", "source": "deploy_credentials", "target": "/run/secrets", "read_only": true },
-        { "type": "bind", "source": "/var/run/docker.sock", "target": "/var/run/docker.sock" }
+        {
+          "type": "volume",
+          "source": "deploy_home",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "deploy_workspace",
+          "target": "/home/jenkins/agent"
+        },
+        {
+          "type": "volume",
+          "source": "deploy_jenkins",
+          "target": "/home/jenkins/.jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "deploy_state",
+          "target": "/srv/agent-platform/deploy"
+        },
+        {
+          "type": "volume",
+          "source": "deploy_private",
+          "target": "/run/agent-platform/jenkins-tools"
+        },
+        {
+          "type": "volume",
+          "source": "deploy_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        },
+        {
+          "type": "bind",
+          "source": "/var/run/docker.sock",
+          "target": "/var/run/docker.sock"
+        }
       ],
       "cpus": 2,
       "mem_limit": "2g",
@@ -64,18 +177,57 @@
       "stop_grace_period": "90s",
       "security_opt": ["no-new-privileges:true"],
       "cap_drop": ["ALL"],
-      "logging": { "driver": "json-file", "options": { "max-size": "10m", "max-file": "5" } }
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "5"
+        }
+      },
+      "dns": ["127.0.0.2"],
+      "depends_on": {
+        "dns": {
+          "condition": "service_healthy"
+        }
+      }
     }
   },
   "volumes": {
-    "data": { "external": true, "name": "agent-platform-production-data" },
-    "api_secrets": { "external": true, "name": "agent-platform-api-secrets" },
-    "tunnel_secrets": { "external": true, "name": "agent-platform-tunnel-secrets" },
-    "deploy_home": { "external": true, "name": "agent-platform-linux-deploy-home" },
-    "deploy_workspace": { "external": true, "name": "agent-platform-linux-deploy-workspace" },
-    "deploy_jenkins": { "external": true, "name": "agent-platform-linux-deploy-jenkins-state" },
-    "deploy_state": { "external": true, "name": "agent-platform-linux-deploy-state" },
-    "deploy_private": { "external": true, "name": "agent-platform-linux-deploy-private" },
-    "deploy_credentials": { "external": true, "name": "agent-platform-linux-deploy-credentials" }
+    "data": {
+      "external": true,
+      "name": "agent-platform-production-data"
+    },
+    "api_secrets": {
+      "external": true,
+      "name": "agent-platform-api-secrets"
+    },
+    "tunnel_secrets": {
+      "external": true,
+      "name": "agent-platform-tunnel-secrets"
+    },
+    "deploy_home": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-home"
+    },
+    "deploy_workspace": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-workspace"
+    },
+    "deploy_jenkins": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-jenkins-state"
+    },
+    "deploy_state": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-state"
+    },
+    "deploy_private": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-private"
+    },
+    "deploy_credentials": {
+      "external": true,
+      "name": "agent-platform-linux-deploy-credentials"
+    }
   }
 }

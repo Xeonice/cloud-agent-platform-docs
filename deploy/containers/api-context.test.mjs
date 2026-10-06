@@ -308,9 +308,12 @@ test("pure dashboard sockets may reconnect, but all seven exact blocker names an
   ])
     assert.equal(idle({ ...quietStatus, ...change }), false);
 });
-test("production starts with separate readonly secrets and data; unauthenticated or foreign runtime configuration is refused", () => {
+test("production uses VM loopback DNS with host networking and separate readonly secrets; unauthenticated or foreign runtime configuration is refused", () => {
   assert.equal(runtimePolicy(envText).PORT, "3101");
   const args = runtimeArguments(IMAGE, release());
+  assert.equal(args[args.indexOf("--network") + 1], "host");
+  assert.equal(args.filter((value) => value === "--dns").length, 1);
+  assert.equal(args[args.indexOf("--dns") + 1], "127.0.0.2");
   assert.ok(
     args.includes(
       "type=volume,source=agent-platform-api-secrets,target=/run/secrets,readonly",
@@ -574,7 +577,22 @@ async function harness(t, configuration = {}) {
     if (a[0] === "logs") {
       assert.equal(opts.includeStderr, true);
       assert.equal(opts.quiet, true);
+      if (a.at(-1) === "agent-platform-dns" && configuration.dns === null)
+        throw Error("missing DNS container");
       return "public runtime output\nACCESS_PASSCODE=fixture-private-passcode\nfixture-private-cookie\nBearer fixture-authorization\n";
+    }
+    if (a[0] === "inspect" && a.at(-1) === "agent-platform-dns") {
+      if (configuration.dns === null) throw Error("missing DNS container");
+      return JSON.stringify([
+        {
+          Image: OLD_IMAGE,
+          State: configuration.dns ?? {
+            Status: "running",
+            Health: { Status: "healthy" },
+          },
+          RestartCount: 0,
+        },
+      ]);
     }
     if (a[0] === "inspect") return JSON.stringify(current ? [current] : []);
     if (a[0] === "exec") return marker(drain, a.at(-2), a.at(-1));
@@ -605,6 +623,7 @@ async function harness(t, configuration = {}) {
             info.Config.Labels["com.agent-platform.schema-fingerprint"],
           ),
         );
+        configuration.onStart?.(current);
         return id;
       }
       if (a.at(-1).includes("Unsafe runtime secret"))
@@ -636,7 +655,7 @@ async function harness(t, configuration = {}) {
     heads: async () =>
       configuration.heads?.() ?? { sha: SHA, rootSha: ROOT_SHA },
     now: () => "2026-10-07T00:00:00.000Z",
-    sleep: async () => {},
+    sleep: async (ms) => configuration.onSleep?.(ms, current),
     checkout: async (kind, sha, stage) => {
       const path = join(stage, kind);
       await fs.mkdir(path);
@@ -883,6 +902,112 @@ async function deployHarness(t, configuration = {}) {
   await h.service.build(SHA, 12, h.workspace, ROOT_SHA);
   return h;
 }
+test("candidate Docker health keeps an HTTP-ready replacement behind admission until starting becomes healthy", async (t) => {
+  const api = await apiHttpFixture(t);
+  let waiting = 0;
+  let h;
+  h = await deployHarness(t, {
+    base: api.base,
+    actualReadiness: true,
+    onStart: (current) => {
+      api.state.commit = current.Config.Labels["com.agent-platform.api-sha"];
+      current.State.Health.Status = "starting";
+    },
+    onSleep: async (ms, current) => {
+      if (ms !== 2000) return;
+      assert.equal(current.Image, IMAGE);
+      assert.equal(current.State.Health.Status, "starting");
+      assert.ok(await fs.stat(h.drain));
+      assert.ok(api.requests.some((r) => r.path === "/api/health"));
+      assert.ok(api.requests.some((r) => r.path === "/api/deployment/status"));
+      if (++waiting === 2) current.State.Health.Status = "healthy";
+    },
+  });
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(waiting, 2);
+  assert.equal(result.state, "deployed");
+  assert.equal(h.current.State.Health.Status, "healthy");
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  const report = await h.service.monitor(join(h.workspace, "health-report"));
+  assert.equal(report.healthy, true);
+});
+test("candidate Docker health failure rolls back rather than publishing an HTTP-ready unhealthy replacement", async (t) => {
+  const api = await apiHttpFixture(t);
+  let waiting = 0;
+  const h = await deployHarness(t, {
+    base: api.base,
+    actualReadiness: true,
+    onStart: (current) => {
+      api.state.commit = current.Config.Labels["com.agent-platform.api-sha"];
+      current.State.Health.Status =
+        current.Image === IMAGE ? "starting" : "healthy";
+    },
+    onSleep: async (ms, current) => {
+      if (ms !== 2000 || current.Image !== IMAGE) return;
+      waiting++;
+      current.State.Health.Status = "unhealthy";
+    },
+  });
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(waiting, 1);
+  assert.equal(result.state, "rolled-back");
+  assert.equal(h.current.Image, OLD_IMAGE);
+  assert.equal(h.current.State.Health.Status, "healthy");
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "runtime-state.json"))).state,
+    "rolled-back",
+  );
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+});
+test("Docker health timeout never releases admission or declares the HTTP-ready replacement deployed", async (t) => {
+  const api = await apiHttpFixture(t);
+  let waiting = 0;
+  let h;
+  h = await deployHarness(t, {
+    base: api.base,
+    actualReadiness: true,
+    onStart: (current) => {
+      api.state.commit = current.Config.Labels["com.agent-platform.api-sha"];
+      current.State.Health.Status =
+        current.Image === IMAGE ? "starting" : "healthy";
+    },
+    onSleep: async (ms, current) => {
+      if (ms !== 2000 || current.Image !== IMAGE) return;
+      waiting++;
+      assert.ok(await fs.stat(h.drain));
+    },
+  });
+  assert.equal((await h.service.deploy(SHA, 12)).state, "rolled-back");
+  assert.equal(waiting, 90);
+  assert.equal(h.current.Image, OLD_IMAGE);
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+});
+test("replacement identity changes during Docker health waiting retain admission and the recovery checkpoint", async (t) => {
+  const api = await apiHttpFixture(t);
+  let h;
+  h = await deployHarness(t, {
+    base: api.base,
+    actualReadiness: true,
+    onStart: (current) => {
+      current.State.Health.Status = "starting";
+    },
+    onSleep: async (ms, current) => {
+      if (ms !== 2000) return;
+      current.Id = "operator-replacement-during-health";
+      current.State.Health.Status = "healthy";
+    },
+  });
+  await assert.rejects(h.service.deploy(SHA, 12), /checkpoint retained/);
+  assert.equal(h.current.Id, "operator-replacement-during-health");
+  assert.ok(await fs.stat(h.drain));
+  assert.equal(
+    JSON.parse(
+      await privateFile(join(h.root, "deployment.lock/checkpoint.json")),
+    ).state,
+    "operator-recovery-required",
+  );
+  assert.equal(h.calls.filter((call) => call.args[2] === "rm").length, 1);
+});
 test("schema changes and real auth activity do not create maintenance or stop any API", async (t) => {
   for (const configuration of [
     { schemaChanged: true },
@@ -1172,6 +1297,24 @@ test("monitor creates its private report directory and writes redacted runtime l
     (await fs.stat(join(folder, "api.redacted.log"))).mode & 0o777,
     0o600,
   );
+  const dns = report.containers.find((c) => c.name === "agent-platform-dns");
+  assert.equal(dns.state, "running");
+  assert.equal(dns.health, "healthy");
+  const dnsLogs = await fs.readFile(join(folder, "dns.redacted.log"), "utf8");
+  assert.match(dnsLogs, /public runtime output/);
+  assert.ok(
+    !dnsLogs.includes("fixture-private-passcode") &&
+      !dnsLogs.includes("fixture-private-cookie") &&
+      !dnsLogs.includes("fixture-authorization"),
+  );
+  assert.equal(
+    (await fs.stat(join(folder, "dns.redacted.log"))).mode & 0o777,
+    0o600,
+  );
+  assert.match(
+    await fs.readFile(join(folder, "report.html"), "utf8"),
+    /href=dns.redacted.log/,
+  );
   await assert.rejects(h.service.monitor(folder), { code: "EEXIST" });
   const writable = join(h.root, "unsafe-report");
   await fs.mkdir(writable, { mode: 0o755 });
@@ -1185,4 +1328,43 @@ test("monitor creates its private report directory and writes redacted runtime l
     h.service.monitor(linked),
     /Unsafe deployment directory/,
   );
+});
+test("missing, starting, unhealthy or stopped DNS prevents a ready API and running tunnel from reporting healthy", async (t) => {
+  for (const [state, health] of [
+    ["missing", null],
+    ["running", "starting"],
+    ["running", "unhealthy"],
+    ["exited", "healthy"],
+  ]) {
+    const h = await harness(t, {
+      dns:
+        state === "missing"
+          ? null
+          : { Status: state, Health: { Status: health } },
+    });
+    h.adopt(release());
+    const folder = join(h.root, "dns-status");
+    const report = await h.service.monitor(folder);
+    assert.equal(report.deployment.ready, true);
+    assert.equal(report.containers[0].state, "running");
+    assert.equal(report.containers[0].health, "healthy");
+    assert.equal(report.containers[1].state, "running");
+    assert.equal(report.healthy, false);
+    const dns = report.containers.find((c) => c.name === "agent-platform-dns");
+    assert.equal(dns.state, state);
+    assert.equal(dns.health ?? null, health);
+    const persisted = JSON.parse(
+      await privateFile(join(folder, "report.json")),
+    );
+    assert.equal(persisted.healthy, false);
+    assert.match(
+      await fs.readFile(join(folder, "report.html"), "utf8"),
+      /Unhealthy/,
+    );
+    if (state === "missing")
+      assert.equal(
+        await fs.readFile(join(folder, "dns.redacted.log"), "utf8"),
+        "",
+      );
+  }
 });

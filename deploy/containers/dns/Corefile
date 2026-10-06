@@ -1,0 +1,14 @@
+.:53 {
+    bind 127.0.0.2
+    errors
+    health 127.0.0.2:2053
+    ready 127.0.0.2:2054 {
+        monitor continuously
+    }
+    forward . https://1.1.1.1 https://1.0.0.1 {
+        tls_servername cloudflare-dns.com
+        health_check 5s
+        max_concurrent 128
+    }
+    cache 30
+}

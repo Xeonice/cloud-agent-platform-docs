@@ -31,6 +31,24 @@ const execute = promisify(execFile);
 const WEB_SHA = "a".repeat(40),
   ROOT_SHA = "b".repeat(40),
   API_SHA = "c".repeat(40);
+// Safe public fields from the first actual Jenkins prebuilt deployment GET.
+// Vercel's generated hostname and project name differ.
+const actualStagedDeployment = Object.freeze({
+  id: "dpl_6GuJF2oG3PZCFWerbJJ58itbuCf9",
+  url: "agent-platform-5ut6423ar-xeonices-projects.vercel.app",
+  projectId: "prj_XYIzK6r7LgRrV5NHCwWff489J73r",
+  readyState: "READY",
+  readySubstate: "STAGED",
+  target: "production",
+  source: "cli",
+  prebuilt: true,
+  meta: {
+    jenkinsRootSha: "0b2bb9bd1c2dfd7d8f815c47bf1cbdb30886fa90",
+    jenkinsApiSha: "1e628c9ad6ad141288f892f0e1873fe5c97a8d0a",
+    jenkinsWebSha: "0a7794b34fef53b564bc7216fd29ef03b0d360da",
+    jenkinsBuildNumber: "7",
+  },
+});
 // Pipeline fixtures simulate the legacy Mac dispatcher with real filesystem
 // and tar boundaries. They also run on Linux; no native VM or Mac service is used.
 const legacySystem = {
@@ -229,10 +247,10 @@ async function fixture(t) {
         return JSON.stringify({
           status: "ok",
           deployment: {
-            id: "dpl_TestReady123",
-            url: "https://agent-platform-web-test-ready.vercel.app",
-            readyState: "READY",
-            target: "production",
+            id: actualStagedDeployment.id,
+            url: `https://${actualStagedDeployment.url}`,
+            readyState: actualStagedDeployment.readyState,
+            target: actualStagedDeployment.target,
           },
         });
       } else if (action === "api") {
@@ -240,11 +258,11 @@ async function fixture(t) {
           return JSON.stringify({
             alias: WEB.domain,
             projectId: WEB.projectId,
-            deploymentId: state.aliasDeploymentId ?? "dpl_TestReady123",
+            deploymentId: state.aliasDeploymentId ?? actualStagedDeployment.id,
+            ...state.aliasPatch,
           });
         return JSON.stringify({
-          id: "dpl_TestReady123",
-          url: "agent-platform-web-test-ready.vercel.app",
+          ...actualStagedDeployment,
           projectId: state.projectId ?? WEB.projectId,
           readyState: "READY",
           target: "production",
@@ -255,6 +273,7 @@ async function fixture(t) {
             jenkinsApiSha: API_SHA,
             jenkinsBuildNumber: "123",
           },
+          ...state.remoteDeploymentPatch,
         });
       } else if (action === "promote") {
         state.promotes++;
@@ -389,6 +408,7 @@ test(
     assert.equal(authenticated.length > 0, true);
     for (const call of authenticated) {
       assert.equal(call.args.at(-1), f.path);
+      assert.equal(call.args[call.args.indexOf("--scope") + 1], WEB.scope);
       assert.equal(call.env.PATH.includes("homebrew"), false);
       for (const name of [
         "ACCESS_PASSCODE",
@@ -689,20 +709,27 @@ test("archive extraction permits only a fixed relative output prefix", () => {
 
 test("deployment CLI JSON must attest a READY production upload and approved URL shape", () => {
   const good = {
-    id: "dpl_test",
-    readyState: "READY",
-    target: "production",
-    url: "https://agent-platform-web-unit-test.vercel.app",
+    id: actualStagedDeployment.id,
+    readyState: actualStagedDeployment.readyState,
+    target: actualStagedDeployment.target,
+    url: `https://${actualStagedDeployment.url}`,
   };
   assert.equal(
     deploymentResult(JSON.stringify({ status: "ok", deployment: good }))
       .deploymentId,
-    "dpl_test",
+    actualStagedDeployment.id,
   );
+  assert.equal(deploymentResult(JSON.stringify(good)).url, good.url);
   for (const patch of [
     { readyState: "ERROR" },
     { target: "preview" },
     { url: "https://evil.example/" },
+    { url: "https://agent-platform-web-unit-test.vercel.app" },
+    { url: "https://other-project-5ut6423ar-xeonices-projects.vercel.app" },
+    { url: "https://agent-platform-5ut6423ar-other-team.vercel.app" },
+    { url: `${good.url}/` },
+    { url: `${good.url}?redirect=evil` },
+    { url: good.url.replace("https:", "http:") },
     { id: undefined },
   ])
     assert.throws(() =>
@@ -1124,6 +1151,47 @@ test(
 );
 
 test(
+  "the verified hostname still requires exact project, three commits, build and STAGED remote state on reuse",
+  native,
+  async (t) => {
+    const f = await fixture(t);
+    await build(f);
+    await f.invoke("adopt");
+    const staged = await f.invoke("upload");
+    assert.equal(staged.deploymentId, actualStagedDeployment.id);
+    assert.equal(staged.url, `https://${actualStagedDeployment.url}`);
+    const validMeta = {
+      jenkinsWebSha: WEB_SHA,
+      jenkinsRootSha: ROOT_SHA,
+      jenkinsApiSha: API_SHA,
+      jenkinsBuildNumber: "123",
+    };
+    for (const patch of [
+      { id: "dpl_Other123" },
+      { projectId: "prj_other" },
+      { url: "agent-platform-other-xeonices-projects.vercel.app" },
+      { readyState: "ERROR" },
+      { readySubstate: "PROMOTED" },
+      { target: "preview" },
+      ...Object.keys(validMeta).map((key) => ({
+        meta: { ...validMeta, [key]: "wrong" },
+      })),
+    ]) {
+      f.state.remoteDeploymentPatch = patch;
+      await assert.rejects(f.invoke("upload"), /matching staged prebuilt/);
+      assert.equal(f.state.uploads, 1);
+      assert.equal(f.state.promotes, 0);
+    }
+    delete f.state.remoteDeploymentPatch;
+    assert.equal((await f.invoke("upload")).reused, true);
+    assert.equal(
+      (await read(join(f.release, `publication-${ROOT_SHA}.json`))).state,
+      "staged",
+    );
+  },
+);
+
+test(
   "failed upload records intent/failure and never creates another deployment on retry",
   native,
   async (t) => {
@@ -1217,11 +1285,20 @@ test(
     assert.equal((await f.invoke("promote")).reused, true);
     assert.equal(f.state.uploads, 1);
     assert.equal(f.state.promotes, 1);
-    f.state.aliasDeploymentId = "dpl_Other123";
-    await assert.rejects(
-      f.invoke("promote"),
-      /does not point to this deployment/,
-    );
+    for (const patch of [
+      { deploymentId: "dpl_Other123" },
+      { projectId: "prj_other" },
+      { alias: "other.example.com" },
+      { redirect: "https://evil.example.com" },
+    ]) {
+      f.state.aliasPatch = patch;
+      await assert.rejects(
+        f.invoke("promote"),
+        /does not point to this deployment/,
+      );
+      assert.equal(f.state.uploads, 1);
+      assert.equal(f.state.promotes, 1);
+    }
     assert.equal(
       (await read(join(f.release, `publication-${ROOT_SHA}.json`))).state,
       "promoted",

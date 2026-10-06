@@ -125,7 +125,7 @@ pipeline {
           def code = sh(script: '"$NODE22" "$MONITOR_TOOL" monitor "runtime-report-$BUILD_NUMBER"', returnStatus: true)
           if (code == 2) { unstable('Service snapshot reports an unhealthy runtime') }
           if (code != 0 && code != 2) { error('Runtime report collection failed') }
-          archiveArtifacts artifacts: "project-plan.json,project-pin.json,verified-web-build.json,verified-contract-build.json,web-adoption.json,web-adopted.json,vercel-upload.json,vercel-promoted.json,packaged.json,github-release.json,${folder}/report.json,${folder}/report.html,${folder}/api.redacted.log,${folder}/tunnel.redacted.log,${folder}/cicd.redacted.log,${folder}/build.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
+          archiveArtifacts artifacts: "project-plan.json,project-pin.json,verified-web-build.json,verified-contract-build.json,web-adoption.json,web-adopted.json,vercel-upload.json,vercel-promoted.json,packaged.json,github-release.json,${folder}/report.json,${folder}/report.html,${folder}/api.redacted.log,${folder}/tunnel.redacted.log,${folder}/dns.redacted.log,${folder}/cicd.redacted.log,${folder}/build.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
           publishHTML(target: [allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: folder, reportFiles: 'report.html', reportName: 'Service status and logs'])
         }
       }

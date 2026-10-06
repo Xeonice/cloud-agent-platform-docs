@@ -272,6 +272,8 @@ export function runtimeArguments(imageId, release) {
     "unless-stopped",
     "--network",
     "host",
+    "--dns",
+    "127.0.0.2",
     "--privileged",
     "--device",
     "/dev/kvm",
@@ -759,33 +761,52 @@ export function createDeployer(options = {}) {
       );
     return actual;
   }
-  async function ready(release) {
-    if (options.ready) return options.ready(release);
-    const env = await runtimeEnv();
+  async function ready(release, expected) {
+    async function candidate() {
+      const actual = await exactContainer(expected);
+      const labels = actual.Config?.Labels;
+      if (
+        labels?.[SHA_LABEL] !== release.sha ||
+        labels?.[ROOT_LABEL] !== release.rootSha ||
+        labels?.[SCHEMA_LABEL] !== release.schemaFingerprint
+      )
+        throw Error("Candidate API release identity changed during readiness");
+      if (!actual.State?.Running || actual.State.Health?.Status === "unhealthy")
+        throw Error("API container failed Docker health readiness");
+      return actual;
+    }
+    const env = options.ready ? null : await runtimeEnv();
     for (let attempt = 0; attempt < 90; attempt++) {
-      try {
-        const r = await fetch(base + "/api/health", {
-          redirect: "error",
-          signal: AbortSignal.timeout(2000),
-        });
-        const v = await fetch(base + "/api/system/version", {
-          headers: { authorization: "Bearer " + env.ACCESS_PASSCODE },
-          redirect: "error",
-          signal: AbortSignal.timeout(2000),
-        });
-        if (
-          r.ok &&
-          v.ok &&
-          (await v.json()).commit === release.sha &&
-          (await status()).ready
-        )
-          return;
-      } catch {
-        /* Remain behind maintenance until pinned readiness succeeds. */
+      await candidate();
+      let apiReady = false;
+      if (options.ready) {
+        await options.ready(release);
+        apiReady = true;
+      } else {
+        try {
+          const r = await fetch(base + "/api/health", {
+            redirect: "error",
+            signal: AbortSignal.timeout(2000),
+          });
+          const v = await fetch(base + "/api/system/version", {
+            headers: { authorization: "Bearer " + env.ACCESS_PASSCODE },
+            redirect: "error",
+            signal: AbortSignal.timeout(2000),
+          });
+          apiReady =
+            r.ok &&
+            v.ok &&
+            (await v.json()).commit === release.sha &&
+            (await status()).ready;
+        } catch {
+          /* Remain behind maintenance until pinned readiness succeeds. */
+        }
       }
+      if ((await candidate()).State.Health?.Status === "healthy" && apiReady)
+        return;
       await sleep(2000);
     }
-    throw Error("API failed readiness or pinned version");
+    throw Error("API failed readiness or pinned version or Docker health");
   }
   async function helper(
     image,
@@ -908,7 +929,7 @@ export function createDeployer(options = {}) {
       if (oldValue.release.imageId !== old.Image)
         throw Error("Current release image metadata conflict");
       if (old.Image === release.imageId) {
-        await ready(release);
+        await ready(release, { id: old.Id, imageId: release.imageId });
         return { state: "current", ...request, imageId: old.Image };
       }
       if (oldValue.release.schemaFingerprint !== release.schemaFingerprint)
@@ -1006,7 +1027,7 @@ export function createDeployer(options = {}) {
         const id = (await d(runtimeArguments(release.imageId, release))).trim();
         replacement = { id, imageId: release.imageId };
         await exactContainer(replacement);
-        await ready(release);
+        await ready(release, replacement);
         await barrier("check", held, release.imageId, id);
         // Replacement starts behind the same barrier. Only this controller releases it after readiness.
         await barrier("release", held, release.imageId, id);
@@ -1092,7 +1113,10 @@ export function createDeployer(options = {}) {
               await d(runtimeArguments(old.Image, oldValue.release))
             ).trim();
           await exactContainer({ id: restoredId, imageId: old.Image });
-          await ready(oldValue.release);
+          await ready(oldValue.release, {
+            id: restoredId,
+            imageId: old.Image,
+          });
           await barrier("release", held, old.Image, restoredId);
           held = null;
           const result = {
@@ -1222,7 +1246,7 @@ export function createDeployer(options = {}) {
           await d(runtimeArguments(release.imageId, release))
         ).trim();
         await exactContainer({ id: containerId, imageId: release.imageId });
-        await ready(release);
+        await ready(release, { id: containerId, imageId: release.imageId });
         if (!idle(await status()))
           throw Error(
             "Initially adopted API has unexpected live work or authorization",
@@ -1280,6 +1304,7 @@ export function createDeployer(options = {}) {
       [API, "api"],
       ["agent-platform-tunnel", "tunnel"],
       ["agent-platform-linux-deploy", "cicd"],
+      ["agent-platform-dns", "dns"],
     ]) {
       let item;
       try {
@@ -1323,9 +1348,12 @@ export function createDeployer(options = {}) {
     } catch {
       /* Failed probe is unhealthy. */
     }
+    const dns = containers.find((c) => c.name === "agent-platform-dns");
     const healthy =
       containers.slice(0, 2).every((c) => c.state === "running") &&
       containers[0].health === "healthy" &&
+      dns.state === "running" &&
+      dns.health === "healthy" &&
       probe?.ready === true;
     const report = {
       schemaVersion: 2,
@@ -1347,7 +1375,7 @@ export function createDeployer(options = {}) {
         (healthy ? "Healthy" : "Unhealthy") +
         "</h1><pre>" +
         escaped +
-        "</pre><p><a href=api.redacted.log>API log</a> · <a href=tunnel.redacted.log>Tunnel log</a> · <a href=cicd.redacted.log>Deployment agent log</a></p>",
+        "</pre><p><a href=api.redacted.log>API log</a> · <a href=tunnel.redacted.log>Tunnel log</a> · <a href=cicd.redacted.log>Deployment agent log</a> · <a href=dns.redacted.log>DNS log</a></p>",
       { flag: "wx", mode: 0o600 },
     );
     return report;

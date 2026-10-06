@@ -30,7 +30,7 @@ pipeline {
     always {
       script {
         def folder = "runtime-report-${env.BUILD_NUMBER}"
-        archiveArtifacts artifacts: "${folder}/report.json,${folder}/report.html,${folder}/api.redacted.log,${folder}/tunnel.redacted.log,${folder}/cicd.redacted.log,${folder}/build.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
+        archiveArtifacts artifacts: "${folder}/report.json,${folder}/report.html,${folder}/api.redacted.log,${folder}/tunnel.redacted.log,${folder}/dns.redacted.log,${folder}/cicd.redacted.log,${folder}/build.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
         publishHTML(target: [allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: folder, reportFiles: 'report.html', reportName: 'Service status and logs'])
       }
     }

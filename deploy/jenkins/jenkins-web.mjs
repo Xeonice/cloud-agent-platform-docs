@@ -72,6 +72,11 @@ export const PUBLIC_ENV = Object.freeze({
 });
 const ARCHIVES = ["source.tar.gz", "prebuilt.tar.gz", "storybook.tar.gz"];
 const TRUSTED = new Set(["prepare-env", "adopt", "upload", "promote"]);
+// The approved Vercel project is agent-platform; agent-platform-web is its
+// GitHub repository. Project identity is verified separately from the generated
+// hostname before publication or receipt reuse.
+const DEPLOYMENT_URL =
+  /^https:\/\/agent-platform-[a-z0-9]+-xeonices-projects\.vercel\.app$/;
 const MACHO = new Set([
   "feedface",
   "cefaedfe",
@@ -382,9 +387,7 @@ export function deploymentResult(text) {
     deployment.readyState !== "READY" ||
     deployment.target !== "production" ||
     !/^dpl_[A-Za-z0-9]+$/.test(deployment.id ?? "") ||
-    !/^https:\/\/agent-platform-web-[a-z0-9-]+\.vercel\.app$/.test(
-      deployment.url ?? "",
-    )
+    !DEPLOYMENT_URL.test(deployment.url ?? "")
   )
     throw new Error(
       "Uploaded deployment did not become ready in the approved project",
@@ -899,9 +902,7 @@ export async function runWebPhase(
       value?.apiSha === apiSha &&
       value?.projectId === WEB.projectId &&
       /^dpl_[A-Za-z0-9]+$/.test(value?.deploymentId ?? "") &&
-      /^https:\/\/agent-platform-web-[a-z0-9-]+\.vercel\.app$/.test(
-        value?.url ?? "",
-      );
+      DEPLOYMENT_URL.test(value?.url ?? "");
     const remoteReceipt = async (cli, receipt, promoted = false) => {
       if (!matchingReceipt(receipt))
         throw new Error("Publication receipt does not match approved project");
