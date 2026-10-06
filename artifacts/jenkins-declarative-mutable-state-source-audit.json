@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-06T03:58:22.400Z",
+  "scope": "Source audit only; real Jenkins Web rerun/release/mutation execution are required for behavior verification",
+  "actualFailure": {
+    "webBuild": 1,
+    "contractBuild": 1,
+    "webResult": "FAILURE",
+    "contractResult": "SUCCESS",
+    "reason": "Declarative CONTRACT_CHILD_RESULT default shadowed runtime assignment and remained NOT_RUN.",
+    "readOnlyEvents": "/tmp/agent-platform-formal-web-1-readonly-events.json"
+  },
+  "movedInitializations": {
+    "web": [
+      "CONTRACT_CHILD_NUMBER",
+      "CONTRACT_CHILD_RESULT"
+    ],
+    "release": [
+      "RELEASE_REQUIRED",
+      "RELEASE_READY"
+    ],
+    "mutation": [
+      "CHECKOUT_READY",
+      "MUTATION_READY"
+    ]
+  },
+  "audit": [
+    {
+      "path": "deploy/jenkins/native-ci.groovy",
+      "sha256": "5d017ba56d0e5be06856eb4a3253e8c880091d8bfb7a1c3d89c63b0eb579475c",
+      "declarativeEnvironment": [
+        "CI_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/api.groovy",
+      "sha256": "69b085c47354447d78f4a33ccee4409e076a3feb1755fa25a96c4f06ea460ceb",
+      "declarativeEnvironment": [
+        "API_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [
+        "RELEASE_ROOT_SHA",
+        "RELEASE_SHA"
+      ],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/web.groovy",
+      "sha256": "fe78be0dd1d6159d9fc7c263bdd4ea43e081f118a44462504d673e5bbc2b687e",
+      "declarativeEnvironment": [
+        "NODE22",
+        "PUBLIC_WEB_TOOL",
+        "TRUSTED_WEB_TOOL"
+      ],
+      "runtimeMutable": [
+        "CONTRACT_CHILD_NUMBER",
+        "CONTRACT_CHILD_RESULT"
+      ],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/contract.groovy",
+      "sha256": "ab2f44b7f0861f1fcc9df511740d11ac4b96bb71f5d07655134c47948128ba0f",
+      "declarativeEnvironment": [
+        "NODE22"
+      ],
+      "runtimeMutable": [
+        "API_SHA",
+        "ROOT_SHA",
+        "WEB_SHA"
+      ],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/release.groovy",
+      "sha256": "eefedbccd0b7c0312ed5d9557e4f1e20acf40d42eb6a30ca5a26cd0b755e23ca",
+      "declarativeEnvironment": [
+        "MONITOR_TOOL",
+        "NODE22",
+        "RELEASE_TOOL",
+        "WEB_TOOL"
+      ],
+      "runtimeMutable": [
+        "API_BUILD",
+        "API_SHA",
+        "CONTRACT_BUILD",
+        "PLAN_PATH",
+        "RELEASE_READY",
+        "RELEASE_REQUIRED",
+        "RELEASE_TAG",
+        "ROOT_SHA",
+        "WEB_BUILD",
+        "WEB_SHA"
+      ],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/discover.groovy",
+      "sha256": "5bb4c73e11003e4ca2e207fb1a0cab7b7553f843e9a7f4a8d4d8636cec8dcb82",
+      "declarativeEnvironment": [
+        "DISCOVERY_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/monitor.groovy",
+      "sha256": "0212c6fbcadeb80d4f67cc835d9fb035107e143bd784c40e773f099818df7e86",
+      "declarativeEnvironment": [
+        "MONITOR_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/sandbox-images.groovy",
+      "sha256": "63d28102f4029644dd77ffeb1670832a5fcb5bcf1f0116747558a1923f8766ae",
+      "declarativeEnvironment": [
+        "IMAGE_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [
+        "IMAGE_SHA"
+      ],
+      "collisions": []
+    },
+    {
+      "path": "deploy/jenkins/mutation.groovy",
+      "sha256": "15adfe66bc963322b672448d4719cf9c1baf8bdd07770fe27e121c8b6e238b3b",
+      "declarativeEnvironment": [
+        "CI_TOOL",
+        "MUTATION_TOOL",
+        "NODE22"
+      ],
+      "runtimeMutable": [
+        "CHECKOUT_READY",
+        "MUTATION_READY",
+        "MUTATION_SHA"
+      ],
+      "collisions": []
+    }
+  ],
+  "limits": [
+    "No job, cloud, production, source push or service mutation executed by this source audit.",
+    "No mirror unit test added; formal Jenkins execution is the decisive behavioral check."
+  ]
+}
