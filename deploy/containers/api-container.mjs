@@ -24,7 +24,6 @@ export const REPOSITORIES = Object.freeze({
 });
 const docker = "/usr/local/bin/docker";
 const spec = ["--host", "unix:///var/run/docker.sock"];
-const base = "http://127.0.0.1:3101";
 const BLOCKERS = [
   "sandboxes",
   "agentTasks",
@@ -368,6 +367,7 @@ export const NATIVE_ADDON_PROBE =
 export function createDeployer(options = {}) {
   const root = options.root ?? ROOT,
     tools = options.tools ?? TOOLS;
+  const base = options.base ?? "http://127.0.0.1:3101";
   const exec = options.run ?? run;
   const now = options.now ?? (() => new Date().toISOString());
   const sleep =
@@ -764,7 +764,7 @@ export function createDeployer(options = {}) {
     const env = await runtimeEnv();
     for (let attempt = 0; attempt < 90; attempt++) {
       try {
-        const r = await fetch(base + "/ready", {
+        const r = await fetch(base + "/api/health", {
           redirect: "error",
           signal: AbortSignal.timeout(2000),
         });

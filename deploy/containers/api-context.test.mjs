@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { runInNewContext } from "node:vm";
+import { createServer } from "node:http";
+import { spawn } from "node:child_process";
 import {
   prepareApiContext,
   sourceAllowed,
@@ -629,6 +631,7 @@ async function harness(t, configuration = {}) {
   const service = createDeployer({
     root,
     tools,
+    base: configuration.base,
     run: fakeRun,
     heads: async () =>
       configuration.heads?.() ?? { sha: SHA, rootSha: ROOT_SHA },
@@ -645,12 +648,16 @@ async function harness(t, configuration = {}) {
       await fs.mkdir(context);
       return { context, manifest: { schemaFingerprint: FINGERPRINT } };
     },
-    status: async () => configuration.status?.(drain) ?? quietStatus,
-    ready: async (rel) => {
-      configuration.onReady?.(current, rel);
-      if (configuration.failNewReadiness && rel.imageId === IMAGE)
-        throw Error("new readiness failed");
-    },
+    status: configuration.actualReadiness
+      ? undefined
+      : async () => configuration.status?.(drain) ?? quietStatus,
+    ready: configuration.actualReadiness
+      ? undefined
+      : async (rel) => {
+          configuration.onReady?.(current, rel);
+          if (configuration.failNewReadiness && rel.imageId === IMAGE)
+            throw Error("new readiness failed");
+        },
   });
   return {
     root,
@@ -671,6 +678,119 @@ async function harness(t, configuration = {}) {
     },
   };
 }
+async function apiHttpFixture(t) {
+  const requests = [];
+  const state = { health: 200, commit: SHA, ready: true };
+  const server = createServer((request, response) => {
+    const authenticated =
+      request.headers.authorization === "Bearer fixture-private-passcode";
+    requests.push({
+      method: request.method,
+      path: request.url,
+      authenticated,
+      carriesAuthorization: request.headers.authorization !== undefined,
+    });
+    response.setHeader("content-type", "application/json");
+    if (request.method === "GET" && request.url === "/api/health") {
+      response.statusCode = state.health;
+      response.end(JSON.stringify({ status: "ok", uptimeSec: 1 }));
+    } else if (
+      request.method === "GET" &&
+      ["/api/system/version", "/api/deployment/status"].includes(request.url)
+    ) {
+      response.statusCode = authenticated ? 200 : 401;
+      response.end(
+        JSON.stringify(
+          request.url === "/api/system/version"
+            ? { commit: state.commit }
+            : { ...quietStatus, ready: state.ready },
+        ),
+      );
+    } else {
+      response.statusCode = 404;
+      response.end(JSON.stringify({ statusCode: 404 }));
+    }
+  });
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  return {
+    base: "http://127.0.0.1:" + server.address().port,
+    port: server.address().port,
+    requests,
+    state,
+  };
+}
+test("Docker HEALTHCHECK executes the real passcode-exempt /api/health route and rejects HTTP failure", async (t) => {
+  const api = await apiHttpFixture(t);
+  const dockerfile = await fs.readFile(
+    new URL("./Dockerfile.api", import.meta.url),
+    "utf8",
+  );
+  const cmd = dockerfile.match(/^HEALTHCHECK .* CMD node -e "(.*)"$/m)?.[1];
+  assert.ok(cmd, "Docker image must advertise an executable Node healthcheck");
+  async function healthcheck() {
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, ["-e", cmd], {
+        env: { PORT: String(api.port), PATH: "/usr/bin:/bin" },
+        stdio: "ignore",
+      });
+      child.once("error", reject);
+      child.once("exit", (code) => resolve(code));
+    });
+  }
+  assert.equal(await healthcheck(), 0);
+  assert.deepEqual(api.requests, [
+    {
+      method: "GET",
+      path: "/api/health",
+      authenticated: false,
+      carriesAuthorization: false,
+    },
+  ]);
+  api.state.health = 503;
+  assert.equal(await healthcheck(), 1);
+});
+test("current-image readiness uses actual HTTP routes and still requires pinned version and authenticated deployment readiness", async (t) => {
+  const api = await apiHttpFixture(t);
+  const h = await harness(t, { base: api.base, actualReadiness: true });
+  await h.service.build(SHA, 58, h.workspace, ROOT_SHA);
+  h.adopt(release());
+  assert.equal((await h.service.deploy(SHA, 58)).state, "current");
+  assert.deepEqual(api.requests, [
+    {
+      method: "GET",
+      path: "/api/health",
+      authenticated: false,
+      carriesAuthorization: false,
+    },
+    {
+      method: "GET",
+      path: "/api/system/version",
+      authenticated: true,
+      carriesAuthorization: true,
+    },
+    {
+      method: "GET",
+      path: "/api/deployment/status",
+      authenticated: true,
+      carriesAuthorization: true,
+    },
+  ]);
+  api.state.commit = NEXT;
+  await assert.rejects(
+    h.service.deploy(SHA, 58),
+    /readiness or pinned version/,
+  );
+  api.state.commit = SHA;
+  api.state.ready = false;
+  await assert.rejects(
+    h.service.deploy(SHA, 58),
+    /readiness or pinned version/,
+  );
+});
 test("same root/API build cache reuses exact artifact/image/builtAt and emits independent immutable receipts", async (t) => {
   const h = await harness(t),
     first = await h.service.build(SHA, 12, h.workspace, ROOT_SHA);

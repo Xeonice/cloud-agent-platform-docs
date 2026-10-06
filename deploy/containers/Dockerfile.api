@@ -40,5 +40,5 @@ ENV NODE_ENV=production HOST=127.0.0.1 PORT=3101 \
     BOXLITE_RUNTIME_DIR=/opt/boxlite-runtime SANDBOX_DEFAULT_PROVIDER=boxlite DEPLOYMENT_DRAIN_FILE=/data/deployment-drain \
     SANDBOX_DEFAULT_IMAGE=ghcr.io/xeonice/agent-platform-boxlite:latest \
     SCHEDULER_CPU_OVERCOMMIT=1 APP_COMMIT=$APP_COMMIT APP_VERSION=$APP_COMMIT APP_BUILT_AT=$APP_BUILT_AT
-HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||'3101')+'/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+HEALTHCHECK --interval=15s --timeout=5s --start-period=120s --retries=4 CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||'3101')+'/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
 ENTRYPOINT ["/usr/local/bin/node", "/opt/agent-platform/api-entrypoint.mjs"]
