@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'agent-platform-deploy' }
+  agent { label 'agent-platform-linux-deploy' }
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -9,8 +9,8 @@ pipeline {
   }
   triggers { cron('H/2 * * * *') }
   environment {
-    NODE22 = '@NODE22@'
-    DISCOVERY_TOOL = '@JENKINS_SOURCE@/deploy/jenkins/jenkins-discover.mjs'
+    NODE22 = '/usr/local/bin/node'
+    DISCOVERY_TOOL = '/opt/agent-platform/tools/jenkins-discover.mjs'
   }
   stages {
     stage('Discover branch and open PR updates') {

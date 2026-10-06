@@ -13,6 +13,18 @@ import {
 } from "node:path";
 import { parseEnv } from "node:util";
 import { pathToFileURL } from "node:url";
+import {
+  assertBuildSystem,
+  buildSystem,
+  ciContext,
+  ciChildEnvironment,
+  browserVerificationScript,
+} from "./ci-platform.mjs";
+import {
+  deploymentContext,
+  assertDeploymentLayout,
+  deploymentEnvironment,
+} from "./deployment-platform.mjs";
 
 // Installed, owner-controlled code. A repository checkout is data to these tools,
 // never the source of a trusted deployment command or its configuration.
@@ -68,11 +80,6 @@ const MACHO = new Set([
   "cafebabe",
   "bebafeca",
 ]);
-const COREPACK = resolve(
-  dirname(process.execPath),
-  "../lib/node_modules/corepack/dist/corepack.js",
-);
-
 export function validRef(ref) {
   return (
     typeof ref === "string" &&
@@ -92,19 +99,15 @@ function inside(root, path) {
     (part !== ".." && !part.startsWith("../") && !isAbsolute(part))
   );
 }
-export function childEnvironment(node, home, temporary) {
+export function childEnvironment(
+  node,
+  home,
+  temporary,
+  platform = process.platform,
+) {
   return {
-    PATH: `${dirname(node)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
-    HOME: home,
+    ...deploymentEnvironment(node, home, platform),
     TMPDIR: temporary,
-    CI: "true",
-    HUSKY: "0",
-    LANG: "en_US.UTF-8",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    VERCEL_TELEMETRY_DISABLED: "1",
-    NEXT_TELEMETRY_DISABLED: "1",
     COPYFILE_DISABLE: "1",
     npm_config_store_dir: join(home, "pnpm-store"),
   };
@@ -172,6 +175,13 @@ async function regular(path, privateOnly = false, maxBytes = 2_000_000) {
 async function json(path, privateOnly = false) {
   return JSON.parse((await regular(path, privateOnly)).toString());
 }
+// Vitest's browser reporter includes browser/source metadata and can exceed the
+// configuration limit. Keep its allowance separate and validate actual results.
+export async function readExecutedTestReport(path) {
+  return testReport(
+    JSON.parse((await regular(path, false, 64 * 1024 * 1024)).toString()),
+  );
+}
 async function writeJson(path, value) {
   const temporary = `${path}.${randomUUID()}.tmp`;
   await fs.writeFile(temporary, JSON.stringify(value, null, 2) + "\n", {
@@ -200,11 +210,28 @@ async function digestFile(path) {
 
 // --standalone removes references to the CI workspace. It does not convert native
 // binaries from macOS to Linux: reject those before upload rather than claim portability.
+async function nativeFunctionArchitecture(root, path) {
+  let parent = dirname(path);
+  while (inside(root, parent)) {
+    if (basename(parent).endsWith(".func")) {
+      const config = await json(join(parent, ".vc-config.json"));
+      const arch = config.architecture ?? "x86_64";
+      if (!["x86_64", "arm64"].includes(arch))
+        throw new Error("Unknown Vercel function target architecture");
+      return arch;
+    }
+    if (parent === root) break;
+    parent = dirname(parent);
+  }
+  throw new Error("Native executable is outside a configured Vercel function");
+}
+
 export async function treeEvidence(root, { linux = false } = {}) {
   await directory(root);
   const hash = createHash("sha256");
   let files = 0,
     bytes = 0;
+  const nativeArchitectures = new Set();
   async function visit(path) {
     const stat = await fs.lstat(path);
     const name = relative(root, path).split("\\").join("/");
@@ -222,18 +249,39 @@ export async function treeEvidence(root, { linux = false } = {}) {
       for (const child of (await fs.readdir(path)).sort())
         await visit(join(path, child));
     } else {
-      if (linux && (name.endsWith(".node") || name.endsWith(".dylib"))) {
+      if (linux) {
         const f = await fs.open(path, "r");
-        const magic = Buffer.alloc(4);
+        const header = Buffer.alloc(64);
+        let length;
         try {
-          await f.read(magic, 0, 4, 0);
+          ({ bytesRead: length } = await f.read(header, 0, 64, 0));
         } finally {
           await f.close();
         }
-        if (MACHO.has(magic.toString("hex")) || name.endsWith(".dylib"))
+        const magic = header.subarray(0, 4).toString("hex");
+        if (MACHO.has(magic) || name.endsWith(".dylib"))
           throw new Error(
             "macOS native binary cannot be uploaded to Vercel Linux functions",
           );
+        if (magic === "7f454c46") {
+          if (length < 20 || header[4] !== 2 || ![1, 2].includes(header[5]))
+            throw new Error("Unsupported native ELF header");
+          const machine =
+            header[5] === 1 ? header.readUInt16LE(18) : header.readUInt16BE(18);
+          const architecture =
+            machine === 62 ? "x86_64" : machine === 183 ? "arm64" : null;
+          if (!architecture)
+            throw new Error("Unsupported native ELF architecture");
+          if (architecture !== (await nativeFunctionArchitecture(root, path)))
+            throw new Error(
+              "Native ELF architecture does not match the Vercel function target",
+            );
+          nativeArchitectures.add(architecture);
+        } else if (name.endsWith(".node") || /\.so(?:\.|$)/.test(name)) {
+          throw new Error(
+            "Native dependency is not a verified Linux ELF binary",
+          );
+        }
       }
       const evidence = await digestFile(path);
       hash.update(`file\0${name}\0${stat.mode & 0o111}\0${evidence.sha256}\0`);
@@ -242,7 +290,12 @@ export async function treeEvidence(root, { linux = false } = {}) {
     }
   }
   await visit(root);
-  return { sha256: hash.digest("hex"), files, bytes };
+  return {
+    sha256: hash.digest("hex"),
+    files,
+    bytes,
+    nativeArchitectures: [...nativeArchitectures].sort(),
+  };
 }
 export async function normalizeOutput(root) {
   await directory(root);
@@ -386,42 +439,45 @@ async function execute(command, args, cwd, env, capture = false) {
   });
 }
 
-export function roleFor(phase, identity = userInfo()) {
+export function roleFor(phase, identity = userInfo(), system = buildSystem()) {
+  assertBuildSystem(system);
   const trusted = TRUSTED.has(phase);
-  if (
-    trusted
-      ? identity.username !== "douglasdong" ||
-        identity.homedir !== WEB.ownerHome
-      : identity.username !== "_agentplatformci" ||
-        identity.homedir !== WEB.ciHome
-  )
-    throw new Error(
-      trusted
-        ? "Trusted deployment account required"
-        : "Isolated CI account required",
-    );
-  return trusted ? "trusted" : "ci";
+  if (!trusted) {
+    ciContext(identity, system);
+    return "ci";
+  }
+  deploymentContext(identity, system);
+  return "trusted";
 }
 async function authenticated(work, operations, action) {
-  await installedCLI(operations);
-  const auth =
-    operations.paths?.auth ??
-    join(WEB.ownerHome, "Library/Application Support/com.vercel.cli/auth.json");
+  const layout = operations.deployment;
+  await installedCLI(operations, layout.cli);
+  const auth = operations.paths?.auth ?? layout.auth;
   const scratch = await fs.mkdtemp(join(tmpdir(), "agent-platform-vercel-"));
   await fs.chmod(scratch, 0o700);
   try {
     const global = dirname(auth);
     await directory(global);
+    if (
+      layout.platform === "linux" &&
+      ((await fs.lstat(global)).mode & 0o777) !== 0o700
+    )
+      throw new Error("Vercel global configuration directory must be private");
     if (((await fs.lstat(auth)).mode & 0o777) !== 0o600)
       throw new Error("Vercel authentication file must be private");
     await regular(auth, true, 65_536);
     // Keep OAuth refresh persistence in its original owner-only global config.
     // Only fixed CLI commands run here, with no repository scripts or token env.
-    const env = childEnvironment(process.execPath, scratch, scratch);
+    const env = childEnvironment(
+      layout.node,
+      scratch,
+      scratch,
+      layout.platform,
+    );
     const cli = (args) =>
       operations.execute(
-        process.execPath,
-        [WEB.cli, ...args, "--scope", WEB.scope, "--global-config", global],
+        layout.node,
+        [layout.cli, ...args, "--scope", WEB.scope, "--global-config", global],
         work,
         env,
         true,
@@ -431,10 +487,10 @@ async function authenticated(work, operations, action) {
     await fs.rm(scratch, { force: true, recursive: true });
   }
 }
-async function installedCLI(operations) {
+async function installedCLI(operations, cliPath = WEB.cli) {
   const version =
     operations.cliVersion ??
-    (await json(resolve(dirname(WEB.cli), "../package.json"))).version;
+    (await json(resolve(dirname(cliPath), "../package.json"))).version;
   if (version !== "62.2.0") throw new Error("Use the pinned Vercel CLI 62.2.0");
 }
 async function approvedPin(sha, rootSha, root = WEB.root, apiSha) {
@@ -631,26 +687,46 @@ export async function runWebPhase(
     !validRef(ref)
   )
     throw new Error("Pinned web/root/API commit and valid ref required");
-  if (
-    process.platform !== "darwin" ||
-    process.arch !== "arm64" ||
-    process.versions.node.split(".")[0] !== "22"
-  )
-    throw new Error("Web pipeline requires macOS ARM64 Node 22");
   const operations = { execute, fetch: globalThis.fetch, ...overrides };
-  const role = roleFor(phase, operations.identity ?? userInfo());
+  const system = assertBuildSystem(operations.system ?? buildSystem());
+  const identity = operations.identity ?? userInfo();
+  const role = roleFor(phase, identity, system);
+  const layout =
+    role === "ci"
+      ? ciContext(identity, system)
+      : deploymentContext(identity, system);
+  if (role === "trusted") {
+    if (layout.platform === "linux")
+      await (operations.assertLayout ?? assertDeploymentLayout)(layout);
+    operations.deployment = layout;
+  }
+  const node = system.node;
+  const corepack = resolve(
+    dirname(node),
+    "../lib/node_modules/corepack/dist/corepack.js",
+  );
+  const cliPath = layout?.cli ?? WEB.cli;
   const work = resolve(workspace);
   await directory(work);
   const source = join(work, "web-source"),
     artifacts = join(work, "web-artifacts");
   const home =
     role === "ci"
-      ? (operations.paths?.ciHome ?? WEB.ciHome)
-      : (operations.paths?.ownerHome ?? WEB.ownerHome);
-  const deployRoot = operations.paths?.root ?? WEB.root;
+      ? (operations.paths?.ciHome ?? layout.home)
+      : (operations.paths?.ownerHome ?? layout.home);
+  const deployRoot =
+    operations.paths?.root ?? (role === "trusted" ? layout.root : WEB.root);
   const temporary = join(home, "tmp");
   await fs.mkdir(temporary, { recursive: true, mode: 0o700 });
-  const env = childEnvironment(process.execPath, home, temporary);
+  const env =
+    role === "ci"
+      ? ciChildEnvironment(node, {
+          ...layout,
+          home,
+          temporary,
+          store: join(home, "pnpm-store"),
+        })
+      : childEnvironment(node, home, temporary, system.platform);
   const run = (cmd, args, cwd = source, capture = false) =>
     operations.execute(cmd, args, cwd, env, capture);
   const git = (args, cwd = source, capture = true) =>
@@ -665,7 +741,7 @@ export async function runWebPhase(
     if (untracked.some((name) => !name.startsWith(".vercel/")))
       throw new Error("Uncommitted source files cannot enter a release");
   };
-  const pnpm = (args) => run(process.execPath, [COREPACK, "pnpm", ...args]);
+  const pnpm = (args) => run(node, [corepack, "pnpm", ...args]);
   const production = ref === WEB.ref;
   if (role === "trusted" && !production)
     throw new Error(
@@ -1025,6 +1101,7 @@ export async function runWebPhase(
       production,
       state: "checking",
       nodeMajor: 22,
+      buildSystem: { platform: system.platform, arch: system.arch },
       vercelCli: "62.2.0",
       jenkins: { job: "agent-platform-web", buildNumber },
       gates: {},
@@ -1066,8 +1143,15 @@ export async function runWebPhase(
     let details = {};
     if (commands[phase]) {
       await pnpm(commands[phase]);
-      if (phase === "install")
-        await pnpm(["exec", "playwright", "install", "chromium"]);
+      if (phase === "install") {
+        if (layout.platform === "linux")
+          await run(node, [
+            "--input-type=module",
+            "-e",
+            browserVerificationScript(layout.browsers),
+          ]);
+        else await pnpm(["exec", "playwright", "install", "chromium"]);
+      }
     } else if (["acceptance", "storybook"].includes(phase)) {
       const output = join(artifacts, `${phase}.json`),
         junit = join(artifacts, `${phase}.xml`);
@@ -1080,7 +1164,7 @@ export async function runWebPhase(
         `--outputFile.json=${output}`,
         `--outputFile.junit=${junit}`,
       ]);
-      details = testReport(await json(output));
+      details = await readExecutedTestReport(output);
     } else if (phase === "build") {
       await cleanSource();
       if (production) {
@@ -1109,9 +1193,9 @@ export async function runWebPhase(
         });
         const offline = join(work, "empty-vercel-global");
         await fs.mkdir(offline, { mode: 0o700 });
-        await installedCLI(operations);
-        await run(process.execPath, [
-          WEB.cli,
+        await installedCLI(operations, cliPath);
+        await run(node, [
+          cliPath,
           "build",
           "--prod",
           "--standalone",

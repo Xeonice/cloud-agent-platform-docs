@@ -1,0 +1,750 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-10-06T00:18:29.021Z",
+  "state": "source-fixed-reviewh-verified-target-uid-startup-pending",
+  "failure": {
+    "review": "system-review-20261007g",
+    "state": "rolled-back-polling-still-retired",
+    "error": "Executable is not traversable by _agentplatformjenkins: /opt/homebrew/opt/openjdk@21/bin/java",
+    "archive": "/Users/douglasdong/.local/share/agent-platform-deploy/backups/launchd-cutover-1791245543470-5aeb4d7e-5404-4888-b882-217ac8a87511",
+    "events": [
+      {
+        "state": "polling-retired",
+        "at": "2026-10-06T00:12:23.477Z"
+      },
+      {
+        "state": "holding-admission-barrier",
+        "at": "2026-10-06T00:12:23.477Z"
+      },
+      {
+        "state": "waiting-gui-tunnel-exit",
+        "at": "2026-10-06T00:12:23.628Z"
+      },
+      {
+        "state": "gui-tunnel-disconnected",
+        "at": "2026-10-06T00:12:53.736Z"
+      },
+      {
+        "state": "production-quiet-ten-seconds",
+        "at": "2026-10-06T00:13:03.881Z"
+      },
+      {
+        "state": "backup-complete",
+        "at": "2026-10-06T00:13:03.982Z"
+      },
+      {
+        "state": "failed-recovering",
+        "at": "2026-10-06T00:13:07.384Z"
+      },
+      {
+        "state": "rolled-back-polling-still-retired",
+        "at": "2026-10-06T00:13:09.670Z"
+      }
+    ],
+    "originalApiStopped": false,
+    "identities": {
+      "_agentplatformjenkins": 400,
+      "_agentplatformci": 401
+    },
+    "oldTunnelPid": 72608,
+    "systemServicesInstalled": false
+  },
+  "actualProbe": {
+    "uid": 501,
+    "original": {
+      "path": "/usr/bin/test",
+      "status": null,
+      "error": "ENOENT"
+    },
+    "correct": {
+      "path": "/bin/test",
+      "status": 0,
+      "error": null
+    }
+  },
+  "candidateTools": {
+    "checkedAt": "2026-10-06T00:17:02.546Z",
+    "executionKind": "readonly-current-UID501-launchability-not-target-service-UIDs",
+    "uid": 501,
+    "readOnly": true,
+    "launches": [
+      {
+        "name": "Java version",
+        "commandFile": "/opt/homebrew/opt/openjdk@21/bin/java",
+        "args": ["--version"],
+        "exitCode": 0,
+        "spawnError": null,
+        "versionOutput": [
+          "openjdk 21.0.12.1 2026-08-18",
+          "OpenJDK Runtime Environment Homebrew (build 21.0.12.1)",
+          "OpenJDK 64-Bit Server VM Homebrew (build 21.0.12.1, mixed mode, sharing)"
+        ]
+      },
+      {
+        "name": "Node22 version",
+        "commandFile": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "args": ["--version"],
+        "exitCode": 0,
+        "spawnError": null,
+        "versionOutput": ["v22.23.3"]
+      },
+      {
+        "name": "Corepack version",
+        "commandFile": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "args": [
+          "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/corepack.js",
+          "--version"
+        ],
+        "exitCode": 0,
+        "spawnError": null,
+        "versionOutput": ["0.36.0"]
+      },
+      {
+        "name": "Pinned pnpm offline version",
+        "commandFile": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "args": [
+          "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/corepack.js",
+          "pnpm",
+          "--version"
+        ],
+        "exitCode": 0,
+        "spawnError": null,
+        "versionOutput": ["9.15.0"]
+      },
+      {
+        "name": "Installed pinned Vercel version",
+        "commandFile": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "args": [
+          "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
+          "--version"
+        ],
+        "exitCode": 0,
+        "spawnError": null,
+        "versionOutput": ["62.2.0", "Vercel CLI 62.2.0 (Node.js 22.23.3)"]
+      }
+    ],
+    "paths": [
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "real": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "bytes": 112925600,
+        "readableByUID501": true
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/corepack.js",
+        "real": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/corepack.js",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "bytes": 174,
+        "readableByUID501": true
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/pnpm.js",
+        "real": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/pnpm.js",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "bytes": 186,
+        "readableByUID501": true
+      },
+      {
+        "path": "/opt/homebrew/opt/openjdk@21/bin/java",
+        "real": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/bin/java",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "bytes": 51584,
+        "readableByUID501": true
+      },
+      {
+        "path": "/opt/homebrew/opt/jenkins-lts/libexec/jenkins.war",
+        "real": "/opt/homebrew/Cellar/jenkins-lts/2.580.1/libexec/jenkins.war",
+        "uid": 501,
+        "gid": 80,
+        "mode": "644",
+        "bytes": 54011943,
+        "readableByUID501": true
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
+        "real": "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
+        "uid": 0,
+        "gid": 80,
+        "mode": "644",
+        "bytes": 62059,
+        "readableByUID501": true
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/jenkins-tools/agent.jar",
+        "real": "/Library/Application Support/AgentPlatform/jenkins-tools/agent.jar",
+        "uid": 0,
+        "gid": 0,
+        "mode": "644",
+        "bytes": 1418560,
+        "readableByUID501": true
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-web.mjs",
+        "real": "/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-web.mjs",
+        "uid": 0,
+        "gid": 0,
+        "mode": "644",
+        "bytes": 41426,
+        "readableByUID501": true,
+        "sha256": "8a97bc30cbdef5375492e2b2f781c9a517e3c2beec4d4774f65ce4395960b6d2"
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-ci.mjs",
+        "real": "/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-ci.mjs",
+        "uid": 0,
+        "gid": 0,
+        "mode": "644",
+        "bytes": 4730,
+        "readableByUID501": true,
+        "sha256": "fc10c5718c1984a78f77b5f3e29a19b7bb8525a7270812c6d82564a94e098f7d"
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/jenkins-tools/project-ci.mjs",
+        "real": "/Library/Application Support/AgentPlatform/jenkins-tools/project-ci.mjs",
+        "uid": 0,
+        "gid": 0,
+        "mode": "644",
+        "bytes": 6504,
+        "readableByUID501": true,
+        "sha256": "df66bf0a5c086ec7238e98d67d94f194b38a9020965e8234d96672bea4efab18"
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/jenkins-tools/mutation.mjs",
+        "real": "/Library/Application Support/AgentPlatform/jenkins-tools/mutation.mjs",
+        "uid": 0,
+        "gid": 0,
+        "mode": "644",
+        "bytes": 9491,
+        "readableByUID501": true,
+        "sha256": "df851d5803bc229ac5506f1742358cc7d8831d84e430e91b1e3bb735ff18771b"
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/jenkins-web.mjs",
+        "real": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/jenkins-web.mjs",
+        "uid": 501,
+        "gid": 20,
+        "mode": "600",
+        "bytes": 41426,
+        "readableByUID501": true,
+        "sha256": "8a97bc30cbdef5375492e2b2f781c9a517e3c2beec4d4774f65ce4395960b6d2"
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/web.groovy",
+        "real": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/web.groovy",
+        "uid": 501,
+        "gid": 20,
+        "mode": "600",
+        "bytes": 7762,
+        "readableByUID501": true,
+        "sha256": "16d2aa4a7c54e45a2165d30d122216e28e803af38ade604e958a9a91b9808460"
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/contract.groovy",
+        "real": "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/source/deploy/jenkins/contract.groovy",
+        "uid": 501,
+        "gid": 20,
+        "mode": "600",
+        "bytes": 2227,
+        "readableByUID501": true,
+        "sha256": "3e76fe2e89fdc61724221b6bd92f9271d3bf52d7b46230e8b88ffd68e24b077b"
+      }
+    ],
+    "aclEvidence": [
+      {
+        "path": "/",
+        "uid": 0,
+        "gid": 0,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library",
+        "uid": 0,
+        "gid": 0,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/vercel",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/vercel/node_modules",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users",
+        "uid": 0,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong",
+        "uid": 501,
+        "gid": 20,
+        "mode": "750",
+        "aclLines": [" 0: group:everyone deny delete"],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist",
+        "uid": 501,
+        "gid": 20,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt",
+        "uid": 0,
+        "gid": 0,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar",
+        "uid": 501,
+        "gid": 80,
+        "mode": "775",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/jenkins-lts",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/jenkins-lts/2.580.1",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/jenkins-lts/2.580.1/libexec",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/bin",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      }
+    ],
+    "war": {
+      "path": "/opt/homebrew/opt/jenkins-lts/libexec/jenkins.war",
+      "readableByUID501": true,
+      "zipIntegrityExitCode": 0,
+      "started": false
+    },
+    "limitations": [
+      "No target UID400/401 process was launched and no sudo was attempted.",
+      "No WAR --version execution: jar readability/integrity is sufficient without any chance of starting Jenkins."
+    ]
+  },
+  "javaPath": {
+    "checkedAt": "2026-10-06T00:15:51.799Z",
+    "readOnly": true,
+    "javaRealPath": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/bin/java",
+    "pathMetadata": [
+      {
+        "path": "/",
+        "uid": 0,
+        "gid": 0,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt",
+        "uid": 0,
+        "gid": 0,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar",
+        "uid": 501,
+        "gid": 80,
+        "mode": "775",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/bin",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      },
+      {
+        "path": "/opt/homebrew/Cellar/openjdk@21/21.0.12.1/libexec/openjdk.jdk/Contents/Home/bin/java",
+        "uid": 501,
+        "gid": 80,
+        "mode": "755",
+        "aclLines": [],
+        "quarantinePresent": false
+      }
+    ],
+    "signing": {
+      "verificationExitCode": 0,
+      "diagnostics": "signature verification passed"
+    },
+    "probes": [
+      {
+        "account": "_agentplatformjenkins",
+        "uid": 400,
+        "command": "java --version under clean environment",
+        "exitCode": 1,
+        "actualStartupVerified": false,
+        "error": "sudo-n-authorization-unavailable"
+      }
+    ],
+    "originalProbe": {
+      "executable": "/usr/bin/test",
+      "status": null,
+      "spawnError": "ENOENT"
+    },
+    "ownerUserProbe": {
+      "executable": "/bin/test",
+      "status": 0,
+      "spawnError": null
+    }
+  },
+  "targetServiceAccountStartupVerified": false,
+  "reason": "UID400/401 actual startup requires the next administrator apply; current-UID tool checks are not equivalent.",
+  "publicHealth": 200,
+  "previewActions": 0,
+  "productionApiPid": 64657,
+  "productionSha": "134433f47912f7172faae50ea3285d010f6a3425",
+  "rollbackVerification": {
+    "verifiedAt": "2026-10-06T00:21:15.664Z",
+    "apiPid": 64657,
+    "sha": "134433f47912f7172faae50ea3285d010f6a3425",
+    "ready": true,
+    "database": true,
+    "provider": true,
+    "image": true,
+    "activeWS": 2,
+    "inFlightHTTP": 0,
+    "credentialAuth": 0,
+    "blockersZero": true,
+    "draining": false,
+    "tunnel": {
+      "pid": 78272,
+      "uid": 501,
+      "domain": "gui/501",
+      "program": "/opt/homebrew/bin/cloudflared",
+      "metricsSameOwner": true
+    },
+    "publicHealth": 200
+  },
+  "sourceVerification": {
+    "installerSha256": "10d6dc15b39c21fab71154d5dcf4b9c6061bc559b5b73493a8a80cdaae1fdbc8",
+    "review": "system-review-20261007h",
+    "sourceTests": {
+      "tests": 220,
+      "passed": 220,
+      "failed": 0,
+      "skipped": 0
+    },
+    "correctedProbePath": "/bin/test",
+    "failedCommandCannotProveIsolation": true,
+    "targetChecksBeforeProductionChanges": true,
+    "realCurrentUidReadableFixtureRefused": true,
+    "realCurrentUidUnreadableFixtureAccepted": true,
+    "tunnelLifecycleHelpersUnchanged": [
+      {
+        "name": "dedicatedTunnelExited",
+        "unchanged": true,
+        "sha256": "6092aae8320508364abc5c4e3848f3a0992134a378076cb7121e5babace1f61a"
+      },
+      {
+        "name": "captureDedicatedTunnel",
+        "unchanged": true,
+        "sha256": "9b528e7edbba67a607d32e7c666777946f2b6a2f8291de98e17166596ce07f06"
+      },
+      {
+        "name": "probeDedicatedTunnelExit",
+        "unchanged": true,
+        "sha256": "59ac983039cde625e28ff5011e0f0fec3ddddd8beacabfbfe1ce53fce9113b76"
+      },
+      {
+        "name": "waitDedicatedTunnelExit",
+        "unchanged": true,
+        "sha256": "b10a2aa5515e99d15eb3775a150d452d72afc020126ffdaec8b1964524322617"
+      },
+      {
+        "name": "restoreTunnelAfterExit",
+        "unchanged": true,
+        "sha256": "b729888897199fb08628800125df881607fb10125b8ae5402943d93267bf9c47"
+      },
+      {
+        "name": "waitCutoverQuiet",
+        "unchanged": true,
+        "sha256": "4414bd6912e71b6a8c73a01c04b75456b57702f969942456e11e9c484cc62a63"
+      }
+    ],
+    "currentUidHelperProof": "jenkins-system-target-prerequisite-uid501.json",
+    "actualTargetUidsVerified": false
+  }
+}

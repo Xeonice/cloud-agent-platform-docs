@@ -1,0 +1,138 @@
+{
+  "kind": "actual-linux-agent-named-nested-volume-recreation",
+  "startedAt": "2026-10-06T02:06:17.090Z",
+  "oldAnonymousVolumesRetained": true,
+  "oldAnonymousDataCopied": false,
+  "priorFormalBuilds": 0,
+  "hostMounts": [],
+  "daemonSocketsInContainers": [],
+  "before": [
+    {
+      "service": "agent",
+      "container": "agent-platform-linux-ci-agent-1",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-workspace",
+          "target": "/home/jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-credentials",
+          "target": "/run/secrets",
+          "readWrite": false
+        },
+        {
+          "type": "volume",
+          "name": "85bbf0e93b0eb8d40049bf9482e6a4ba78aba1484d5646f4066e9769855b114e",
+          "target": "/home/jenkins/agent",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "2374f6419b91fc1d415782adb609e5b0f563fbd2c19dc619c9490ad3a6c38e6d",
+          "target": "/home/jenkins/.jenkins",
+          "readWrite": true
+        }
+      ]
+    },
+    {
+      "service": "web",
+      "container": "agent-platform-linux-ci-web-1",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-workspace",
+          "target": "/home/jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-credentials",
+          "target": "/run/secrets",
+          "readWrite": false
+        },
+        {
+          "type": "volume",
+          "name": "55358337e13b1aa0e81079c9b79cd307f6639caa4327f828491394a8ef9276d1",
+          "target": "/home/jenkins/.jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "8acb5cc8998995f13eb40dac1586e254fbbe43f9f32492d265d34131510cc18f",
+          "target": "/home/jenkins/agent",
+          "readWrite": true
+        }
+      ]
+    }
+  ],
+  "after": [
+    {
+      "service": "agent",
+      "container": "agent-platform-linux-ci-agent-1",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-credentials",
+          "target": "/run/secrets",
+          "readWrite": false
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-jenkins-state",
+          "target": "/home/jenkins/.jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-agent-workspace",
+          "target": "/home/jenkins/agent",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-ci-workspace",
+          "target": "/home/jenkins",
+          "readWrite": true
+        }
+      ],
+      "exactNamedMountPolicyPassed": true
+    },
+    {
+      "service": "web",
+      "container": "agent-platform-linux-ci-web-1",
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-jenkins-state",
+          "target": "/home/jenkins/.jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-agent-workspace",
+          "target": "/home/jenkins/agent",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-workspace",
+          "target": "/home/jenkins",
+          "readWrite": true
+        },
+        {
+          "type": "volume",
+          "name": "agent-platform-linux-web-credentials",
+          "target": "/run/secrets",
+          "readWrite": false
+        }
+      ],
+      "exactNamedMountPolicyPassed": true
+    }
+  ],
+  "finishedAt": "2026-10-06T02:06:18.712Z",
+  "state": "named-nested-volumes-verified",
+  "productionApiOrTunnelChanged": false
+}

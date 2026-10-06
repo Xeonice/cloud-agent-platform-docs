@@ -1,0 +1,24 @@
+# Experimental Linux ARM64 compatibility proof, not a production API image.
+FROM node:22.23.3-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS sdk
+RUN node -e "if (process.arch !== 'arm64') throw Error('This compatibility proof requires Linux ARM64')"
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 patchelf && rm -rf /var/lib/apt/lists/*
+WORKDIR /proof
+COPY boxlite-proof/package.json boxlite-proof/package-lock.json /proof/
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY boxlite-proof/prepare-runtime.py /tmp/prepare-runtime.py
+RUN python3 /tmp/prepare-runtime.py
+
+# The 0.9.7 companion runtime's static ARM64 shim uses glibc 2.28.
+FROM rockylinux:8@sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c
+RUN dnf install -y python3 ca-certificates libcap libseccomp libstdc++ && dnf clean all
+COPY boxlite-proof/materialize-certs.py /tmp/materialize-certs.py
+RUN python3 /tmp/materialize-certs.py && rm /tmp/materialize-certs.py
+COPY --from=sdk /usr/local/ /usr/local/
+COPY --from=sdk /proof/ /proof/
+COPY --from=sdk /opt/boxlite-runtime /opt/boxlite-runtime
+COPY boxlite-smoke.mjs /proof/boxlite-smoke.mjs
+WORKDIR /proof
+ENV BOXLITE_HOME=/data/boxlite BOXLITE_RUNTIME_DIR=/opt/boxlite-runtime
+RUN node --input-type=module -e "await import('@boxlite-ai/boxlite');console.log('BoxLite0.9.7 LinuxARM64 native import passed')"
+ENTRYPOINT ["node", "/proof/boxlite-smoke.mjs"]
+CMD ["create"]

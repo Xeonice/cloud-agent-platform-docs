@@ -95,5 +95,22 @@
     "systemInstallValidated": false,
     "boundary": "Actual UID501 GUI Tunnel hold/bootout/exit/strict-quiet/gate/bootstrap/readiness/exact-owner-release was validated. No API restart, schema migration, privileged installer, root helper/system services installation or Jenkins system startup was tested by this lifecycle."
   },
-  "systemInstallValidated": false
+  "systemInstallValidated": false,
+  "currentSourceVerification": {
+    "status": "current-source-tests-passed-target-UID400-401-pending",
+    "evidence": "artifacts/jenkins-system-cutover-source-verification.json",
+    "installerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "currentTests": 236,
+    "currentPassed": 236,
+    "currentFailed": 0,
+    "currentSkipped": 0,
+    "uid501Evidence": "artifacts/jenkins-system-target-prerequisite-uid501.json",
+    "uid400Verified": false,
+    "uid401Verified": false,
+    "systemInstallValidated": false,
+    "historicalEvidencePreserved": "Recorded sourceSha256/snapshot/trace and reviewf liveCutoverValidation remain historical; currentSourceVerification describes j-candidate source/tests only.",
+    "actualApiLifecycleVerified": false,
+    "actualRootAccountReuseValidated": false,
+    "accountReadonlyEvidence": "artifacts/jenkins-system-isolated-account-record-readonly.json"
+  }
 }

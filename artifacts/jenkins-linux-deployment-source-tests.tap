@@ -1,0 +1,2546 @@
+TAP version 13
+# (node:2640) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: public context excludes private data, dependencies and escaping paths
+ok 1 - public context excludes private data, dependencies and escaping paths
+  ---
+  duration_ms: 0.548284
+  type: 'test'
+  ...
+# Subtest: pinned root public inputs define the context; submodule, installed tools and untracked secrets stay out
+ok 2 - pinned root public inputs define the context; submodule, installed tools and untracked secrets stay out
+  ---
+  duration_ms: 63.868615
+  type: 'test'
+  ...
+# Subtest: tracked secret, link and hardlinked inputs fail without retaining a partial context
+ok 3 - tracked secret, link and hardlinked inputs fail without retaining a partial context
+  ---
+  duration_ms: 41.5464
+  type: 'test'
+  ...
+# Subtest: the complete migration input set participates in the schema guard
+ok 4 - the complete migration input set participates in the schema guard
+  ---
+  duration_ms: 57.914578
+  type: 'test'
+  ...
+# Subtest: requests pin both commits and numeric Jenkins identity
+ok 5 - requests pin both commits and numeric Jenkins identity
+  ---
+  duration_ms: 0.401692
+  type: 'test'
+  ...
+# Subtest: pure dashboard sockets may reconnect, but all seven exact blocker names and auth/HTTP must be idle
+ok 6 - pure dashboard sockets may reconnect, but all seven exact blocker names and auth/HTTP must be idle
+  ---
+  duration_ms: 0.34348
+  type: 'test'
+  ...
+# Subtest: production starts with separate readonly secrets and data; unauthenticated or foreign runtime configuration is refused
+ok 7 - production starts with separate readonly secrets and data; unauthenticated or foreign runtime configuration is refused
+  ---
+  duration_ms: 0.372377
+  type: 'test'
+  ...
+# Subtest: private metadata rejects links and immutable receipts cannot be overwritten
+ok 8 - private metadata rejects links and immutable receipts cannot be overwritten
+  ---
+  duration_ms: 1.969848
+  type: 'test'
+  ...
+# Subtest: runtime logs collect Docker stderr and redact explicit values, bearer tokens and token assignments
+ok 9 - runtime logs collect Docker stderr and redact explicit values, bearer tokens and token assignments
+  ---
+  duration_ms: 13.166358
+  type: 'test'
+  ...
+# Subtest: real maintenance file preserves manual markers and operator replacements
+ok 10 - real maintenance file preserves manual markers and operator replacements
+  ---
+  duration_ms: 54.589578
+  type: 'test'
+  ...
+# Subtest: real rollback tar restores data while retaining the exact admission marker inode without find
+ok 11 - real rollback tar restores data while retaining the exact admission marker inode without find
+  ---
+  duration_ms: 44.088408
+  type: 'test'
+  ...
+# Subtest: same root/API build cache reuses exact artifact/image/builtAt and emits independent immutable receipts
+ok 12 - same root/API build cache reuses exact artifact/image/builtAt and emits independent immutable receipts
+  ---
+  duration_ms: 15.328899
+  type: 'test'
+  ...
+# Subtest: conflicting/foreign cache and artifact bytes remain untouched rather than being overwritten
+ok 13 - conflicting/foreign cache and artifact bytes remain untouched rather than being overwritten
+  ---
+  duration_ms: 7.171456
+  type: 'test'
+  ...
+# Subtest: schema changes and real auth activity do not create maintenance or stop any API
+ok 14 - schema changes and real auth activity do not create maintenance or stop any API
+  ---
+  duration_ms: 21.792546
+  type: 'test'
+  ...
+# Subtest: manual maintenance is preserved; no backup, stop or replacement occurs
+ok 15 - manual maintenance is preserved; no backup, stop or replacement occurs
+  ---
+  duration_ms: 27.885568
+  type: 'test'
+  ...
+# Subtest: successful drain samples every quiet second, backs up, starts behind barrier and publishes both commits
+ok 16 - successful drain samples every quiet second, backs up, starts behind barrier and publishes both commits
+  ---
+  duration_ms: 203.703358
+  type: 'test'
+  ...
+# Subtest: failed replacement restores original image behind the owned barrier; ambiguous stop preserves checkpoint
+ok 17 - failed replacement restores original image behind the owned barrier; ambiguous stop preserves checkpoint
+  ---
+  duration_ms: 399.831712
+  type: 'test'
+  ...
+# Subtest: mounted runtime secret mismatch rejects before any maintenance or service mutation
+ok 18 - mounted runtime secret mismatch rejects before any maintenance or service mutation
+  ---
+  duration_ms: 11.364679
+  type: 'test'
+  ...
+# Subtest: a real-work arrival during quiet withdraws only owned admission and never stops the API
+ok 19 - a real-work arrival during quiet withdraws only owned admission and never stops the API
+  ---
+  duration_ms: 95.097608
+  type: 'test'
+  ...
+# Subtest: unknown replacement container after stop retains the barrier and checkpoint without removing it or starting a duplicate
+ok 20 - unknown replacement container after stop retains the barrier and checkpoint without removing it or starting a duplicate
+  ---
+  duration_ms: 167.172462
+  type: 'test'
+  ...
+# Subtest: changed approved ROOT head produces no build receipt or service mutation
+ok 21 - changed approved ROOT head produces no build receipt or service mutation
+  ---
+  duration_ms: 1.741537
+  type: 'test'
+  ...
+# Subtest: an operator-created empty release directory is never overwritten during publish
+ok 22 - an operator-created empty release directory is never overwritten during publish
+  ---
+  duration_ms: 8.697221
+  type: 'test'
+  ...
+# Subtest: normal deployment waits for explicit initial adoption; approved private import permit produces a real adopted container and consumed history
+ok 23 - normal deployment waits for explicit initial adoption; approved private import permit produces a real adopted container and consumed history
+  ---
+  duration_ms: 69.544588
+  type: 'test'
+  ...
+# Subtest: initial adoption refuses live work, existing API and mismatched or unowned migration permit without starting a service
+ok 24 - initial adoption refuses live work, existing API and mismatched or unowned migration permit without starting a service
+  ---
+  duration_ms: 49.567772
+  type: 'test'
+  ...
+# Subtest: initial readiness failure preserves container, migration permit, exact barrier and checkpoint for recovery
+ok 25 - initial readiness failure preserves container, migration permit, exact barrier and checkpoint for recovery
+  ---
+  duration_ms: 25.50608
+  type: 'test'
+  ...
+# Subtest: actual SQLite migration probe validates integrity, zero blockers and translated baseline while leaving source bytes unchanged
+ok 26 - actual SQLite migration probe validates integrity, zero blockers and translated baseline while leaving source bytes unchanged
+  ---
+  duration_ms: 52.987147
+  type: 'test'
+  ...
+# Subtest: CI image locks both Linux architectures, Node bytes and browser/CLI dependency graph
+ok 27 - CI image locks both Linux architectures, Node bytes and browser/CLI dependency graph
+  ---
+  duration_ms: 5.048264
+  type: 'test'
+  ...
+# Subtest: image copies only fixed public tools as root and launches the isolated secret-file agent
+ok 28 - image copies only fixed public tools as root and launches the isolated secret-file agent
+  ---
+  duration_ms: 0.578082
+  type: 'test'
+  ...
+# Subtest: Web releases their CI executor before contract waits, and contract runs deployment and acceptance on Linux
+ok 29 - Web releases their CI executor before contract waits, and contract runs deployment and acceptance on Linux
+  ---
+  duration_ms: 0.551811
+  type: 'test'
+  ...
+# Subtest: controller lab, migrated controller and CI configurations retain separate volumes and profiles
+ok 30 - controller lab, migrated controller and CI configurations retain separate volumes and profiles
+  ---
+  duration_ms: 5.081639
+  type: 'test'
+  ...
+# Subtest: controller policy rejects socket/data mounts, host execution and public HTTP exposure
+ok 31 - controller policy rejects socket/data mounts, host execution and public HTTP exposure
+  ---
+  duration_ms: 2.159456
+  type: 'test'
+  ...
+# Subtest: migration config refuses accidental fresh Home, native bootstrap, or shared lab volume
+ok 32 - migration config refuses accidental fresh Home, native bootstrap, or shared lab volume
+  ---
+  duration_ms: 0.671155
+  type: 'test'
+  ...
+# Subtest: migrated controller defaults to paused migration but supports validated active restarts
+ok 33 - migrated controller defaults to paused migration but supports validated active restarts
+  ---
+  duration_ms: 0.986363
+  type: 'test'
+  ...
+# Subtest: controller image uses the actual verified Node and Jenkins base digests
+ok 34 - controller image uses the actual verified Node and Jenkins base digests
+  ---
+  duration_ms: 1.418203
+  type: 'test'
+  ...
+# Subtest: generic CI keeps only its three independent data volumes and file-based agent credential
+ok 35 - generic CI keeps only its three independent data volumes and file-based agent credential
+  ---
+  duration_ms: 0.54443
+  type: 'test'
+  ...
+# Subtest: ARM64 and AMD64 CI cannot share credentials or use a writable secret mount
+ok 36 - ARM64 and AMD64 CI cannot share credentials or use a writable secret mount
+  ---
+  duration_ms: 0.600224
+  type: 'test'
+  ...
+# Subtest: named child mounts cover the inherited agent workDir and Jenkins state without replacing HOME caches
+ok 37 - named child mounts cover the inherited agent workDir and Jenkins state without replacing HOME caches
+  ---
+  duration_ms: 0.838162
+  type: 'test'
+  ...
+# Subtest: actual inspect topology accepts only fixed named mounts including both inherited child targets
+ok 38 - actual inspect topology accepts only fixed named mounts including both inherited child targets
+  ---
+  duration_ms: 0.371585
+  type: 'test'
+  ...
+# Subtest: runtime mounts refuse anonymous extras, missing child targets, shared nodes, host mounts and writable credentials
+ok 39 - runtime mounts refuse anonymous extras, missing child targets, shared nodes, host mounts and writable credentials
+  ---
+  duration_ms: 0.338059
+  type: 'test'
+  ...
+# Subtest: failed private comparisons never include secret operands in the assertion message
+ok 40 - failed private comparisons never include secret operands in the assertion message
+  ---
+  duration_ms: 0.296692
+  type: 'test'
+  ...
+# Subtest: managed activation checks active mode before state mutation and only clears connected fixed nodes
+ok 41 - managed activation checks active mode before state mutation and only clears connected fixed nodes
+  ---
+  duration_ms: 0.134397
+  type: 'test'
+  ...
+# Subtest: default Docker context and cross-profile daemon use are refused
+ok 42 - default Docker context and cross-profile daemon use are refused
+  ---
+  duration_ms: 0.080105
+  type: 'test'
+  ...
+# Subtest: plugin install writes exactly verified bytes without dependency/version resolution
+ok 43 - plugin install writes exactly verified bytes without dependency/version resolution
+  ---
+  duration_ms: 11.578312
+  type: 'test'
+  ...
+# Subtest: plugin SHA/download failures discard all partial plugins and preserve no installable output
+ok 44 - plugin SHA/download failures discard all partial plugins and preserve no installable output
+  ---
+  duration_ms: 2.813556
+  type: 'test'
+  ...
+# Subtest: plugin installer refuses lock drift, duplicate plugins, URL injection and existing output
+ok 45 - plugin installer refuses lock drift, duplicate plugins, URL injection and existing output
+  ---
+  duration_ms: 1.442139
+  type: 'test'
+  ...
+# Subtest: migration plan preserves encryption and build history while excluding executable native bootstrap and queued builds
+ok 46 - migration plan preserves encryption and build history while excluding executable native bootstrap and queued builds
+  ---
+  duration_ms: 0.22989
+  type: 'test'
+  ...
+# Subtest: Home plan rejects traversal, external links, duplicate archive paths, hardlinks and missing keys
+ok 47 - Home plan rejects traversal, external links, duplicate archive paths, hardlinks and missing keys
+  ---
+  duration_ms: 0.397897
+  type: 'test'
+  ...
+# Subtest: Home export can omit an unused lazily generated hudson.util.Secret without inventing a key
+ok 48 - Home export can omit an unused lazily generated hudson.util.Secret without inventing a key
+  ---
+  duration_ms: 0.138401
+  type: 'test'
+  ...
+# Subtest: container entrypoint clears stale readiness before attempting Jenkins startup
+ok 49 - container entrypoint clears stale readiness before attempting Jenkins startup
+  ---
+  duration_ms: 4.211911
+  type: 'test'
+  ...
+# Subtest: container entrypoint refuses a linked readiness directory without changing its target
+ok 50 - container entrypoint refuses a linked readiness directory without changing its target
+  ---
+  duration_ms: 2.935986
+  type: 'test'
+  ...
+# Subtest: prepared export binds the fixed Home and inode rather than accepting an arbitrary privileged source
+ok 51 - prepared export binds the fixed Home and inode rather than accepting an arbitrary privileged source
+  ---
+  duration_ms: 1.155371
+  type: 'test'
+  ...
+# Subtest: source account identity is fixed and unsafe root identities fail closed
+ok 52 - source account identity is fixed and unsafe root identities fail closed
+  ---
+  duration_ms: 0.137859
+  type: 'test'
+  ...
+# Subtest: archive entry names and internal build links remain confined to the Home
+ok 53 - archive entry names and internal build links remain confined to the Home
+  ---
+  duration_ms: 0.159251
+  type: 'test'
+  ...
+# Subtest: real standard tar preserves configuration, historical artifacts and master keys in a private archive
+ok 54 - real standard tar preserves configuration, historical artifacts and master keys in a private archive
+  ---
+  duration_ms: 15.307675
+  type: 'test'
+  ...
+# Subtest: a symbolic link to another Home is rejected before tar runs and its destination is never archived
+ok 55 - a symbolic link to another Home is rejected before tar runs and its destination is never archived
+  ---
+  duration_ms: 1.056876
+  type: 'test'
+  ...
+# Subtest: hard-linked files are rejected before export rather than importing an outside inode alias
+ok 56 - hard-linked files are rejected before export rather than importing an outside inode alias
+  ---
+  duration_ms: 1.100286
+  type: 'test'
+  ...
+# Subtest: source mutation during tar discards the partial archive and produces no completed manifest
+ok 57 - source mutation during tar discards the partial archive and produces no completed manifest
+  ---
+  duration_ms: 2.903668
+  type: 'test'
+  ...
+# Subtest: existing exports and permissive output directories cannot be overwritten or used
+ok 58 - existing exports and permissive output directories cannot be overwritten or used
+  ---
+  duration_ms: 1.288685
+  type: 'test'
+  ...
+# Subtest: standard tar failure removes the private partial output
+ok 59 - standard tar failure removes the private partial output
+  ---
+  duration_ms: 0.712146
+  type: 'test'
+  ...
+# Subtest: a competing final archive created during export is preserved, including symlink targets
+ok 60 - a competing final archive created during export is preserved, including symlink targets
+  ---
+  duration_ms: 3.982771
+  type: 'test'
+  ...
+# Subtest: wrong source ownership and writable files fail before archive creation
+ok 61 - wrong source ownership and writable files fail before archive creation
+  ---
+  duration_ms: 0.905215
+  type: 'test'
+  ...
+# Subtest: loaded Jenkins, account processes and unknown service observations prohibit export
+ok 62 - loaded Jenkins, account processes and unknown service observations prohibit export
+  ---
+  duration_ms: 0.494849
+  type: 'test'
+  ...
+# Subtest: only two dedicated VM timers and two unprivileged native agents are rendered
+ok 63 - only two dedicated VM timers and two unprivileged native agents are rendered
+  ---
+  duration_ms: 0.915014
+  type: 'test'
+  ...
+# Subtest: existing system or GUI jobs and unknown queries refuse installation before any service change
+ok 64 - existing system or GUI jobs and unknown queries refuse installation before any service change
+  ---
+  duration_ms: 0.460113
+  type: 'test'
+  ...
+# Subtest: agents use fixed file credentials and Remoting workDirs without secret environment values
+ok 65 - agents use fixed file credentials and Remoting workDirs without secret environment values
+  ---
+  duration_ms: 0.142238
+  type: 'test'
+  ...
+# Subtest: five public modules include the ci-platform sibling and all source imports resolve without execution
+ok 66 - five public modules include the ci-platform sibling and all source imports resolve without execution
+  ---
+  duration_ms: 6.658259
+  type: 'test'
+  ...
+# Subtest: VM Docker configuration accepts credential-free contexts and rejects credentials/helpers
+ok 67 - VM Docker configuration accepts credential-free contexts and rejects credentials/helpers
+  ---
+  duration_ms: 0.204536
+  type: 'test'
+  ...
+# Subtest: existing OrbStack Compose/Buildx plugin directory is allowed only at its fixed exact path
+ok 68 - existing OrbStack Compose/Buildx plugin directory is allowed only at its fixed exact path
+  ---
+  duration_ms: 0.085026
+  type: 'test'
+  ...
+# Subtest: complete private reviewed bytes and fixed plist arguments verify
+ok 69 - complete private reviewed bytes and fixed plist arguments verify
+  ---
+  duration_ms: 6.843989
+  type: 'test'
+  ...
+# Subtest: changed manifest hash or changed reviewed public tool bytes are refused
+ok 70 - changed manifest hash or changed reviewed public tool bytes are refused
+  ---
+  duration_ms: 8.145851
+  type: 'test'
+  ...
+# Subtest: extra members and unapproved destinations cannot enter the privileged bundle
+ok 71 - extra members and unapproved destinations cannot enter the privileged bundle
+  ---
+  duration_ms: 3.76635
+  type: 'test'
+  ...
+# Subtest: even rehashed service changes cannot introduce another program or production label
+ok 72 - even rehashed service changes cannot introduce another program or production label
+  ---
+  duration_ms: 2.43338
+  type: 'test'
+  ...
+# Subtest: symlink and hardlink members are refused without following external bytes
+ok 73 - symlink and hardlink members are refused without following external bytes
+  ---
+  duration_ms: 4.01267
+  type: 'test'
+  ...
+# Subtest: world-readable files or a directory alias cannot pass private review
+ok 74 - world-readable files or a directory alias cannot pass private review
+  ---
+  duration_ms: 1.444349
+  type: 'test'
+  ...
+# Subtest: blank or malformed agent credentials and missing profile evidence cannot pass review
+ok 75 - blank or malformed agent credentials and missing profile evidence cannot pass review
+  ---
+  duration_ms: 4.203696
+  type: 'test'
+  ...
+# Subtest: startup probes drop privileges, isolate environment and import all five reviewed public tools
+ok 76 - startup probes drop privileges, isolate environment and import all five reviewed public tools
+  ---
+  duration_ms: 0.37784
+  type: 'test'
+  ...
+# Subtest: missing commands, timeouts, signals and nonstandard test results fail closed
+ok 77 - missing commands, timeouts, signals and nonstandard test results fail closed
+  ---
+  duration_ms: 0.089488
+  type: 'test'
+  ...
+# Subtest: wrong Node or Java versions and unsuccessful module imports block service startup
+ok 78 - wrong Node or Java versions and unsuccessful module imports block service startup
+  ---
+  duration_ms: 0.176514
+  type: 'test'
+  ...
+# Subtest: actual standard tar is verified, staged and filtered while preserving authentication, keys and completed history bytes
+ok 79 - actual standard tar is verified, staged and filtered while preserving authentication, keys and completed history bytes
+  ---
+  duration_ms: 44.022981
+  type: 'test'
+  ...
+# Subtest: an existing lazily generated encryption key is preserved without requiring one to be manufactured
+ok 80 - an existing lazily generated encryption key is preserved without requiring one to be manufactured
+  ---
+  duration_ms: 31.467355
+  type: 'test'
+  ...
+# Subtest: CLI source identity remains fixed even when a valid unrelated private export is presented
+ok 81 - CLI source identity remains fixed even when a valid unrelated private export is presented
+  ---
+  duration_ms: 15.343953
+  type: 'test'
+  ...
+# Subtest: archive hash tampering is rejected before extracting any files
+ok 82 - archive hash tampering is rejected before extracting any files
+  ---
+  duration_ms: 16.855272
+  type: 'test'
+  ...
+# Subtest: a recalculated digest cannot hide archive members omitted from manifest metadata
+ok 83 - a recalculated digest cannot hide archive members omitted from manifest metadata
+  ---
+  duration_ms: 13.229158
+  type: 'test'
+  ...
+# Subtest: actual tar headers reject external symlinks even with an updated whole-archive digest
+ok 84 - actual tar headers reject external symlinks even with an updated whole-archive digest
+  ---
+  duration_ms: 13.831384
+  type: 'test'
+  ...
+# Subtest: actual hard-link tar members fail closed rather than restoring inode aliases
+ok 85 - actual hard-link tar members fail closed rather than restoring inode aliases
+  ---
+  duration_ms: 14.983335
+  type: 'test'
+  ...
+# Subtest: an actual tar containing an absolute member is rejected even when its digest is correct
+ok 86 - an actual tar containing an absolute member is rejected even when its digest is correct
+  ---
+  duration_ms: 13.710413
+  type: 'test'
+  ...
+# Subtest: unsafe absolute/traversal/header ambiguity and special permissions are rejected while normal GNU/BSD metadata parses
+ok 87 - unsafe absolute/traversal/header ambiguity and special permissions are rejected while normal GNU/BSD metadata parses
+  ---
+  duration_ms: 0.353363
+  type: 'test'
+  ...
+# Subtest: manifest duplicate members or members beneath a symlink cannot influence extraction
+ok 88 - manifest duplicate members or members beneath a symlink cannot influence extraction
+  ---
+  duration_ms: 0.199824
+  type: 'test'
+  ...
+# Subtest: saved unfinished Pipeline records are refused despite a claimed successful result
+ok 89 - saved unfinished Pipeline records are refused despite a claimed successful result
+  ---
+  duration_ms: 46.42688
+  type: 'test'
+  ...
+# Subtest: staging independently reviews saved WorkflowRun completion rather than trusting caller-supplied history
+ok 90 - staging independently reviews saved WorkflowRun completion rather than trusting caller-supplied history
+  ---
+  duration_ms: 16.708614
+  type: 'test'
+  ...
+# Subtest: an unsecured realm, anonymous full control, missing preserved local user or XML entity is refused
+ok 91 - an unsecured realm, anonymous full control, missing preserved local user or XML entity is refused
+  ---
+  duration_ms: 0.250448
+  type: 'test'
+  ...
+# Subtest: nonempty staging and a replaced previously verified archive cannot be used
+ok 92 - nonempty staging and a replaced previously verified archive cannot be used
+  ---
+  duration_ms: 18.458497
+  type: 'test'
+  ...
+# Subtest: private manifest/archive aliases and permissive export directories are refused
+ok 93 - private manifest/archive aliases and permissive export directories are refused
+  ---
+  duration_ms: 16.867615
+  type: 'test'
+  ...
+# Subtest: only a new explicitly named volume and owned ephemeral helper are used; no controller/API or host mounts start
+ok 94 - only a new explicitly named volume and owned ephemeral helper are used; no controller/API or host mounts start
+  ---
+  duration_ms: 0.395187
+  type: 'test'
+  ...
+# Subtest: a preexisting target is never overwritten even if allegedly empty
+ok 95 - a preexisting target is never overwritten even if allegedly empty
+  ---
+  duration_ms: 0.061215
+  type: 'test'
+  ...
+# Subtest: mutable tags and mismatched CPU architecture fail before creating any Home volume
+ok 96 - mutable tags and mismatched CPU architecture fail before creating any Home volume
+  ---
+  duration_ms: 0.05963
+  type: 'test'
+  ...
+# Subtest: an unexpectedly attached new volume aborts without starting a helper or modifying another container
+ok 97 - an unexpectedly attached new volume aborts without starting a helper or modifying another container
+  ---
+  duration_ms: 0.089404
+  type: 'test'
+  ...
+# Subtest: a failed import removes only its known helper and leaves the new volume for review instead of pruning data
+ok 98 - a failed import removes only its known helper and leaves the new volume for review instead of pruning data
+  ---
+  duration_ms: 0.069805
+  type: 'test'
+  ...
+# Subtest: a replacement volume or unidentified helper is never mutated or removed
+ok 99 - a replacement volume or unidentified helper is never mutated or removed
+  ---
+  duration_ms: 0.117968
+  type: 'test'
+  ...
+# (node:2784) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: online readonly backup includes committed WAL and preserves native files while only the copy paths change
+ok 100 - online readonly backup includes committed WAL and preserves native files while only the copy paths change
+  ---
+  duration_ms: 28.389174
+  type: 'test'
+  ...
+# Subtest: file master key and private runtime secrets retain exact bytes without entering evidence
+ok 101 - file master key and private runtime secrets retain exact bytes without entering evidence
+  ---
+  duration_ms: 17.064312
+  type: 'test'
+  ...
+# Subtest: environment master key is preserved, and missing key refuses encrypted records
+ok 102 - environment master key is preserved, and missing key refuses encrypted records
+  ---
+  duration_ms: 21.849967
+  type: 'test'
+  ...
+# Subtest: encrypted image settings require the same master key even with an empty credential vault
+ok 103 - encrypted image settings require the same master key even with an empty credential vault
+  ---
+  duration_ms: 8.830851
+  type: 'test'
+  ...
+# Subtest: path migration rolls back every earlier update on an outside or noncanonical stored path
+ok 104 - path migration rolls back every earlier update on an outside or noncanonical stored path
+  ---
+  duration_ms: 0.243442
+  type: 'test'
+  ...
+# Subtest: referenced immutable task logs are copied and remapped without copying the active runtime log
+ok 105 - referenced immutable task logs are copied and remapped without copying the active runtime log
+  ---
+  duration_ms: 18.053051
+  type: 'test'
+  ...
+# Subtest: baseline symlinks and hardlinks refuse staging rather than copy data outside its owner tree
+ok 106 - baseline symlinks and hardlinks refuse staging rather than copy data outside its owner tree
+  ---
+  duration_ms: 10.778138
+  type: 'test'
+  ...
+# Subtest: log parent symlinks cannot bypass the source data-root boundary
+ok 107 - log parent symlinks cannot bypass the source data-root boundary
+  ---
+  duration_ms: 13.410259
+  type: 'test'
+  ...
+# Subtest: a project baseline missing from the copied tree cannot become a ready migration stage
+ok 108 - a project baseline missing from the copied tree cannot become a ready migration stage
+  ---
+  duration_ms: 13.010194
+  type: 'test'
+  ...
+# Subtest: manifest, copied baseline, secret or extra-file tampering is refused before named-volume import
+ok 109 - manifest, copied baseline, secret or extra-file tampering is refused before named-volume import
+  ---
+  duration_ms: 35.438367
+  type: 'test'
+  ...
+# Subtest: private source/environment permissions and incorrect native environment roots fail closed
+ok 110 - private source/environment permissions and incorrect native environment roots fail closed
+  ---
+  duration_ms: 8.943022
+  type: 'test'
+  ...
+# Subtest: import is an immutable image, fixed daemon, empty-volume tar helper with no host/data/socket binds
+ok 111 - import is an immutable image, fixed daemon, empty-volume tar helper with no host/data/socket binds
+  ---
+  duration_ms: 0.173887
+  type: 'test'
+  ...
+# Subtest: the real shell empty-volume guard requires no find/ls and refuses visible, hidden and dangling-link entries
+ok 112 - the real shell empty-volume guard requires no find/ls and refuses visible, hidden and dangling-link entries
+  ---
+  duration_ms: 3.563065
+  type: 'test'
+  ...
+# Subtest: volume inspection refuses host-backed drivers/options and unrelated/shared names
+ok 113 - volume inspection refuses host-backed drivers/options and unrelated/shared names
+  ---
+  duration_ms: 0.140903
+  type: 'test'
+  ...
+# Subtest: a rejecting import consumer drains the real producer pipe so a nonempty-volume refusal cannot hang
+ok 114 - a rejecting import consumer drains the real producer pipe so a nonempty-volume refusal cannot hang
+  ---
+  duration_ms: 16.694436
+  type: 'test'
+  ...
+# Subtest: controller and CI contexts contain only their fixed public input files
+ok 115 - controller and CI contexts contain only their fixed public input files
+  ---
+  duration_ms: 17.787341
+  type: 'test'
+  ...
+# Subtest: a symlink file, symlink parent or missing input is refused before creating a context
+ok 116 - a symlink file, symlink parent or missing input is refused before creating a context
+  ---
+  duration_ms: 3.368952
+  type: 'test'
+  ...
+# Subtest: component names cannot select arbitrary repository files
+ok 117 - component names cannot select arbitrary repository files
+  ---
+  duration_ms: 0.145365
+  type: 'test'
+  ...
+# Subtest: complete readonly evidence proves ten secrets, original credentials/history, paused jobs, locked plugins and unchanged native API without exposing values or digests
+ok 118 - complete readonly evidence proves ten secrets, original credentials/history, paused jobs, locked plugins and unchanged native API without exposing values or digests
+  ---
+  duration_ms: 2.823605
+  type: 'test'
+  ...
+# Subtest: secret hash mismatch fails using only a fixed safe label rather than formatting secret operands
+ok 119 - secret hash mismatch fails using only a fixed safe label rather than formatting secret operands
+  ---
+  duration_ms: 0.097702
+  type: 'test'
+  ...
+# Subtest: user API token/password field drift fails even if configuration looks structurally valid
+ok 120 - user API token/password field drift fails even if configuration looks structurally valid
+  ---
+  duration_ms: 0.370251
+  type: 'test'
+  ...
+# Subtest: only the matching never-activated private import receipt proves source identity
+ok 121 - only the matching never-activated private import receipt proves source identity
+  ---
+  duration_ms: 0.201201
+  type: 'test'
+  ...
+# Subtest: container root identity, writable rootfs, host socket/binds, public binding and active mode are rejected
+ok 122 - container root identity, writable rootfs, host socket/binds, public binding and active mode are rejected
+  ---
+  duration_ms: 0.443642
+  type: 'test'
+  ...
+# Subtest: a queued build, enabled job, online original Mac node or running historical build cannot pass migration readiness
+ok 123 - a queued build, enabled job, online original Mac node or running historical build cannot pass migration readiness
+  ---
+  duration_ms: 0.548975
+  type: 'test'
+  ...
+# Subtest: plugins must match both live active versions and exact pinned JPI bytes
+ok 124 - plugins must match both live active versions and exact pinned JPI bytes
+  ---
+  duration_ms: 0.512696
+  type: 'test'
+  ...
+# Subtest: matching build XML bytes do not hide a live-history result or record-count change
+ok 125 - matching build XML bytes do not hide a live-history result or record-count change
+  ---
+  duration_ms: 0.822733
+  type: 'test'
+  ...
+# Subtest: an original password/token failure or changed public API PID refuses a successful report
+ok 126 - an original password/token failure or changed public API PID refuses a successful report
+  ---
+  duration_ms: 3.285345
+  type: 'test'
+  ...
+# Subtest: the verifier uses only fixed read commands and GET endpoints, with no inherited credentials or raw-error logging
+ok 127 - the verifier uses only fixed read commands and GET endpoints, with no inherited credentials or raw-error logging
+  ---
+  duration_ms: 6.572484
+  type: 'test'
+  ...
+# Subtest: preview is readonly, binds real formal three-SHA evidence and exposes only the narrow App-specific patches plus six fixed workflows
+ok 128 - preview is readonly, binds real formal three-SHA evidence and exposes only the narrow App-specific patches plus six fixed workflows
+  ---
+  duration_ms: 10.885223
+  type: 'test'
+  ...
+# Subtest: apply roundtrips real App statuses before patching only status protection and disables workflows only after every repository is verified
+ok 129 - apply roundtrips real App statuses before patching only status protection and disables workflows only after every repository is verified
+  ---
+  duration_ms: 8.405681
+  type: 'test'
+  ...
+# Subtest: an incomplete, failed or source-mismatched actual build rejects synthetic successful artifacts before any writes
+ok 130 - an incomplete, failed or source-mismatched actual build rejects synthetic successful artifacts before any writes
+  ---
+  duration_ms: 7.64704
+  type: 'test'
+  ...
+# Subtest: migration mode or discovery/deploy enabled refuses the limited validation profile
+ok 131 - migration mode or discovery/deploy enabled refuses the limited validation profile
+  ---
+  duration_ms: 2.92556
+  type: 'test'
+  ...
+# Subtest: ref movement after real status publication cannot patch branch protection for a different main/feature SHA
+ok 132 - ref movement after real status publication cannot patch branch protection for a different main/feature SHA
+  ---
+  duration_ms: 8.898028
+  type: 'test'
+  ...
+# Subtest: OAuth or another bot success is not accepted as proof of the verified App source
+ok 133 - OAuth or another bot success is not accepted as proof of the verified App source
+  ---
+  duration_ms: 1.338223
+  type: 'test'
+  ...
+# Subtest: protection review/signature/admin drift or wrong old workflow identity aborts before any external mutation
+ok 134 - protection review/signature/admin drift or wrong old workflow identity aborts before any external mutation
+  ---
+  duration_ms: 2.656682
+  type: 'test'
+  ...
+# Subtest: unrelated protection mutation detected after PATCH never retires the old workflows
+ok 135 - unrelated protection mutation detected after PATCH never retires the old workflows
+  ---
+  duration_ms: 3.357778
+  type: 'test'
+  ...
+# Subtest: a partial provider failure checkpoints each verified status and resumes without duplicate publication or weakening already migrated protection
+ok 136 - a partial provider failure checkpoints each verified status and resumes without duplicate publication or weakening already migrated protection
+  ---
+  duration_ms: 6.901785
+  type: 'test'
+  ...
+# Subtest: unknown required checks and generic or unrelated App sources are never dropped to unblock a merge
+ok 137 - unknown required checks and generic or unrelated App sources are never dropped to unblock a merge
+  ---
+  duration_ms: 0.264209
+  type: 'test'
+  ...
+# Subtest: tampered reviewed plans, permissive inputs and arbitrary repositories/refs are rejected
+ok 138 - tampered reviewed plans, permissive inputs and arbitrary repositories/refs are rejected
+  ---
+  duration_ms: 1.653055
+  type: 'test'
+  ...
+# Subtest: the actual packaged Linux manifest shape retains archive sizes, trees and test counts but its manual evidence can never authorize cutover
+ok 139 - the actual packaged Linux manifest shape retains archive sizes, trees and test counts but its manual evidence can never authorize cutover
+  ---
+  duration_ms: 1.346396
+  type: 'test'
+  ...
+# Subtest: allowed source refs are per repository and cannot substitute root's deployment branch with the API/Web feature ref
+ok 140 - allowed source refs are per repository and cannot substitute root's deployment branch with the API/Web feature ref
+  ---
+  duration_ms: 0.655726
+  type: 'test'
+  ...
+# Subtest: the real App publisher signs RSA JWTs and uses only the fixed repository-limited installation token, never OAuth or wider permissions
+ok 141 - the real App publisher signs RSA JWTs and uses only the fixed repository-limited installation token, never OAuth or wider permissions
+  ---
+  duration_ms: 54.373239
+  type: 'test'
+  ...
+# Subtest: fixed Linux ARM64 and AMD64 agents retain one isolated identity and separate caches
+ok 142 - fixed Linux ARM64 and AMD64 agents retain one isolated identity and separate caches
+  ---
+  duration_ms: 0.532629
+  type: 'test'
+  ...
+# Subtest: legacy isolated Mac CI remains accepted while the production owner cannot become CI
+ok 143 - legacy isolated Mac CI remains accepted while the production owner cannot become CI
+  ---
+  duration_ms: 0.103457
+  type: 'test'
+  ...
+# Subtest: Linux children receive fixed Chromium/cache paths without secret or loader environment inheritance
+ok 144 - Linux children receive fixed Chromium/cache paths without secret or loader environment inheritance
+  ---
+  duration_ms: 0.086234
+  type: 'test'
+  ...
+# Subtest: agent uses the Remoting secret-file argument and fixed names without embedding the secret
+ok 145 - agent uses the Remoting secret-file argument and fixed names without embedding the secret
+  ---
+  duration_ms: 0.127809
+  type: 'test'
+  ...
+# Subtest: immutable browser verification uses each project's direct dependency and refuses missing, escaped or incompatible revisions
+ok 146 - immutable browser verification uses each project's direct dependency and refuses missing, escaped or incompatible revisions
+  ---
+  duration_ms: 146.442713
+  type: 'test'
+  ...
+# Subtest: actual RSA signature verifies RS256 claims with bounded lifetime and clock-drift allowance
+ok 147 - actual RSA signature verifies RS256 claims with bounded lifetime and clock-drift allowance
+  ---
+  duration_ms: 1.821606
+  type: 'test'
+  ...
+# Subtest: RSA JWT rejects EC/public/weak keys before making any GitHub request
+ok 148 - RSA JWT rejects EC/public/weak keys before making any GitHub request
+  ---
+  duration_ms: 4.381794
+  type: 'test'
+  ...
+# Subtest: real private-file guards refuse wrong owner, public mode, symlinks and oversized keys
+ok 149 - real private-file guards refuse wrong owner, public mode, symlinks and oversized keys
+  ---
+  duration_ms: 5.039522
+  type: 'test'
+  ...
+# Subtest: actual App/installation identity and permissions are checked before issuing narrowly scoped memory-only token
+ok 150 - actual App/installation identity and permissions are checked before issuing narrowly scoped memory-only token
+  ---
+  duration_ms: 4.94207
+  type: 'test'
+  ...
+# Subtest: installation token is reused only in memory and renewed before expiry
+ok 151 - installation token is reused only in memory and renewed before expiry
+  ---
+  duration_ms: 6.734861
+  type: 'test'
+  ...
+# Subtest: concurrent statuses share one token renewal rather than issuing excess tokens
+ok 152 - concurrent statuses share one token renewal rather than issuing excess tokens
+  ---
+  duration_ms: 3.599343
+  type: 'test'
+  ...
+# Subtest: wrong App owner/id or elevated App permissions never reach token issuance or status publication
+ok 153 - wrong App owner/id or elevated App permissions never reach token issuance or status publication
+  ---
+  duration_ms: 6.010373
+  type: 'test'
+  ...
+# Subtest: all-repository, foreign, suspended or overprivileged installations are rejected
+ok 154 - all-repository, foreign, suspended or overprivileged installations are rejected
+  ---
+  duration_ms: 6.048736
+  type: 'test'
+  ...
+# Subtest: unexpected token scopes, expiry or effective repository set cannot publish a status
+ok 155 - unexpected token scopes, expiry or effective repository set cannot publish a status
+  ---
+  duration_ms: 7.802621
+  type: 'test'
+  ...
+# Subtest: status helper cannot send credentials to arbitrary repositories, contexts or Jenkins targets
+ok 156 - status helper cannot send credentials to arbitrary repositories, contexts or Jenkins targets
+  ---
+  duration_ms: 0.639422
+  type: 'test'
+  ...
+# Subtest: missing installation reports honest OAuth fallback; invalid config fails closed
+ok 157 - missing installation reports honest OAuth fallback; invalid config fails closed
+  ---
+  duration_ms: 0.715732
+  type: 'test'
+  ...
+# Subtest: minimum registration manifest is private with disabled events/webhooks and no administrative grants
+ok 158 - minimum registration manifest is private with disabled events/webhooks and no administrative grants
+  ---
+  duration_ms: 0.102832
+  type: 'test'
+  ...
+# Subtest: actual loopback callback validates state/duplicates/code before conversion and consumes a valid callback once
+ok 159 - actual loopback callback validates state/duplicates/code before conversion and consumes a valid callback once
+  ---
+  duration_ms: 15.813908
+  type: 'test'
+  ...
+# Subtest: concurrent real callbacks cannot exchange the one-time code twice
+ok 160 - concurrent real callbacks cannot exchange the one-time code twice
+  ---
+  duration_ms: 6.199439
+  type: 'test'
+  ...
+# Subtest: expired registration and wrong Host never call GitHub
+ok 161 - expired registration and wrong Host never call GitHub
+  ---
+  duration_ms: 3.780069
+  type: 'test'
+  ...
+# Subtest: manifest exchange verifies actual App identity before saving secrets and does not expose provider secrets on failure
+ok 162 - manifest exchange verifies actual App identity before saving secrets and does not expose provider secrets on failure
+  ---
+  duration_ms: 3.625781
+  type: 'test'
+  ...
+# Subtest: verify matches selected installation, checks effective three-repo grant and persists only nonsecret identity
+ok 163 - verify matches selected installation, checks effective three-repo grant and persists only nonsecret identity
+  ---
+  duration_ms: 2.465072
+  type: 'test'
+  ...
+# Subtest: verify rejects all-repo or missing repo grants without saving an installation ID
+ok 164 - verify rejects all-repo or missing repo grants without saving an installation ID
+  ---
+  duration_ms: 1.339934
+  type: 'test'
+  ...
+# Subtest: existing private App configuration/key cannot be replaced by another registration server
+ok 165 - existing private App configuration/key cannot be replaced by another registration server
+  ---
+  duration_ms: 0.503856
+  type: 'test'
+  ...
+# Subtest: real discovery uses App for statuses while keeping App JWT/token away from OAuth branch queries
+ok 166 - real discovery uses App for statuses while keeping App JWT/token away from OAuth branch queries
+  ---
+  duration_ms: 5.825852
+  type: 'test'
+  ...
+# Subtest: real discovery without App retains OAuth statuses and explicitly reports unsatisfied Actions source
+ok 167 - real discovery without App retains OAuth statuses and explicitly reports unsatisfied Actions source
+  ---
+  duration_ms: 3.655304
+  type: 'test'
+  ...
+# Subtest: backend validation accepts the isolated ARM64 Linux account and rejects other execution identities
+ok 168 - backend validation accepts the isolated ARM64 Linux account and rejects other execution identities
+  ---
+  duration_ms: 0.586296
+  type: 'test'
+  ...
+# Subtest: checkout fetches only the fixed API repository and records exact PR provenance on Linux
+ok 169 - checkout fetches only the fixed API repository and records exact PR provenance on Linux
+  ---
+  duration_ms: 5.740534
+  type: 'test'
+  ...
+# Subtest: a moved branch refuses checkout and cannot retain stale success metadata
+ok 170 - a moved branch refuses checkout and cannot retain stale success metadata
+  ---
+  duration_ms: 2.216876
+  type: 'test'
+  ...
+# Subtest: changed HEAD or REF provenance blocks repository code before execution
+ok 171 - changed HEAD or REF provenance blocks repository code before execution
+  ---
+  duration_ms: 4.010251
+  type: 'test'
+  ...
+# Subtest: a source symlink is refused before removal or command execution
+ok 172 - a source symlink is refused before removal or command execution
+  ---
+  duration_ms: 2.041612
+  type: 'test'
+  ...
+# Subtest: Linux runs every existing API gate through pinned Corepack without inheriting credentials
+ok 173 - Linux runs every existing API gate through pinned Corepack without inheriting credentials
+  ---
+  duration_ms: 4.293057
+  type: 'test'
+  ...
+# Subtest: an OpenAPI drift failure propagates rather than recording successful validation
+ok 174 - an OpenAPI drift failure propagates rather than recording successful validation
+  ---
+  duration_ms: 1.32021
+  type: 'test'
+  ...
+# Subtest: native phase loads SQLite and the actual BoxLite binding in the pinned Linux dependency tree
+ok 175 - native phase loads SQLite and the actual BoxLite binding in the pinned Linux dependency tree
+  ---
+  duration_ms: 2.879066
+  type: 'test'
+  ...
+# Subtest: either failed native load removes an old success report and fails the phase
+ok 176 - either failed native load removes an old success report and fails the phase
+  ---
+  duration_ms: 3.010795
+  type: 'test'
+  ...
+# Subtest: invalid phase or pinned input cannot run even the initial Git command
+ok 177 - invalid phase or pinned input cannot run even the initial Git command
+  ---
+  duration_ms: 1.605184
+  type: 'test'
+  ...
+# Subtest: managed backend pipeline targets only Linux validation and keeps all gates and archive provenance
+ok 178 - managed backend pipeline targets only Linux validation and keeps all gates and archive provenance
+  ---
+  duration_ms: 2.048409
+  type: 'test'
+  ...
+# Subtest: trusted Linux adopts identical CI bits and authenticates only fixed Vercel commands after private volume validation
+ok 179 - trusted Linux adopts identical CI bits and authenticates only fixed Vercel commands after private volume validation
+  ---
+  duration_ms: 91.373089
+  type: 'test'
+  ...
+# Subtest: Linux CI identity without trusted private volumes cannot invoke credential-bearing web publication
+ok 180 - Linux CI identity without trusted private volumes cannot invoke credential-bearing web publication
+  ---
+  duration_ms: 2.765851
+  type: 'test'
+  ...
+# Subtest: Linux AMD64 production CI runs every local gate with no publication credentials and packages verified ELF targets
+ok 181 - Linux AMD64 production CI runs every local gate with no publication credentials and packages verified ELF targets
+  ---
+  duration_ms: 40.089802
+  type: 'test'
+  ...
+# Subtest: Linux browser verification failure makes install fail and prevents packaging
+ok 182 - Linux browser verification failure makes install fail and prevents packaging
+  ---
+  duration_ms: 3.080707
+  type: 'test'
+  ...
+# Subtest: Linux ARM64 output may be pure JS but cannot package ARM ELF for a default x86_64 function
+ok 183 - Linux ARM64 output may be pure JS but cannot package ARM ELF for a default x86_64 function
+  ---
+  duration_ms: 29.681917
+  type: 'test'
+  ...
+# Subtest: only valid fixed-repository ref syntax and isolated/trusted OS identities are accepted
+ok 184 - only valid fixed-repository ref syntax and isolated/trusted OS identities are accepted
+  ---
+  duration_ms: 0.189137
+  type: 'test'
+  ...
+# Subtest: child environment is constructed without ambient deployment/runtime secrets
+ok 185 - child environment is constructed without ambient deployment/runtime secrets
+  ---
+  duration_ms: 0.037519
+  type: 'test'
+  ...
+# Subtest: public cache drops unknown/private project env values and pins exact production origins
+ok 186 - public cache drops unknown/private project env values and pins exact production origins
+  ---
+  duration_ms: 0.107137
+  type: 'test'
+  ...
+# Subtest: browser report metadata above the configuration limit remains readable, while links and oversized reports fail
+ok 187 - browser report metadata above the configuration limit remains readable, while links and oversized reports fail
+  ---
+  duration_ms: 13.773759
+  type: 'test'
+  ...
+# Subtest: real executed test reports reject missing counts, skips, contradictory suites and failures
+ok 188 - real executed test reports reject missing counts, skips, contradictory suites and failures
+  ---
+  duration_ms: 0.233117
+  type: 'test'
+  ...
+# Subtest: archive extraction permits only a fixed relative output prefix
+ok 189 - archive extraction permits only a fixed relative output prefix
+  ---
+  duration_ms: 0.086919
+  type: 'test'
+  ...
+# Subtest: deployment CLI JSON must attest a READY production upload and approved URL shape
+ok 190 - deployment CLI JSON must attest a READY production upload and approved URL shape
+  ---
+  duration_ms: 0.071244
+  type: 'test'
+  ...
+# Subtest: project cache key distinguishes docs/API releases even when web SHA is unchanged
+ok 191 - project cache key distinguishes docs/API releases even when web SHA is unchanged
+  ---
+  duration_ms: 0.122936
+  type: 'test'
+  ...
+# Subtest: build walker hashes real files and refuses Darwin binaries, symlinks and env leakage
+ok 192 - build walker hashes real files and refuses Darwin binaries, symlinks and env leakage
+  ---
+  duration_ms: 4.734949
+  type: 'test'
+  ...
+# Subtest: ELF machine is verified against each function target, including shared libraries and explicit arm64
+ok 193 - ELF machine is verified against each function target, including shared libraries and explicit arm64
+  ---
+  duration_ms: 8.947638
+  type: 'test'
+  ...
+# Subtest: standalone normalization flattens internal aliases while refusing source links and cycles
+ok 194 - standalone normalization flattens internal aliases while refusing source links and cycles
+  ---
+  duration_ms: 8.491244
+  type: 'test'
+  ...
+# Subtest: production local gates, reports and portable packages feed immutable adoption and STAGED upload
+ok 195 - production local gates, reports and portable packages feed immutable adoption and STAGED upload
+  ---
+  duration_ms: 81.12746
+  type: 'test'
+  ...
+# Subtest: PR/main CI never receives production settings or trusted upload and still executes all gates
+ok 196 - PR/main CI never receives production settings or trusted upload and still executes all gates
+  ---
+  duration_ms: 19.352463
+  type: 'test'
+  ...
+# Subtest: moved production ref cancels preparation before any credential-bearing command
+ok 197 - moved production ref cancels preparation before any credential-bearing command
+  ---
+  duration_ms: 2.462022
+  type: 'test'
+  ...
+# Subtest: a failed or skipped gate prevents packaging and is not overwritten by a retry
+ok 198 - a failed or skipped gate prevents packaging and is not overwritten by a retry
+  ---
+  duration_ms: 4.204518
+  type: 'test'
+  ...
+# Subtest: tests with skip evidence fail their actual phase rather than become a green artifact
+ok 199 - tests with skip evidence fail their actual phase rather than become a green artifact
+  ---
+  duration_ms: 3.709938
+  type: 'test'
+  ...
+# Subtest: Mac native dependency in the local Vercel output blocks build and packaging
+ok 200 - Mac native dependency in the local Vercel output blocks build and packaging
+  ---
+  duration_ms: 14.120473
+  type: 'test'
+  ...
+# Subtest: tracked or untracked source changes cannot be hidden behind a matching HEAD SHA
+ok 201 - tracked or untracked source changes cannot be hidden behind a matching HEAD SHA
+  ---
+  duration_ms: 9.199556
+  type: 'test'
+  ...
+# Subtest: tampered archives and SHA/gate provenance are refused without adopting
+ok 202 - tampered archives and SHA/gate provenance are refused without adopting
+  ---
+  duration_ms: 36.169243
+  type: 'test'
+  ...
+# Subtest: trusted pin or branch changes during/after CI refuse adoption and publication
+ok 203 - trusted pin or branch changes during/after CI refuse adoption and publication
+  ---
+  duration_ms: 45.687374
+  type: 'test'
+  ...
+# Subtest: promotion probes protected API exact SHA, validates remote staged metadata and promotes only uploaded URI
+ok 204 - promotion probes protected API exact SHA, validates remote staged metadata and promotes only uploaded URI
+  ---
+  duration_ms: 63.852869
+  type: 'test'
+  ...
+# Subtest: unready or wrong API prevents promotion, preserves failure evidence and blocks automatic retry
+ok 205 - unready or wrong API prevents promotion, preserves failure evidence and blocks automatic retry
+  ---
+  duration_ms: 60.54926
+  type: 'test'
+  ...
+# Subtest: wrong project or mismatching staged deployment metadata cannot be promoted
+ok 206 - wrong project or mismatching staged deployment metadata cannot be promoted
+  ---
+  duration_ms: 52.999153
+  type: 'test'
+  ...
+# Subtest: failed upload records intent/failure and never creates another deployment on retry
+ok 207 - failed upload records intent/failure and never creates another deployment on retry
+  ---
+  duration_ms: 71.29217
+  type: 'test'
+  ...
+# Subtest: adopt needs only verified downloaded artifacts, never CI source checkout
+ok 208 - adopt needs only verified downloaded artifacts, never CI source checkout
+  ---
+  duration_ms: 52.683162
+  type: 'test'
+  ...
+# Subtest: a stale publication lock never gets stolen and incomplete upload intent cannot be retried
+ok 209 - a stale publication lock never gets stolen and incomplete upload intent cannot be retried
+  ---
+  duration_ms: 64.422612
+  type: 'test'
+  ...
+# Subtest: immutable adoption reuses original package and original Jenkins build identity
+ok 210 - immutable adoption reuses original package and original Jenkins build identity
+  ---
+  duration_ms: 70.009029
+  type: 'test'
+  ...
+# Subtest: promoted retries verify the real custom-domain alias and refuse another deployment or promotion
+ok 211 - promoted retries verify the real custom-domain alias and refuse another deployment or promotion
+  ---
+  duration_ms: 72.610954
+  type: 'test'
+  ...
+# Subtest: production public settings preparation is read-only and needs no publication approval pin
+ok 212 - production public settings preparation is read-only and needs no publication approval pin
+  ---
+  duration_ms: 6.608469
+  type: 'test'
+  ...
+# Subtest: an altered Vercel project link cannot upload to an unrelated project
+ok 213 - an altered Vercel project link cannot upload to an unrelated project
+  ---
+  duration_ms: 40.137392
+  type: 'test'
+  ...
+# Subtest: untrusted refs cannot turn a pure-CI checkout into shell or Git options
+ok 214 - untrusted refs cannot turn a pure-CI checkout into shell or Git options
+  ---
+  duration_ms: 0.983443
+  type: 'test'
+  ...
+# Subtest: child environments omit ambient production/cloud credentials and Git hooks
+ok 215 - child environments omit ambient production/cloud credentials and Git hooks
+  ---
+  duration_ms: 29.422338
+  type: 'test'
+  ...
+# Subtest: project key uses all three pinned commits and matches web immutable cache key
+ok 216 - project key uses all three pinned commits and matches web immutable cache key
+  ---
+  duration_ms: 0.471402
+  type: 'test'
+  ...
+# Subtest: Jenkins gate proof requires actual SUCCESS and the exact source combination
+ok 217 - Jenkins gate proof requires actual SUCCESS and the exact source combination
+  ---
+  duration_ms: 0.299108
+  type: 'test'
+  ...
+# Subtest: file hashing refuses symlinks instead of authenticating external private bytes
+ok 218 - file hashing refuses symlinks instead of authenticating external private bytes
+  ---
+  duration_ms: 2.314991
+  type: 'test'
+  ...
+# Subtest: source tree refuses tracked secrets, symlinks, and foreign submodules
+ok 219 - source tree refuses tracked secrets, symlinks, and foreign submodules
+  ---
+  duration_ms: 0.432049
+  type: 'test'
+  ...
+# Subtest: actual git/tar archive verifies FETCH_HEAD and retains only tracked pinned files
+ok 220 - actual git/tar archive verifies FETCH_HEAD and retains only tracked pinned files
+  ---
+  duration_ms: 19.16983
+  type: 'test'
+  ...
+# Subtest: actual tracked .env aborts before creating any source tar
+ok 221 - actual tracked .env aborts before creating any source tar
+  ---
+  duration_ms: 9.331997
+  type: 'test'
+  ...
+# Subtest: complete package uses three actual pinned Git archives and immutable web bytes
+ok 222 - complete package uses three actual pinned Git archives and immutable web bytes
+  ---
+  duration_ms: 103.369076
+  type: 'test'
+  ...
+# Subtest: package checksum inventory authenticates native/web/source archives and manifest
+ok 223 - package checksum inventory authenticates native/web/source archives and manifest
+  ---
+  duration_ms: 8.397447
+  type: 'test'
+  ...
+# Subtest: checksum file itself and extra assets cannot be spoofed
+ok 224 - checksum file itself and extra assets cannot be spoofed
+  ---
+  duration_ms: 11.10655
+  type: 'test'
+  ...
+# Subtest: release provenance rejects an unsupported build architecture
+ok 225 - release provenance rejects an unsupported build architecture
+  ---
+  duration_ms: 12.221691
+  type: 'test'
+  ...
+# Subtest: an existing immutable combination cannot be remapped to another user-specified tag
+ok 226 - an existing immutable combination cannot be remapped to another user-specified tag
+  ---
+  duration_ms: 2.868267
+  type: 'test'
+  ...
+# Subtest: published GitHub bytes recover local state without new uploads or current-head requirement
+ok 227 - published GitHub bytes recover local state without new uploads or current-head requirement
+  ---
+  duration_ms: 11.220149
+  type: 'test'
+  ...
+# Subtest: published source or remote asset digest mismatch refuses recovery
+ok 228 - published source or remote asset digest mismatch refuses recovery
+  ---
+  duration_ms: 17.968104
+  type: 'test'
+  ...
+# Subtest: draft partial-upload retry skips exact immutable bytes and publishes only a complete inventory
+ok 229 - draft partial-upload retry skips exact immutable bytes and publishes only a complete inventory
+  ---
+  duration_ms: 15.347879
+  type: 'test'
+  ...
+# Subtest: failed local published-state write can retry after remote publication without duplicate uploads
+ok 230 - failed local published-state write can retry after remote publication without duplicate uploads
+  ---
+  duration_ms: 17.510792
+  type: 'test'
+  ...
+# Subtest: failed zero-byte draft upload is removed only with the exact private pending-upload proof
+ok 231 - failed zero-byte draft upload is removed only with the exact private pending-upload proof
+  ---
+  duration_ms: 11.110594
+  type: 'test'
+  ...
+# Subtest: unknown starter or nonempty failed upload refuses destructive recovery
+ok 232 - unknown starter or nonempty failed upload refuses destructive recovery
+  ---
+  duration_ms: 10.074535
+  type: 'test'
+  ...
+# Subtest: recovering an older published release never downgrades the current project pointer
+ok 233 - recovering an older published release never downgrades the current project pointer
+  ---
+  duration_ms: 11.927169
+  type: 'test'
+  ...
+# Subtest: record-build saves numeric build IDs only after real gate and three-SHA proof
+ok 234 - record-build saves numeric build IDs only after real gate and three-SHA proof
+  ---
+  duration_ms: 9.204767
+  type: 'test'
+  ...
+# Subtest: Web parent retains an independently verified exact-three-SHA contract child in the same private record
+ok 235 - Web parent retains an independently verified exact-three-SHA contract child in the same private record
+  ---
+  duration_ms: 8.166998
+  type: 'test'
+  ...
+# Subtest: a pruned contract child cannot be restored from Web self-report, while original Web archives remain reusable
+ok 236 - a pruned contract child cannot be restored from Web self-report, while original Web archives remain reusable
+  ---
+  duration_ms: 8.964813
+  type: 'test'
+  ...
+# Subtest: cross report must match its parent, canonical child, all three commits and exact parameter schema before retaining bytes
+ok 237 - cross report must match its parent, canonical child, all three commits and exact parameter schema before retaining bytes
+  ---
+  duration_ms: 15.857842
+  type: 'test'
+  ...
+# Subtest: Web artifact SUCCESS cannot hide actual failed, incomplete or wrong-commit Jenkins child
+ok 238 - Web artifact SUCCESS cannot hide actual failed, incomplete or wrong-commit Jenkins child
+  ---
+  duration_ms: 5.329413
+  type: 'test'
+  ...
+# Subtest: retained Web retry excludes a subsequently pruned child from savedBuilds without replacing its original bits
+ok 239 - retained Web retry excludes a subsequently pruned child from savedBuilds without replacing its original bits
+  ---
+  duration_ms: 18.924416
+  type: 'test'
+  ...
+# Subtest: API package proof requires pinned Linux Docker bytes and its actual native import probe
+ok 240 - API package proof requires pinned Linux Docker bytes and its actual native import probe
+  ---
+  duration_ms: 0.240412
+  type: 'test'
+  ...
+# Subtest: API child accepts real ci-passed receipt path and refuses stale draft-state assumptions
+ok 241 - API child accepts real ci-passed receipt path and refuses stale draft-state assumptions
+  ---
+  duration_ms: 2.909495
+  type: 'test'
+  ...
+# Subtest: retained immutable web proof survives Jenkins build pruning and keeps original numeric ID
+ok 242 - retained immutable web proof survives Jenkins build pruning and keeps original numeric ID
+  ---
+  duration_ms: 18.274466
+  type: 'test'
+  ...
+# Subtest: pre-adoption original archives survive pruned Jenkins history and fetch without rebuilding
+ok 243 - pre-adoption original archives survive pruned Jenkins history and fetch without rebuilding
+  ---
+  duration_ms: 26.20051
+  type: 'test'
+  ...
+# Subtest: failed stream cannot leave a green saved build or a half-retained archive cache
+ok 244 - failed stream cannot leave a green saved build or a half-retained archive cache
+  ---
+  duration_ms: 3.193554
+  type: 'test'
+  ...
+# Subtest: CI cache is created only after a real matching SUCCESS, never from manifest gateResult alone
+ok 245 - CI cache is created only after a real matching SUCCESS, never from manifest gateResult alone
+  ---
+  duration_ms: 1.707353
+  type: 'test'
+  ...
+# Subtest: fetch-web verifies actual manifest and byte streams before atomic trusted workspace adoption
+ok 246 - fetch-web verifies actual manifest and byte streams before atomic trusted workspace adoption
+  ---
+  duration_ms: 5.312822
+  type: 'test'
+  ...
+# Subtest: fetch-web tampered stream leaves no adopted folder
+ok 247 - fetch-web tampered stream leaves no adopted folder
+  ---
+  duration_ms: 2.460062
+  type: 'test'
+  ...
+# Subtest: Jenkins URL policy rejects foreign jobs, userinfo, query and cross-host redirects
+ok 248 - Jenkins URL policy rejects foreign jobs, userinfo, query and cross-host redirects
+  ---
+  duration_ms: 0.237619
+  type: 'test'
+  ...
+# Subtest: persisted requests cannot supply alternate refs or unreviewed job parameters
+ok 249 - persisted requests cannot supply alternate refs or unreviewed job parameters
+  ---
+  duration_ms: 0.132649
+  type: 'test'
+  ...
+# Subtest: first discovery builds main/open PR across three repos while baselining historical API branches
+ok 250 - first discovery builds main/open PR across three repos while baselining historical API branches
+  ---
+  duration_ms: 5.642278
+  type: 'test'
+  ...
+# Subtest: GitHub status failure cannot discard queued work or queue twice on the next poll
+ok 251 - GitHub status failure cannot discard queued work or queue twice on the next poll
+  ---
+  duration_ms: 5.048606
+  type: 'test'
+  ...
+# Subtest: queue 404 recovers the actual build by matching source parameters and completes repo-specific status
+ok 252 - queue 404 recovers the actual build by matching source parameters and completes repo-specific status
+  ---
+  duration_ms: 3.54423
+  type: 'test'
+  ...
+# Subtest: vanished queue without actual matching build retries instead of remaining permanently pending
+ok 253 - vanished queue without actual matching build retries instead of remaining permanently pending
+  ---
+  duration_ms: 2.979072
+  type: 'test'
+  ...
+# Subtest: three-head production changes queue one full release; unchanged current and live duplicate do not
+ok 254 - three-head production changes queue one full release; unchanged current and live duplicate do not
+  ---
+  duration_ms: 3.803234
+  type: 'test'
+  ...
+# Subtest: discovery recovers an already queued full release after local state loss
+ok 255 - discovery recovers an already queued full release after local state loss
+  ---
+  duration_ms: 2.479781
+  type: 'test'
+  ...
+# Subtest: UNSTABLE full publication is retried by the next discovery rather than treated as published
+ok 256 - UNSTABLE full publication is retried by the next discovery rather than treated as published
+  ---
+  duration_ms: 3.060696
+  type: 'test'
+  ...
+# Subtest: ordinary source CI failure is recorded once until a new source commit, without a busy retry loop
+ok 257 - ordinary source CI failure is recorded once until a new source commit, without a busy retry loop
+  ---
+  duration_ms: 5.819241
+  type: 'test'
+  ...
+# Subtest: new image tag publishes only its own pinned API source and never historical tags at bootstrap
+ok 258 - new image tag publishes only its own pinned API source and never historical tags at bootstrap
+  ---
+  duration_ms: 5.841086
+  type: 'test'
+  ...
+# Subtest: changed production Dockerfile schedules check, while PR does not publish an image
+ok 259 - changed production Dockerfile schedules check, while PR does not publish an image
+  ---
+  duration_ms: 5.669958
+  type: 'test'
+  ...
+# Subtest: mutation uses the isolated ARM64 Linux CI account and clean fixed tools/cache environment without deployment credentials
+ok 260 - mutation uses the isolated ARM64 Linux CI account and clean fixed tools/cache environment without deployment credentials
+  ---
+  duration_ms: 0.643113
+  type: 'test'
+  ...
+# Subtest: mutation request pins source/base and excludes assembly/generated/path-injection inputs
+ok 261 - mutation request pins source/base and excludes assembly/generated/path-injection inputs
+  ---
+  duration_ms: 0.463357
+  type: 'test'
+  ...
+# Subtest: changed mutation uses real merge-base/diff and the fixed repository; report records only mutable changes
+ok 262 - changed mutation uses real merge-base/diff and the fixed repository; report records only mutable changes
+  ---
+  duration_ms: 33.463223
+  type: 'test'
+  ...
+# Subtest: documentation-only changed mode skips Stryker and never reuses a stale report
+ok 263 - documentation-only changed mode skips Stryker and never reuses a stale report
+  ---
+  duration_ms: 30.233693
+  type: 'test'
+  ...
+# Subtest: failed/no-related-tests run is nonblocking but cannot publish an old success report; wrong SHA fails before Stryker
+ok 264 - failed/no-related-tests run is nonblocking but cannot publish an old success report; wrong SHA fails before Stryker
+  ---
+  duration_ms: 25.790139
+  type: 'test'
+  ...
+# Subtest: archive inspection preserves relative pnpm links and rejects escaped, broken or private entries
+ok 265 - archive inspection preserves relative pnpm links and rejects escaped, broken or private entries
+  ---
+  duration_ms: 15.082829
+  type: 'test'
+  ...
+# Subtest: packaging rejects active releases, current symlinks and persistent-data outputs before invoking any build
+ok 266 - packaging rejects active releases, current symlinks and persistent-data outputs before invoking any build # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance
+  ---
+  duration_ms: 0.072078
+  type: 'test'
+  ...
+# Subtest: pnpm9's exact API self-reference is rebound inside the archive while another escaped dependency still fails
+ok 267 - pnpm9's exact API self-reference is rebound inside the archive while another escaped dependency still fails
+  ---
+  duration_ms: 11.460477
+  type: 'test'
+  ...
+# Subtest: a real tar roundtrip excludes source, private env and data identities and probes its relocated production tree
+ok 268 - a real tar roundtrip excludes source, private env and data identities and probes its relocated production tree # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance
+  ---
+  duration_ms: 0.060238
+  type: 'test'
+  ...
+# Subtest: Linux native addons and build-host-only dylib dependencies fail packaging without leaving a publishable tarball
+ok 269 - Linux native addons and build-host-only dylib dependencies fail packaging without leaving a publishable tarball # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance
+  ---
+  duration_ms: 0.092171
+  type: 'test'
+  ...
+# Subtest: Linux docs executes only the real docs gate, not skipped native deployment tests
+ok 270 - Linux docs executes only the real docs gate, not skipped native deployment tests
+  ---
+  duration_ms: 5.92617
+  type: 'test'
+  ...
+# Subtest: Linux deployment regression executes every deployment source directory
+ok 271 - Linux deployment regression executes every deployment source directory
+  ---
+  duration_ms: 2.356969
+  type: 'test'
+  ...
+# Subtest: native deployment phase executes tests from all three deployment source directories
+ok 272 - native deployment phase executes tests from all three deployment source directories
+  ---
+  duration_ms: 2.525303
+  type: 'test'
+  ...
+# Subtest: Linux installation preserves locked installs for each repository and fixed Chromium
+ok 273 - Linux installation preserves locked installs for each repository and fixed Chromium
+  ---
+  duration_ms: 1.680257
+  type: 'test'
+  ...
+# Subtest: Mac retains its writable per-account browser installation
+ok 274 - Mac retains its writable per-account browser installation
+  ---
+  duration_ms: 1.91379
+  type: 'test'
+  ...
+# Subtest: a moved pinned checkout blocks Linux docs before running repository code
+ok 275 - a moved pinned checkout blocks Linux docs before running repository code
+  ---
+  duration_ms: 1.27768
+  type: 'test'
+  ...
+# Subtest: trusted Linux deployment pins account, ARM64 Node and private volume paths
+ok 276 - trusted Linux deployment pins account, ARM64 Node and private volume paths
+  ---
+  duration_ms: 0.558112
+  type: 'test'
+  ...
+# Subtest: ordinary CI cannot authorize deployment merely by sharing UID1000; absent, writable and linked volumes fail
+ok 277 - ordinary CI cannot authorize deployment merely by sharing UID1000; absent, writable and linked volumes fail
+  ---
+  duration_ms: 4.450975
+  type: 'test'
+  ...
+# Subtest: Jenkins transport reaches only the fixed host gateway while provenance stays canonical
+ok 278 - Jenkins transport reaches only the fixed host gateway while provenance stays canonical
+  ---
+  duration_ms: 0.2846
+  type: 'test'
+  ...
+# Subtest: Docker29 OCI index image ID is verified through the ARM64 manifest/config chain, not mistaken for config ID
+ok 279 - Docker29 OCI index image ID is verified through the ARM64 manifest/config chain, not mistaken for config ID
+  ---
+  duration_ms: 31.796432
+  type: 'test'
+  ...
+# Subtest: legacy Docker-save validates immutable config ID; wrong architecture, missing blobs and ambiguous runtime are rejected
+ok 280 - legacy Docker-save validates immutable config ID; wrong architecture, missing blobs and ambiguous runtime are rejected
+  ---
+  duration_ms: 35.540137
+  type: 'test'
+  ...
+# Subtest: trusted Linux runner verifies actual Jenkins SUCCESS at the gateway and preserves canonical three-SHA evidence
+ok 281 - trusted Linux runner verifies actual Jenkins SUCCESS at the gateway and preserves canonical three-SHA evidence
+  ---
+  duration_ms: 19.190174
+  type: 'test'
+  ...
+# Subtest: API evidence requires the matching private root/API receipt and refuses stale root-only release reuse
+ok 282 - API evidence requires the matching private root/API receipt and refuses stale root-only release reuse
+  ---
+  duration_ms: 10.362137
+  type: 'test'
+  ...
+# Subtest: Linux discovery queues exact commits through the gateway and stores canonical queue provenance
+ok 283 - Linux discovery queues exact commits through the gateway and stores canonical queue provenance
+  ---
+  duration_ms: 8.106176
+  type: 'test'
+  ...
+# Subtest: new Linux trusted pipelines preserve executor release before child waits and use container monitor CLI
+ok 284 - new Linux trusted pipelines preserve executor release before child waits and use container monitor CLI
+  ---
+  duration_ms: 1.08475
+  type: 'test'
+  ...
+# Subtest: image requests/configuration bind both provider coordinates and reject PRs, tag drift, mutable version and missing architecture
+ok 285 - image requests/configuration bind both provider coordinates and reject PRs, tag drift, mutable version and missing architecture
+  ---
+  duration_ms: 7.379688
+  type: 'test'
+  ...
+# Subtest: anonymous OCI validation verifies both platform/config digests and source labels, including GHCR blob redirects
+ok 286 - anonymous OCI validation verifies both platform/config digests and source labels, including GHCR blob redirects
+  ---
+  duration_ms: 13.232654
+  type: 'test'
+  ...
+# {"stage":"default-image","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"builder","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# Subtest: check mode binds checkout and builder without reading publication credentials or making a push
+ok 287 - check mode binds checkout and builder without reading publication credentials or making a push
+  ---
+  duration_ms: 7.094129
+  type: 'test'
+  ...
+# {"stage":"default-image","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"builder","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"package-permission","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"publish-aio","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"anonymous-aio","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"publish-boxlite","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"anonymous-boxlite","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# Subtest: publish sends token only over login stdin/private Docker config, publishes two architectures/tier and anonymizes final provenance
+ok 288 - publish sends token only over login stdin/private Docker config, publishes two architectures/tier and anonymizes final provenance
+  ---
+  duration_ms: 8.052232
+  type: 'test'
+  ...
+# {"stage":"default-image","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"builder","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# {"stage":"package-permission","sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+# Subtest: missing write:packages fails before login/build and cannot be reported as publish success
+ok 289 - missing write:packages fails before login/build and cannot be reported as publish success
+  ---
+  duration_ms: 4.441804
+  type: 'test'
+  ...
+# Subtest: ordinary Linux CI identity cannot publish without both private deployment volumes; layout refusal precedes checkout/token/Docker
+ok 290 - ordinary Linux CI identity cannot publish without both private deployment volumes; layout refusal precedes checkout/token/Docker
+  ---
+  duration_ms: 0.254586
+  type: 'test'
+  ...
+# Subtest: publisher fixes Linux ARM64 identity, Docker socket/tools and workspace, rejecting root, wrong home and generic x64 builders
+ok 291 - publisher fixes Linux ARM64 identity, Docker socket/tools and workspace, rejecting root, wrong home and generic x64 builders
+  ---
+  duration_ms: 0.253793
+  type: 'test'
+  ...
+# Subtest: GHCR service file refuses readable modes, hardlinks, symlinks and wrong ownership without exposing its contents
+ok 292 - GHCR service file refuses readable modes, hardlinks, symlinks and wrong ownership without exposing its contents
+  ---
+  duration_ms: 1.68876
+  type: 'test'
+  ...
+# Subtest: image child environment ignores inherited application secrets and redirects all Docker state into the private context
+ok 293 - image child environment ignores inherited application secrets and redirects all Docker state into the private context
+  ---
+  duration_ms: 0.210439
+  type: 'test'
+  ...
+# Subtest: actual default-image gate uses the Jenkins configuration with no Actions workflow; rejects provider/architecture/owner/default drift
+ok 294 - actual default-image gate uses the Jenkins configuration with no Actions workflow; rejects provider/architecture/owner/default drift
+  ---
+  duration_ms: 106.666182
+  type: 'test'
+  ...
+# Subtest: bootout registry removal alone cannot declare a still-serving API child exited
+ok 295 - bootout registry removal alone cannot declare a still-serving API child exited
+  ---
+  duration_ms: 0.536643
+  type: 'test'
+  ...
+# Subtest: every original job, process, listener and lock must release regardless of shutdown order
+ok 296 - every original job, process, listener and lock must release regardless of shutdown order
+  ---
+  duration_ms: 0.873311
+  type: 'test'
+  ...
+# Subtest: sixty-second API shutdown may outlive launchd registry removal before lock cleanup permits replacement
+ok 297 - sixty-second API shutdown may outlive launchd registry removal before lock cleanup permits replacement
+  ---
+  duration_ms: 0.482741
+  type: 'test'
+  ...
+# Subtest: the same empty lock directory during fs.rm is still a blocker, not permission to steal the lock
+ok 298 - the same empty lock directory during fs.rm is still a blocker, not permission to steal the lock
+  ---
+  duration_ms: 0.185342
+  type: 'test'
+  ...
+# Subtest: PID reuse, changed parent or executable, foreign listener and replaced lock are rejected without signalling anything
+ok 299 - PID reuse, changed parent or executable, foreign listener and replaced lock are rejected without signalling anything
+  ---
+  duration_ms: 0.238035
+  type: 'test'
+  ...
+# Subtest: a real lock owner record belongs to the original supervisor, and another identity cannot borrow its exit proof
+ok 300 - a real lock owner record belongs to the original supervisor, and another identity cannot borrow its exit proof
+  ---
+  duration_ms: 0.084167
+  type: 'test'
+  ...
+# Subtest: a still-registered original job without a PID also blocks, while another process cannot masquerade as an adopted child
+ok 301 - a still-registered original job without a PID also blocks, while another process cannot masquerade as an adopted child
+  ---
+  duration_ms: 0.091212
+  type: 'test'
+  ...
+# Subtest: missing or malformed observation cannot be treated as an empty machine
+ok 302 - missing or malformed observation cannot be treated as an empty machine
+  ---
+  duration_ms: 0.350884
+  type: 'test'
+  ...
+# Subtest: timeout preserves the real admission marker and does not bootstrap another API
+ok 303 - timeout preserves the real admission marker and does not bootstrap another API
+  ---
+  duration_ms: 23.054063
+  type: 'test'
+  ...
+# Subtest: barrier replacement during the final exit sample refuses recovery and preserves the replacement marker
+ok 304 - barrier replacement during the final exit sample refuses recovery and preserves the replacement marker
+  ---
+  duration_ms: 2.696556
+  type: 'test'
+  ...
+# Subtest: recovery waits for old child, listener and lock removal before one bootstrap and authenticated readiness
+ok 305 - recovery waits for old child, listener and lock removal before one bootstrap and authenticated readiness
+  ---
+  duration_ms: 0.160956
+  type: 'test'
+  ...
+# Subtest: unknown replacement or unavailable process evidence never reaches bootstrap/readiness
+ok 306 - unknown replacement or unavailable process evidence never reaches bootstrap/readiness
+  ---
+  duration_ms: 0.139945
+  type: 'test'
+  ...
+# Subtest: manual and legacy maintenance files are preserved without readiness or approval calls
+ok 307 - manual and legacy maintenance files are preserved without readiness or approval calls
+  ---
+  duration_ms: 9.785807
+  type: 'test'
+  ...
+# Subtest: disabled deployment preserves its existing controller barrier even when the API could be ready
+ok 308 - disabled deployment preserves its existing controller barrier even when the API could be ready
+  ---
+  duration_ms: 2.298565
+  type: 'test'
+  ...
+# Subtest: enabled recovery removes only a controller barrier after readiness and renewed approval
+ok 309 - enabled recovery removes only a controller barrier after readiness and renewed approval
+  ---
+  duration_ms: 0.936051
+  type: 'test'
+  ...
+# Subtest: an unready API keeps its controller maintenance barrier for operator recovery
+ok 310 - an unready API keeps its controller maintenance barrier for operator recovery
+  ---
+  duration_ms: 1.078456
+  type: 'test'
+  ...
+# Subtest: withdrawing approval during readiness preserves the real controller barrier
+ok 311 - withdrawing approval during readiness preserves the real controller barrier
+  ---
+  duration_ms: 1.100508
+  type: 'test'
+  ...
+# Subtest: resume preserves an operator's in-place rewrite of the barrier
+ok 312 - resume preserves an operator's in-place rewrite of the barrier
+  ---
+  duration_ms: 1.559654
+  type: 'test'
+  ...
+# Subtest: resume preserves a replaced barrier even when its token and contents were copied
+ok 313 - resume preserves a replaced barrier even when its token and contents were copied
+  ---
+  duration_ms: 1.649824
+  type: 'test'
+  ...
+# Subtest: operator replacement during readiness is retained rather than recovered
+ok 314 - operator replacement during readiness is retained rather than recovered
+  ---
+  duration_ms: 0.620352
+  type: 'test'
+  ...
+# Subtest: resume removes its own unchanged barrier once and leaves absent files alone
+ok 315 - resume removes its own unchanged barrier once and leaves absent files alone
+  ---
+  duration_ms: 1.908787
+  type: 'test'
+  ...
+# Subtest: only the configured repository, branch and fixed Jenkins job form a production channel
+ok 316 - only the configured repository, branch and fixed Jenkins job form a production channel
+  ---
+  duration_ms: 0.42367
+  type: 'test'
+  ...
+# Subtest: CI requires the controller's same-SHA same-build Jenkins receipt, never GitHub green evidence
+ok 317 - CI requires the controller's same-SHA same-build Jenkins receipt, never GitHub green evidence
+  ---
+  duration_ms: 0.163957
+  type: 'test'
+  ...
+# Subtest: the stage API pins full SHA, numeric build identity and local fixed-job links
+ok 318 - the stage API pins full SHA, numeric build identity and local fixed-job links
+  ---
+  duration_ms: 0.132858
+  type: 'test'
+  ...
+# Subtest: system service operations use only the fixed privileged helper while GUI operations retain their configured UID
+ok 319 - system service operations use only the fixed privileged helper while GUI operations retain their configured UID
+  ---
+  duration_ms: 0.11685
+  type: 'test'
+  ...
+# Subtest: system installer identity accepts only the dedicated UID501 home and runtime config
+ok 320 - system installer identity accepts only the dedicated UID501 home and runtime config
+  ---
+  duration_ms: 0.142447
+  type: 'test'
+  ...
+# Subtest: actual generated system plists declare non-root identity, fixed execution and persistent logs
+ok 321 - actual generated system plists declare non-root identity, fixed execution and persistent logs
+  ---
+  duration_ms: 23.527884
+  type: 'test'
+  ...
+# Subtest: isolated Jenkins CI plists reject production identity, leaked secrets and an outside working directory
+ok 322 - isolated Jenkins CI plists reject production identity, leaked secrets and an outside working directory
+  ---
+  duration_ms: 0.19147
+  type: 'test'
+  ...
+# Subtest: Jenkins secret handoff admits only fixed distinct source, destination and owner metadata
+ok 323 - Jenkins secret handoff admits only fixed distinct source, destination and owner metadata
+  ---
+  duration_ms: 0.091338
+  type: 'test'
+  ...
+# Subtest: the privileged helper is valid shell and sudoers grants fixed service commands without root Node or generic launchctl
+ok 324 - the privileged helper is valid shell and sudoers grants fixed service commands without root Node or generic launchctl
+  ---
+  duration_ms: 3.278388
+  type: 'test'
+  ...
+# Subtest: native CI executes every gate including fixture capability and native SDK checks without runtime secrets
+ok 325 - native CI executes every gate including fixture capability and native SDK checks without runtime secrets
+  ---
+  duration_ms: 0.422836
+  type: 'test'
+  ...
+# Subtest: a provider fixture failure aborts native CI before build or attestation
+ok 326 - a provider fixture failure aborts native CI before build or attestation
+  ---
+  duration_ms: 0.166625
+  type: 'test'
+  ...
+# Subtest: successful CI writes an owner-only same-build receipt bound to the complete real artifact manifest
+ok 327 - successful CI writes an owner-only same-build receipt bound to the complete real artifact manifest
+  ---
+  duration_ms: 5.794437
+  type: 'test'
+  ...
+# Subtest: a legacy ready artifact cannot issue a Jenkins success receipt without the new native CI attestation
+ok 328 - a legacy ready artifact cannot issue a Jenkins success receipt without the new native CI attestation
+  ---
+  duration_ms: 2.037101
+  type: 'test'
+  ...
+# Subtest: first Jenkins verification of the active SHA builds separately and leaves the active release bytes untouched
+ok 329 - first Jenkins verification of the active SHA builds separately and leaves the active release bytes untouched
+  ---
+  duration_ms: 3.681256
+  type: 'test'
+  ...
+# Subtest: an already-current SHA still needs matching Jenkins verification before deployment can report current
+ok 330 - an already-current SHA still needs matching Jenkins verification before deployment can report current
+  ---
+  duration_ms: 0.168042
+  type: 'test'
+  ...
+# Subtest: a stale requested SHA or an advancing remote cannot issue CI evidence or change admission
+ok 331 - a stale requested SHA or an advancing remote cannot issue CI evidence or change admission
+  ---
+  duration_ms: 1.038894
+  type: 'test'
+  ...
+# Subtest: changing verified metadata, checks, or the production channel invalidates cached Jenkins evidence
+ok 332 - changing verified metadata, checks, or the production channel invalidates cached Jenkins evidence
+  ---
+  duration_ms: 4.566115
+  type: 'test'
+  ...
+# Subtest: receipts reject public files, symlinks and arbitrary artifact paths even with successful metadata
+ok 333 - receipts reject public files, symlinks and arbitrary artifact paths even with successful metadata
+  ---
+  duration_ms: 2.972902
+  type: 'test'
+  ...
+# Subtest: approved same-SHA CI builds, checks quiet admission twice, and activates only after drain
+ok 334 - approved same-SHA CI builds, checks quiet admission twice, and activates only after drain
+  ---
+  duration_ms: 0.118101
+  type: 'test'
+  ...
+# Subtest: an already-active SHA is a no-op only after authenticated readiness
+ok 335 - an already-active SHA is a no-op only after authenticated readiness
+  ---
+  duration_ms: 0.046773
+  type: 'test'
+  ...
+# Subtest: a failed first installation's same-SHA symlink cannot masquerade as an active release
+ok 336 - a failed first installation's same-SHA symlink cannot masquerade as an active release
+  ---
+  duration_ms: 0.037394
+  type: 'test'
+  ...
+# Subtest: channel minimum ancestry and rejected CI prevent all build or admission side effects
+ok 337 - channel minimum ancestry and rejected CI prevent all build or admission side effects
+  ---
+  duration_ms: 0.064866
+  type: 'test'
+  ...
+# Subtest: remote branch advancing during build discards the candidate before drain or activation
+ok 338 - remote branch advancing during build discards the candidate before drain or activation
+  ---
+  duration_ms: 0.072161
+  type: 'test'
+  ...
+# Subtest: remote branch advancing after drain releases the barrier and never activates stale code
+ok 339 - remote branch advancing after drain releases the barrier and never activates stale code
+  ---
+  duration_ms: 0.035727
+  type: 'test'
+  ...
+# Subtest: disabled deployment still verifies/builds but does not drain or activate
+ok 340 - disabled deployment still verifies/builds but does not drain or activate
+  ---
+  duration_ms: 0.029223
+  type: 'test'
+  ...
+# Subtest: withdrawing deployment approval during build or the quiet interval never activates the candidate
+ok 341 - withdrawing deployment approval during build or the quiet interval never activates the candidate
+  ---
+  duration_ms: 0.431215
+  type: 'test'
+  ...
+# Subtest: approval is checked again after quiet admission before a still-approved release activates
+ok 342 - approval is checked again after quiet admission before a still-approved release activates
+  ---
+  duration_ms: 0.041854
+  type: 'test'
+  ...
+# Subtest: approval read failure after drain preserves the original ready release and removes its barrier
+ok 343 - approval read failure after drain preserves the original ready release and removes its barrier
+  ---
+  duration_ms: 0.082666
+  type: 'test'
+  ...
+# Subtest: failed build never drains, activates or treats the candidate as a successful release
+ok 344 - failed build never drains, activates or treats the candidate as a successful release
+  ---
+  duration_ms: 0.040478
+  type: 'test'
+  ...
+# Subtest: active tasks defer cutover, including a task appearing between the first idle read and the barrier
+ok 345 - active tasks defer cutover, including a task appearing between the first idle read and the barrier
+  ---
+  duration_ms: 0.050775
+  type: 'test'
+  ...
+# Subtest: activation failure keeps the admission barrier unless a ready rollback is verified
+ok 346 - activation failure keeps the admission barrier unless a ready rollback is verified
+  ---
+  duration_ms: 0.04373
+  type: 'test'
+  ...
+# Subtest: pre-cutover lookup failure releases the barrier without starting any candidate
+ok 347 - pre-cutover lookup failure releases the barrier without starting any candidate
+  ---
+  duration_ms: 0.042063
+  type: 'test'
+  ...
+# Subtest: first-install readiness failure stops the candidate and preserves recovery admission
+ok 348 - first-install readiness failure stops the candidate and preserves recovery admission
+  ---
+  duration_ms: 0.088627
+  type: 'test'
+  ...
+# Subtest: candidate readiness failure rolls back only the matching schema/storage release and resumes after old readiness
+ok 349 - candidate readiness failure rolls back only the matching schema/storage release and resumes after old readiness
+  ---
+  duration_ms: 0.07733
+  type: 'test'
+  ...
+# Subtest: failed rollback readiness never reopens admission or claims a ready previous release
+ok 350 - failed rollback readiness never reopens admission or claims a ready previous release
+  ---
+  duration_ms: 0.067034
+  type: 'test'
+  ...
+# Subtest: activation itself refuses unsafe rollback when migration/storage fingerprints differ
+ok 351 - activation itself refuses unsafe rollback when migration/storage fingerprints differ
+  ---
+  duration_ms: 0.124228
+  type: 'test'
+  ...
+# Subtest: backup or old-process stop failure prevents candidate startup
+ok 352 - backup or old-process stop failure prevents candidate startup
+  ---
+  duration_ms: 0.051318
+  type: 'test'
+  ...
+# Subtest: schema or persistent storage identity change blocks cutover and rollback
+ok 353 - schema or persistent storage identity change blocks cutover and rollback
+  ---
+  duration_ms: 0.108429
+  type: 'test'
+  ...
+# Subtest: only a complete native Node 22 release with matching migration content is reusable
+ok 354 - only a complete native Node 22 release with matching migration content is reusable
+  ---
+  duration_ms: 7.265298
+  type: 'test'
+  ...
+# Subtest: editing an existing migration changes the content hash, invalidates cache and blocks rollback
+ok 355 - editing an existing migration changes the content hash, invalidates cache and blocks rollback
+  ---
+  duration_ms: 1.271469
+  type: 'test'
+  ...
+# Subtest: migration symlinks cannot escape the isolated release or masquerade as a stable hash
+ok 356 - migration symlinks cannot escape the isolated release or masquerade as a stable hash
+  ---
+  duration_ms: 6.938425
+  type: 'test'
+  ...
+# Subtest: build subprocess environment excludes ambient credentials and executable injection
+ok 357 - build subprocess environment excludes ambient credentials and executable injection
+  ---
+  duration_ms: 0.084376
+  type: 'test'
+  ...
+# Subtest: runtime accepts explicit API settings but rejects inherited tooling credentials or executable hooks
+ok 358 - runtime accepts explicit API settings but rejects inherited tooling credentials or executable hooks
+  ---
+  duration_ms: 0.272052
+  type: 'test'
+  ...
+# Subtest: runtime rejects exposed listeners, insecure cookies, invalid ports and changed drain ownership
+ok 359 - runtime rejects exposed listeners, insecure cookies, invalid ports and changed drain ownership
+  ---
+  duration_ms: 0.19935
+  type: 'test'
+  ...
+# Subtest: runtime/config files must be owner-only regular files, never public files or symlinks
+ok 360 - runtime/config files must be owner-only regular files, never public files or symlinks
+  ---
+  duration_ms: 4.511672
+  type: 'test'
+  ...
+# Subtest: a real live process is refused before spawning a second API, while its exited PID is accepted
+ok 361 - a real live process is refused before spawning a second API, while its exited PID is accepted
+  ---
+  duration_ms: 12.489617
+  type: 'test'
+  ...
+# Subtest: unknown previous process state fails closed and only explicit no-previous-state permits first installation
+ok 362 - unknown previous process state fails closed and only explicit no-previous-state permits first installation
+  ---
+  duration_ms: 0.110847
+  type: 'test'
+  ...
+# Subtest: SIGKILL of the actual runtime wrapper leaves its live child protected by both the stale lock and process guard
+ok 363 - SIGKILL of the actual runtime wrapper leaves its live child protected by both the stale lock and process guard # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22
+  ---
+  duration_ms: 0.017342
+  type: 'test'
+  ...
+# Subtest: normal child exit releases the actual wrapper's runtime lock and permits one subsequent child
+ok 364 - normal child exit releases the actual wrapper's runtime lock and permits one subsequent child # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22
+  ---
+  duration_ms: 0.015132
+  type: 'test'
+  ...
+# Subtest: actual runtime wrapper refuses every persistent-path mismatch before spawning its dummy API
+ok 365 - actual runtime wrapper refuses every persistent-path mismatch before spawning its dummy API # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22
+  ---
+  duration_ms: 0.013882
+  type: 'test'
+  ...
+# Subtest: one live controller owns the lock, rejects competitors, and releases after failure
+ok 366 - one live controller owns the lock, rejects competitors, and releases after failure
+  ---
+  duration_ms: 3.866557
+  type: 'test'
+  ...
+# Subtest: an incomplete or malformed lock owner is never stolen
+ok 367 - an incomplete or malformed lock owner is never stolen
+  ---
+  duration_ms: 1.892154
+  type: 'test'
+  ...
+# Subtest: lock release cannot remove a replacement ownership token
+ok 368 - lock release cannot remove a replacement ownership token
+  ---
+  duration_ms: 1.339837
+  type: 'test'
+  ...
+# Subtest: concurrent stale-lock detection preserves the dead owner until operator recovery, without admitting a compiler
+ok 369 - concurrent stale-lock detection preserves the dead owner until operator recovery, without admitting a compiler
+  ---
+  duration_ms: 2.455978
+  type: 'test'
+  ...
+# Subtest: real plist conversion retains Native IsHidden and Standard identity attributes for idempotent account validation
+ok 370 - real plist conversion retains Native IsHidden and Standard identity attributes for idempotent account validation
+  ---
+  duration_ms: 42.207968
+  type: 'test'
+  ...
+# Subtest: account validation refuses missing, duplicate, wrong namespace and invalid identity fields without exposing values
+ok 371 - account validation refuses missing, duplicate, wrong namespace and invalid identity fields without exposing values
+  ---
+  duration_ms: 0.576037
+  type: 'test'
+  ...
+# Subtest: omitted protected AuthenticationAuthority is never inferred as disabled; every authority must carry the disabled marker
+ok 372 - omitted protected AuthenticationAuthority is never inferred as disabled; every authority must carry the disabled marker
+  ---
+  duration_ms: 0.126897
+  type: 'test'
+  ...
+# Subtest: Directory Services record-not-found command result permits creation; command/permission failures remain refusals
+ok 373 - Directory Services record-not-found command result permits creation; command/permission failures remain refusals
+  ---
+  duration_ms: 13.833413
+  type: 'test'
+  ...
+# Subtest: real /bin/test distinguishes accessible files from absent files without inheriting cwd or secrets
+ok 374 - real /bin/test distinguishes accessible files from absent files without inheriting cwd or secrets
+  ---
+  duration_ms: 21.755081
+  type: 'test'
+  ...
+# Subtest: positive and negative access probes fail closed on missing/error/signalled/null/invalid exit results
+ok 375 - positive and negative access probes fail closed on missing/error/signalled/null/invalid exit results
+  ---
+  duration_ms: 0.364266
+  type: 'test'
+  ...
+# Subtest: actual startup command absence is reported separately from an unreadable path and output is never leaked
+ok 376 - actual startup command absence is reported separately from an unreadable path and output is never leaked
+  ---
+  duration_ms: 0.517342
+  type: 'test'
+  ...
+# Subtest: negative isolation checks first require existing private metadata and reject accessible real files or probe failures
+ok 377 - negative isolation checks first require existing private metadata and reject accessible real files or probe failures
+  ---
+  duration_ms: 2.040061
+  type: 'test'
+  ...
+# Subtest: busy preflight and failed real startup prerequisite leave config/poller/barrier untouched before transition
+ok 378 - busy preflight and failed real startup prerequisite leave config/poller/barrier untouched before transition
+  ---
+  duration_ms: 2.842295
+  type: 'test'
+  ...
+# Subtest: actual historical dedicated GUI plist and current generated plist both validate without changing service/config/token
+ok 379 - actual historical dedicated GUI plist and current generated plist both validate without changing service/config/token
+  ---
+  duration_ms: 10.624351
+  type: 'test'
+  ...
+# Subtest: legacy compatibility never permits changed executable, UID/home, token-file, label, extra launchd directives, UUID or production target
+ok 380 - legacy compatibility never permits changed executable, UID/home, token-file, label, extra launchd directives, UUID or production target
+  ---
+  duration_ms: 0.421586
+  type: 'test'
+  ...
+# Subtest: preflight uses only authenticated GET snapshots and returns counts/readiness without runtime secrets or payload extras
+ok 381 - preflight uses only authenticated GET snapshots and returns counts/readiness without runtime secrets or payload extras
+  ---
+  duration_ms: 8.250164
+  type: 'test'
+  ...
+# Subtest: work preflight refuses before real config/poller mutation or rollback trace even when residual sockets could be disconnected
+ok 382 - work preflight refuses before real config/poller mutation or rollback trace even when residual sockets could be disconnected
+  ---
+  duration_ms: 2.376688
+  type: 'test'
+  ...
+# Subtest: operator preflight checks every blocker, HTTP/auth and readiness; only reviewed Tunnel sockets are eligible
+ok 383 - operator preflight checks every blocker, HTTP/auth and readiness; only reviewed Tunnel sockets are eligible
+  ---
+  duration_ms: 0.762381
+  type: 'test'
+  ...
+# Subtest: operator admission holds a real private owner barrier while sockets remain; backup can proceed only after ten continuous seconds of full idle
+ok 384 - operator admission holds a real private owner barrier while sockets remain; backup can proceed only after ten continuous seconds of full idle
+  ---
+  duration_ms: 3.0356
+  type: 'test'
+  ...
+# Subtest: work appearing during admission refuses and removes only the exact barrier it created
+ok 385 - work appearing during admission refuses and removes only the exact barrier it created
+  ---
+  duration_ms: 2.009171
+  type: 'test'
+  ...
+# Subtest: admission refuses existing manual maintenance and preserves operator replacement even on its error path
+ok 386 - admission refuses existing manual maintenance and preserves operator replacement even on its error path
+  ---
+  duration_ms: 6.736491
+  type: 'test'
+  ...
+# Subtest: quiet interval resets on returning sockets and rejects real work, unknown tables or loss of owner without stopping API
+ok 387 - quiet interval resets on returning sockets and rejects real work, unknown tables or loss of owner without stopping API
+  ---
+  duration_ms: 1.640987
+  type: 'test'
+  ...
+# Subtest: persistent sockets time out with admission still held and no backup/API stop
+ok 388 - persistent sockets time out with admission still held and no backup/API stop
+  ---
+  duration_ms: 1.051275
+  type: 'test'
+  ...
+# Subtest: actual macOS lsof process fields include mandatory fd records; ownership parser keeps all process owners and rejects malformed records
+ok 389 - actual macOS lsof process fields include mandatory fd records; ownership parser keeps all process owners and rejects malformed records
+  ---
+  duration_ms: 0.194472
+  type: 'test'
+  ...
+# Subtest: launchd job metadata keeps the original PID while printable, and missing PID still requires registry removal
+ok 390 - launchd job metadata keeps the original PID while printable, and missing PID still requires registry removal
+  ---
+  duration_ms: 0.181008
+  type: 'test'
+  ...
+# Subtest: dedicated Tunnel's real thirty-second graceful boundary is allowed; original PID and metrics must both release before quiet/backup
+ok 391 - dedicated Tunnel's real thirty-second graceful boundary is allowed; original PID and metrics must both release before quiet/backup
+  ---
+  duration_ms: 1.570535
+  type: 'test'
+  ...
+# Subtest: metrics closing first never permits replacing a still-live PID; PID exiting first still waits for the metrics release
+ok 392 - metrics closing first never permits replacing a still-live PID; PID exiting first still waits for the metrics release
+  ---
+  duration_ms: 0.150825
+  type: 'test'
+  ...
+# Subtest: unknown listener, changed PID ownership/executable or reloaded GUI job refuses without signaling any process
+ok 393 - unknown listener, changed PID ownership/executable or reloaded GUI job refuses without signaling any process
+  ---
+  duration_ms: 0.206728
+  type: 'test'
+  ...
+# Subtest: ninety-second exit timeout or barrier replacement preserves admission; a still-exiting original prevents duplicate Tunnel recovery
+ok 394 - ninety-second exit timeout or barrier replacement preserves admission; a still-exiting original prevents duplicate Tunnel recovery
+  ---
+  duration_ms: 3.285517
+  type: 'test'
+  ...
+# Subtest: recovery waits for the same old terminating job/process/listener removal before bootstrap and readiness, and never bootstraps over an unknown replacement
+ok 395 - recovery waits for the same old terminating job/process/listener removal before bootstrap and readiness, and never bootstraps over an unknown replacement
+  ---
+  duration_ms: 2.799899
+  type: 'test'
+  ...
+# Subtest: pre-API failure restores only an originally loaded/stopped Tunnel before readiness and exact-owner admission release
+ok 396 - pre-API failure restores only an originally loaded/stopped Tunnel before readiness and exact-owner admission release
+  ---
+  duration_ms: 3.806653
+  type: 'test'
+  ...
+# Subtest: worker stderr exposes only complete allowlisted constant reasons, never arbitrary exception text or appended credentials
+ok 397 - worker stderr exposes only complete allowlisted constant reasons, never arbitrary exception text or appended credentials
+  ---
+  duration_ms: 0.128023
+  type: 'test'
+  ...
+# Subtest: trusted monitor verifies authenticated production probes and preserves real non-idle blockers without leaking inputs
+ok 398 - trusted monitor verifies authenticated production probes and preserves real non-idle blockers without leaking inputs
+  ---
+  duration_ms: 20.018671
+  type: 'test'
+  ...
+# Subtest: HTTP liveness alone cannot mark protected readiness/version as verified
+ok 399 - HTTP liveness alone cannot mark protected readiness/version as verified
+  ---
+  duration_ms: 4.330247
+  type: 'test'
+  ...
+# Subtest: wrong API SHA, false readiness and nonrunning persistent tunnel fail required checks
+ok 400 - wrong API SHA, false readiness and nonrunning persistent tunnel fail required checks
+  ---
+  duration_ms: 3.015716
+  type: 'test'
+  ...
+# Subtest: dead or unverifiable PID cannot be presented as running; only signal zero is used
+ok 401 - dead or unverifiable PID cannot be presented as running; only signal zero is used
+  ---
+  duration_ms: 9.400448
+  type: 'test'
+  ...
+# Subtest: failed launchctl, malformed probes and arbitrary HTTP error bodies are projected as safe diagnostics
+ok 402 - failed launchctl, malformed probes and arbitrary HTTP error bodies are projected as safe diagnostics
+  ---
+  duration_ms: 3.71569
+  type: 'test'
+  ...
+# Subtest: oversized streamed HTTP responses are cancelled before parsing or recording arbitrary bytes
+ok 403 - oversized streamed HTTP responses are cancelled before parsing or recording arbitrary bytes
+  ---
+  duration_ms: 4.623936
+  type: 'test'
+  ...
+# Subtest: private configuration boundaries reject alternate runtime files, symlinks, broad permissions and preview ports before probes
+ok 404 - private configuration boundaries reject alternate runtime files, symlinks, broad permissions and preview ports before probes
+  ---
+  duration_ms: 2.192137
+  type: 'test'
+  ...
+# Subtest: escaped current-release target and malicious status fields never escape projection into reports or build-log paths
+ok 405 - escaped current-release target and malicious status fields never escape projection into reports or build-log paths
+  ---
+  duration_ms: 2.394363
+  type: 'test'
+  ...
+# Subtest: log tails are bounded by bytes and lines, and discard partial leading/trailing secret fragments
+ok 406 - log tails are bounded by bytes and lines, and discard partial leading/trailing secret fragments
+  ---
+  duration_ms: 2.809821
+  type: 'test'
+  ...
+# Subtest: symlinked log files and directories are unavailable instead of following arbitrary private targets
+ok 407 - symlinked log files and directories are unavailable instead of following arbitrary private targets
+  ---
+  duration_ms: 2.782599
+  type: 'test'
+  ...
+# Subtest: log redaction covers labelled credentials, opaque provider tokens, cookie dumps and credential-bearing URLs
+ok 408 - log redaction covers labelled credentials, opaque provider tokens, cookie dumps and credential-bearing URLs
+  ---
+  duration_ms: 0.129815
+  type: 'test'
+  ...
+# Subtest: launchctl projection takes only top-level service fields and elapsed parser retains multi-day uptime
+ok 409 - launchctl projection takes only top-level service fields and elapsed parser retains multi-day uptime
+  ---
+  duration_ms: 0.04248
+  type: 'test'
+  ...
+# Subtest: final string redaction cannot corrupt boolean/null JSON when a passcode resembles a JSON keyword
+ok 410 - final string redaction cannot corrupt boolean/null JSON when a passcode resembles a JSON keyword
+  ---
+  duration_ms: 4.07091
+  type: 'test'
+  ...
+# Subtest: system launchd domain is respected and retired CI LaunchAgent is diagnostic only
+ok 411 - system launchd domain is respected and retired CI LaunchAgent is diagnostic only
+  ---
+  duration_ms: 5.99608
+  type: 'test'
+  ...
+# Subtest: fresh reports may use the designated Jenkins workspace without writing into production inputs
+ok 412 - fresh reports may use the designated Jenkins workspace without writing into production inputs
+  ---
+  duration_ms: 9.854925
+  type: 'test'
+  ...
+# Subtest: archive output is a fresh private directory containing exactly the whitelist and escaped inert HTML
+ok 413 - archive output is a fresh private directory containing exactly the whitelist and escaped inert HTML
+  ---
+  duration_ms: 7.45681
+  type: 'test'
+  ...
+# Subtest: a complete private CLI snapshot with contained npm symlinks verifies
+ok 414 - a complete private CLI snapshot with contained npm symlinks verifies
+  ---
+  duration_ms: 7.01213
+  type: 'test'
+  ...
+# Subtest: the installed-tree verifier accepts only the complete same manifest and expected ownership, without changing bytes
+ok 415 - the installed-tree verifier accepts only the complete same manifest and expected ownership, without changing bytes
+  ---
+  duration_ms: 6.598756
+  type: 'test'
+  ...
+# Subtest: installed reuse rejects modified bytes, extra/missing entries and writable/wrong executable modes
+ok 416 - installed reuse rejects modified bytes, extra/missing entries and writable/wrong executable modes
+  ---
+  duration_ms: 9.329912
+  type: 'test'
+  ...
+# Subtest: installed reuse rejects escaped/replaced links, hardlinked files and a symlink destination
+ok 417 - installed reuse rejects escaped/replaced links, hardlinked files and a symlink destination
+  ---
+  duration_ms: 4.483449
+  type: 'test'
+  ...
+# Subtest: altered bytes and extra entries reject the snapshot before privileged installation
+ok 418 - altered bytes and extra entries reject the snapshot before privileged installation
+  ---
+  duration_ms: 3.109346
+  type: 'test'
+  ...
+# Subtest: an escaped symlink and hardlinked file reject the snapshot
+ok 419 - an escaped symlink and hardlinked file reject the snapshot
+  ---
+  duration_ms: 3.062364
+  type: 'test'
+  ...
+# Subtest: a missing reviewed entry or unapproved destination cannot pass
+ok 420 - a missing reviewed entry or unapproved destination cannot pass
+  ---
+  duration_ms: 5.404117
+  type: 'test'
+  ...
+1..420
+# tests 420
+# suites 0
+# pass 414
+# fail 0
+# cancelled 0
+# skipped 6
+# todo 0
+# duration_ms 1819.721728

@@ -1,22 +1,32 @@
-# Jenkins 系统服务安装与 GitHub 授权命令
+# Jenkins 容器迁移与 GitHub 授权命令
 
-在这台 Mac mini 的 Terminal 中复制执行本文件的命令。安装只操作生产 `3101`，排除本地 `3100` 预览。
+Mac mini 已安装三个 Docker 引擎的系统启动项：Jenkins controller、隔离构建、生产运行时。用户已执行管理员安装并验证三个 LaunchDaemon 已加载；日常容器启动、构建和发布不需要手工初始化。参见[已完成的开机配置](container-boot-commands.md)。
 
-当前安装状态：`system-review-20261007e` 遇到 launchd 在停止期间仍显示旧服务的中间状态，安装器保留了维护屏障。已恢复原 GUI Tunnel，精确撤除自有屏障，公网 API 正常。修复后已用 `reviewf` 在真实服务上完成停止、等待、十秒空闲、恢复、鉴权 readiness 和屏障释放验证：实际等待原 job、PID 和端口消失约 31 秒，API 进程未变。新 `reviewg` 已准备；系统服务安装和首次 Jenkins 全量 Release 仍待完成。
+Jenkins controller 和 Linux ARM64、AMD64、部署节点已连接。完整 Linux 部署回归 420 项零失败；正式 API CI 首次构建已成功。生产 API、BoxLite 和 Tunnel 的初次数据迁移与正式 Release 仍在执行，具体完成状态应查看 Jenkins 实际构建记录。
 
-镜像凭证已完成：本机已验证账号为 `Xeonice`、权限为 `write:packages`、凭证文件权限为 `0600`。第 2 节保留供以后轮换凭证时使用，现在无需重复执行。
+## 1 Docker 引擎开机配置已完成
 
-## 1 安装 Mac 常驻服务
+无需重跑安装。Docker 管理 API、Tunnel、Jenkins 与各构建节点的进程、重启和日志；Mac 系统启动项仅启动三个 Colima Docker 引擎。已经停用重复的用户级引擎启动项。
 
-管理员密码只在 Terminal 的 sudo 提示中输入。安装器核对没有运行任务后，建立维护屏障、临时断开原专属 Tunnel，等待原 launchd job、PID、监听全部消失，所有连接归零并连续十秒空闲，再备份、切换生产 API 并安装六个常驻服务。生产入口会短暂中断，安装器不操作 `3100`。
+所有旧 `system-review-20261007*` 和 `host-service-installer-20261006` 安装命令已退役，不再执行。保留旧审核材料、原生服务数据和 Jenkins 导出，便于追溯及回退。实际整机冷启动尚未验证。
+
+### 已完成：原 Jenkins 数据导出与导入
+
+原 Jenkins Home 属于专属 UID `400`，目录权限为 `0700`，当前登录账户无法读取。本步骤需要在 Terminal 输入本机管理员密码，以标准 `tar` 导出已停止的原 Jenkins；不会修改原目录、停止生产 API 或 Tunnel，也不会启动发布任务。
+
+本步骤已完成：归档含 9 个 job、6 次已完成构建记录，SHA-256 为 `713de5d21ed03d61be5b72b00bb952fd8f1bc5b0fafd53343f0525efe0daeeeb`。无需重跑。下面保留已执行的冻结导出命令供追溯：
 
 ```sh
-sudo '/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node' '/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007g/tools/install-system-services.mjs' apply '/Users/douglasdong/.local/share/agent-platform-jenkins-tools/system-review-20261007g'
+sudo '/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node' '/Users/douglasdong/.local/share/agent-platform-jenkins-tools/container-home-export-20261006/export-jenkins-home.mjs' apply '/Users/douglasdong/.local/share/agent-platform-jenkins-tools/migration/bc32cab8-c8a7-4891-9849-fd85bee61ddf/plan.json'
 ```
 
-执行后回复“常驻服务已安装”，或提供错误文字。第 2—4 节已完成，无需重跑。[实际生命周期验证](jenkins-system-cutover-live-lifecycle.json)记录本次修复的真实运行结果；本次检查前后 `3100` 均无监听，安装器没有启动或停止预览服务。
+导出已成功，实际停止状态检查及归档完整校验通过。完整归档和 manifest 保存在上述 migration 目录，权限为 `0600`，其中包含加密密钥，不能上传到 GitHub 或聊天。导出源码 SHA-256 为 `e6943a8321c30d2c2da293f34cbfa6870f7b7426c51ec1a7f3ec408699c929a1`；实际停止状态检查已通过。
 
-旧的 `system-review-20261007b`、`system-review-20261007c`、`system-review-20261007d`、`system-review-20261007e` 不再使用；`system-review-20261007f` 仅用于已完成的实际生命周期验证。
+配置、用户、密钥及构建历史已导入新的 Docker 持久卷；旧插件、启动脚本、工作区和待执行队列已排除。正式 `8080` 在迁移模式下完成 Home 验证，随后切到 active 模式；9 个 job 仍禁用。验证结果见 [Home 迁移证据](jenkins-controller-home-migration-verification.json)及[模式验证](jenkins-controller-active-mode-verification.json)。此导出和导入不等于完整 CI/CD 已完成。
+
+第 2—4 节已完成，无需重跑。既有[命令诊断](jenkins-system-cutover-command-probe-diagnosis.json)、[账户验证](jenkins-system-isolated-account-record-readonly.json)与 [Tunnel 生命周期验证](jenkins-system-cutover-live-lifecycle.json)保留作为历史证据；它们不表示 Docker 服务已经部署。
+
+所有既有 `system-review-20261007*` 目录均不用于新的安装；其中的准备文件和验证结果保留，不删除或执行。
 
 ## 2 配置独立的 GitHub 镜像凭证
 

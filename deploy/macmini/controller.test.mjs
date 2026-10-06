@@ -39,6 +39,7 @@ import {
   withLock,
 } from "./lib.mjs";
 import { runNativeChecks, serviceCommand } from "./controller.mjs";
+import { parsePlistFixture } from "./plist-test-support.mjs";
 import {
   ACCOUNTS,
   DEPLOY_ROOT,
@@ -632,20 +633,14 @@ test("actual generated system plists declare non-root identity, fixed execution 
   for (const kind of ["api", "tunnel"]) {
     const path = join(folder, `${kind}.plist`);
     await fs.writeFile(path, servicePlist(kind, production, { system: true }));
-    const child = spawn(
-      "/usr/bin/plutil",
-      ["-convert", "json", "-o", "-", path],
-      { stdio: ["ignore", "pipe", "pipe"] },
-    );
-    let output = "";
-    child.stdout.on("data", (chunk) => (output += chunk));
-    const [code] = await once(child, "exit");
-    assert.equal(code, 0);
-    const parsed = JSON.parse(output);
+    const parsed = parsePlistFixture(await fs.readFile(path, "utf8"));
     assert.equal(parsed.UserName, "douglasdong");
     assert.equal(parsed.GroupName, "staff");
     assert.equal(parsed.KeepAlive, true);
     assert.equal(parsed.RunAtLoad, true);
+    assert.equal(parsed.ThrottleInterval, 20);
+    assert.equal(parsed.ExitTimeOut, kind === "api" ? 60 : 30);
+    assert.equal(parsed.Umask, 63);
     assert.equal(parsed.EnvironmentVariables.HOME, "/Users/douglasdong");
     assert.equal(parsed.StandardOutPath, join(DEPLOY_ROOT, `logs/${kind}.log`));
     assert.equal(parsed.EnvironmentVariables.ACCESS_PASSCODE, undefined);

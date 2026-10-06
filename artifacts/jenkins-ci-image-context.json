@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "component": "ci",
+  "files": [
+    {
+      "source": "deploy/containers/ci.Dockerfile",
+      "target": "ci.Dockerfile",
+      "sizeBytes": 2863,
+      "sha256": "1a4205b1ad084db0f59fe058269251beefd3d980da72ec40812af990d3094cbd"
+    },
+    {
+      "source": "deploy/containers/ci-tools/package.json",
+      "target": "ci-tools/package.json",
+      "sizeBytes": 157,
+      "sha256": "de3f6901fe8ba883c71a908f489395712001bd8ea17ec0c74c27a34fd849e3be"
+    },
+    {
+      "source": "deploy/containers/ci-tools/package-lock.json",
+      "target": "ci-tools/package-lock.json",
+      "sizeBytes": 176063,
+      "sha256": "9ad5bd7800fb971e3afa6b27a9637e5498a8b02b88ce2e1718511e9b58204408"
+    },
+    {
+      "source": "deploy/jenkins/ci-agent-entrypoint.mjs",
+      "target": "tools/ci-agent-entrypoint.mjs",
+      "sizeBytes": 3253,
+      "sha256": "925ed40d161ac0f041f3f0534794469df7506e915e57eee4eced0b95c043af5a"
+    },
+    {
+      "source": "deploy/jenkins/jenkins-ci.mjs",
+      "target": "tools/jenkins-ci.mjs",
+      "sizeBytes": 4730,
+      "sha256": "fc10c5718c1984a78f77b5f3e29a19b7bb8525a7270812c6d82564a94e098f7d"
+    },
+    {
+      "source": "deploy/jenkins/project-ci.mjs",
+      "target": "tools/project-ci.mjs",
+      "sizeBytes": 7277,
+      "sha256": "e89779f2ab8f8e8955d778640068206638a0ff1432fc3156c893355777abc67a"
+    },
+    {
+      "source": "deploy/jenkins/jenkins-web.mjs",
+      "target": "tools/jenkins-web.mjs",
+      "sizeBytes": 43973,
+      "sha256": "a8fb7868f40be48112a11a18ff9309980f5437a4963c298143addf56a5c9f2fb"
+    },
+    {
+      "source": "deploy/jenkins/mutation.mjs",
+      "target": "tools/mutation.mjs",
+      "sizeBytes": 9491,
+      "sha256": "df851d5803bc229ac5506f1742358cc7d8831d84e430e91b1e3bb735ff18771b"
+    },
+    {
+      "source": "deploy/jenkins/ci-platform.mjs",
+      "target": "tools/ci-platform.mjs",
+      "sizeBytes": 4123,
+      "sha256": "a8528d7044b9578721f7a847043b3a069b3ac3d21da745125c122799ff8bef87"
+    }
+  ],
+  "localFrozenContext": "/var/folders/rq/pq76ym9s757g8vzsbq08tv680000gn/T/agent-platform-ci-context-hsMOMp",
+  "imageIds": {
+    "arm64": "sha256:f2fa6136753873ad891c89e560b1bd7a220ab8de1825b5d1a257b119fc1a5813",
+    "amd64": "sha256:8237c4b10e646b469fb56a824c33ade5a256e3fe348c3803c286d94e588c2721"
+  },
+  "checkedAt": "2026-10-06T01:58:17.704Z",
+  "currentSourceHashesMatch": true
+}

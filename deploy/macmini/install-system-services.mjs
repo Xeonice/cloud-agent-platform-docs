@@ -1,7 +1,7 @@
 import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
@@ -11,6 +11,8 @@ import {
   prepareVercel,
   verifyVercel,
   installVercel,
+  VERCEL_DESTINATION,
+  VERCEL_VERSION,
 } from "./public-build-tools.mjs";
 import {
   validateConfig,
@@ -301,9 +303,16 @@ export async function operatorPreflight(probe, dedicatedTunnelLoaded) {
 }
 
 // Refusal sits outside the mutation/rollback block so config/review stay intact.
-export async function cutoverAfterPreflight(probe, tunnelLoaded, transition) {
+export async function cutoverAfterPreflight(
+  probe,
+  tunnelLoaded,
+  transition,
+  prerequisites = async () => null,
+) {
   await operatorPreflight(probe, tunnelLoaded);
-  return transition();
+  // Account/tool preparation and actual target-UID probes must finish while the
+  // original API/Tunnel/config/poller are still untouched.
+  return transition(await prerequisites());
 }
 
 export async function holdCutoverAdmission(path, heldPath, probe) {
@@ -787,40 +796,358 @@ async function prepare() {
   );
 }
 
-async function account(name) {
-  const home = ACCOUNTS[name];
-  const existing = spawnSync(
-    "/usr/bin/dscl",
-    [".", "-read", `/Users/${name}`],
-    { encoding: "utf8", timeout: 10_000 },
+function targetOptions(target) {
+  if (
+    !Number.isInteger(target.uid) ||
+    target.uid <= 0 ||
+    !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(target.user) ||
+    !isAbsolute(target.home)
+  )
+    throw new Error("Invalid unprivileged startup probe identity");
+  return {
+    uid: target.uid,
+    gid: SERVICE_GID,
+    cwd: "/",
+    env: {
+      HOME: target.home,
+      USER: target.user,
+      LOGNAME: target.user,
+      PATH: "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      LANG: "en_US.UTF-8",
+      COREPACK_ENABLE_NETWORK: "0",
+    },
+    encoding: "utf8",
+    timeout: 10_000,
+    maxBuffer: 64 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  };
+}
+
+function successfulProbe(result, name, access = false) {
+  if (result.error?.code === "ENOENT")
+    throw new Error(`Startup probe command is missing: ${name}`);
+  if (
+    result.error ||
+    result.signal ||
+    !Number.isInteger(result.status) ||
+    (access ? ![0, 1].includes(result.status) : result.status !== 0)
+  )
+    throw new Error(`Startup probe command failed: ${name}`);
+  return result.status === 0;
+}
+
+// Darwin provides /bin/test, not /usr/bin/test. A failed command is never proof
+// that a production secret is inaccessible to the isolated CI account.
+export function targetAccess(flag, path, target, run = spawnSync) {
+  if (!["-x", "-r", "-w", "-d"].includes(flag) || !isAbsolute(path))
+    throw new Error("Invalid startup permission probe");
+  return successfulProbe(
+    run("/bin/test", [flag, path], targetOptions(target)),
+    "/bin/test",
+    true,
   );
-  if (existing.status === 0) {
-    const fields = Object.fromEntries(
-      existing.stdout
-        .split("\n")
-        .filter((line) => line.includes(": "))
-        .map((line) => {
-          const i = line.indexOf(": ");
-          return [line.slice(0, i), line.slice(i + 2)];
-        }),
+}
+
+export function targetCommand(name, file, args, target, run = spawnSync) {
+  if (!isAbsolute(file) || !Array.isArray(args))
+    throw new Error("Invalid startup command probe");
+  const result = run(file, args, targetOptions(target));
+  successfulProbe(result, name);
+  return `${result.stdout ?? ""}\n${result.stderr ?? ""}`.trim();
+}
+
+function requireAccess(flag, path, target) {
+  if (!targetAccess(flag, path, target))
+    throw new Error(
+      `Startup path is not accessible (${flag}) by ${target.user}: ${path}`,
     );
-    const uid = Number(fields.UniqueID);
+}
+
+export async function assertPrivatePathsInaccessible(
+  paths,
+  target,
+  expectedUid = SERVICE_UID,
+  run = spawnSync,
+) {
+  for (const path of paths) {
+    // Absence is not isolation evidence. Inspect metadata only, never contents.
+    const stat = await fs.lstat(path);
     if (
-      !Number.isInteger(uid) ||
-      uid < 400 ||
-      uid > 499 ||
-      fields.PrimaryGroupID !== String(SERVICE_GID) ||
-      fields.NFSHomeDirectory !== home ||
-      fields.UserShell !== "/usr/bin/false" ||
-      fields.IsHidden !== "1" ||
-      fields.Password !== "*" ||
-      !fields.AuthenticationAuthority?.includes("DisabledUser")
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      stat.uid !== expectedUid ||
+      (stat.mode & 0o077) !== 0
     )
       throw new Error(
-        `Existing ${name} does not match the isolated disabled service account`,
+        "Expected existing owner-only production secret/database for isolation probe",
       );
-    return uid;
+    if (targetAccess("-r", path, target, run))
+      throw new Error(
+        "Isolated CI can read a production secret/database; cutover refused",
+      );
   }
+}
+
+async function verifyTargetStartup(manifest, config, identities) {
+  const checks = [];
+  const profiles = new Map();
+  for (const label of manifest.extraLabels) {
+    const plist = validateExtraPlist(
+      await parsePlist(join(review, `${label}.plist`)),
+      label,
+    );
+    const target = {
+      user: plist.UserName,
+      uid:
+        plist.UserName === SERVICE_USER
+          ? SERVICE_UID
+          : identities[plist.UserName],
+      home: plist.EnvironmentVariables.HOME,
+    };
+    profiles.set(target.user, target);
+    for (const path of [
+      target.home,
+      plist.WorkingDirectory,
+      dirname(plist.StandardOutPath),
+      dirname(plist.StandardErrorPath),
+    ]) {
+      for (const flag of ["-d", "-r", "-w", "-x"])
+        requireAccess(flag, path, target);
+    }
+    const executable = plist.ProgramArguments[0];
+    requireAccess("-x", executable, target);
+    if (label.endsWith(".build-docker")) {
+      // Version only: never start a VM/daemon during prerequisite checks.
+      if (
+        !/colima version/i.test(
+          targetCommand("Colima version", executable, ["version"], target),
+        )
+      )
+        throw new Error("Unexpected Colima startup version");
+      checks.push({
+        label,
+        uid: target.uid,
+        executable,
+        check: "version-only",
+      });
+      continue;
+    }
+    const java = targetCommand(
+      "Java21 version",
+      executable,
+      ["--version"],
+      target,
+    );
+    if (!/^(?:openjdk|java) 21(?:\.|\s)/m.test(java))
+      throw new Error("Startup requires Java21 for Jenkins and inbound agents");
+    const jar =
+      plist.ProgramArguments[plist.ProgramArguments.indexOf("-jar") + 1];
+    if (!isAbsolute(jar ?? ""))
+      throw new Error("Missing reviewed Jenkins WAR/agent JAR");
+    requireAccess("-r", jar, target);
+    const secret = plist.ProgramArguments.indexOf("-secret");
+    if (secret >= 0)
+      requireAccess("-r", plist.ProgramArguments[secret + 1].slice(1), target);
+    checks.push({
+      label,
+      uid: target.uid,
+      executable,
+      jar,
+      check: "java-version-and-readable-jar",
+    });
+  }
+  const corepack = resolve(
+    dirname(config.node),
+    "../lib/node_modules/corepack/dist/corepack.js",
+  );
+  for (const target of profiles.values()) {
+    if (target.user === "_agentplatformjenkins") continue;
+    requireAccess("-x", config.node, target);
+    const nodeVersion = targetCommand(
+      "Node22 version",
+      config.node,
+      ["--version"],
+      target,
+    );
+    if (!/^v22\.[0-9]+\.[0-9]+$/.test(nodeVersion))
+      throw new Error("Startup requires native Node22 for CI/deploy users");
+    requireAccess("-r", corepack, target);
+    const corepackVersion = targetCommand(
+      "Corepack version",
+      config.node,
+      [corepack, "--version"],
+      target,
+    );
+    if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(corepackVersion))
+      throw new Error("Unexpected Corepack startup version");
+    for (const name of PUBLIC_TOOLS.filter(
+      (name) => name.endsWith(".mjs") && manifest.files[name],
+    )) {
+      const path = join(CI_TOOLS, name);
+      requireAccess("-r", path, target);
+      targetCommand(
+        `Public tool syntax: ${name}`,
+        config.node,
+        ["--check", path],
+        target,
+      );
+    }
+    if (manifest.vercel) {
+      const path = join(
+        VERCEL_DESTINATION,
+        "node_modules/vercel/dist/index.js",
+      );
+      requireAccess("-r", path, target);
+      const version = targetCommand(
+        "Vercel version",
+        config.node,
+        [path, "--version"],
+        target,
+      );
+      if (!version.split(/\r?\n/).includes(VERCEL_VERSION))
+        throw new Error("Unexpected pinned Vercel startup version");
+    }
+    checks.push({
+      user: target.user,
+      uid: target.uid,
+      nodeVersion,
+      corepackVersion,
+      publicTools: "syntax-checked",
+    });
+  }
+  if (profiles.has("_agentplatformci")) {
+    await assertPrivatePathsInaccessible(
+      [
+        config.runtimeEnvFile,
+        join(DEPLOY_ROOT, "cloudflared.token"),
+        join(SERVICE_HOME, "agent-platform/production/platform.db"),
+      ],
+      profiles.get("_agentplatformci"),
+    );
+    checks.push({
+      user: "_agentplatformci",
+      check: "existing-production-files-unreadable",
+    });
+  }
+  return checks;
+}
+
+const ACCOUNT_ATTRIBUTES = Object.freeze({
+  UniqueID: "dsAttrTypeStandard",
+  PrimaryGroupID: "dsAttrTypeStandard",
+  NFSHomeDirectory: "dsAttrTypeStandard",
+  UserShell: "dsAttrTypeStandard",
+  IsHidden: "dsAttrTypeNative",
+  Password: "dsAttrTypeStandard",
+  AuthenticationAuthority: "dsAttrTypeStandard",
+});
+
+// dscl plist keys retain Directory Services namespaces. In particular IsHidden
+// is a Native attribute, not a Standard key or a plain-text line prefix.
+export function isolatedAccountUid(record, name) {
+  if (
+    !Object.hasOwn(ACCOUNTS, name) ||
+    !record ||
+    typeof record !== "object" ||
+    Array.isArray(record)
+  )
+    throw new Error("Invalid isolated service account record");
+  function values(attribute) {
+    const canonical = `${ACCOUNT_ATTRIBUTES[attribute]}:${attribute}`;
+    const aliases = Object.keys(record).filter(
+      (key) => key === attribute || key.endsWith(`:${attribute}`),
+    );
+    if (aliases.length !== 1 || ![canonical, attribute].includes(aliases[0]))
+      throw new Error(
+        `Existing ${name} has missing or ambiguous ${attribute}; privileged account verification is required`,
+      );
+    const result = record[aliases[0]];
+    if (
+      !Array.isArray(result) ||
+      result.length === 0 ||
+      result.some((value) => typeof value !== "string")
+    )
+      throw new Error(`Existing ${name} has invalid ${attribute}`);
+    return result;
+  }
+  function single(attribute) {
+    const result = values(attribute);
+    if (result.length !== 1)
+      throw new Error(`Existing ${name} has ambiguous ${attribute}`);
+    return result[0];
+  }
+  const uidText = single("UniqueID");
+  const uid = Number(uidText);
+  if (
+    !/^[0-9]{3}$/.test(uidText) ||
+    !Number.isInteger(uid) ||
+    uid < 400 ||
+    uid > 499
+  )
+    throw new Error(`Existing ${name} has unexpected UniqueID`);
+  for (const [attribute, expected] of Object.entries({
+    PrimaryGroupID: String(SERVICE_GID),
+    NFSHomeDirectory: ACCOUNTS[name],
+    UserShell: "/usr/bin/false",
+    IsHidden: "1",
+    Password: "*",
+  }))
+    if (single(attribute) !== expected)
+      throw new Error(`Existing ${name} has unexpected ${attribute}`);
+  if (
+    !values("AuthenticationAuthority").every((value) =>
+      value.startsWith(";DisabledUser;"),
+    )
+  )
+    throw new Error(
+      `Existing ${name} is missing disabled AuthenticationAuthority state`,
+    );
+  return uid;
+}
+
+export function accountRecordFound(result) {
+  if (result.error || result.signal || !Number.isInteger(result.status))
+    throw new Error("Cannot read isolated Directory Services account record");
+  if (result.status === 0) return true;
+  // Only the actual Directory Services record-not-found response permits a new
+  // account. Permission/command failures must never become account creation.
+  if (
+    result.status === 56 &&
+    /eDSRecordNotFound/.test(`${result.stdout ?? ""}\n${result.stderr ?? ""}`)
+  )
+    return false;
+  throw new Error("Cannot read isolated Directory Services account record");
+}
+
+async function account(name) {
+  const home = ACCOUNTS[name];
+  const attributes = Object.entries(ACCOUNT_ATTRIBUTES).map(
+    ([key, namespace]) => `${namespace}:${key}`,
+  );
+  function readUid() {
+    const existing = spawnSync(
+      "/usr/bin/dscl",
+      ["-plist", ".", "-read", `/Users/${name}`, ...attributes],
+      {
+        encoding: "utf8",
+        timeout: 10_000,
+        maxBuffer: 64 * 1024,
+        cwd: "/",
+        env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8" },
+      },
+    );
+    if (!accountRecordFound(existing)) return null;
+    const record = JSON.parse(
+      command("/usr/bin/plutil", ["-convert", "json", "-o", "-", "--", "-"], {
+        input: existing.stdout,
+        cwd: "/",
+        env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8" },
+      }),
+    );
+    return isolatedAccountUid(record, name);
+  }
+  const existingUid = readUid();
+  if (existingUid !== null) return existingUid;
   const occupied = new Set(
     command("/usr/bin/dscl", [".", "-list", "/Users", "UniqueID"])
       .split("\n")
@@ -844,6 +1171,8 @@ async function account(name) {
     AuthenticationAuthority: ";DisabledUser;",
   }))
     command("/usr/bin/dscl", [".", "-create", record, key, value]);
+  if (readUid() !== uid)
+    throw new Error(`New ${name} isolated identity was not verified`);
   return uid;
 }
 async function chownHome(path, uid) {
@@ -1097,23 +1426,415 @@ async function stillOwnsBarrier() {
     (await fs.readFile(path, "utf8")) === held.contents
   );
 }
-async function waitApiExit(state) {
-  if (!Number.isInteger(state?.pid) || state.pid < 1)
-    throw new Error(
-      "Missing recorded production API process; operator review required",
-    );
-  for (let attempt = 0; attempt < 60; attempt++) {
+const API_OWNERSHIP_ERROR =
+  "Dedicated API process, job, listener or lock ownership changed; no replacement API was started";
+
+function apiProcess(pid) {
+  const result = spawnSync(
+    "/bin/ps",
+    [
+      "-p",
+      String(pid),
+      "-o",
+      "pid=",
+      "-o",
+      "ppid=",
+      "-o",
+      "uid=",
+      "-o",
+      "comm=",
+    ],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if (!result.error && result.status === 1 && !result.stdout.trim())
+    return null;
+  const fields = /^\s*([0-9]+)\s+([0-9]+)\s+([0-9]+)\s+([^\r\n]+?)\s*$/.exec(
+    result.stdout ?? "",
+  );
+  if (result.error || result.signal || result.status !== 0 || !fields)
+    throw new Error("Cannot inspect the dedicated API process");
+  return {
+    pid: Number(fields[1]),
+    ppid: Number(fields[2]),
+    uid: Number(fields[3]),
+    command: fields[4],
+  };
+}
+
+function apiJob(domain, node) {
+  if (![gui, "system"].includes(domain)) throw new Error(API_OWNERSHIP_ERROR);
+  const result = spawnSync(
+    "/bin/launchctl",
+    ["print", `${domain}/${LABELS.api}`],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if (
+    !result.error &&
+    !result.signal &&
+    result.status !== 0 &&
+    /Could not find service|No such process/.test(result.stderr ?? "")
+  )
+    return null;
+  if (result.error || result.signal || result.status !== 0)
+    throw new Error("Cannot inspect the dedicated API launchd job");
+  const text = /^\s*pid = ([0-9]+)$/m.exec(result.stdout)?.[1];
+  const pid = text === undefined ? null : Number(text);
+  const program = /^\s*program = (.+)$/m.exec(result.stdout)?.[1];
+  const state = /^\s*state = (.+)$/m.exec(result.stdout)?.[1];
+  if (
+    program !== node ||
+    typeof state !== "string" ||
+    (pid !== null && (!Number.isSafeInteger(pid) || pid < 1))
+  )
+    throw new Error(API_OWNERSHIP_ERROR);
+  return { pid, program, state };
+}
+
+function apiListeners() {
+  const result = spawnSync(
+    "/usr/sbin/lsof",
+    ["-nP", "-iTCP:3101", "-sTCP:LISTEN", "-Fpcu"],
+    {
+      encoding: "utf8",
+      timeout: 5000,
+    },
+  );
+  if (
+    !result.error &&
+    !result.signal &&
+    result.status === 1 &&
+    !result.stdout.trim()
+  )
+    return [];
+  if (result.error || result.signal || result.status !== 0)
+    throw new Error("Cannot inspect dedicated API listener ownership");
+  try {
+    return tunnelListenerMetadata(result.stdout);
+  } catch {
+    throw new Error(API_OWNERSHIP_ERROR);
+  }
+}
+
+async function apiLock(config) {
+  const path = join(config.root, "runtime.lock");
+  const stat = await fs.lstat(path).catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (stat === null) return null;
+  if (
+    !stat.isDirectory() ||
+    stat.uid !== SERVICE_UID ||
+    (stat.mode & 0o777) !== 0o700
+  )
+    throw new Error(API_OWNERSHIP_ERROR);
+  try {
+    const entries = await fs.readdir(path);
+    if (entries.some((name) => name !== "owner.json"))
+      throw new Error(API_OWNERSHIP_ERROR);
+    const ownerPath = join(path, "owner.json");
+    const owner = await fs
+      .open(ownerPath, constants.O_RDONLY | constants.O_NOFOLLOW)
+      .catch((error) => {
+        if (error.code === "ENOENT") return null;
+        throw error;
+      });
+    if (owner === null)
+      return {
+        dev: stat.dev,
+        ino: stat.ino,
+        ownerDev: null,
+        ownerIno: null,
+        ownerSha256: null,
+      };
     try {
-      process.kill(state.pid, 0);
-    } catch (error) {
-      if (error.code === "ESRCH") return;
-      throw error;
+      const ownerStat = await owner.stat();
+      if (
+        !ownerStat.isFile() ||
+        ownerStat.nlink !== 1 ||
+        ownerStat.uid !== SERVICE_UID ||
+        (ownerStat.mode & 0o777) !== 0o600 ||
+        ownerStat.size > 2048
+      )
+        throw new Error(API_OWNERSHIP_ERROR);
+      const contents = await owner.readFile();
+      const value = JSON.parse(contents);
+      if (
+        !Number.isSafeInteger(value.pid) ||
+        value.pid < 1 ||
+        typeof value.token !== "string" ||
+        value.token.length < 16
+      )
+        throw new Error(API_OWNERSHIP_ERROR);
+      return {
+        dev: stat.dev,
+        ino: stat.ino,
+        ownerDev: ownerStat.dev,
+        ownerIno: ownerStat.ino,
+        ownerSha256: digest(contents),
+        pid: value.pid,
+      };
+    } finally {
+      await owner.close();
     }
-    await pause(1000);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+async function apiRuntime(config) {
+  const value = JSON.parse(
+    await ownerFile(join(config.root, "runtime-state.json")),
+  );
+  if (
+    !Number.isSafeInteger(value.pid) ||
+    value.pid < 1 ||
+    !Number.isSafeInteger(value.supervisorPid) ||
+    value.supervisorPid < 1 ||
+    value.pid === value.supervisorPid ||
+    !/^[a-f0-9]{40}$/.test(value.sha ?? "")
+  )
+    throw new Error(API_OWNERSHIP_ERROR);
+  return { pid: value.pid, supervisorPid: value.supervisorPid, sha: value.sha };
+}
+
+export async function probeDedicatedApiExit(
+  identity,
+  config,
+  domain = identity.domain,
+) {
+  assertNativeServiceIdentity(config);
+  if (identity.domain !== domain || identity.node !== config.node)
+    throw new Error(API_OWNERSHIP_ERROR);
+  return {
+    job: apiJob(domain, config.node),
+    supervisor: apiProcess(identity.supervisorPid),
+    child: apiProcess(identity.pid),
+    listeners: apiListeners(),
+    lock: await apiLock(config),
+    runtime: await apiRuntime(config),
+  };
+}
+
+export function dedicatedApiExited(identity, snapshot) {
+  const lock = snapshot?.lock;
+  if (
+    !Number.isSafeInteger(identity?.pid) ||
+    identity.pid < 1 ||
+    !Number.isSafeInteger(identity.supervisorPid) ||
+    identity.supervisorPid < 1 ||
+    identity.pid === identity.supervisorPid ||
+    identity.uid !== SERVICE_UID ||
+    !isAbsolute(identity.node ?? "") ||
+    ![gui, "system"].includes(identity.domain) ||
+    !/^[a-f0-9]{40}$/.test(identity.sha ?? "") ||
+    identity.lock === undefined ||
+    (identity.lock !== null &&
+      (!Number.isSafeInteger(identity.lock.dev) ||
+        !Number.isSafeInteger(identity.lock.ino) ||
+        (identity.lock.ownerSha256 !== null &&
+          (!/^[a-f0-9]{64}$/.test(identity.lock.ownerSha256 ?? "") ||
+            !Number.isSafeInteger(identity.lock.ownerDev) ||
+            !Number.isSafeInteger(identity.lock.ownerIno))))) ||
+    snapshot?.job === undefined ||
+    snapshot?.supervisor === undefined ||
+    snapshot?.child === undefined ||
+    lock === undefined ||
+    (snapshot.job !== null &&
+      (snapshot.job.program !== identity.node ||
+        typeof snapshot.job.state !== "string" ||
+        (snapshot.job.pid !== null &&
+          snapshot.job.pid !== identity.supervisorPid))) ||
+    (snapshot.supervisor !== null &&
+      (snapshot.supervisor.pid !== identity.supervisorPid ||
+        snapshot.supervisor.uid !== SERVICE_UID ||
+        snapshot.supervisor.command !== identity.node ||
+        snapshot.supervisor.ppid !== 1)) ||
+    (snapshot.child !== null &&
+      (snapshot.child.pid !== identity.pid ||
+        snapshot.child.uid !== SERVICE_UID ||
+        snapshot.child.command !== identity.node ||
+        (snapshot.child.ppid !== identity.supervisorPid &&
+          !(snapshot.supervisor === null && snapshot.child.ppid === 1)))) ||
+    !Array.isArray(snapshot.listeners) ||
+    snapshot.listeners.some(
+      (listener) =>
+        listener.pid !== identity.pid ||
+        listener.uid !== SERVICE_UID ||
+        listener.command !== "node",
+    ) ||
+    !snapshot.runtime ||
+    snapshot.runtime.pid !== identity.pid ||
+    snapshot.runtime.supervisorPid !== identity.supervisorPid ||
+    snapshot.runtime.sha !== identity.sha ||
+    (lock !== null &&
+      (!identity.lock ||
+        lock.dev !== identity.lock.dev ||
+        lock.ino !== identity.lock.ino ||
+        (lock.ownerSha256 === null
+          ? lock.ownerDev !== null || lock.ownerIno !== null
+          : lock.ownerSha256 !== identity.lock.ownerSha256 ||
+            lock.ownerDev !== identity.lock.ownerDev ||
+            lock.ownerIno !== identity.lock.ownerIno) ||
+        (lock.pid !== undefined && lock.pid !== identity.supervisorPid)))
+  )
+    throw new Error(API_OWNERSHIP_ERROR);
+  return (
+    snapshot.job === null &&
+    snapshot.supervisor === null &&
+    snapshot.child === null &&
+    snapshot.listeners.length === 0 &&
+    lock === null
+  );
+}
+
+export async function captureDedicatedApi(
+  config,
+  domain = gui,
+  { requireListener = true } = {},
+) {
+  assertNativeServiceIdentity(config);
+  const runtime = await apiRuntime(config);
+  const lock = await apiLock(config);
+  const identity = {
+    ...runtime,
+    uid: SERVICE_UID,
+    node: config.node,
+    domain,
+    lock,
+  };
+  const snapshot = await probeDedicatedApiExit(identity, config, domain);
+  if (
+    !snapshot.job ||
+    (requireListener &&
+      (!snapshot.supervisor ||
+        !snapshot.child ||
+        snapshot.job.pid !== identity.supervisorPid ||
+        !lock?.ownerSha256 ||
+        snapshot.listeners.length === 0)) ||
+    (lock?.pid !== undefined && lock.pid !== identity.supervisorPid)
+  )
+    throw new Error(API_OWNERSHIP_ERROR);
+  dedicatedApiExited(identity, snapshot);
+  if (domain === gui)
+    identity.guiPlistSha256 = digest(
+      await ownerFile(
+        join(SERVICE_HOME, "Library/LaunchAgents", `${LABELS.api}.plist`),
+      ),
+    );
+  return identity;
+}
+
+export async function waitDedicatedApiExit(
+  identity,
+  probe,
+  ownsBarrier,
+  { sleep = pause, now = () => performance.now(), timeoutMs = 90_000 } = {},
+) {
+  const deadline = now() + timeoutMs;
+  while (now() <= deadline) {
+    if (!(await ownsBarrier()))
+      throw new Error("Maintenance ownership changed; barrier was preserved");
+    if (dedicatedApiExited(identity, await probe())) {
+      if (!(await ownsBarrier()))
+        throw new Error("Maintenance ownership changed; barrier was preserved");
+      return;
+    }
+    await sleep(1000);
   }
   throw new Error(
-    "Old production API has not exited; no second API was started",
+    "Old production API has not fully exited within ninety seconds; no replacement API was started",
   );
+}
+
+export async function restoreApiAfterExit({ waitForExit, bootstrap, ready }) {
+  await waitForExit();
+  await bootstrap();
+  await ready();
+}
+
+async function restoreOriginalGuiApi(
+  originalIdentity,
+  exitedIdentity,
+  original,
+) {
+  await restoreApiAfterExit({
+    waitForExit: () =>
+      waitDedicatedApiExit(
+        exitedIdentity,
+        () => probeDedicatedApiExit(exitedIdentity, original),
+        stillOwnsBarrier,
+      ),
+    bootstrap: async () => {
+      const path = join(
+        SERVICE_HOME,
+        "Library/LaunchAgents",
+        `${LABELS.api}.plist`,
+      );
+      if (
+        digest(await ownerFile(path)) !== originalIdentity.guiPlistSha256 ||
+        apiJob(gui, original.node) !== null
+      )
+        throw new Error(API_OWNERSHIP_ERROR);
+      launch(["enable", `${gui}/${LABELS.api}`]);
+      launch(["bootstrap", gui, path]);
+    },
+    ready: () => userWorker("ready", 120_000),
+  });
+}
+
+async function preparePrivilegedTargets(manifest, config) {
+  const identities = {};
+  for (const name of new Set(
+    manifest.extraLabels
+      .map((label) => EXTRA_SERVICES[label])
+      .filter((name) => name !== SERVICE_USER),
+  )) {
+    identities[name] = await account(name);
+    await chownHome(ACCOUNTS[name], identities[name]);
+  }
+  if (manifest.vercel)
+    await installVercel(review, manifest.vercel, rootDirectory);
+  for (const name of PUBLIC_TOOLS)
+    if (manifest.files[name]) {
+      await rootDirectory(CI_TOOLS);
+      await writeOwned(
+        join(CI_TOOLS, name),
+        await ownerFile(join(review, name)),
+        0,
+        0o644,
+      );
+    }
+  for (const item of manifest.secrets) {
+    const uid =
+      item.owner === SERVICE_USER ? SERVICE_UID : identities._agentplatformci;
+    if (!Number.isInteger(uid))
+      throw new Error("Missing isolated CI identity for secret handoff");
+    const stat = await fs.lstat(item.source);
+    if (
+      !stat.isFile() ||
+      stat.nlink !== 1 ||
+      stat.mode & 0o077 ||
+      stat.uid !== identities._agentplatformjenkins
+    )
+      throw new Error(
+        "Jenkins agent secret source is not private and owned by the isolated controller",
+      );
+    const temporary = `${item.destination}.${randomUUID()}.tmp`;
+    await fs.copyFile(item.source, temporary, constants.COPYFILE_EXCL);
+    await fs.chown(temporary, uid, SERVICE_GID);
+    await fs.chmod(temporary, 0o600);
+    await fs.rename(temporary, item.destination);
+  }
+  const startupChecks = await verifyTargetStartup(manifest, config, identities);
+  return { identities, startupChecks };
 }
 
 async function apply() {
@@ -1210,11 +1931,19 @@ async function apply() {
   return cutoverAfterPreflight(
     () => userWorker("preflight"),
     oldTunnelLoaded,
-    () => performCutover(manifest, original, config, oldTunnelLoaded),
+    (targets) =>
+      performCutover(manifest, original, config, oldTunnelLoaded, targets),
+    () => preparePrivilegedTargets(manifest, config),
   );
 }
 
-async function performCutover(manifest, original, config, oldTunnelLoaded) {
+async function performCutover(
+  manifest,
+  original,
+  config,
+  oldTunnelLoaded,
+  targets,
+) {
   const id = `${Date.now()}-${randomUUID()}`;
   const archive = join(DEPLOY_ROOT, "backups", `launchd-cutover-${id}`);
   await userDirectory(archive);
@@ -1227,25 +1956,31 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
     services: [],
     events: [],
     previewUntouched: true,
+    identities: targets.identities,
+    startupChecks: targets.startupChecks,
   };
   async function stage(name) {
     state.state = name;
+    state.apiStopAttempted = apiStopAttempted;
+    state.oldApiExited = oldApiExited;
+    state.runtimeConverted = runtimeConverted;
     state.events.push({ state: name, at: new Date().toISOString() });
     await jsonOwned(join(DEPLOY_ROOT, "system-services-state.json"), state);
   }
-  const runtimeState = JSON.parse(
-    await ownerFile(join(DEPLOY_ROOT, "runtime-state.json")),
-  );
   let committed = false;
   let barrier = false,
-    oldApiStopped = false,
+    apiStopAttempted = false,
+    oldApiExited = false,
+    runtimeConverted = false,
     oldTunnelStopped = false,
     configChanged = false,
     pollingRetired = false;
   let oldTunnelIdentity;
+  let oldApiIdentity;
   const startedExtras = [];
   try {
     await writeOwned(join(archive, "config.json"), await ownerFile(configPath));
+    await stage("privileged-prerequisites-ready-before-cutover");
     // Retire polling before taking a barrier: its crash-recovery path must never
     // mistake this installer-owned quiet interval for its own interrupted deploy.
     await jsonOwned(configPath, { ...original, deployEnabled: false });
@@ -1289,101 +2024,24 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
     await stage("production-quiet-ten-seconds");
     state.backup = userWorker("backup", 120_000).backup;
     await stage("backup-complete");
-    const identities = {};
-    for (const name of new Set(
-      manifest.extraLabels
-        .map((label) => EXTRA_SERVICES[label])
-        .filter((name) => name !== SERVICE_USER),
-    )) {
-      identities[name] = await account(name);
-      await chownHome(ACCOUNTS[name], identities[name]);
-    }
-    state.identities = identities;
-    if (manifest.vercel)
-      await installVercel(review, manifest.vercel, rootDirectory);
-    for (const name of PUBLIC_TOOLS)
-      if (manifest.files[name]) {
-        await rootDirectory(CI_TOOLS);
-        await writeOwned(
-          join(CI_TOOLS, name),
-          await ownerFile(join(review, name)),
-          0,
-          0o644,
-        );
-      }
-    for (const item of manifest.secrets) {
-      const uid =
-        item.owner === SERVICE_USER ? SERVICE_UID : identities._agentplatformci;
-      if (!Number.isInteger(uid))
-        throw new Error("Missing isolated CI identity for secret handoff");
-      const stat = await fs.lstat(item.source);
-      if (
-        !stat.isFile() ||
-        stat.nlink !== 1 ||
-        stat.mode & 0o077 ||
-        stat.uid !== identities._agentplatformjenkins
-      )
-        throw new Error(
-          "Jenkins agent secret source is not private and owned by the isolated controller",
-        );
-      const temporary = `${item.destination}.${randomUUID()}.tmp`;
-      await fs.copyFile(item.source, temporary, constants.COPYFILE_EXCL);
-      await fs.chown(temporary, uid, SERVICE_GID);
-      await fs.chmod(temporary, 0o600);
-      await fs.rename(temporary, item.destination);
-    }
-    // Probe executables as the target service users; never relax Douglas/prod directory permissions.
-    for (const label of manifest.extraLabels) {
-      const plist = await parsePlist(join(review, `${label}.plist`));
-      const uid =
-        plist.UserName === SERVICE_USER
-          ? SERVICE_UID
-          : identities[plist.UserName];
-      const result = spawnSync(
-        "/usr/bin/test",
-        ["-x", plist.ProgramArguments[0]],
-        { uid, gid: SERVICE_GID, stdio: "ignore", timeout: 5000 },
-      );
-      if (result.status !== 0)
-        throw new Error(
-          `Executable is not traversable by ${plist.UserName}: ${plist.ProgramArguments[0]}`,
-        );
-    }
-    if (identities._agentplatformci) {
-      const options = {
-        uid: identities._agentplatformci,
-        gid: SERVICE_GID,
-        stdio: "ignore",
-        timeout: 5000,
-      };
-      if (spawnSync("/usr/bin/test", ["-x", config.node], options).status !== 0)
-        throw new Error(
-          "Node22 path is not traversable by isolated CI; permissions must be reviewed explicitly",
-        );
-      for (const path of [
-        config.runtimeEnvFile,
-        join(DEPLOY_ROOT, "cloudflared.token"),
-        join(SERVICE_HOME, "agent-platform/production/platform.db"),
-      ])
-        if (spawnSync("/usr/bin/test", ["-r", path], options).status === 0)
-          throw new Error(
-            "Isolated CI can read a production secret/database; cutover refused",
-          );
-    }
     await stage("privileged-files-reviewed");
     userWorker("gate");
-    try {
-      await stopJob(gui, LABELS.api);
-    } finally {
-      // A failed bootout can leave the GUI API running. Do not pretend it was
-      // replaced, or run system-service rollback against that original process.
-      oldApiStopped = !loaded(gui, LABELS.api);
-    }
-    if (!oldApiStopped)
-      throw new Error(
-        "GUI production API was not stopped; no second API was started",
-      );
-    await waitApiExit(runtimeState);
+    oldApiIdentity = await captureDedicatedApi(original);
+    state.oldApiPid = oldApiIdentity.pid;
+    state.oldApiSupervisorPid = oldApiIdentity.supervisorPid;
+    // bootout returning is only a stop attempt: the original job/supervisor can
+    // remain printable while the child exits and its owner lock is released.
+    apiStopAttempted = true;
+    await stopJob(gui, LABELS.api);
+    await stage("waiting-gui-api-exit");
+    await waitDedicatedApiExit(
+      oldApiIdentity,
+      () => probeDedicatedApiExit(oldApiIdentity, original),
+      stillOwnsBarrier,
+    );
+    oldApiExited = true;
+    await stage("gui-api-fully-exited");
+    runtimeConverted = true;
     for (const kind of ["api", "tunnel"]) {
       launch(["disable", `${gui}/${LABELS[kind]}`]);
       const path = join(
@@ -1478,7 +2136,7 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
     state.error = error.message;
     await stage("failed-recovering");
     if (
-      oldApiStopped &&
+      apiStopAttempted &&
       (committed || !(await stillOwnsBarrier().catch(() => false)))
     ) {
       // Once admission resumed (or ownership changed), users may have created
@@ -1501,10 +2159,23 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
     try {
       for (const label of startedExtras.reverse())
         await stopJob("system", label);
-      if (oldApiStopped) {
-        await stopJob("system", LABELS.api);
-        await waitApiExit(
-          JSON.parse(await ownerFile(join(DEPLOY_ROOT, "runtime-state.json"))),
+      let exitedApiIdentity = oldApiIdentity;
+      if (runtimeConverted) {
+        if (!oldApiExited || !oldApiIdentity)
+          throw new Error(API_OWNERSHIP_ERROR);
+        // If a fixed system API was actually started, capture that new identity
+        // before stopping it. Otherwise recheck the original exited GUI API;
+        // never pretend its stale runtime-state is a live system API identity.
+        if (apiJob("system", config.node) !== null) {
+          exitedApiIdentity = await captureDedicatedApi(config, "system", {
+            requireListener: false,
+          });
+          await stopJob("system", LABELS.api);
+        }
+        await waitDedicatedApiExit(
+          exitedApiIdentity,
+          () => probeDedicatedApiExit(exitedApiIdentity, config),
+          stillOwnsBarrier,
         );
         const systemTunnel = loaded("system", LABELS.tunnel)
           ? captureDedicatedTunnel("system", { requireMetrics: false })
@@ -1535,53 +2206,54 @@ async function performCutover(manifest, original, config, oldTunnelLoaded) {
           );
           if (await fs.lstat(old).catch(() => null)) await fs.rename(old, path);
           launch(["enable", `${gui}/${LABELS[kind]}`]);
-          if ((kind === "api" || oldTunnelLoaded) && !loaded(gui, LABELS[kind]))
-            launch(["bootstrap", gui, path]);
         }
       } else {
         if (configChanged)
           await jsonOwned(configPath, { ...original, deployEnabled: false });
-        await recoverUnstoppedApi({
-          tunnelWasLoaded: oldTunnelLoaded,
-          tunnelWasStopped: oldTunnelStopped,
-          restartTunnel: async () => {
-            await verifyGuiTunnelPlist(original);
-            if (!oldTunnelIdentity) throw new Error(TUNNEL_OWNERSHIP_ERROR);
-            await restoreTunnelAfterExit({
-              waitForExit: () =>
-                waitDedicatedTunnelExit(
-                  oldTunnelIdentity,
-                  () => probeDedicatedTunnelExit(oldTunnelIdentity),
-                  stillOwnsBarrier,
+      }
+      if (apiStopAttempted) {
+        if (!oldApiIdentity) throw new Error(API_OWNERSHIP_ERROR);
+        await restoreOriginalGuiApi(
+          oldApiIdentity,
+          exitedApiIdentity,
+          original,
+        );
+      }
+      await recoverUnstoppedApi({
+        tunnelWasLoaded: oldTunnelLoaded,
+        tunnelWasStopped: oldTunnelStopped,
+        restartTunnel: async () => {
+          await verifyGuiTunnelPlist(original);
+          if (!oldTunnelIdentity) throw new Error(TUNNEL_OWNERSHIP_ERROR);
+          await restoreTunnelAfterExit({
+            waitForExit: () =>
+              waitDedicatedTunnelExit(
+                oldTunnelIdentity,
+                () => probeDedicatedTunnelExit(oldTunnelIdentity),
+                stillOwnsBarrier,
+              ),
+            bootstrap: async () => {
+              await verifyGuiTunnelPlist(original);
+              if (loaded(gui, LABELS.tunnel))
+                throw new Error(TUNNEL_OWNERSHIP_ERROR);
+              launch([
+                "bootstrap",
+                gui,
+                join(
+                  SERVICE_HOME,
+                  "Library/LaunchAgents",
+                  `${LABELS.tunnel}.plist`,
                 ),
-              bootstrap: async () => {
-                await verifyGuiTunnelPlist(original);
-                if (loaded(gui, LABELS.tunnel))
-                  throw new Error(TUNNEL_OWNERSHIP_ERROR);
-                launch([
-                  "bootstrap",
-                  gui,
-                  join(
-                    SERVICE_HOME,
-                    "Library/LaunchAgents",
-                    `${LABELS.tunnel}.plist`,
-                  ),
-                ]);
-              },
-              ready: () => httpReady("http://127.0.0.1:20241/ready"),
-            });
-          },
-          hasBarrier: barrier,
-          ready: () => userWorker("ready", 120_000),
-          release: () => userWorker("release"),
-        });
-        barrier = false;
-      }
-      if (oldApiStopped && barrier) {
-        userWorker("ready", 120_000);
-        userWorker("release");
-        barrier = false;
-      }
+              ]);
+            },
+            ready: () => httpReady("http://127.0.0.1:20241/ready"),
+          });
+        },
+        hasBarrier: barrier,
+        ready: () => userWorker("ready", 120_000),
+        release: () => userWorker("release"),
+      });
+      barrier = false;
       await stage(
         pollingRetired
           ? "rolled-back-polling-still-retired"

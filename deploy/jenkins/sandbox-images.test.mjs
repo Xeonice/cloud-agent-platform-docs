@@ -16,7 +16,23 @@ import {
   DOCKER,
   BUILDER,
   DOCKER_HOST,
+  DOCKER_PLUGINS,
+  TOOLS,
+  WORKSPACES,
+  tokenValue,
 } from "./sandbox-images.mjs";
+const identity = {
+  username: "jenkins",
+  uid: 1000,
+  gid: 1000,
+  homedir: "/home/jenkins",
+};
+const system = {
+  platform: "linux",
+  arch: "arm64",
+  nodeMajor: 22,
+  node: "/usr/local/bin/node",
+};
 const sha = "a".repeat(40);
 const config = {
   version: 1,
@@ -225,13 +241,26 @@ async function publisherFixture(t, mode, scopes = "repo, write:packages") {
       if (args[0] === "rev-parse") return sha;
       return "";
     }
-    if (command === process.execPath) {
+    if (command === system.node) {
       assert.deepEqual(args, ["scripts/check-default-image-consistency.mjs"]);
       return "";
     }
     assert.equal(command, DOCKER);
     assert.equal(options.env.DOCKER_HOST, DOCKER_HOST);
     if (args[0] === "context") {
+      const privateConfig = JSON.parse(
+        await fs.readFile(
+          join(options.env.DOCKER_CONFIG, "config.json"),
+          "utf8",
+        ),
+      );
+      assert.deepEqual(privateConfig, {
+        cliPluginsExtraDirs: [DOCKER_PLUGINS],
+      });
+      assert.equal(
+        (await fs.stat(options.env.DOCKER_CONFIG)).mode & 0o777,
+        0o700,
+      );
       assert.deepEqual(args, [
         "context",
         "create",
@@ -280,7 +309,13 @@ async function publisherFixture(t, mode, scopes = "repo, write:packages") {
   };
   const runner = createImagePublisher({
     workspaceRoot: f.root,
-    identity: { uid: 501, platform: "darwin", arch: "arm64", node: 22 },
+    identity,
+    system,
+    checkLayout: async (context) => {
+      assert.equal(context.root, "/srv/agent-platform/deploy");
+      assert.equal(context.tools, "/run/agent-platform/jenkins-tools");
+      assert.equal(context.uid, 1000);
+    },
     run,
     token: async () => {
       reads++;
@@ -362,11 +397,108 @@ test("missing write:packages fails before login/build and cannot be reported as 
     (await fs.readdir(f.work)).filter((name) => name.startsWith(".docker-")),
     [],
   );
-  const env = imageEnvironment(
-    process.execPath,
-    "/temporary/private",
-    "/temporary",
-  );
+  const env = imageEnvironment(system.node, "/temporary/private", "/temporary");
   assert.equal(env.ACCESS_PASSCODE, undefined);
   assert.equal(env.GH_TOKEN, undefined);
+});
+
+test("ordinary Linux CI identity cannot publish without both private deployment volumes; layout refusal precedes checkout/token/Docker", async () => {
+  let calls = 0;
+  let reads = 0;
+  const runner = createImagePublisher({
+    identity,
+    system,
+    checkLayout: async () => {
+      throw new Error("Private deployment volumes absent");
+    },
+    run: async () => {
+      calls++;
+    },
+    token: async () => {
+      reads++;
+    },
+  });
+  await assert.rejects(runner.head(), /Private deployment volumes absent/);
+  await assert.rejects(
+    runner.stage(sha, IMAGE_BRANCH),
+    /Private deployment volumes absent/,
+  );
+  assert.equal(calls, 0);
+  assert.equal(reads, 0);
+});
+
+test("publisher fixes Linux ARM64 identity, Docker socket/tools and workspace, rejecting root, wrong home and generic x64 builders", async () => {
+  assert.equal(DOCKER, "/usr/local/bin/docker");
+  assert.equal(DOCKER_HOST, "unix:///var/run/docker.sock");
+  assert.equal(BUILDER, "agent-platform-runtime");
+  assert.equal(TOOLS, "/run/agent-platform/jenkins-tools");
+  assert.equal(WORKSPACES, "/home/jenkins/agent");
+  for (const account of [
+    { ...identity, uid: 0 },
+    { ...identity, gid: 0 },
+    { ...identity, homedir: "/srv/agent-platform/deploy" },
+    { ...identity, username: "root" },
+  ]) {
+    await assert.rejects(
+      createImagePublisher({ identity: account, system }).head(),
+      /Trusted deployment/,
+    );
+  }
+  for (const platform of [
+    { ...system, arch: "x64" },
+    { ...system, node: "/tmp/node" },
+    { ...system, nodeMajor: 24 },
+  ]) {
+    await assert.rejects(
+      createImagePublisher({ identity, system: platform }).head(),
+      /Trusted deployment|fixed Node/,
+    );
+  }
+});
+
+test("GHCR service file refuses readable modes, hardlinks, symlinks and wrong ownership without exposing its contents", async (t) => {
+  const f = await fixture(t);
+  const file = join(f.root, "ghcr-token");
+  const token = "isolated-test-credential";
+  await fs.writeFile(file, token, { mode: 0o600 });
+  assert.equal(await tokenValue(file, process.getuid()), token);
+  await fs.chmod(file, 0o644);
+  await assert.rejects(tokenValue(file, process.getuid()), /owner-only/);
+  await fs.chmod(file, 0o600);
+  await assert.rejects(tokenValue(file, process.getuid() + 1), /owner-only/);
+  const hardlink = join(f.root, "hardlink");
+  await fs.link(file, hardlink);
+  await assert.rejects(tokenValue(file, process.getuid()), /owner-only/);
+  await fs.unlink(hardlink);
+  const symlink = join(f.root, "symlink");
+  await fs.symlink(file, symlink);
+  await assert.rejects(tokenValue(symlink, process.getuid()));
+});
+
+test("image child environment ignores inherited application secrets and redirects all Docker state into the private context", () => {
+  const previous = { ...process.env };
+  process.env.ACCESS_PASSCODE = "private-test-passcode";
+  process.env.GH_TOKEN = "private-test-token";
+  process.env.DOCKER_HOST = "tcp://untrusted.invalid:2375";
+  process.env.DOCKER_CONFIG = "/untrusted/config";
+  process.env.NODE_OPTIONS = "--require=/untrusted/code.js";
+  try {
+    const environment = imageEnvironment(
+      system.node,
+      "/private/docker",
+      "/private/tmp",
+    );
+    assert.equal(environment.HOME, "/home/jenkins");
+    assert.equal(environment.LANG, "C.UTF-8");
+    assert.equal(environment.DOCKER_HOST, "unix:///var/run/docker.sock");
+    assert.equal(environment.DOCKER_CONFIG, "/private/docker");
+    for (const name of ["ACCESS_PASSCODE", "GH_TOKEN", "NODE_OPTIONS"])
+      assert.equal(environment[name], undefined);
+    assert.equal(environment.PATH.includes("/Users/"), false);
+    assert.equal(environment.PATH.includes("/opt/homebrew/"), false);
+  } finally {
+    for (const key of Object.keys(process.env))
+      if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+  }
 });

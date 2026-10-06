@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-06T03:27:31.107Z",
+  "state": "source-verified",
+  "node": "v22.23.3",
+  "executionPlatform": {
+    "os": "darwin",
+    "arch": "arm64"
+  },
+  "sourceHashes": {
+    "deploy/jenkins/deployment-platform.mjs": "2089c63cd5457e9fc105681ad5763b89bbbd1f9253fc4b0d7959ed93a1e41df9",
+    "deploy/jenkins/jenkins-ci.mjs": "b0e8091af75fbf752c0da927b1388b131199fa8a5b5dd57a36e618ed39eaaa13",
+    "deploy/jenkins/native-ci.groovy": "5d017ba56d0e5be06856eb4a3253e8c880091d8bfb7a1c3d89c63b0eb579475c",
+    "deploy/jenkins/project-release.mjs": "61c5acdaf25dcef256dfbd60ba697dec703d74472412b347106bb6aba3620388",
+    "deploy/jenkins/jenkins-web.mjs": "943340b38691f7f03334deac92cff08b7160f3a9ae278d14db26e526dc1874b1",
+    "deploy/jenkins/jenkins-discover.mjs": "ea59f432d468c8fe2f56edc02c339869a9dc6699bcd4ecdfe1f01a7001498f14",
+    "deploy/jenkins/release.groovy": "1c3bd750c588dc254fccc0e082128d1a02db55f43bfa22c6c02ec82a8f3e8113",
+    "deploy/jenkins/discover.groovy": "5bb4c73e11003e4ca2e207fb1a0cab7b7553f843e9a7f4a8d4d8636cec8dcb82",
+    "deploy/jenkins/monitor.groovy": "0212c6fbcadeb80d4f67cc835d9fb035107e143bd784c40e773f099818df7e86",
+    "deploy/jenkins/web.groovy": "18709723f375dcf9ce13a6f2fa036f5a9aae2238072ca456f181a0904fb5b959",
+    "deploy/jenkins/web.md": "35647e073bbfcbca14121b97a1deaad59e56fb7cb7037a612f8bcc5aad7e380c",
+    "deploy/jenkins/jenkins-ci.test.mjs": "a0f940dcdf60793ebaf9ab4c76d7a32a244402c5b2e3a7635906927f512573a6",
+    "deploy/jenkins/jenkins.test.mjs": "d5c2e43ba5595137cad3733c9668f2bbfbd7fc4c3faa68cdf9f41866bc03e962",
+    "deploy/jenkins/jenkins-web.test.mjs": "f9246f33fb8a2718156ed6501870cf97f8a546c0a68a5ad3ac017606b2635a73",
+    "deploy/jenkins/project-release-container.test.mjs": "47b1d22839e24be397bcd76ef31fc917233c5838a53f1e662dc279bbba9de4b1",
+    "deploy/jenkins/fixtures/docker-save.mjs": "a0a94353ec4edf5bac5e4e4672bc8942e9e27f1acefbac715599b2e2f3a861bd",
+    "deploy/jenkins/ci-platform.mjs": "a8528d7044b9578721f7a847043b3a069b3ac3d21da745125c122799ff8bef87"
+  },
+  "checks": {
+    "focusedSourceSuite": {
+      "files": 5,
+      "tests": 106,
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "report": "artifacts/jenkins-linux-trusted-release-source-tests.tap",
+      "sha256": "df1d0ea8f09c2d12ff0b02c1c372d57ab7c4fed45470136dea2483b3956dea62"
+    },
+    "prettier": {
+      "files": 11,
+      "result": "passed"
+    },
+    "nodeSyntax": {
+      "helpers": 5,
+      "result": "passed"
+    },
+    "actualLinuxRerun": {
+      "state": "passed",
+      "image": "sha256:772f4519f939ebcb777820b4e61629a412affa24c9720ac1a7503078e388cdf6",
+      "container": "agent-platform-trusted-source-proof-1791257413144",
+      "network": "none",
+      "privileged": false,
+      "hostMounts": [],
+      "credentialMounts": [],
+      "identity": {
+        "platform": "linux",
+        "arch": "arm64",
+        "node": "v22.23.3",
+        "uid": 1000,
+        "gid": 1000
+      },
+      "files": 5,
+      "tests": 106,
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "report": "artifacts/jenkins-linux-trusted-release-actual-linux-tests-v2.tap",
+      "completedAt": "2026-10-06T03:30:14.378Z",
+      "scope": "Fresh isolated public-source fixture execution, not a Jenkins build or deploy.",
+      "sha256": "ad38f93dee6e0e4679883fe7aeabb9d626c3c527a095f6a3db00a8325311f21e"
+    }
+  },
+  "actualDockerArchiveReadonlyVerification": {
+    "state": "passed",
+    "archive": "/tmp/agent-platform-api-docker-save.tar",
+    "archiveBytes": 327542784,
+    "imageId": "sha256:f3995a825d2e6d97634823ec635dccec15a20bd81b3148b5c5f94558392f8ed8",
+    "configDigest": "sha256:99548b0d346ee5d87ef917a704e393b001ec8a07651d0f5e6bff26c5071e5f73",
+    "platform": "linux",
+    "arch": "arm64",
+    "format": "docker-save-oci",
+    "scope": "Read-only verification of provided public build archive; historical image is not a publication approval.",
+    "archiveSha256": "f664f823a73401adc55c6573d524cf38669e91b3dfc2566f91e7567342e00373",
+    "verifiedAt": "2026-10-06T03:27:44.531Z"
+  },
+  "contracts": {
+    "apiParameters": [
+      "SHA",
+      "ROOT_SHA"
+    ],
+    "releaseDirectory": "/srv/agent-platform/deploy/releases/<ROOT40>-<API40>",
+    "deploymentLabel": "agent-platform-linux-deploy",
+    "ciLabel": "agent-platform-linux-ci",
+    "jenkinsTransport": "http://host.lima.internal:8080/",
+    "canonicalJenkinsEvidence": "http://127.0.0.1:8080/",
+    "deploymentTools": "/opt/agent-platform/tools",
+    "privateTools": "/run/agent-platform/jenkins-tools"
+  },
+  "limitations": [
+    "Pure fixture source regressions verify dispatch, provenance and filesystem boundaries; actual repository NAPI imports remain required in the Linux native-ci job.",
+    "No service starts, image builds, upload, promotion, publication, commits or pushes performed in this verification.",
+    "Groovy templates have source-boundary regression coverage; current installed Jenkins Declarative linter and complete formal jobs remain pending."
+  ],
+  "preservedFailures": [
+    {
+      "report": "/tmp/agent-platform-linux-deploy-tests-Zj1n20/preliminary.tap",
+      "ownedFailures": 2,
+      "details": [
+        "A macOS temporary-directory prefix assumption in a portable Web fixture.",
+        "Repeated API record-build skipped changed private receipt verification."
+      ],
+      "resolvedBy": [
+        "OS-native scratch parent verification without weakening isolation.",
+        "API records revalidate artifact and trusted receipt on repeat; contract-only shortcut retained."
+      ]
+    },
+    {
+      "report": "artifacts/jenkins-linux-trusted-release-actual-linux-tests.tap",
+      "phase": "image lookup",
+      "image": "sha256:f2fa6136753873ad891c89e560b1bd7a220ab8de1825b5d1a257b119fc1a5813",
+      "reason": "Image not present in designated build daemon; no fixture container or tests started. Current ARM64 tag identity was inspected before retry."
+    }
+  ],
+  "followUp": {
+    "reason": "Authorized narrow correction of published release notes from macOS to Docker Linux ARM64 after readonly planning audit",
+    "sourceHashes": {
+      "deploy/jenkins/project-release.mjs": "8647b2366952abf85c45aafe1007e759b87faec73203843da6ead200466051c7",
+      "deploy/jenkins/jenkins.test.mjs": "0934b8eb5f6ad2a5888739dc37b3c373966e8dd83db63d8062581874b5ff3da0"
+    },
+    "checks": {
+      "files": 2,
+      "tests": 56,
+      "passed": 56,
+      "failed": 0,
+      "skipped": 0,
+      "platform": "darwin",
+      "report": "artifacts/jenkins-linux-release-notes-source-tests.tap"
+    },
+    "changes": [
+      "GitHub draft body now accurately states Docker Linux ARM64 / Node22.",
+      "Fresh-draft actual release runner fixture verifies three source commits, complete immutable asset inventory and accurate runtime description before publication."
+    ],
+    "limits": "The preceding106-test proofs bind the preceding sourceHashes; this follow-up is the only subsequent source change. Formal source suite must use the new snapshot."
+  }
+}

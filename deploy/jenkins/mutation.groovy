@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'agent-platform-ci' }
+  agent { label 'agent-platform-linux-ci' }
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -16,9 +16,9 @@ pipeline {
     string(name: 'BASE_REF', defaultValue: '', description: 'Discovered refs/heads/base branch for changed mode')
   }
   environment {
-    NODE22 = '@NODE22@'
-    CI_TOOL = '/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-ci.mjs'
-    MUTATION_TOOL = '/Library/Application Support/AgentPlatform/jenkins-tools/mutation.mjs'
+    NODE22 = '/usr/local/bin/node'
+    CI_TOOL = '/opt/agent-platform/tools/jenkins-ci.mjs'
+    MUTATION_TOOL = '/opt/agent-platform/tools/mutation.mjs'
     CHECKOUT_READY = 'false'
     MUTATION_READY = 'false'
   }

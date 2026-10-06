@@ -58,5 +58,22 @@
     "requiresTunnelDisconnect": true,
     "previewUntouched": true
   },
-  "sideEffects": "No review writes, no token-file reads and no service mutation."
+  "sideEffects": "No review writes, no token-file reads and no service mutation.",
+  "currentSourceVerification": {
+    "status": "current-source-tests-passed-target-UID400-401-pending",
+    "evidence": "artifacts/jenkins-system-cutover-source-verification.json",
+    "installerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "currentTests": 236,
+    "currentPassed": 236,
+    "currentFailed": 0,
+    "currentSkipped": 0,
+    "uid501Evidence": "artifacts/jenkins-system-target-prerequisite-uid501.json",
+    "uid400Verified": false,
+    "uid401Verified": false,
+    "systemInstallValidated": false,
+    "historicalEvidencePreserved": "Recorded sourceSha256/snapshot/trace and reviewf liveCutoverValidation remain historical; currentSourceVerification describes j-candidate source/tests only.",
+    "actualApiLifecycleVerified": false,
+    "actualRootAccountReuseValidated": false,
+    "accountReadonlyEvidence": "artifacts/jenkins-system-isolated-account-record-readonly.json"
+  }
 }

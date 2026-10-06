@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-06T01:55:14.478Z",
+  "daemon": "colima-agent-platform-build",
+  "image": "agent-platform-ci:node22-amd64",
+  "imageMetadata": "\"sha256:8237c4b10e646b469fb56a824c33ade5a256e3fe348c3803c286d94e588c2721\" \"linux\" \"amd64\"",
+  "network": "none",
+  "hostMounts": [],
+  "credentials": false,
+  "exitCode": 0,
+  "signal": null,
+  "status": "passed",
+  "evidence": {
+    "arch": "x64",
+    "node": "22.23.3",
+    "uid": 1000,
+    "nodeChecks": 30,
+    "browserRuns": [
+      {
+        "version": "151.0.7922.34",
+        "title": "CI browser 0",
+        "jitAnswer": 6,
+        "screenshotSha256": "07aabbc0ff3bb9aa2df332486297152790014e277243649258067bd95160da7f"
+      },
+      {
+        "version": "151.0.7922.34",
+        "title": "CI browser 1",
+        "jitAnswer": 6,
+        "screenshotSha256": "07aabbc0ff3bb9aa2df332486297152790014e277243649258067bd95160da7f"
+      },
+      {
+        "version": "151.0.7922.34",
+        "title": "CI browser 2",
+        "jitAnswer": 6,
+        "screenshotSha256": "07aabbc0ff3bb9aa2df332486297152790014e277243649258067bd95160da7f"
+      }
+    ],
+    "native": {
+      "elfMachine": 62,
+      "loadedAnswer": 42,
+      "architecture": "x86_64",
+      "mismatchRejected": true
+    },
+    "executionEngine": "rosetta",
+    "pnpm": "9.15.0",
+    "pnpmVersions": {
+      "web": "9.15.0",
+      "api": "9.12.0"
+    },
+    "browserVerification": {
+      "playwright": "1.62.1",
+      "preinstalledChromium": "/opt/agent-platform/playwright/chromium-1234/chrome-linux64/chrome"
+    },
+    "vercel": "62.2.0",
+    "javaMajor": 21
+  },
+  "finishedAt": "2026-10-06T01:55:27.014Z",
+  "originalLocalReport": "/tmp/agent-platform-ci-amd64-final-image-smoke.json"
+}

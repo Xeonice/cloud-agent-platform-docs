@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'agent-platform-ci' }
+  agent { label 'agent-platform-linux-ci' }
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -12,8 +12,8 @@ pipeline {
     string(name: 'REF', defaultValue: 'refs/heads/main', description: 'Fixed repository branch or open pull-request head')
   }
   environment {
-    NODE22 = '@NODE22@'
-    CI_TOOL = '/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-ci.mjs'
+    NODE22 = '/usr/local/bin/node'
+    CI_TOOL = '/opt/agent-platform/tools/jenkins-ci.mjs'
   }
   stages {
     stage('Checkout exact commit') { steps { sh '"$NODE22" "$CI_TOOL" checkout "$SHA" "$REF"' } }
@@ -30,7 +30,7 @@ pipeline {
   }
   post {
     always {
-      archiveArtifacts artifacts: 'commit.json,source/reports/acceptance/*.json,source/reports/acceptance/*.xml,source/acceptance/execution-report.json', allowEmptyArchive: true, fingerprint: true, followSymlinks: false
+      archiveArtifacts artifacts: 'commit.json,native-import.json,source/reports/acceptance/*.json,source/reports/acceptance/*.xml,source/acceptance/execution-report.json', allowEmptyArchive: true, fingerprint: true, followSymlinks: false
       junit testResults: 'source/reports/acceptance/*.xml', allowEmptyResults: true
       script { currentBuild.description = "${params.REF} @ ${params.SHA.take(12)}" }
     }

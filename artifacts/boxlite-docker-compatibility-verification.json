@@ -1,0 +1,603 @@
+{
+  "state": "actual-boxlite-linux-arm64-docker-lifecycle-passed-production-not-migrated",
+  "verifiedAt": "2026-10-06T02:49:50.493200+00:00",
+  "kind": "isolated-compatibility-proof-not-formal-Jenkins-release",
+  "host": {
+    "chip": "M5 Pro",
+    "macOS": "27.0.1",
+    "colima": "0.10.3",
+    "lima": "2.2.1"
+  },
+  "vm": {
+    "profile": "agent-platform-boxlite-proof",
+    "arch": "aarch64",
+    "vmType": "vz",
+    "cpus": 2,
+    "memoryGiB": 4,
+    "diskGiB": 30,
+    "nestedVirtualization": true,
+    "hostDirectoryMounts": [],
+    "stateAfterProof": "stopped",
+    "shutdownVerified": true,
+    "shutdownVerifiedAt": "2026-10-06T02:50:49.367673+00:00"
+  },
+  "sourceInputsSha256": {
+    "deploy/containers/Dockerfile.boxlite-proof": "35260adffec5a30c5205319861f511d412c8415c86f93d86516f199e16a6f497",
+    "deploy/containers/Dockerfile.boxlite-proof.dockerignore": "1ee65cd81741ee8004bce9d42d8d93a77967bd32ee01f34c5a81a16cf3db3a4d",
+    "deploy/containers/boxlite-smoke.mjs": "1e7b1d880291295f4a3823e1d3a27282b9c77d7d59848e67019e62da4a179dfb",
+    "deploy/containers/boxlite-proof/package.json": "e4ce76227dfca6c8f65fbf2247f74f87415a16a4eb6b826aab7324fcd462c3d9",
+    "deploy/containers/boxlite-proof/package-lock.json": "e3c6e191a62b7bc67e1b9a21d0b54137ada6b864ba328bed5bb37b07b9476a47",
+    "deploy/containers/boxlite-proof/prepare-runtime.py": "99f87664308ca867fdadb06371c06b1b31cff8cafea887e9bdc95f3ad0e3a26e",
+    "deploy/containers/boxlite-proof/materialize-certs.py": "9a4d17436ee18513c4daa8a72d5187dfd4f386c523271f1a43af90c789cb0a1f"
+  },
+  "image": {
+    "dockerIndexId": "sha256:122eac9500aa6b5e8f0d9e2fc2c49e7971373f17dbf196ce5699800227e4a488",
+    "os": "linux",
+    "architecture": "arm64",
+    "runtime": "official-v0.9.7-linux-arm64-gnu-companion",
+    "runtimeArchiveSha256": "78e978d6398d5a78dc76d675941cb05287e8c70b1b647e98a479058a9652be28",
+    "firmwareBeforeSha256": "f30112748a09cefccb9b3d98098fe2b770e785debfafea5dc9e0523f17b8d74a",
+    "firmwareAfterSha256": "8b7e1bfff87e691d7a2754b98596adc323014d92ce2a0e522930006161926b6e",
+    "firmwareChange": "ARM64-only DT_NEEDED libc.so.6",
+    "runtimeDir": "/opt/boxlite-runtime",
+    "glibc": "2.28",
+    "node": "22.23.3",
+    "sdk": "0.9.7",
+    "baseImageDigests": {
+      "node": "sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c",
+      "rockylinux": "sha256:9794037624aaa6212aeada1d28861ef5e0a935adaf93e4ef79837119f2a2d04c"
+    }
+  },
+  "volume": "agent-platform-boxlite-proof-data-865f9305c3bf",
+  "containers": {
+    "create": {
+      "id": "1e20141f1b19bf4573186a7fbdf0659ea638b6d42a50296478dd05e36463dd9d",
+      "name": "/agent-platform-boxlite-proof-create-865f9305c3bf",
+      "dockerImage": "sha256:122eac9500aa6b5e8f0d9e2fc2c49e7971373f17dbf196ce5699800227e4a488",
+      "exitCode": 0,
+      "startedAt": "2026-10-06T02:46:54.351392808Z",
+      "finishedAt": "2026-10-06T02:47:15.373948308Z",
+      "privileged": true,
+      "devices": [
+        {
+          "PathOnHost": "/dev/kvm",
+          "PathInContainer": "/dev/kvm",
+          "CgroupPermissions": "rwm"
+        }
+      ],
+      "memoryBytes": 1610612736,
+      "nanoCpus": 2000000000,
+      "pidsLimit": 512,
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-boxlite-proof-data-865f9305c3bf",
+          "destination": "/data",
+          "rw": true
+        }
+      ],
+      "publishedPorts": {},
+      "scriptSha256": "1e7b1d880291295f4a3823e1d3a27282b9c77d7d59848e67019e62da4a179dfb"
+    },
+    "resume": {
+      "id": "81840a4e8e0ace0e22ff08a509a03669a568ef35f3622adeb91a59e7a5ab5553",
+      "name": "/agent-platform-boxlite-proof-resume-865f9305c3bf",
+      "dockerImage": "sha256:122eac9500aa6b5e8f0d9e2fc2c49e7971373f17dbf196ce5699800227e4a488",
+      "exitCode": 0,
+      "startedAt": "2026-10-06T02:48:15.530229625Z",
+      "finishedAt": "2026-10-06T02:48:22.95083301Z",
+      "privileged": true,
+      "devices": [
+        {
+          "PathOnHost": "/dev/kvm",
+          "PathInContainer": "/dev/kvm",
+          "CgroupPermissions": "rwm"
+        }
+      ],
+      "memoryBytes": 1610612736,
+      "nanoCpus": 2000000000,
+      "pidsLimit": 512,
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-boxlite-proof-data-865f9305c3bf",
+          "destination": "/data",
+          "rw": true
+        }
+      ],
+      "publishedPorts": {},
+      "scriptSha256": "1e7b1d880291295f4a3823e1d3a27282b9c77d7d59848e67019e62da4a179dfb"
+    },
+    "cleanup": {
+      "id": "83ffdb8efe604be7bc8cccc335f8eb9070f63478bdd8b043f5ec555f09ade3e0",
+      "name": "/agent-platform-boxlite-proof-cleanup-865f9305c3bf",
+      "dockerImage": "sha256:122eac9500aa6b5e8f0d9e2fc2c49e7971373f17dbf196ce5699800227e4a488",
+      "exitCode": 0,
+      "startedAt": "2026-10-06T02:48:23.216176335Z",
+      "finishedAt": "2026-10-06T02:48:30.902263066Z",
+      "privileged": true,
+      "devices": [
+        {
+          "PathOnHost": "/dev/kvm",
+          "PathInContainer": "/dev/kvm",
+          "CgroupPermissions": "rwm"
+        }
+      ],
+      "memoryBytes": 1610612736,
+      "nanoCpus": 2000000000,
+      "pidsLimit": 512,
+      "mounts": [
+        {
+          "type": "volume",
+          "name": "agent-platform-boxlite-proof-data-865f9305c3bf",
+          "destination": "/data",
+          "rw": true
+        }
+      ],
+      "publishedPorts": {},
+      "scriptSha256": "1e7b1d880291295f4a3823e1d3a27282b9c77d7d59848e67019e62da4a179dfb"
+    }
+  },
+  "reports": {
+    "create": {
+      "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+      "phase": "create",
+      "sdkVersion": "0.9.7",
+      "node": "v22.23.3",
+      "uid": 0,
+      "kvm": {
+        "api": 12,
+        "createVm": true
+      },
+      "startedAt": "2026-10-06T02:46:54.415Z",
+      "checks": [
+        {
+          "id": "9uZr8EO3vXTr",
+          "ownKernel": true,
+          "hostKernel": "6.8.0-117-generic",
+          "guestKernel": "6.12.76",
+          "exec": true,
+          "pty": true,
+          "sharedVolume": true,
+          "stopStartDiskPreserved": true
+        },
+        {
+          "id": "SHDwsQ113thV",
+          "ownKernel": true,
+          "hostKernel": "6.8.0-117-generic",
+          "guestKernel": "6.12.76",
+          "exec": true,
+          "pty": true,
+          "sharedVolume": true,
+          "stopStartDiskPreserved": true
+        }
+      ],
+      "productionTouched": false,
+      "state": "passed",
+      "finishedAt": "2026-10-06T02:47:15.348Z"
+    },
+    "resume": {
+      "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+      "phase": "resume",
+      "sdkVersion": "0.9.7",
+      "node": "v22.23.3",
+      "uid": 0,
+      "kvm": {
+        "api": 12,
+        "createVm": true
+      },
+      "startedAt": "2026-10-06T02:48:15.598Z",
+      "checks": [
+        {
+          "id": "9uZr8EO3vXTr",
+          "sameBoxId": true,
+          "containerRecreationDiskPreserved": true,
+          "jailerNamespaces": {
+            "pid": true,
+            "mnt": true,
+            "user": true
+          }
+        },
+        {
+          "id": "SHDwsQ113thV",
+          "sameBoxId": true,
+          "containerRecreationDiskPreserved": true,
+          "jailerNamespaces": {
+            "pid": true,
+            "mnt": true,
+            "user": true
+          }
+        }
+      ],
+      "productionTouched": false,
+      "twoMicroVMsRunningConcurrently": true,
+      "state": "passed",
+      "finishedAt": "2026-10-06T02:48:22.929Z"
+    },
+    "cleanup": {
+      "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+      "phase": "cleanup",
+      "sdkVersion": "0.9.7",
+      "node": "v22.23.3",
+      "uid": 0,
+      "kvm": {
+        "api": 12,
+        "createVm": true
+      },
+      "startedAt": "2026-10-06T02:48:23.292Z",
+      "checks": [
+        {
+          "id": "9uZr8EO3vXTr",
+          "sameBoxId": true,
+          "containerRecreationDiskPreserved": true,
+          "jailerNamespaces": {
+            "pid": true,
+            "mnt": true,
+            "user": true
+          }
+        },
+        {
+          "id": "SHDwsQ113thV",
+          "sameBoxId": true,
+          "containerRecreationDiskPreserved": true,
+          "jailerNamespaces": {
+            "pid": true,
+            "mnt": true,
+            "user": true
+          }
+        }
+      ],
+      "productionTouched": false,
+      "twoMicroVMsRunningConcurrently": true,
+      "state": "passed",
+      "finishedAt": "2026-10-06T02:48:30.876Z"
+    }
+  },
+  "cachedImageSdkRecords": [
+    {
+      "reference": "docker.io/library/debian:bookworm-slim",
+      "repository": "library/debian",
+      "tag": "bookworm-slim",
+      "id": "sha256:a1b86db52ce3daef089e45aabe36dfec4091f82464c25c1fdcf03de197cbe82a",
+      "cachedAt": "2026-10-06T02:46:58.562316824+00:00"
+    },
+    {
+      "reference": "docker.io/library/alpine:3.22.2",
+      "repository": "library/alpine",
+      "tag": "3.22.2",
+      "id": "sha256:24bb3511a0db7b5114a4aee033c65a8a4148f39b7b80a398e548546db967a36f",
+      "cachedAt": "2026-10-06T02:46:58.107228108+00:00"
+    }
+  ],
+  "allProofMicroVMsRemoved": true,
+  "ownedProofContainersStillRunning": 0,
+  "namespaceObservationScope": "Each running shim compared with outer container process; no cross-shim namespace identity comparison",
+  "production": {
+    "apiPort": 3101,
+    "pidBefore": 64657,
+    "pidAfter": 64657,
+    "uniqueListenerVerified": true,
+    "health": {
+      "local": {
+        "status": "ok",
+        "uptimeSec": 23030
+      },
+      "public": {
+        "status": "ok",
+        "uptimeSec": 23031
+      }
+    },
+    "databaseOrBoxliteHomeMounted": false,
+    "apiStoppedOrRestarted": false,
+    "tunnelOrPublicRoutingChanged": false,
+    "previewOperations": 0,
+    "fullProductionApiTested": false,
+    "darwinToLinuxDataMigrationTested": false
+  },
+  "failedAttempts": [
+    {
+      "runId": "4df930cc1c34",
+      "containerId": "49e592eb6f07fe5032300dc35d23ed8bf8cebfd2b1281b7471f4c409f0600bb6",
+      "imageId": "sha256:91b96f0541838c15cbfe18bca6db4275444483f425ff0d5913872de5402b16b6",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:32:16.416Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box Ob6vP2znF2Ny failed to start: error\n\nThe shim process exited with an error.\n\nError: engine reported an error: VM failed to start (libkrun status=-2)\n\nDebug files:\n• Console: /data/boxlite/boxes/Ob6vP2znF2Ny/logs/console.log\n• Stderr:  /data/boxlite/boxes/Ob6vP2znF2Ny/shim.stderr\n\nError output:\n[shim] 02:32:21.727770 T+0ms: main() entered\n[shim] T+0ms: config parsed\n[shim] T+1ms: logging initialized\n[shim] T+4ms: gvproxy created\n[shim] T+4ms: engine created\n... (see stderr file for full output)",
+        "finishedAt": "2026-10-06T02:32:22.236Z"
+      }
+    },
+    {
+      "runId": "69cccb7bde53",
+      "containerId": "d5e1af03e162d13b265ff1042a024a67547e36daee47930c898698ded89a5f91",
+      "imageId": "sha256:ff8b6dade5f352d7957ef43644e024248b55ada3296169d2235447fe445f77a1",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:36:57.210Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box jjuOFY1Cue2h failed to start\n\nExit code: 1\n\nConsole output: empty (no kernel or guest messages captured)\n\nShim stderr:\nbwrap: Can't create file at /etc/pki/tls/certs/ca-bundle.crt: No such file or directory\n\nDebug files:\n• Console: /data/boxlite/boxes/jjuOFY1Cue2h/logs/console.log\n• Stderr: /data/boxlite/boxes/jjuOFY1Cue2h/shim.stderr\n\nDiagnostic commands:\n• RUST_LOG=debug boxlite run ...   (re-run with tracing)\n• dmesg | tail -50                 (kernel messages)\n• file $(which boxlite-guest)      (check binary arch)",
+        "finishedAt": "2026-10-06T02:37:03.018Z"
+      }
+    },
+    {
+      "runId": "af596f5db3fd",
+      "containerId": "22db7ce59879b5c9f8592ae7f8f87a6a6d431ed286aa641bb3d5a15608a1ea1b",
+      "imageId": "sha256:a5bd183e916be30eaefed37162f981a7d65b34e5727dca299aa76c363fb71547",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:29:05.729Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box Td4vr79pXDxo failed to start: error\n\nThe shim process exited with an error.\n\nError: engine reported an error: VM failed to start (libkrun status=-2)\n\nDebug files:\n• Console: /data/boxlite/boxes/Td4vr79pXDxo/logs/console.log\n• Stderr:  /data/boxlite/boxes/Td4vr79pXDxo/shim.stderr\n\nError output:\n[shim] 02:29:11.299303 T+0ms: main() entered\n[shim] T+0ms: config parsed\n[shim] T+1ms: logging initialized\n[shim] T+5ms: gvproxy created\n[shim] T+5ms: engine created\n... (see stderr file for full output)",
+        "finishedAt": "2026-10-06T02:29:11.802Z"
+      }
+    },
+    {
+      "runId": "b9fe218056a3",
+      "containerId": "149dc7967661f985bfdeca87e63567d29a6388d78bc203af9b9884f4c9a2a3d5",
+      "imageId": "sha256:b01b6d298b2a52e19eb83db013c1fc91626002a600a5d3006be7073efb819ebd",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:27:00.778Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box Oe8AXpviK4kZ failed to start: error\n\nThe shim process exited with an error.\n\nError: engine reported an error: VM failed to start (libkrun status=-2)\n\nDebug files:\n• Console: /data/boxlite/boxes/Oe8AXpviK4kZ/logs/console.log\n• Stderr:  /data/boxlite/boxes/Oe8AXpviK4kZ/shim.stderr\n\nError output:\n[shim] 02:27:07.166368 T+0ms: main() entered\n[shim] T+0ms: config parsed\n[shim] T+2ms: logging initialized\n[shim] T+6ms: gvproxy created\n[shim] T+6ms: engine created\n... (see stderr file for full output)",
+        "finishedAt": "2026-10-06T02:27:07.667Z"
+      }
+    },
+    {
+      "runId": "caa01bfa52db",
+      "containerId": "eb3a191132f488588f3c0c0aa21624ab529295957a82cedea8224c7712f8a45e",
+      "imageId": "sha256:b01b6d298b2a52e19eb83db013c1fc91626002a600a5d3006be7073efb819ebd",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:24:38.335Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box AWSsRarOFou0 failed to start: error\n\nThe shim process exited with an error.\n\nError: engine reported an error: VM failed to start (libkrun status=-2)\n\nDebug files:\n• Console: /data/boxlite/boxes/AWSsRarOFou0/logs/console.log\n• Stderr:  /data/boxlite/boxes/AWSsRarOFou0/shim.stderr\n\nError output:\n[shim] 02:24:45.706525 T+0ms: main() entered\n[shim] T+0ms: config parsed\n[shim] T+2ms: logging initialized\n[shim] T+7ms: gvproxy created\n[shim] T+7ms: engine created\n... (see stderr file for full output)",
+        "finishedAt": "2026-10-06T02:24:46.209Z"
+      }
+    },
+    {
+      "runId": "f8a07d84d6a4",
+      "containerId": "6a03c92403d0a29b7f91d34238a8433a567f3532d3e3ac71b829ec892c640951",
+      "imageId": "sha256:7eac0f2ab4c867d17cfe7b7ab07f30972cc4eb329b19fb8b77418479c7323535",
+      "exitCode": 1,
+      "report": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:35:25.726Z",
+        "checks": [],
+        "productionTouched": false,
+        "state": "failed",
+        "error": "engine reported an error: Box MN2JojvBtrmg failed to start\n\nExit code: 1\n\nConsole output: empty (no kernel or guest messages captured)\n\nShim stderr:\nbwrap: Can't create file at /etc/pki/tls/certs/ca-bundle.crt: No such file or directory\n\nDebug files:\n• Console: /data/boxlite/boxes/MN2JojvBtrmg/logs/console.log\n• Stderr: /data/boxlite/boxes/MN2JojvBtrmg/shim.stderr\n\nDiagnostic commands:\n• RUST_LOG=debug boxlite run ...   (re-run with tracing)\n• dmesg | tail -50                 (kernel messages)\n• file $(which boxlite-guest)      (check binary arch)",
+        "finishedAt": "2026-10-06T02:35:31.315Z"
+      }
+    }
+  ],
+  "reducedPrivilegeAttempt": {
+    "privileged": false,
+    "capAdd": ["SYS_ADMIN"],
+    "securityOpt": ["seccomp=unconfined", "apparmor=unconfined"],
+    "state": "failed",
+    "report": {
+      "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+      "phase": "resume",
+      "sdkVersion": "0.9.7",
+      "node": "v22.23.3",
+      "uid": 0,
+      "kvm": {
+        "api": 12,
+        "createVm": true
+      },
+      "startedAt": "2026-10-06T02:41:40.923Z",
+      "checks": [],
+      "productionTouched": false,
+      "state": "failed",
+      "error": "engine reported an error: Box RmNwf6eMZAOb failed to start\n\nExit code: 1\n\nShim stderr:\nbwrap: Can't mount proc on /newroot/proc: Operation not permitted\n\nDebug files:\n• Console: /data/boxlite/boxes/RmNwf6eMZAOb/logs/console.log\n• Stderr: /data/boxlite/boxes/RmNwf6eMZAOb/shim.stderr\n\nDiagnostic commands:\n• RUST_LOG=debug boxlite run ...   (re-run with tracing)\n• dmesg | tail -50                 (kernel messages)\n• file $(which boxlite-guest)      (check binary arch)",
+      "finishedAt": "2026-10-06T02:41:41.473Z"
+    },
+    "minimumPrivilegesVerified": false
+  },
+  "sourceRegression": {
+    "tests": 352,
+    "passed": 352,
+    "failed": 0,
+    "skipped": 0
+  },
+  "limitations": [
+    "Alpine guest lifecycle proof; full business API and real agent tasks not exercised",
+    "Darwin production state not copied or migrated",
+    "Stopped guest recovery verified; live task continuity across replacement not tested",
+    "Privileged baseline only; minimum Docker permissions not established",
+    "API Linux provider selection and cgroup-aware capacity require adaptation",
+    "System package and guest image tag inputs do not guarantee future byte-identical builds",
+    "Formal Jenkins CI, release publication, protection cutover and cold boot remain incomplete"
+  ],
+  "npmEmbeddedRuntimeProof": {
+    "imageIndexId": "sha256:944c485e88156e02d98bfbb77d9a395ab4ac98d714a68613f41c532afe37ca57",
+    "runtimeSource": "exact npm SDK 0.9.7 embedded assets plus same ARM64 firmware fixup",
+    "originalShimSha256": "c4a123257215e611c578f824fc22e8ef52b3d4d664ef1d10e1cdab9b9011014c",
+    "reports": {
+      "create": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "create",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:39:10.967Z",
+        "checks": [
+          {
+            "id": "RmNwf6eMZAOb",
+            "ownKernel": true,
+            "hostKernel": "6.8.0-117-generic",
+            "guestKernel": "6.12.76",
+            "exec": true,
+            "pty": true,
+            "sharedVolume": true,
+            "stopStartDiskPreserved": true
+          },
+          {
+            "id": "nO4aJ6W5hTBG",
+            "ownKernel": true,
+            "hostKernel": "6.8.0-117-generic",
+            "guestKernel": "6.12.76",
+            "exec": true,
+            "pty": true,
+            "sharedVolume": true,
+            "stopStartDiskPreserved": true
+          }
+        ],
+        "productionTouched": false,
+        "state": "passed",
+        "finishedAt": "2026-10-06T02:39:32.442Z"
+      },
+      "resume": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "resume",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:40:00.138Z",
+        "checks": [
+          {
+            "id": "RmNwf6eMZAOb",
+            "sameBoxId": true,
+            "containerRecreationDiskPreserved": true,
+            "jailerNamespaces": {
+              "pid": true,
+              "mnt": true,
+              "user": true
+            }
+          },
+          {
+            "id": "nO4aJ6W5hTBG",
+            "sameBoxId": true,
+            "containerRecreationDiskPreserved": true,
+            "jailerNamespaces": {
+              "pid": true,
+              "mnt": true,
+              "user": true
+            }
+          }
+        ],
+        "productionTouched": false,
+        "twoMicroVMsRunningConcurrently": true,
+        "state": "passed",
+        "finishedAt": "2026-10-06T02:40:07.672Z"
+      },
+      "cleanup": {
+        "kind": "actual-boxlite-0.9.7-in-linux-arm64-docker",
+        "phase": "cleanup",
+        "sdkVersion": "0.9.7",
+        "node": "v22.23.3",
+        "uid": 0,
+        "kvm": {
+          "api": 12,
+          "createVm": true
+        },
+        "startedAt": "2026-10-06T02:42:03.077Z",
+        "checks": [
+          {
+            "id": "RmNwf6eMZAOb",
+            "sameBoxId": true,
+            "containerRecreationDiskPreserved": true,
+            "jailerNamespaces": {
+              "pid": true,
+              "mnt": true,
+              "user": true
+            }
+          },
+          {
+            "id": "nO4aJ6W5hTBG",
+            "sameBoxId": true,
+            "containerRecreationDiskPreserved": true,
+            "jailerNamespaces": {
+              "pid": true,
+              "mnt": true,
+              "user": true
+            }
+          }
+        ],
+        "productionTouched": false,
+        "twoMicroVMsRunningConcurrently": true,
+        "state": "passed",
+        "finishedAt": "2026-10-06T02:42:10.781Z"
+      }
+    }
+  },
+  "documentationGate": {
+    "checks": 13,
+    "passed": 13,
+    "failed": 0,
+    "skipped": 0,
+    "checkedAt": "2026-10-06T02:51:41.160681+00:00"
+  }
+}

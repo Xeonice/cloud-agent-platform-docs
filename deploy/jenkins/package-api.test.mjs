@@ -12,6 +12,12 @@ import {
 } from "./package-api.mjs";
 
 const SHA = "a".repeat(40);
+const historicalNativeOnly =
+  process.platform === "darwin" &&
+  process.arch === "arm64" &&
+  process.versions.node.split(".")[0] === "22"
+    ? false
+    : "Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance";
 
 async function fixture(t) {
   const root = await fs.realpath(
@@ -183,29 +189,33 @@ test("archive inspection preserves relative pnpm links and rejects escaped, brok
   await assert.rejects(inspectArchiveTree(tree), /Private state/);
 });
 
-test("packaging rejects active releases, current symlinks and persistent-data outputs before invoking any build", async (t) => {
-  const { root, source, output, manifest } = await fixture(t);
-  const run = () =>
-    assert.fail("unsafe input cannot run pnpm or native probes");
-  await fs.symlink(source, join(root, "current"));
-  await assert.rejects(
-    packageApi(source, output, SHA, { run }),
-    /active release/,
-  );
-  await assert.rejects(
-    packageApi(join(root, "current"), output, SHA, { run }),
-    /source symlink/,
-  );
-  await fs.rm(join(root, "current"));
-  await assert.rejects(
-    packageApi(source, join(manifest.dataRoot, "archive.tgz"), SHA, { run }),
-    /outside persistent data/,
-  );
-  await assert.rejects(
-    packageApi(source, join(source, "archive.tgz"), SHA, { run }),
-    /build tree/,
-  );
-});
+test(
+  "packaging rejects active releases, current symlinks and persistent-data outputs before invoking any build",
+  { skip: historicalNativeOnly },
+  async (t) => {
+    const { root, source, output, manifest } = await fixture(t);
+    const run = () =>
+      assert.fail("unsafe input cannot run pnpm or native probes");
+    await fs.symlink(source, join(root, "current"));
+    await assert.rejects(
+      packageApi(source, output, SHA, { run }),
+      /active release/,
+    );
+    await assert.rejects(
+      packageApi(join(root, "current"), output, SHA, { run }),
+      /source symlink/,
+    );
+    await fs.rm(join(root, "current"));
+    await assert.rejects(
+      packageApi(source, join(manifest.dataRoot, "archive.tgz"), SHA, { run }),
+      /outside persistent data/,
+    );
+    await assert.rejects(
+      packageApi(source, join(source, "archive.tgz"), SHA, { run }),
+      /build tree/,
+    );
+  },
+);
 
 test("pnpm9's exact API self-reference is rebound inside the archive while another escaped dependency still fails", async (t) => {
   const { root } = await fixture(t);
@@ -226,63 +236,71 @@ test("pnpm9's exact API self-reference is rebound inside the archive while anoth
   );
 });
 
-test("a real tar roundtrip excludes source, private env and data identities and probes its relocated production tree", async (t) => {
-  const { root, source, output, manifest } = await fixture(t);
-  const { run, probes } = dependencyFixture();
-  const result = await packageApi(source, output, SHA, { run });
-  assert.equal(result.state, "packaged");
-  assert.equal(probes.length, 1);
-  assert(result.sizeBytes > 0);
-  assert.match(result.sha256, /^[a-f0-9]{64}$/);
-  const extracted = join(root, "check");
-  await fs.mkdir(extracted);
-  await execute("/usr/bin/tar", ["-xzf", output, "-C", extracted]);
-  const bundle = join(extracted, "agent-platform-api");
-  const release = JSON.parse(
-    await fs.readFile(join(bundle, "release.json"), "utf8"),
-  );
-  assert.equal(release.sha, SHA);
-  assert.equal(release.schemaHash, manifest.schemaHash);
-  assert.equal(release.databaseUrl, undefined);
-  assert.equal(release.dataRoot, undefined);
-  assert.equal(release.boxliteHome, undefined);
-  assert.deepEqual(await fs.readdir(join(bundle, "application")), [
-    "dist",
-    "node_modules",
-    "package.json",
-  ]);
-  const env = await fs.readFile(join(bundle, ".env.example"), "utf8");
-  assert.match(env, /^ACCESS_PASSCODE=$/m);
-  assert.doesNotMatch(env, /PRIVATE_FIXTURE|do-not-copy/);
-  assert.match(
-    await fs.readFile(join(bundle, "README.md"), "utf8"),
-    /existing installation until its schema changes/,
-  );
-  assert.match(
-    await fs.readFile(join(bundle, "bin/start.mjs"), "utf8"),
-    /MIGRATIONS_DIR/,
-  );
-  await assert.rejects(
-    packageApi(source, output, SHA, { run }),
-    /overwrite an immutable package/,
-  );
-});
+test(
+  "a real tar roundtrip excludes source, private env and data identities and probes its relocated production tree",
+  { skip: historicalNativeOnly },
+  async (t) => {
+    const { root, source, output, manifest } = await fixture(t);
+    const { run, probes } = dependencyFixture();
+    const result = await packageApi(source, output, SHA, { run });
+    assert.equal(result.state, "packaged");
+    assert.equal(probes.length, 1);
+    assert(result.sizeBytes > 0);
+    assert.match(result.sha256, /^[a-f0-9]{64}$/);
+    const extracted = join(root, "check");
+    await fs.mkdir(extracted);
+    await execute("/usr/bin/tar", ["-xzf", output, "-C", extracted]);
+    const bundle = join(extracted, "agent-platform-api");
+    const release = JSON.parse(
+      await fs.readFile(join(bundle, "release.json"), "utf8"),
+    );
+    assert.equal(release.sha, SHA);
+    assert.equal(release.schemaHash, manifest.schemaHash);
+    assert.equal(release.databaseUrl, undefined);
+    assert.equal(release.dataRoot, undefined);
+    assert.equal(release.boxliteHome, undefined);
+    assert.deepEqual(await fs.readdir(join(bundle, "application")), [
+      "dist",
+      "node_modules",
+      "package.json",
+    ]);
+    const env = await fs.readFile(join(bundle, ".env.example"), "utf8");
+    assert.match(env, /^ACCESS_PASSCODE=$/m);
+    assert.doesNotMatch(env, /PRIVATE_FIXTURE|do-not-copy/);
+    assert.match(
+      await fs.readFile(join(bundle, "README.md"), "utf8"),
+      /existing installation until its schema changes/,
+    );
+    assert.match(
+      await fs.readFile(join(bundle, "bin/start.mjs"), "utf8"),
+      /MIGRATIONS_DIR/,
+    );
+    await assert.rejects(
+      packageApi(source, output, SHA, { run }),
+      /overwrite an immutable package/,
+    );
+  },
+);
 
-test("Linux native addons and build-host-only dylib dependencies fail packaging without leaving a publishable tarball", async (t) => {
-  const { source, output } = await fixture(t);
-  await assert.rejects(
-    packageApi(source, output, SHA, dependencyFixture({ wrongArch: true })),
-    /not macOS ARM64/,
-  );
-  await assert.rejects(fs.stat(output), { code: "ENOENT" });
-  await assert.rejects(
-    packageApi(
-      source,
-      output,
-      SHA,
-      dependencyFixture({ outsideLibrary: true }),
-    ),
-    /build-host library/,
-  );
-  await assert.rejects(fs.stat(output), { code: "ENOENT" });
-});
+test(
+  "Linux native addons and build-host-only dylib dependencies fail packaging without leaving a publishable tarball",
+  { skip: historicalNativeOnly },
+  async (t) => {
+    const { source, output } = await fixture(t);
+    await assert.rejects(
+      packageApi(source, output, SHA, dependencyFixture({ wrongArch: true })),
+      /not macOS ARM64/,
+    );
+    await assert.rejects(fs.stat(output), { code: "ENOENT" });
+    await assert.rejects(
+      packageApi(
+        source,
+        output,
+        SHA,
+        dependencyFixture({ outsideLibrary: true }),
+      ),
+      /build-host library/,
+    );
+    await assert.rejects(fs.stat(output), { code: "ENOENT" });
+  },
+);

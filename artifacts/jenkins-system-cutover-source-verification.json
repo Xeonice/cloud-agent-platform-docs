@@ -1,65 +1,75 @@
 {
   "status": "passed",
-  "verifiedAt": "2026-10-05T23:51:16.556Z",
+  "verifiedAt": "2026-10-06T00:46:31.984006Z",
   "runtime": {
     "node": "v22.23.3",
     "platform": "darwin",
     "arch": "arm64"
   },
-  "scope": "Source implementation and temporary filesystem regressions, plus the separately executed parent-owned real UID501 GUI Tunnel lifecycle recorded below. This subagent changed no installed services, private review, runtime secrets or production data.",
+  "scope": "Current j-candidate source and12 native root test files, plus actual unprivileged UID501 selected Directory Services attributes read. Historical f GUI Tunnel lifecycle, h UID501 short-process prerequisites and i API helper implementation remain separately source-bound. Protected root AuthenticationAuthority/account reuse, UID400/401 startup and privileged system installation remain pending.",
   "sourceHashes": {
-    "deploy/macmini/install-system-services.mjs": "0570a36b701b0b9d359115969beb2a32c1e21e53d59ca67d3472b583bcb2e75b",
-    "deploy/macmini/install-system-services.test.mjs": "99d8bba6c4403c216f6d862b96ed2d88ea835178b964ce06419465ac5a5e9e5f",
+    "deploy/macmini/install-system-services.mjs": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "deploy/macmini/install-system-services.test.mjs": "d19d47a03f5c77854aa6880c92674d428197391ef8872d7a8b45b3c77dd88ea5",
     "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
     "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
-    "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380"
+    "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380",
+    "deploy/macmini/api-cutover.test.mjs": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e"
   },
   "commands": {
-    "nodeTests": "node --test deploy/macmini/controller.test.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/package-api.test.mjs deploy/jenkins/mutation.test.mjs deploy/jenkins/sandbox-images.test.mjs deploy/jenkins/sandbox-publication-config.test.mjs",
+    "nodeTests": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs",
     "syntax": [
       "node --check deploy/macmini/install-system-services.mjs",
-      "node --check deploy/macmini/public-build-tools.mjs"
+      "node --check deploy/macmini/install-system-services.test.mjs"
     ],
-    "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/mutation.test.mjs",
+    "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/api-cutover.test.mjs",
     "whitespace": "git diff --check"
   },
   "execution": {
-    "files": 7,
-    "tests": 104,
-    "passed": 104,
+    "files": 12,
+    "tests": 236,
+    "passed": 236,
     "failed": 0,
     "skipped": 0,
     "exitCode": 0,
-    "log": "artifacts/jenkins-system-cutover-source-tests.log",
-    "newInstallerTests": 19,
+    "log": "artifacts/jenkins-system-account-reuse-source-tests.log",
+    "logSha256": "5c5d6b53b8df73d135ac04534a21b43af0618e567893f804093e2643e9e78057",
+    "installerTests": 28,
+    "newPrerequisiteRegressionTests": 5,
     "publicBuildToolsTests": 7,
     "formatExitCode": 0,
     "syntaxExitCode": 0,
-    "whitespaceExitCode": 0
+    "whitespaceExitCode": 0,
+    "newApiExitRegressionTests": 12,
+    "newAccountReuseRegressionTests": 4
   },
   "operatorCutover": {
     "automaticControllerChanged": false,
     "preflight": "Authenticated GET status/version only; exact seven blocker fields, all readiness true and all HTTP/auth/database work zero. Residual WS requires the validated dedicated GUI Tunnel.",
     "order": [
+      "authenticated read-only production work/WS/readiness preflight",
+      "prepare fixed isolated identities/homes, public tools and secret handoffs while original production services/config/poller remain unchanged",
+      "actual target UID short-lived version, public-script syntax, WAR/JAR/secret readability and home permissions checks; existing private production-file isolation checks; any failure refuses before cutover",
       "retire old polling",
       "create and record exact-owner admission barrier",
       "stop only the validated dedicated GUI Tunnel if originally loaded",
       "strict ready/draining/all counters zero continuously sampled for ten seconds",
       "SQLite backup",
       "final strict idle and barrier ownership gate",
-      "stop original API",
+      "capture original API job/supervisor/child/listener/lock identity",
+      "attempt GUI API bootout, then wait all original identity components fully gone; unknown replacement refuses",
+      "only after complete API exit archive/convert runtime sources and plists",
       "install/start system services",
       "authenticated readiness and exact-owner barrier release"
     ],
     "earlyRecovery": "When API was never stopped, restore only the originally loaded/stopped dedicated GUI Tunnel: wait for the old job/process/metrics removal before bootstrap, then metrics readiness, authenticated API readiness, exact-owner release. A printable terminating job is not treated as an already restored ready service. Unknown replacement or ownership change preserves maintenance.",
-    "stoppedApiRecovery": "Existing full system-to-GUI rollback path retained; API stage determined by actual GUI loaded state after bootout. Ownership loss preserves live services for operator review.",
+    "stoppedApiRecovery": "Stop-attempt, full exit and runtime-source conversion are distinct. Recovery of an attempted GUI stop waits all original job/supervisor/child/listener/lock removal before unchanged original plist bootstrap/readiness. Converted-source rollback captures and waits the owned system API when actually started, otherwise rechecks the original GUI exit identity; unknown replacement or lost maintenance ownership preserves services for operator review.",
     "preview3100Excluded": true,
     "legacyGuiTunnelCompatibility": "Semantic fixed-field validation accepts the observed legacy GUI plist without EnvironmentVariables/ProcessType, or current exact explicit values. Fixed UUID b59b8cc0-571a-46ec-bf21-1a01b78670a4 / agent-api.douglasdong.com / http://127.0.0.1:3101 metadata required. Unknown launchd fields, alternate user/home/executable/token path/target refuse.",
     "tunnelGracefulExit": "Read-only capture of fixed-label original PID, exact executable/UID501 and all metrics owners. Probe tracks structured launchd job {pid,program,state}; same original job/PID remaining printable during bootout/SIGTERM is allowed to finish. Wait at most 90 seconds until launchd registry entry, original process and metrics listener are all gone, while exact barrier ownership and process/listener/job identity remain valid. Different PID/program/owner refuses. No signal/force-kill fallback."
   },
   "publicVercelReuse": "Existing fixed root-owned public CLI tree is reusable only when the same reviewed manifest matches all bytes, complete entry set, exact modes, contained links and ownership. Mismatch refuses without deleting existing tree.",
   "mutationRegression": "Invalid pinned-request assertion is independent of the trusted deploy UID versus isolated CI UID; no skipped test or identity relaxation.",
-  "evidenceLimit": "Source/tests and actual GUI Tunnel lifecycle passed against the same frozen installer SHA. The actual probe observed the old SIGTERMed job/PID/listener remain after bootout and all disappear after31,040ms; ten-second strict quiet/gate then fixed GUI bootstrap/authenticated readiness/exact-owner release passed. API PID64657 and SHA134433 were unchanged, HTTPS200 and maintenance absent at end. Preview3100 was absent before and after; no preview operations were performed. Privileged system installation and later installer stages remain unvalidated and require a new reviewed snapshot.",
+  "evidenceLimit": "Current j source and12 root test files passed236/236, including4 new structured account regressions,12 independent API exit regressions and5 early startup-probe regressions. Actual UID501 selected-attribute reads confirmed Native IsHidden plus public identity fields; protected AuthenticationAuthority was omitted, so root account validation was not inferred. Actual root account reuse and UID400/401 short-process startup checks remain pending before any production cutover. Current11 API/Tunnel/quiet helper bodies are hash-identical to frozen i; full real API stop/wait/restore remains pending its separately source-bound parent execution. Historical f/h/i evidence is preserved; no account/service/permission/config/secret was changed by this subagent, and automatic controller is untouched.",
   "liveReadOnlyPreflight": "artifacts/jenkins-system-cutover-live-preflight.json",
   "tunnelExitDiagnosis": "artifacts/jenkins-system-cutover-tunnel-exit-diagnosis.json",
   "liveCutoverValidation": {
@@ -91,5 +101,215 @@
     "boundary": "Actual UID501 GUI Tunnel hold/bootout/exit/strict-quiet/gate/bootstrap/readiness/exact-owner-release was validated. No API restart, schema migration, privileged installer, root helper/system services installation or Jenkins system startup was tested by this lifecycle."
   },
   "launchdBoundaryDiagnosis": "artifacts/jenkins-system-cutover-launchd-boundary-diagnosis.json",
-  "systemInstallValidated": false
+  "systemInstallValidated": false,
+  "historicalSourceVerification": {
+    "verifiedAt": "2026-10-05T23:51:16.556Z",
+    "sourceHashes": {
+      "deploy/macmini/install-system-services.mjs": "10d6dc15b39c21fab71154d5dcf4b9c6061bc559b5b73493a8a80cdaae1fdbc8",
+      "deploy/macmini/install-system-services.test.mjs": "124a34992d3552bbd63eb2cdb40373a5df7d56f57b8cd443ecc9cba286b43a82",
+      "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
+      "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
+      "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380"
+    },
+    "commands": {
+      "nodeTests": "node --test deploy/macmini/controller.test.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/package-api.test.mjs deploy/jenkins/mutation.test.mjs deploy/jenkins/sandbox-images.test.mjs deploy/jenkins/sandbox-publication-config.test.mjs",
+      "syntax": [
+        "node --check deploy/macmini/install-system-services.mjs",
+        "node --check deploy/macmini/public-build-tools.mjs"
+      ],
+      "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/public-build-tools.mjs deploy/macmini/public-build-tools.test.mjs deploy/jenkins/mutation.test.mjs",
+      "whitespace": "git diff --check"
+    },
+    "execution": {
+      "files": 7,
+      "tests": 104,
+      "passed": 104,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "artifacts/jenkins-system-cutover-source-tests.log",
+      "newInstallerTests": 19,
+      "publicBuildToolsTests": 7,
+      "formatExitCode": 0,
+      "syntaxExitCode": 0,
+      "whitespaceExitCode": 0
+    },
+    "evidenceLimit": "Source/tests and actual GUI Tunnel lifecycle passed against the same frozen installer SHA. The actual probe observed the old SIGTERMed job/PID/listener remain after bootout and all disappear after31,040ms; ten-second strict quiet/gate then fixed GUI bootstrap/authenticated readiness/exact-owner release passed. API PID64657 and SHA134433 were unchanged, HTTPS200 and maintenance absent at end. Preview3100 was absent before and after; no preview operations were performed. Privileged system installation and later installer stages remain unvalidated and require a new reviewed snapshot."
+  },
+  "targetPrerequisiteVerification": {
+    "status": "source-tests-and-actual-UID501-passed-target-UID400-401-pending",
+    "installerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "testSha256": "d19d47a03f5c77854aa6880c92674d428197391ef8872d7a8b45b3c77dd88ea5",
+    "uid501Evidence": "artifacts/jenkins-system-target-prerequisite-uid501.json",
+    "artifactSha256": "f153e3ba90212aa17d49fe991cc856873b52e479fe195a811b25d255830762de",
+    "uid501ShortCommands": 5,
+    "publicScriptSyntaxChecks": 4,
+    "readonlyFileChecks": 3,
+    "fixedPermissionCommand": "/bin/test",
+    "permissionResultPolicy": "Only an error-free, signal-free integer exit0/1 is interpreted as allowed/denied. ENOENT, other error, signal, null, noninteger or other exit status refuses both positive and negative probes.",
+    "environment": "Fixed HOME/USER/LOGNAME/PATH/LANG/COREPACK_ENABLE_NETWORK=0 and cwd /; no inherited production credentials or NODE_OPTIONS.",
+    "privateFiles": "Metadata requires existing regular single-link UID501 mode600 production runtime.env, cloudflared.token and platform.db before isolated-CI read-denial checks. Contents are never read by the probes.",
+    "uid400Verified": false,
+    "uid401Verified": false,
+    "nextVerification": "New reviewed privileged apply runs actual target UID400/401 prerequisites before any config/poller/maintenance/Tunnel/API cutover effect. Missing isolated pnpm cache is not an early prerequisite; no daemon startup or private production-directory permission change is used.",
+    "systemInstallValidated": false,
+    "historicalUid501ProbeInstallerSha256": "10d6dc15b39c21fab71154d5dcf4b9c6061bc559b5b73493a8a80cdaae1fdbc8",
+    "uid501EvidenceBoundary": "The saved UID501-only actual probe executed h helper code at SHA10d6dc...; those permission/startup helpers are unchanged in current i. No UID400/401 privileged probe has yet passed."
+  },
+  "historicalPrerequisiteSourceVerification": {
+    "verifiedAt": "2026-10-06T00:25:39.555210Z",
+    "sourceHashes": {
+      "deploy/macmini/install-system-services.mjs": "c5225ab0fa906be6fda54d7df66b47e1e99fb47c845e519cac9b981cc2593cc4",
+      "deploy/macmini/install-system-services.test.mjs": "124a34992d3552bbd63eb2cdb40373a5df7d56f57b8cd443ecc9cba286b43a82",
+      "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
+      "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
+      "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380",
+      "deploy/macmini/api-cutover.test.mjs": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e"
+    },
+    "commands": {
+      "nodeTests": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs",
+      "syntax": ["node --check deploy/macmini/install-system-services.mjs"],
+      "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/api-cutover.test.mjs",
+      "whitespace": "git diff --check"
+    },
+    "execution": {
+      "files": 12,
+      "tests": 232,
+      "passed": 232,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "artifacts/jenkins-system-api-cutover-source-tests.log",
+      "logSha256": "84bdc755c3c2c936fe86dbfa875e21bf622928acf238a07beafa8a83da726974",
+      "installerTests": 24,
+      "newPrerequisiteRegressionTests": 5,
+      "publicBuildToolsTests": 7,
+      "formatExitCode": 0,
+      "syntaxExitCode": 0,
+      "whitespaceExitCode": 0,
+      "newApiExitRegressionTests": 12
+    },
+    "scope": "Current h-candidate source implementation, native Node22 temporary filesystem regressions, and actual UID501-only clean-environment short-process tool probes. Historical reviewf GUI Tunnel lifecycle evidence is preserved separately against its original frozen source; no privileged system installation or UID400/401 startup check has yet passed.",
+    "targetPrerequisiteVerification": {
+      "status": "source-tests-and-actual-UID501-passed-target-UID400-401-pending",
+      "installerSha256": "c5225ab0fa906be6fda54d7df66b47e1e99fb47c845e519cac9b981cc2593cc4",
+      "testSha256": "124a34992d3552bbd63eb2cdb40373a5df7d56f57b8cd443ecc9cba286b43a82",
+      "uid501Evidence": "artifacts/jenkins-system-target-prerequisite-uid501.json",
+      "artifactSha256": "f153e3ba90212aa17d49fe991cc856873b52e479fe195a811b25d255830762de",
+      "uid501ShortCommands": 5,
+      "publicScriptSyntaxChecks": 4,
+      "readonlyFileChecks": 3,
+      "fixedPermissionCommand": "/bin/test",
+      "permissionResultPolicy": "Only an error-free, signal-free integer exit0/1 is interpreted as allowed/denied. ENOENT, other error, signal, null, noninteger or other exit status refuses both positive and negative probes.",
+      "environment": "Fixed HOME/USER/LOGNAME/PATH/LANG/COREPACK_ENABLE_NETWORK=0 and cwd /; no inherited production credentials or NODE_OPTIONS.",
+      "privateFiles": "Metadata requires existing regular single-link UID501 mode600 production runtime.env, cloudflared.token and platform.db before isolated-CI read-denial checks. Contents are never read by the probes.",
+      "uid400Verified": false,
+      "uid401Verified": false,
+      "nextVerification": "New reviewed privileged apply runs actual target UID400/401 prerequisites before any config/poller/maintenance/Tunnel/API cutover effect. Missing isolated pnpm cache is not an early prerequisite; no daemon startup or private production-directory permission change is used.",
+      "systemInstallValidated": false,
+      "historicalUid501ProbeInstallerSha256": "10d6dc15b39c21fab71154d5dcf4b9c6061bc559b5b73493a8a80cdaae1fdbc8",
+      "uid501EvidenceBoundary": "The saved UID501-only actual probe executed h helper code at SHA10d6dc...; those permission/startup helpers are unchanged in current i. No UID400/401 privileged probe has yet passed."
+    },
+    "evidenceLimit": "Current h-candidate installer source and all11 native root test files passed220/220; actual UID501-only short-process checks passed. Actual target UID400/401 early checks and privileged system installation remain pending. The separately preserved reviewf lifecycle proof executed the earlier installer SHA0570a36b... only: same old SIGTERMed job/PID/listener disappeared after31,040ms, ten-second strict quiet/gate then GUI bootstrap/authenticated readiness/exact-owner release passed, API64657/SHA134433 unchanged and HTTPS200. Parent independently compared the six lifecycle helper function bodies as unchanged between f and h; this does not extend the actual lifecycle test to newly added privileged prerequisites. Preview3100 was absent before/after that historical lifecycle, with no preview operations."
+  },
+  "apiExitVerification": {
+    "status": "source-tests-passed-actual-api-lifecycle-pending",
+    "installerSha256": "c5225ab0fa906be6fda54d7df66b47e1e99fb47c845e519cac9b981cc2593cc4",
+    "test": "deploy/macmini/api-cutover.test.mjs",
+    "testSha256": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e",
+    "tests": 12,
+    "passed": 12,
+    "failed": 0,
+    "skipped": 0,
+    "stopState": "apiStopAttempted, oldApiExited and runtimeConverted are separate. bootout return or loaded=false alone never authorizes conversion or restoration.",
+    "exitIdentity": "Fixed original launchd job/program, supervisor/child PIDs+UID501+Node executable+parent relation, all3101 listener owners, original runtime.lock directory/owner inode and content digest. Unknown replacement refuses. The original runtime-state PID record remains legitimate stale metadata after exit and is never removed.",
+    "exitBoundary": "At most90 seconds; job, supervisor, child, listeners and original lock must all disappear, with exact installer maintenance ownership retained before every sample and before success. Same original printable terminating job and empty original lock directory during fs.rm remain blockers, not errors permitting replacement.",
+    "recovery": "An attempted GUI stop must finish before original unchanged plist hash is checked, one GUI bootstrap and authenticated readiness. Converted-source rollback captures only an actually owned fixed system API job/runtime identity before stop/wait; absent system job rechecks the original exited GUI identity. Restore original API before original Tunnel and exact-owned barrier release.",
+    "automaticControllerChanged": false,
+    "actualApiLifecycleVerified": false,
+    "systemInstallValidated": false,
+    "currentInstallerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "helperReuseEvidence": "artifacts/jenkins-system-isolated-account-record-readonly.json",
+    "helperReuseBoundary": "Actual UID501 read-only comparison of11 API/Tunnel/quiet exported function toString hashes confirms byte-identical helper bodies between frozen i SHA c5225ab... and current j. This does not validate new account reuse code or a privileged apply."
+  },
+  "historicalApiExitSourceVerification": {
+    "verifiedAt": "2026-10-06T00:38:09.228378Z",
+    "sourceHashes": {
+      "deploy/macmini/install-system-services.mjs": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+      "deploy/macmini/install-system-services.test.mjs": "d19d47a03f5c77854aa6880c92674d428197391ef8872d7a8b45b3c77dd88ea5",
+      "deploy/macmini/public-build-tools.mjs": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8",
+      "deploy/macmini/public-build-tools.test.mjs": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0",
+      "deploy/jenkins/mutation.test.mjs": "6cb44bcc8692e450084d0a5a0bfdcc047b58247cfed2075306f69c223284b380",
+      "deploy/macmini/api-cutover.test.mjs": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e"
+    },
+    "commands": {
+      "nodeTests": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs",
+      "syntax": [
+        "node --check deploy/macmini/install-system-services.mjs",
+        "node --check deploy/macmini/install-system-services.test.mjs"
+      ],
+      "format": "prettier --check deploy/macmini/install-system-services.mjs deploy/macmini/install-system-services.test.mjs deploy/macmini/api-cutover.test.mjs",
+      "whitespace": "git diff --check"
+    },
+    "execution": {
+      "files": 12,
+      "tests": 236,
+      "passed": 236,
+      "failed": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "log": "artifacts/jenkins-system-account-reuse-source-tests.log",
+      "logSha256": "5c5d6b53b8df73d135ac04534a21b43af0618e567893f804093e2643e9e78057",
+      "installerTests": 28,
+      "newPrerequisiteRegressionTests": 5,
+      "publicBuildToolsTests": 7,
+      "formatExitCode": 0,
+      "syntaxExitCode": 0,
+      "whitespaceExitCode": 0,
+      "newApiExitRegressionTests": 12,
+      "newAccountReuseRegressionTests": 4
+    },
+    "scope": "Current i-candidate source implementation and12 native Node22 root test files. Historical f GUI Tunnel lifecycle and h UID501 short-process prerequisites remain separately bound to their original sources. Actual full API stop/wait/restore lifecycle and UID400/401 privileged startup checks remain pending.",
+    "apiExitVerification": {
+      "status": "source-tests-passed-actual-api-lifecycle-pending",
+      "installerSha256": "c5225ab0fa906be6fda54d7df66b47e1e99fb47c845e519cac9b981cc2593cc4",
+      "test": "deploy/macmini/api-cutover.test.mjs",
+      "testSha256": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e",
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0,
+      "stopState": "apiStopAttempted, oldApiExited and runtimeConverted are separate. bootout return or loaded=false alone never authorizes conversion or restoration.",
+      "exitIdentity": "Fixed original launchd job/program, supervisor/child PIDs+UID501+Node executable+parent relation, all3101 listener owners, original runtime.lock directory/owner inode and content digest. Unknown replacement refuses. The original runtime-state PID record remains legitimate stale metadata after exit and is never removed.",
+      "exitBoundary": "At most90 seconds; job, supervisor, child, listeners and original lock must all disappear, with exact installer maintenance ownership retained before every sample and before success. Same original printable terminating job and empty original lock directory during fs.rm remain blockers, not errors permitting replacement.",
+      "recovery": "An attempted GUI stop must finish before original unchanged plist hash is checked, one GUI bootstrap and authenticated readiness. Converted-source rollback captures only an actually owned fixed system API job/runtime identity before stop/wait; absent system job rechecks the original exited GUI identity. Restore original API before original Tunnel and exact-owned barrier release.",
+      "automaticControllerChanged": false,
+      "actualApiLifecycleVerified": false,
+      "systemInstallValidated": false,
+      "currentInstallerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+      "helperReuseEvidence": "artifacts/jenkins-system-isolated-account-record-readonly.json",
+      "helperReuseBoundary": "Actual UID501 read-only comparison of11 API/Tunnel/quiet exported function toString hashes confirms byte-identical helper bodies between frozen i SHA c5225ab... and current j. This does not validate new account reuse code or a privileged apply."
+    },
+    "evidenceLimit": "Current i-candidate source and12 native root test files passed232/232, including12 new independent API lifecycle regressions and5 early prerequisite regressions. Parent confirmed current API capture/probe read-only against child64657/supervisor64656/listener/lock UID501; this is not a write lifecycle test. Full real API stop/wait/restore, actual target UID400/401 early checks and privileged system installation remain pending. The original reviewf Tunnel lifecycle proof and its source SHA0570a36b... remain unchanged, and historical h actual UID501 short-process startup proof remains separately bound to SHA10d6dc... . No daemon/service operation was executed by this subagent; automatic controller was unchanged."
+  },
+  "accountReuseVerification": {
+    "status": "source-regressions-and-unprivileged-structured-read-passed-root-validation-pending",
+    "installerSha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4",
+    "testSha256": "d19d47a03f5c77854aa6880c92674d428197391ef8872d7a8b45b3c77dd88ea5",
+    "tests": 4,
+    "passed": 4,
+    "failed": 0,
+    "skipped": 0,
+    "readonlyEvidence": "artifacts/jenkins-system-isolated-account-record-readonly.json",
+    "artifactSha256": "489e5940ff2b85d451027f965d69152508d093bb6e3cfd6410fa58ebfe5bc66e",
+    "query": "dscl -plist . -read /Users/<fixed isolated account> with only seven named Standard/Native attributes, parsed through plutil JSON.",
+    "namespace": "UniqueID/PrimaryGroupID/NFSHomeDirectory/UserShell/Password/AuthenticationAuthority use dsAttrTypeStandard; IsHidden uses dsAttrTypeNative. One unambiguous array of strings required per field.",
+    "identity": "UID400–499, group20, exact isolated home, /usr/bin/false, Native IsHidden1, Password* and every AuthenticationAuthority entry with the DisabledUser prefix. Existing records are never weakened; newly created records must re-read and pass the same validator.",
+    "lookupFailure": "Only actual eDSRecordNotFound with exit56 permits new account creation; spawn error, signal, missing/noninteger status or other failure refuses.",
+    "actualUid501Read": "UID400/401, group20, fixed home/shell, Native hidden and disabled password marker observed. Protected AuthenticationAuthority was omitted and the validator correctly refused with the field name. No inference is made about root-visible authority.",
+    "actualRootAccountReuseValidated": false,
+    "uid400StartupVerified": false,
+    "uid401StartupVerified": false,
+    "systemInstallValidated": false
+  }
 }

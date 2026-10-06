@@ -2,14 +2,14 @@
   "name": "cloud-agent-platform-docs",
   "version": "0.3.0",
   "private": true,
-  "description": "云 Agent 管理平台 · 三仓文档契约与 Mac mini Jenkins 原生构建、打包、部署和 GitHub Release 发布。",
+  "description": "云 Agent 管理平台 · 三仓文档契约与 Mac mini Jenkins 容器构建、打包、部署和 GitHub Release 发布。",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.11.0"
   },
   "scripts": {
-    "deploy:macmini:test": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs",
+    "deploy:macmini:test": "node --test deploy/macmini/*.test.mjs deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs",
     "docs:check": "node scripts/docs-check.mjs",
     "migration:check": "node scripts/check-design-migration.mjs",
     "migration:report": "node scripts/summarize-design-migration.mjs",

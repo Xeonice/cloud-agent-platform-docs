@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "status": "darwin-arm64-linux-arm64-disk-restore-passed",
+  "verifiedAt": "2026-10-06T03:14:58.321Z",
+  "sdk": "0.9.7",
+  "sourcePlatform": "darwin-arm64",
+  "targetPlatform": "linux-arm64",
+  "sourceHomeIsolated": true,
+  "sourceBoxId": "msEWLVx7kpcA",
+  "targetBoxId": "jsohacePmMng",
+  "archive": {
+    "sha256": "6b2c3bffc4cfd6259edabec5bc47c9b8f933996f7380d69742ce7dc91fb9fa60",
+    "sizeBytes": 31728291
+  },
+  "targetProfile": "agent-platform-runtime",
+  "targetImageId": "sha256:a9d3b4b60bcee73d1cea57e13c905b7021a134163574275df494bdaa942ee14a",
+  "volume": "migration-test-portable-a01230f1-cc4c-4001-af3f-2816ec6272a8",
+  "checks": {
+    "archiveDigest": true,
+    "newBoxIdentity": true,
+    "guestFileMarker": true,
+    "pty": true,
+    "stopStart": true,
+    "containerReplacement": true
+  },
+  "guestKernels": {
+    "source": "6.12.76",
+    "target": "6.12.76"
+  },
+  "runtimePrivileges": {
+    "privileged": true,
+    "device": "/dev/kvm",
+    "hostBindMounts": false,
+    "dockerSocketMounted": false
+  },
+  "nativeProduction": {
+    "apiPid": 64657,
+    "supervisorPid": 64656,
+    "authHelperPid": 64693,
+    "processesStillSame": true,
+    "homeCopied": false,
+    "stopped": false
+  },
+  "scope": "Independent alpine disk export/import, not live VM memory migration or production cutover",
+  "scriptHashes": {
+    "/tmp/agent-platform-native-portable-proof.mjs": "39a63bb570556263c2204ad491b535f007c0264a44058541dfb9d42ad75d72e9",
+    "/tmp/agent-platform-linux-portable-proof.mjs": "30acc51849d790e993d5a4914e2f29e68e15736affb05837025b63f7c23259ab"
+  }
+}

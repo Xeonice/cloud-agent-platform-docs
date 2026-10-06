@@ -32,6 +32,7 @@ export const PUBLIC_TOOLS = [
   "jenkins-ci.mjs",
   "project-ci.mjs",
   "jenkins-web.mjs",
+  "ci-platform.mjs",
   "mutation.mjs",
   "agent.jar",
 ];

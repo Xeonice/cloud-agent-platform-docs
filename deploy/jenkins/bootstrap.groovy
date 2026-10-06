@@ -46,9 +46,12 @@ j.setSlaveAgentPort(-1)
 JenkinsLocationConfiguration.get().setUrl('http://127.0.0.1:8080/')
 [
     [name: 'mac-deploy', label: 'agent-platform-deploy', remote: settings.deployAgentRoot],
-    [name: 'mac-ci', label: 'agent-platform-ci', remote: '/Users/Shared/agent-platform-ci/agent']
+    [name: 'mac-ci', label: 'agent-platform-ci', remote: '/Users/Shared/agent-platform-ci/agent'],
+    [name: 'linux-deploy', label: 'agent-platform-linux-deploy', remote: '/home/jenkins/agent'],
+    [name: 'linux-ci', label: 'agent-platform-linux-ci', remote: '/home/jenkins/agent'],
+    [name: 'linux-web-amd64', label: 'agent-platform-web-build', remote: '/home/jenkins/agent']
 ].each { spec ->
-    if (j.getNode(spec.name) == null) j.addNode(new DumbSlave(spec.name, 'Fixed Mac mini service agent', spec.remote, '1', Node.Mode.EXCLUSIVE, spec.label, new JNLPLauncher(), new RetentionStrategy.Always(), []))
+    if (j.getNode(spec.name) == null) j.addNode(new DumbSlave(spec.name, 'Fixed Mac mini container agent', spec.remote, '1', Node.Mode.EXCLUSIVE, spec.label, new JNLPLauncher(), new RetentionStrategy.Always(), []))
     writeSecret(root.resolve("secrets/${spec.name}.secret"), j.getNode(spec.name).toComputer().getJnlpMac())
 }
 [
@@ -66,9 +69,9 @@ JenkinsLocationConfiguration.get().setUrl('http://127.0.0.1:8080/')
     def job = j.getItem(spec.name)
     if (job == null) job = j.createProject(WorkflowJob.class, spec.name)
     job.setDefinition(new CpsFlowDefinition(Files.readString(root.resolve("managed-pipelines/${spec.file}")), true))
-    job.setDescription('Managed from the cloud-agent-platform-docs deployment configuration. Fixed repositories; native Mac runners; immutable commit tracking.')
+    job.setDescription('Managed from the cloud-agent-platform-docs deployment configuration. Fixed repositories; isolated Linux CI and trusted container deployment; immutable commit tracking.')
     def parameters = [
-        'agent-platform-api': ['SHA'],
+        'agent-platform-api': ['SHA', 'ROOT_SHA'],
         'agent-platform-native-ci': ['SHA', 'REF'],
         'agent-platform-web': ['SHA', 'REF', 'ROOT_SHA', 'API_SHA'],
         'agent-platform-contract': ['ROOT_SHA', 'API_SHA', 'WEB_SHA'],

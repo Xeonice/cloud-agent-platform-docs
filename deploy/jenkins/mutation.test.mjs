@@ -11,12 +11,73 @@ import {
   mutationRequest,
   mutationForCheckout,
   mutationRun,
+  mutationEnvironment,
 } from "./mutation.mjs";
 import { REPOSITORY } from "./jenkins-ci.mjs";
 
 const exec = promisify(execFile);
 const ref = "refs/heads/feat/design-v2-migration";
 const baseRef = "refs/heads/base";
+
+test("mutation uses the isolated ARM64 Linux CI account and clean fixed tools/cache environment without deployment credentials", () => {
+  const identity = {
+    username: "jenkins",
+    uid: 1000,
+    gid: 1000,
+    homedir: "/home/jenkins",
+  };
+  const system = {
+    platform: "linux",
+    arch: "arm64",
+    nodeMajor: 22,
+    node: "/usr/local/bin/node",
+  };
+  const previous = { ...process.env };
+  process.env.HOME = "/srv/agent-platform/deploy";
+  process.env.GH_TOKEN = "private-test-value";
+  process.env.ACCESS_PASSCODE = "private-test-value";
+  process.env.NODE_OPTIONS = "--require=/untrusted.js";
+  try {
+    const { home, env } = mutationEnvironment(identity, system);
+    assert.equal(home, "/home/jenkins");
+    assert.equal(env.TMPDIR, "/home/jenkins/tmp");
+    assert.equal(env.npm_config_store_dir, "/home/jenkins/pnpm-store");
+    assert.equal(env.COREPACK_HOME, "/opt/agent-platform/corepack");
+    assert.equal(env.COREPACK_DEFAULT_TO_LATEST, "0");
+    assert.equal(env.LANG, "C.UTF-8");
+    for (const name of [
+      "GH_TOKEN",
+      "ACCESS_PASSCODE",
+      "NODE_OPTIONS",
+      "DOCKER_HOST",
+    ])
+      assert.equal(env[name], undefined);
+    assert.throws(
+      () => mutationEnvironment({ ...identity, uid: 0 }, system),
+      /Isolated CI/,
+    );
+    assert.throws(
+      () =>
+        mutationEnvironment(
+          { ...identity, homedir: "/srv/agent-platform/deploy" },
+          system,
+        ),
+      /Isolated CI/,
+    );
+    assert.throws(
+      () => mutationEnvironment(identity, { ...system, arch: "x64" }),
+      /ARM64/,
+    );
+    assert.throws(
+      () => mutationEnvironment(identity, { ...system, node: "/tmp/node" }),
+      /fixed Node/,
+    );
+  } finally {
+    for (const key of Object.keys(process.env))
+      if (!(key in previous)) delete process.env[key];
+    Object.assign(process.env, previous);
+  }
+});
 async function fixture(t, sourceChanged = true) {
   const root = await fs.realpath(
     await fs.mkdtemp(join(tmpdir(), "mutation-test-")),

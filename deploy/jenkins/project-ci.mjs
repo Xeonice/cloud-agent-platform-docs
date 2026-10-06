@@ -1,33 +1,55 @@
 import * as fs from "node:fs/promises";
 import { join, resolve, dirname } from "node:path";
 import { spawn } from "node:child_process";
+import { userInfo } from "node:os";
 import { pathToFileURL } from "node:url";
-import { SHA, ciEnvironment } from "./jenkins-ci.mjs";
+import { SHA } from "./jenkins-ci.mjs";
+import {
+  buildSystem,
+  ciContext,
+  ciChildEnvironment,
+  browserVerificationScript,
+} from "./ci-platform.mjs";
 
 const repositories = {
   project: "https://github.com/Xeonice/cloud-agent-platform-docs.git",
   api: "https://github.com/Xeonice/agent-platform-api.git",
   web: "https://github.com/Xeonice/agent-platform-web.git",
 };
-export async function projectCI(phase, rootSha, apiSha, webSha) {
+export function projectCiContext(
+  phase,
+  identity = userInfo(),
+  system = buildSystem(),
+) {
+  const context = ciContext(identity, system);
+  return context;
+}
+
+export async function projectCI(phase, rootSha, apiSha, webSha, options = {}) {
   if (
     phase !== "head" &&
     ![rootSha, apiSha, webSha].every((sha) => SHA.test(sha ?? ""))
   )
     throw new Error("Every repository must be pinned to a full commit");
-  if (
-    process.platform !== "darwin" ||
-    process.arch !== "arm64" ||
-    process.versions.node.split(".")[0] !== "22" ||
-    process.env.HOME !== "/Users/Shared/agent-platform-ci"
-  )
-    throw new Error("Project CI requires the isolated native Mac CI account");
-  const workspace = resolve(process.cwd());
+  const context = projectCiContext(
+    phase,
+    options.identity ?? userInfo(),
+    options.system ?? buildSystem(),
+  );
+  const workspace = resolve(options.workspace ?? process.cwd());
   const source = join(workspace, "source");
-  const temporary = "/Users/Shared/agent-platform-ci/tmp";
+  const home = options.home ?? context.home;
+  const temporary = join(home, "tmp");
   await fs.mkdir(temporary, { recursive: true, mode: 0o700 });
-  const env = ciEnvironment(process.execPath, process.env.HOME, temporary);
+  const env = ciChildEnvironment(context.node, {
+    ...context,
+    home,
+    temporary,
+    store: join(home, "pnpm-store"),
+  });
   async function run(command, args, cwd = source, capture = false) {
+    if (options.execute)
+      return options.execute(command, args, cwd, env, capture);
     return new Promise((accept, reject) => {
       const child = spawn(command, args, {
         cwd,
@@ -51,11 +73,11 @@ export async function projectCI(phase, rootSha, apiSha, webSha) {
     });
   }
   const corepack = resolve(
-    dirname(process.execPath),
+    dirname(context.node),
     "../lib/node_modules/corepack/dist/corepack.js",
   );
   const pnpm = (directory, args) =>
-    run(process.execPath, [corepack, "pnpm", ...args], join(source, directory));
+    run(context.node, [corepack, "pnpm", ...args], join(source, directory));
   if (phase === "head") {
     // The daily main contract check follows its exact submodule gitlinks.
     const heads = await fs.mkdtemp(join(temporary, "contract-heads-"));
@@ -148,9 +170,16 @@ export async function projectCI(phase, rootSha, apiSha, webSha) {
       throw new Error("Pinned repository changed");
   if (phase === "docs") {
     // Missing submodules are an error above. The cross-repository doc gates may not silently skip.
-    await run(process.execPath, ["scripts/docs-check.mjs"]);
+    await run(context.node, ["scripts/docs-check.mjs"]);
+    return;
+  }
+  if (phase === "deployment-tests") {
     const tests = [];
-    for (const directory of ["deploy/macmini", "deploy/jenkins"]) {
+    for (const directory of [
+      "deploy/macmini",
+      "deploy/jenkins",
+      "deploy/containers",
+    ]) {
       const files = await fs
         .readdir(join(source, directory), { withFileTypes: true })
         .catch((error) => {
@@ -161,9 +190,9 @@ export async function projectCI(phase, rootSha, apiSha, webSha) {
         if (file.isFile() && file.name.endsWith(".test.mjs"))
           tests.push(join(directory, file.name));
     }
-    // Historical main commits predate Jenkins. Run their actual test files;
-    // current release commits contain the complete deployment regression suite.
-    if (tests.length) await run(process.execPath, ["--test", ...tests.sort()]);
+    if (!tests.length)
+      throw new Error("Deployment regression sources are missing");
+    await run(context.node, ["--test", ...tests.sort()]);
     return;
   }
   if (phase === "install") {
@@ -172,9 +201,20 @@ export async function projectCI(phase, rootSha, apiSha, webSha) {
         "install",
         "--frozen-lockfile",
         "--store-dir",
-        "/Users/Shared/agent-platform-ci/pnpm-store",
+        join(home, "pnpm-store"),
       ]);
-    await pnpm("e2e-contract", ["exec", "playwright", "install", "chromium"]);
+    if (context.platform === "linux")
+      await run(
+        context.node,
+        [
+          "--input-type=module",
+          "-e",
+          browserVerificationScript(context.browsers),
+        ],
+        join(source, "e2e-contract"),
+      );
+    else
+      await pnpm("e2e-contract", ["exec", "playwright", "install", "chromium"]);
     return;
   }
   if (phase === "contract") {

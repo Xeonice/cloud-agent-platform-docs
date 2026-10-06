@@ -14,16 +14,16 @@ pipeline {
     string(name: 'API_SHA', defaultValue: '', description: 'API commit pinned by the umbrella project')
   }
   environment {
-    NODE22 = '@NODE22@'
-    PUBLIC_WEB_TOOL = '/Library/Application Support/AgentPlatform/jenkins-tools/jenkins-web.mjs'
-    TRUSTED_WEB_TOOL = '@JENKINS_SOURCE@/deploy/jenkins/jenkins-web.mjs'
+    NODE22 = '/usr/local/bin/node'
+    PUBLIC_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
+    TRUSTED_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
     CONTRACT_CHILD_NUMBER = ''
     CONTRACT_CHILD_RESULT = 'NOT_RUN'
   }
   stages {
     stage('Prepare public production build settings') {
       when { expression { params.REF == 'refs/heads/feat/design-v2-migration' } }
-      agent { label 'agent-platform-deploy' }
+      agent { label 'agent-platform-linux-deploy' }
       steps {
         // No checkout and no repository code in this credential-bearing stage.
         deleteDir()
@@ -32,7 +32,11 @@ pipeline {
       }
     }
     stage('Local web CI and packaging') {
-      agent { label 'agent-platform-ci' }
+      agent { label 'agent-platform-web-build' }
+      environment {
+        NODE22 = '/usr/local/bin/node'
+        PUBLIC_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
+      }
       stages {
         stage('Checkout exact commit') {
           steps {
@@ -67,7 +71,7 @@ pipeline {
     }
     stage('Real cross repository browser acceptance') {
       // This stage inherits agent none. The preceding CI stage (including its
-      // archive post) has released mac-ci before the contract child needs it.
+      // archive post) has released its Linux executor before the contract child.
       steps {
         script {
           if (![params.ROOT_SHA, params.API_SHA, params.SHA].every { it ==~ /[a-f0-9]{40}/ }) {
@@ -93,7 +97,7 @@ pipeline {
     always {
       // Allocate an executor only after the child has completed or waiting was
       // interrupted. The report contains no repository output or credentials.
-      node('agent-platform-deploy') {
+      node('agent-platform-linux-deploy') {
         script {
           def fullSha = { value -> value ==~ /[a-f0-9]{40}/ ? value : null }
           def childNumber = env.CONTRACT_CHILD_NUMBER ==~ /[1-9][0-9]*/ ? env.CONTRACT_CHILD_NUMBER.toInteger() : null
@@ -117,5 +121,5 @@ pipeline {
     }
   }
   // No trigger or deployment here. The umbrella release job verifies this job's
-  // final SUCCESS and all three SHAs, then adopts/uploads/promotes on mac-deploy.
+  // final SUCCESS and all three SHAs, then adopts/uploads/promotes on linux-deploy.
 }

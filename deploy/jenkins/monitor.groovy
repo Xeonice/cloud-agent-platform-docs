@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'agent-platform-deploy' }
+  agent { label 'agent-platform-linux-deploy' }
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -9,16 +9,15 @@ pipeline {
   }
   triggers { cron('H/5 * * * *') }
   environment {
-    NODE22 = '@NODE22@'
-    DEPLOY_CONFIG = '@DEPLOY_CONFIG@'
-    DEPLOY_TOOLS = '@DEPLOY_TOOLS@'
+    NODE22 = '/usr/local/bin/node'
+    MONITOR_TOOL = '/opt/agent-platform/tools/api-container.mjs'
   }
   stages {
     stage('Collect runtime state and redacted logs') {
       steps {
         script {
           def folder = "runtime-report-${env.BUILD_NUMBER}"
-          def code = sh(script: '"$NODE22" "$DEPLOY_TOOLS/jenkins-monitor.mjs" "$DEPLOY_CONFIG" "runtime-report-$BUILD_NUMBER"', returnStatus: true)
+          def code = sh(script: '"$NODE22" "$MONITOR_TOOL" monitor "runtime-report-$BUILD_NUMBER"', returnStatus: true)
           if (code == 2) { unstable('Service snapshot reports an unhealthy runtime') }
           if (code != 0 && code != 2) { error('Runtime snapshot collection failed') }
           def report = readJSON(file: "${folder}/report.json")

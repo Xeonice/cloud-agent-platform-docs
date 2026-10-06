@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
+import { dockerSaveFixture } from "./fixtures/docker-save.mjs";
 import { promisify } from "node:util";
 import { validRef, ciEnvironment } from "./jenkins-ci.mjs";
 import { GATES, WEB, releaseKey } from "./jenkins-web.mjs";
@@ -41,7 +42,14 @@ const commits = {
   api: "b".repeat(40),
   web: "c".repeat(40),
 };
-const identity = { uid: 501, platform: "darwin", arch: "arm64", nodeMajor: 22 };
+const identity = {
+  username: "douglasdong",
+  homedir: "/Users/douglasdong",
+  uid: 501,
+  platform: "darwin",
+  arch: "arm64",
+  nodeMajor: 22,
+};
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 afterEach(async () => {
   await Promise.all(
@@ -455,11 +463,20 @@ test("complete package uses three actual pinned Git archives and immutable web b
     await fs.writeFile(join(webRoot, name), bytes, { mode: 0o600 });
   const nativeRoot = join(origin, "agent-platform-api");
   await fs.mkdir(nativeRoot);
+  const docker = await dockerSaveFixture(origin);
+  await fs.copyFile(docker.archive, join(nativeRoot, "api-image.tar"));
   await json(join(nativeRoot, "release.json"), {
     sha: source.api,
-    platform: "darwin",
+    rootSha: source.project,
+    schemaVersion: 2,
+    platform: "linux",
     arch: "arm64",
     nodeMajor: 22,
+    imageId: docker.imageId,
+    boxliteVersion: "0.9.7",
+    nativeProbe: "passed",
+    builtAt: new Date().toISOString(),
+    imageArchive: "api-image.tar",
   });
   await fs.writeFile(join(nativeRoot, "README.md"), "native archive fixture");
   const nativePath = join(origin, "api-package-6.tgz");
@@ -474,12 +491,17 @@ test("complete package uses three actual pinned Git archives and immutable web b
   const nativeManifest = {
     state: "packaged",
     sha: source.api,
+    rootSha: source.project,
     artifact: nativePath,
     sha256: sha256(nativeBytes),
     sizeBytes: nativeBytes.length,
-    files: 2,
-    nativeDependencies: ["sqlite.node", "boxlite.node"],
-    relocatedNativeProbe: "passed",
+    files: 3,
+    platform: "linux",
+    arch: "arm64",
+    nodeMajor: 22,
+    imageId: docker.imageId,
+    boxliteVersion: "0.9.7",
+    nativeProbe: "passed",
   };
   const run = createReleaseRunner({
     root: f.root,
@@ -499,12 +521,24 @@ test("complete package uses three actual pinned Git archives and immutable web b
         if (path === "artifact/ci.json")
           return {
             sha: source.api,
+            rootSha: source.project,
             runId: number,
-            artifactPath: join(f.root, "ci-workspaces", source.api),
+            artifactPath: join(
+              f.root,
+              "releases",
+              source.project + "-" + source.api,
+            ),
             state: "ci-passed",
+            imageId: docker.imageId,
+            nativeProbe: "passed",
           };
         if (path === "artifact/api-package.json") return nativeManifest;
-        return { state: "deployed", sha: source.api };
+        return {
+          state: "deployed",
+          sha: source.api,
+          rootSha: source.project,
+          imageId: docker.imageId,
+        };
       },
       response: async (path) => {
         assert.equal(path, "artifact/api-package-6.tgz");
@@ -578,12 +612,12 @@ test("checksum file itself and extra assets cannot be spoofed", async () => {
   await fs.writeFile(join(p.assets, "extra"), "secret");
   await assert.rejects(verifyPackage(p.assets, f.plan), /unexpected/);
 });
-test("release provenance rejects a Linux archive labelled as native Mac", async () => {
+test("release provenance rejects an unsupported build architecture", async () => {
   const f = await fixture(),
     p = await packageFixture(f),
     path = join(p.assets, "release-manifest.json");
   const m = await read(path);
-  m.builtOn.platform = "linux";
+  m.builtOn.arch = "x64";
   await json(path, m);
   await assert.rejects(verifyPackage(p.assets, f.plan), /provenance/);
 });
@@ -638,6 +672,57 @@ test("published source or remote asset digest mismatch refuses recovery", async 
   remote.assets[0].digest = "sha256:" + p.evidence[ASSETS[0]].sha256;
   remote.assets[0].browser_download_url = "https://evil.invalid/download";
   await assert.rejects(run("upload", f.planPath), /download URL/);
+});
+test("a fresh GitHub draft describes the packaged Docker Linux API before publishing the complete inventory", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f);
+  let remote = null,
+    requested;
+  const run = createReleaseRunner({
+    root: f.root,
+    identity,
+    head: async (spec) =>
+      commits[
+        Object.keys(REPOSITORIES).find(
+          (name) => REPOSITORIES[name].name === spec.name,
+        )
+      ],
+    github: async (path, options = {}) => {
+      if (path.startsWith("git/"))
+        return remote && !remote.draft
+          ? { object: { type: "commit", sha: commits.project } }
+          : null;
+      if (path === "releases" && options.method === "POST") {
+        requested = JSON.parse(options.body);
+        remote = releaseRemote(f, p.evidence, 0, true);
+      }
+      if (options.method === "PATCH") {
+        remote.draft = false;
+        remote.published_at = "2026-10-06T01:00:00.000Z";
+      }
+      return structuredClone(remote);
+    },
+    uploadAsset: async (_, name, path, evidence) => {
+      assert.equal((await fileDigest(path)).sha256, evidence.sha256);
+      const item = releaseRemote(f, p.evidence).assets.find(
+        (asset) => asset.name === name,
+      );
+      remote.assets.push(item);
+      return item;
+    },
+  });
+  const result = await run("upload", f.planPath);
+  assert.equal(requested.target_commitish, commits.project);
+  assert.equal(requested.draft, true);
+  assert.match(requested.body, /API: Docker Linux ARM64 \/ Node22/);
+  assert.doesNotMatch(requested.body, /native macOS|Darwin/);
+  for (const sha of Object.values(commits))
+    assert.ok(requested.body.includes(sha));
+  assert.equal(result.state, "published");
+  assert.deepEqual(
+    remote.assets.map((asset) => asset.name),
+    ASSETS,
+  );
 });
 test("draft partial-upload retry skips exact immutable bytes and publishes only a complete inventory", async () => {
   const f = await fixture(),
@@ -1065,27 +1150,42 @@ test("retained Web retry excludes a subsequently pruned child from savedBuilds w
     before,
   );
 });
-test("API package proof requires pinned pre-deployment bytes and a relocated native probe", () => {
+test("API package proof requires pinned Linux Docker bytes and its actual native import probe", () => {
   const value = {
     state: "packaged",
     sha: commits.api,
+    rootSha: commits.project,
     artifact: "/trusted/workspace/api-package-6.tgz",
     sha256: "a".repeat(64),
     sizeBytes: 80,
     files: 2,
-    nativeDependencies: ["sqlite.node", "boxlite.node"],
-    relocatedNativeProbe: "passed",
+    platform: "linux",
+    arch: "arm64",
+    nodeMajor: 22,
+    imageId: "sha256:" + "d".repeat(64),
+    boxliteVersion: "0.9.7",
+    nativeProbe: "passed",
   };
-  validateApiPackage(value, 6, commits.api);
+  validateApiPackage(value, 6, commits.api, commits.project);
   for (const replacement of [
     { artifact: "/trusted/workspace/api-package-7.tgz" },
     { sha: commits.web },
+    { rootSha: commits.web },
     { sizeBytes: 0 },
-    { relocatedNativeProbe: "not-run" },
-    { nativeDependencies: [] },
+    { nativeProbe: "not-run" },
+    { platform: "darwin" },
+    { arch: "x64" },
+    { nodeMajor: 26 },
+    { imageId: "mutable-tag" },
+    { boxliteVersion: "0.9.6" },
   ])
     assert.throws(() =>
-      validateApiPackage({ ...value, ...replacement }, 6, commits.api),
+      validateApiPackage(
+        { ...value, ...replacement },
+        6,
+        commits.api,
+        commits.project,
+      ),
     );
 });
 test("API child accepts real ci-passed receipt path and refuses stale draft-state assumptions", async () => {
@@ -1093,8 +1193,15 @@ test("API child accepts real ci-passed receipt path and refuses stale draft-stat
   let ci = {
       state: "ci-passed",
       sha: commits.api,
+      rootSha: commits.project,
       runId: 6,
-      artifactPath: join(f.root, "ci-workspaces", commits.api),
+      artifactPath: join(
+        f.root,
+        "releases",
+        commits.project + "-" + commits.api,
+      ),
+      imageId: "sha256:" + "d".repeat(64),
+      nativeProbe: "passed",
     },
     receipts = 0;
   const run = createReleaseRunner({
@@ -1109,7 +1216,12 @@ test("API child accepts real ci-passed receipt path and refuses stale draft-stat
       get: async (path) =>
         path === "artifact/ci.json"
           ? ci
-          : { state: "current", sha: commits.api },
+          : {
+              state: "current",
+              sha: commits.api,
+              rootSha: commits.project,
+              imageId: ci.imageId,
+            },
     }),
   });
   assert.equal((await run("record-build", f.planPath, "api", "6")).number, 6);
@@ -1117,12 +1229,12 @@ test("API child accepts real ci-passed receipt path and refuses stale draft-stat
   ci = { ...ci, runId: 7, state: "built" };
   await assert.rejects(
     run("record-build", f.planPath, "api", "7"),
-    /native release/,
+    /Docker release/,
   );
   ci = { ...ci, state: "ci-passed", artifactPath: "/untrusted/" + commits.api };
   await assert.rejects(
     run("record-build", f.planPath, "api", "7"),
-    /native release/,
+    /Docker release/,
   );
 });
 test("retained immutable web proof survives Jenkins build pruning and keeps original numeric ID", async () => {

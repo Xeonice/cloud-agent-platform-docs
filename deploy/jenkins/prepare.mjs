@@ -270,7 +270,12 @@ const manifest = {
     },
   ],
 };
-for (const file of ["project-ci.mjs", "jenkins-web.mjs", "mutation.mjs"])
+for (const file of [
+  "project-ci.mjs",
+  "jenkins-web.mjs",
+  "ci-platform.mjs",
+  "mutation.mjs",
+])
   if (await fs.stat(join(source, file)).catch(() => null))
     manifest.tools.push({ name: file, source: join(source, file) });
 manifest.vercelSource = "/Users/Shared/agent-platform-build-tools/vercel";

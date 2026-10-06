@@ -1,0 +1,414 @@
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+Initialized empty Git repository in /home/jenkins/agent/source/.git/
+From https://github.com/Xeonice/cloud-agent-platform-docs
+ * branch            aea0c60a2c8a0cd38ac785a9ac36d721936ccc9a -> FETCH_HEAD
+HEAD is now at aea0c60 fix: wait for complete launchd Tunnel removal before cutover
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+Initialized empty Git repository in /home/jenkins/agent/source/api/.git/
+From https://github.com/Xeonice/agent-platform-api
+ * branch            5a94ea9dc6bca7f584aaf4c8248c1541041f8b51 -> FETCH_HEAD
+HEAD is now at 5a94ea9 ci: move API gates and sandbox publication to Mac Jenkins
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: is subject to change. To configure the initial branch name to use in all
+hint: of your new repositories, which will suppress this warning, call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+Initialized empty Git repository in /home/jenkins/agent/source/web/.git/
+From https://github.com/Xeonice/agent-platform-web
+ * branch            0a7794b34fef53b564bc7216fd29ef03b0d360da -> FETCH_HEAD
+HEAD is now at 0a7794b ci: move frontend gates and prebuilt publication to Mac Jenkins
+▶ docs:check —— 文档一致性门禁（权威定义：docs/shared/09-工程化规范.md §2.4）
+  仓库：/home/jenkins/agent/source
+
+A. 文档内部检查（不依赖 submodule，始终跑）
+  ✔ A1 相对链接可达       1172 条站内链接全部命中
+  ✔ A2 章节引用存在       2657 条 §引用全部命中（逐级下探口径）
+  ✔ A3 README 清单完整    70 篇文档 / 4 份索引，双向一致
+  ✔ A4 能力目录对账       10 §6 = 69 个端点，27 §2–§9 = 69 个端点，集合相等
+
+B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）
+  ✔ A5 错误码对账         源码 89 个码，10 §6.8 表 89 行，集合相等
+  ✔ B1 端点集合覆盖       openapi 71 条 paths，排除传输层 3 条，余 68 条全部 ⊆ 10 §6
+  ✔ B2 MCP tool 面对账    代码注册 14 个 tool，02 §5.2 = 14 设计 / 14 已注册，集合相等（0 个 ⏳ 不参与判定），3 处计数句同源
+  ✔ B6 未实现端点已标注   10 §6 共 67 个端点，其中 1 个已标 ⏳，其余全部在 openapi 中
+  ✔ B3 openapi 跨仓一致   两份 openapi.json 逐字节相同（sha256 7ce01475643c…）
+  ✔ B4 WS 协议跨仓对账    两仓 canonical 一致（861 字符）
+  ✔ B5 SSE 协议跨仓对账   两仓 canonical 一致（833 字符）
+  ✔ B7 保留 env 跨仓对账  后端 12 名 + 2 前缀，前端全部覆盖
+
+C. 文档 ↔ 部署产物对账（compose；缺失即 skip，不判失败）
+  ✔ C1 compose 骨架对账   骨架 3 个服务（0 个 ⏳）/ 真 compose 3 个，插值默认值 2 条，服务集合与插值默认值均一致
+
+✔ docs:check 通过：13 项检查全绿。
+Scope: all 11 workspace projects
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +639
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 639, reused 0, downloaded 54, added 55
+Progress: resolved 639, reused 0, downloaded 155, added 155
+Progress: resolved 639, reused 0, downloaded 278, added 280
+Progress: resolved 639, reused 0, downloaded 378, added 377
+Progress: resolved 639, reused 0, downloaded 491, added 490
+Progress: resolved 639, reused 0, downloaded 599, added 601
+Progress: resolved 639, reused 0, downloaded 636, added 638
+Progress: resolved 639, reused 0, downloaded 637, added 639, done
+.../node_modules/@swc/core postinstall$ node postinstall.js
+.../node_modules/better-sqlite3 install$ prebuild-install || node-gyp rebuild --release
+.../node_modules/unrs-resolver postinstall$ node postinstall.js
+.../esbuild@0.21.5/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.18.20/node_modules/esbuild postinstall$ node install.js
+.../node_modules/@swc/core postinstall: Done
+.../node_modules/unrs-resolver postinstall: Done
+.../esbuild@0.21.5/node_modules/esbuild postinstall: Done
+.../node_modules/@scarf/scarf postinstall$ node ./report.js
+.../esbuild@0.18.20/node_modules/esbuild postinstall: Done
+.../esbuild@0.19.12/node_modules/esbuild postinstall$ node install.js
+.../node_modules/protobufjs postinstall$ node scripts/postinstall
+.../node_modules/cpu-features install$ node buildcheck.js > buildcheck.gypi && node-gyp rebuild
+.../esbuild@0.19.12/node_modules/esbuild postinstall: Done
+.../node_modules/protobufjs postinstall: Done
+.../node_modules/cpu-features install: gyp info it worked if it ends with ok
+.../node_modules/cpu-features install: gyp info using node-gyp@10.2.0
+.../node_modules/cpu-features install: gyp info using node@22.23.3 | linux | arm64
+.../node_modules/cpu-features install: gyp info find Python using Python version 3.13.5 found at "/usr/bin/python3"
+.../node_modules/cpu-features install: gyp http GET https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+.../node_modules/cpu-features install: gyp http 200 https://nodejs.org/download/release/v22.23.3/node-v22.23.3-headers.tar.gz
+.../node_modules/@scarf/scarf postinstall: Done
+.../node_modules/cpu-features install: gyp http GET https://nodejs.org/download/release/v22.23.3/SHASUMS256.txt
+.../node_modules/cpu-features install: gyp http 200 https://nodejs.org/download/release/v22.23.3/SHASUMS256.txt
+.../node_modules/cpu-features install: gyp info spawn /usr/bin/python3
+.../node_modules/cpu-features install: gyp info spawn args [
+.../node_modules/cpu-features install: gyp info spawn args '/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp/gyp/gyp_main.py',
+.../node_modules/cpu-features install: gyp info spawn args 'binding.gyp',
+.../node_modules/cpu-features install: gyp info spawn args '-f',
+.../node_modules/cpu-features install: gyp info spawn args 'make',
+.../node_modules/cpu-features install: gyp info spawn args '-I',
+.../node_modules/cpu-features install: gyp info spawn args '/home/jenkins/agent/source/api/node_modules/.pnpm/cpu-features@0.0.10/node_modules/cpu-features/build/config.gypi',
+.../node_modules/cpu-features install: gyp info spawn args '-I',
+.../node_modules/cpu-features install: gyp info spawn args '/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp/addon.gypi',
+.../node_modules/cpu-features install: gyp info spawn args '-I',
+.../node_modules/cpu-features install: gyp info spawn args '/home/jenkins/.cache/node-gyp/22.23.3/include/node/common.gypi',
+.../node_modules/cpu-features install: gyp info spawn args '-Dlibrary=shared_library',
+.../node_modules/cpu-features install: gyp info spawn args '-Dvisibility=default',
+.../node_modules/cpu-features install: gyp info spawn args '-Dnode_root_dir=/home/jenkins/.cache/node-gyp/22.23.3',
+.../node_modules/cpu-features install: gyp info spawn args '-Dnode_gyp_dir=/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp',
+.../node_modules/cpu-features install: gyp info spawn args '-Dnode_lib_file=/home/jenkins/.cache/node-gyp/22.23.3/<(target_arch)/node.lib',
+.../node_modules/cpu-features install: gyp info spawn args '-Dmodule_root_dir=/home/jenkins/agent/source/api/node_modules/.pnpm/cpu-features@0.0.10/node_modules/cpu-features',
+.../node_modules/cpu-features install: gyp info spawn args '-Dnode_engine=v8',
+.../node_modules/cpu-features install: gyp info spawn args '--depth=.',
+.../node_modules/cpu-features install: gyp info spawn args '--no-parallel',
+.../node_modules/cpu-features install: gyp info spawn args '--generator-output',
+.../node_modules/cpu-features install: gyp info spawn args 'build',
+.../node_modules/cpu-features install: gyp info spawn args '-Goutput_dir=.'
+.../node_modules/cpu-features install: gyp info spawn args ]
+.../node_modules/better-sqlite3 install: Done
+.../node_modules/cpu-features install: gyp info spawn make
+.../node_modules/cpu-features install: gyp info spawn args [ 'BUILDTYPE=Release', '-C', 'build' ]
+.../node_modules/cpu-features install: make: Entering directory '/home/jenkins/agent/source/api/node_modules/.pnpm/cpu-features@0.0.10/node_modules/cpu-features/build'
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_aarch64_linux_or_android.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_aarch64_macos_or_iphone.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_aarch64_windows.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_arm_linux_or_android.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_mips_linux_or_android.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_ppc_linux.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_x86_freebsd.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_x86_linux_or_android.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_x86_macos.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/impl_x86_windows.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/filesystem.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/stack_line_reader.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/string_view.o
+.../node_modules/cpu-features install:   CC(target) Release/obj.target/cpu_features/deps/cpu_features/src/hwcaps.o
+.../node_modules/cpu-features install: rm -f Release/obj.target/deps/cpu_features/cpu_features.a Release/obj.target/deps/cpu_features/cpu_features.a.ar-file-list; mkdir -p `dirname Release/obj.target/deps/cpu_features/cpu_features.a`
+.../node_modules/cpu-features install: ar crs Release/obj.target/deps/cpu_features/cpu_features.a @Release/obj.target/deps/cpu_features/cpu_features.a.ar-file-list
+.../node_modules/cpu-features install:   COPY Release/cpu_features.a
+.../node_modules/cpu-features install:   CXX(target) Release/obj.target/cpufeatures/src/binding.o
+.../node_modules/cpu-features install: In file included from ../src/binding.cc:1:
+.../node_modules/cpu-features install: /home/jenkins/.cache/node-gyp/22.23.3/include/node/node.h:1243:7: warning: cast between incompatible function types from ‘void (*)(Nan::ADDON_REGISTER_FUNCTION_ARGS_TYPE)’ {aka ‘void (*)(v8::Local<v8::Object>)’} to ‘node::addon_register_func’ {aka ‘void (*)(v8::Local<v8::Object>, v8::Local<v8::Value>, void*)’} [-Wcast-function-type]
+.../node_modules/cpu-features install:  1243 |       (node::addon_register_func) (regfunc),                          \
+.../node_modules/cpu-features install:       |       ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.../node_modules/cpu-features install: /home/jenkins/.cache/node-gyp/22.23.3/include/node/node.h:1277:3: note: in expansion of macro ‘NODE_MODULE_X’
+.../node_modules/cpu-features install:  1277 |   NODE_MODULE_X(modname, regfunc, NULL, 0)  // NOLINT (readability/null_usage)
+.../node_modules/cpu-features install:       |   ^~~~~~~~~~~~~
+.../node_modules/cpu-features install: ../src/binding.cc:151:1: note: in expansion of macro ‘NODE_MODULE’
+.../node_modules/cpu-features install:   151 | NODE_MODULE(cpufeatures, init)
+.../node_modules/cpu-features install:       | ^~~~~~~~~~~
+.../node_modules/cpu-features install:   SOLINK_MODULE(target) Release/obj.target/cpufeatures.node
+.../node_modules/cpu-features install:   COPY Release/cpufeatures.node
+.../node_modules/cpu-features install: make: Leaving directory '/home/jenkins/agent/source/api/node_modules/.pnpm/cpu-features@0.0.10/node_modules/cpu-features/build'
+.../node_modules/cpu-features install: gyp info ok 
+.../node_modules/cpu-features install: Done
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install$ node install.js
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info it worked if it ends with ok
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info using node-gyp@10.2.0
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info using node@22.23.3 | linux | arm64
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info find Python using Python version 3.13.5 found at "/usr/bin/python3"
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn /usr/bin/python3
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args [
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp/gyp/gyp_main.py',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args 'binding.gyp',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-f',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args 'make',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-I',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '/home/jenkins/agent/source/api/node_modules/.pnpm/ssh2@1.17.0/node_modules/ssh2/lib/protocol/crypto/build/config.gypi',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-I',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp/addon.gypi',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-I',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '/home/jenkins/.cache/node-gyp/22.23.3/include/node/common.gypi',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dlibrary=shared_library',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dvisibility=default',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dnode_root_dir=/home/jenkins/.cache/node-gyp/22.23.3',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dnode_gyp_dir=/opt/agent-platform/corepack/v1/pnpm/9.12.0/dist/node_modules/node-gyp',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dnode_lib_file=/home/jenkins/.cache/node-gyp/22.23.3/<(target_arch)/node.lib',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dmodule_root_dir=/home/jenkins/agent/source/api/node_modules/.pnpm/ssh2@1.17.0/node_modules/ssh2/lib/protocol/crypto',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Dnode_engine=v8',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '--depth=.',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '--no-parallel',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '--generator-output',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args 'build',
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args '-Goutput_dir=.'
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args ]
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn make
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info spawn args [ 'BUILDTYPE=Release', '-C', 'build' ]
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: make: Entering directory '/home/jenkins/agent/source/api/node_modules/.pnpm/ssh2@1.17.0/node_modules/ssh2/lib/protocol/crypto/build'
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install:   CXX(target) Release/obj.target/sshcrypto/src/binding.o
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install:   SOLINK_MODULE(target) Release/obj.target/sshcrypto.node
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install:   COPY Release/sshcrypto.node
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: make: Leaving directory '/home/jenkins/agent/source/api/node_modules/.pnpm/ssh2@1.17.0/node_modules/ssh2/lib/protocol/crypto/build'
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: gyp info ok 
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: Succeeded in building optional crypto binding
+.../.pnpm/ssh2@1.17.0/node_modules/ssh2 install: Done
+
+devDependencies:
++ @modelcontextprotocol/sdk 1.30.0
++ @nestjs/common 11.1.29
++ @nestjs/testing 11.1.29
++ @stryker-mutator/core 10.0.0
++ @stryker-mutator/vitest-runner 10.0.0
++ @swc/core 1.15.47
++ @types/better-sqlite3 7.6.13
++ @types/node 22.20.1
++ @types/supertest 6.0.3
++ better-sqlite3 11.10.0
++ drizzle-orm 0.36.4
++ eslint 9.39.5
++ eslint-import-resolver-typescript 3.10.1
++ eslint-plugin-boundaries 5.4.0
++ husky 9.1.7
++ prettier 3.9.6
++ reflect-metadata 0.2.2
++ simple-git 3.36.0
++ socket.io-client 4.8.3
++ supertest 7.2.2
++ typescript 5.9.3
++ typescript-eslint 8.67.0
++ unplugin-swc 1.5.10
++ vitest 2.1.9
+
+. prepare$ husky || true
+. prepare: HUSKY=0 skip install
+. prepare: Done
+Done in 11.4s
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +718
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 718, reused 250, downloaded 52, added 302
+Progress: resolved 718, reused 250, downloaded 112, added 362
+Progress: resolved 718, reused 250, downloaded 168, added 418
+Progress: resolved 718, reused 250, downloaded 183, added 418
+Progress: resolved 718, reused 250, downloaded 232, added 471
+Progress: resolved 718, reused 250, downloaded 342, added 592
+Progress: resolved 718, reused 250, downloaded 468, added 718, done
+.../esbuild@0.25.12/node_modules/esbuild postinstall$ node install.js
+.../sharp@0.34.5/node_modules/sharp install$ node install/check.js || npm run build
+.../node_modules/msw postinstall$ node -e "import('./config/scripts/postinstall.js').catch(() => void 0)"
+.../esbuild@0.28.2/node_modules/esbuild postinstall$ node install.js
+.../esbuild@0.25.12/node_modules/esbuild postinstall: Done
+.../esbuild@0.28.2/node_modules/esbuild postinstall: Done
+.../sharp@0.34.5/node_modules/sharp install: Done
+.../node_modules/msw postinstall: Done
+
+dependencies:
++ @radix-ui/react-accordion 1.2.20
++ @radix-ui/react-dialog 1.1.23
++ @radix-ui/react-dropdown-menu 2.1.24
++ @radix-ui/react-label 2.1.15
++ @radix-ui/react-progress 1.1.16
++ @radix-ui/react-radio-group 1.4.7
++ @radix-ui/react-separator 1.1.15
++ @radix-ui/react-slot 1.3.3
++ @radix-ui/react-switch 1.3.7
++ @radix-ui/react-tooltip 1.2.16
++ @tanstack/react-query 5.101.4
++ @xterm/addon-canvas 0.7.0
++ @xterm/addon-fit 0.10.0
++ @xterm/addon-unicode11 0.8.0
++ @xterm/addon-web-links 0.11.0
++ @xterm/addon-webgl 0.18.0
++ @xterm/xterm 5.5.0
++ class-variance-authority 0.7.1
++ clsx 2.1.1
++ lucide-react 0.468.0
++ next 15.5.23
++ openapi-fetch 0.13.8
++ react 19.2.8
++ react-dom 19.2.8
++ socket.io-client 4.8.3
++ sonner 1.7.4
++ tailwind-merge 2.6.1
++ tailwindcss-animate 1.0.7
++ zod 3.25.76
++ zustand 5.0.14
+
+devDependencies:
++ @commitlint/cli 19.8.1
++ @commitlint/config-conventional 19.8.1
++ @eslint/js 9.39.5
++ @playwright/test 1.62.1
++ @storybook/addon-a11y 9.1.20
++ @storybook/addon-vitest 9.1.20
++ @storybook/nextjs-vite 9.1.20
++ @tanstack/react-query-devtools 5.101.4
++ @testing-library/dom 10.4.1
++ @testing-library/jest-dom 6.10.0
++ @testing-library/react 16.3.2
++ @types/node 22.20.1
++ @types/react 19.2.18
++ @types/react-dom 19.2.4
++ @vitejs/plugin-react 4.7.0
++ @vitest/browser 3.2.7
++ @vitest/coverage-v8 3.2.7
++ autoprefixer 10.5.4
++ axe-core 4.13.0
++ eslint 9.39.5
++ eslint-import-resolver-typescript 4.4.5
++ eslint-plugin-boundaries 5.4.0
++ eslint-plugin-react-hooks 5.2.0
++ eslint-plugin-storybook 9.1.20
++ globals 15.15.0
++ husky 9.1.7
++ jsdom 25.0.1
++ lint-staged 15.5.2
++ msw 2.15.0
++ openapi-typescript 7.13.0
++ playwright 1.62.1
++ postcss 8.5.26
++ prettier 3.9.6
++ storybook 9.1.20
++ tailwindcss 3.4.19
++ tsx 4.23.12
++ typescript 5.9.3
++ typescript-eslint 8.67.0
++ vitest 3.2.7
+
+
+> agent-platform-web@0.1.0 prepare /home/jenkins/agent/source/web
+> husky || true
+
+HUSKY=0 skip installDone in 7.5s
+Lockfile is up to date, resolution step is skipped
+Progress: resolved 1, reused 0, downloaded 0, added 0
+Packages: +9
++++++++++
+Progress: resolved 9, reused 8, downloaded 1, added 9, done
+
+devDependencies:
++ @playwright/test 1.62.1
++ @types/node 22.20.1
++ tsx 4.23.13
++ typescript 5.9.3
+
+Done in 940ms
+{"playwright":"1.62.1","preinstalledChromium":"/opt/agent-platform/playwright/chromium-1234/chrome-linux/chrome"}
+
+> cloud-agent-platform-e2e-contract@0.0.0 test /home/jenkins/agent/source/e2e-contract
+> playwright test
+
+[WebServer] 
+[WebServer] > agent-platform-api@0.0.1 build /home/jenkins/agent/source/api
+[WebServer] > tsc -b
+[WebServer] 
+[WebServer] 
+[WebServer] > cloud-agent-platform-e2e-contract@0.0.0 api /home/jenkins/agent/source/e2e-contract
+[WebServer] > tsx server/start-api.ts
+[WebServer] 
+[WebServer] Design-v2 real Nest + fresh SQLite: http://127.0.0.1:3110
+[WebServer] 
+[WebServer] > agent-platform-web@0.1.0 build /home/jenkins/agent/source/web
+[WebServer] > next build
+[WebServer] 
+[WebServer] ⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+[WebServer]    ▲ Next.js 15.5.23
+[WebServer] 
+[WebServer]    Creating an optimized production build ...
+[WebServer]    Using tsconfig file: .tsconfig.acceptance.json
+[WebServer]    Using tsconfig file: .tsconfig.acceptance.json
+[WebServer]    Using tsconfig file: .tsconfig.acceptance.json
+[WebServer]  ✓ Compiled successfully in 7.3s
+[WebServer]    Skipping linting
+[WebServer]    Checking validity of types ...
+[WebServer]    Collecting page data ...
+[WebServer]    Generating static pages (0/7) ...
+[WebServer]    Generating static pages (1/7) 
+[WebServer]    Generating static pages (3/7) 
+[WebServer]    Generating static pages (5/7) 
+[WebServer]  ✓ Generating static pages (7/7)
+[WebServer]    Finalizing page optimization ...
+[WebServer]    Collecting build traces ...
+[WebServer] 
+[WebServer] Route (app)                                 Size  First Load JS    
+[WebServer] ┌ ○ /                                    53.1 kB         326 kB
+[WebServer] ├ ○ /_not-found                            123 B         103 kB
+[WebServer] ├ ○ /settings/credentials                15.2 kB         208 kB
+[WebServer] ├ ○ /settings/images                     14.6 kB         207 kB
+[WebServer] └ ○ /settings/system                     16.5 kB         224 kB
+[WebServer] + First Load JS shared by all             103 kB
+[WebServer]   ├ chunks/29dd14f1-cd3d51cbb4d3b809.js  54.2 kB
+[WebServer]   ├ chunks/513-d3c8355d8287c5b2.js       46.4 kB
+[WebServer]   └ other shared chunks (total)          2.63 kB
+[WebServer] 
+[WebServer] 
+[WebServer] ○  (Static)  prerendered as static content
+[WebServer] 
+[WebServer] 
+[WebServer] > agent-platform-web@0.1.0 start /home/jenkins/agent/source/web
+[WebServer] > next start "-H" "127.0.0.1" "-p" "3210"
+[WebServer] 
+[WebServer]    ▲ Next.js 15.5.23
+[WebServer]    - Local:        http://127.0.0.1:3210
+[WebServer]    - Network:      http://127.0.0.1:3210
+[WebServer] 
+[WebServer]  ✓ Starting...
+[WebServer]  ⚠ "next start" does not work with "output: standalone" configuration. Use "node .next/standalone/server.js" instead.
+[WebServer]  ✓ Ready in 127ms
+
+Running 1 test using 1 worker
+
+  ✓  1 [chromium] › acceptance/task-lifecycle.spec.ts:4:1 › browser actions use actual Nest and current SQLite through the same-origin proxy (2.7s)
+
+  1 passed (32.9s)

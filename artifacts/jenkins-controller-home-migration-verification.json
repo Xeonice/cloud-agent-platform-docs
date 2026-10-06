@@ -1,0 +1,70 @@
+{
+  "state": "verified-migration-paused-not-activated",
+  "archive": {
+    "sha256": "713de5d21ed03d61be5b72b00bb952fd8f1bc5b0fafd53343f0525efe0daeeeb",
+    "sizeBytes": 239482880,
+    "entries": 3212,
+    "unchanged": true
+  },
+  "container": {
+    "id": "4de13b2cd39bf1c4e402748cc1d216712b671301d3077f4056a02f8020176fa1",
+    "imageId": "sha256:0c3590904dfba9c1ee5f206da6591b92e6a4a634b44130258a791717e11dba3f",
+    "homeOwner": 1000,
+    "readonlyRootfs": true,
+    "hostSocketMounted": false
+  },
+  "secrets": {
+    "files": 10,
+    "allBytesMatch": true
+  },
+  "credentials": {
+    "files": 4,
+    "allBytesMatch": true
+  },
+  "user": {
+    "passwordHashPreserved": true,
+    "apiTokenStorePreserved": true,
+    "wholeConfigBytesMatch": true
+  },
+  "builds": {
+    "files": 6,
+    "allBytesMatch": true,
+    "success": 5,
+    "failure": 1,
+    "historyMatches": true
+  },
+  "paused": {
+    "jobs": 9,
+    "allDisabled": true,
+    "queueItems": 0,
+    "existingMacNodes": 2,
+    "allOffline": true,
+    "builtInExecutors": 0,
+    "runningBuilds": 0
+  },
+  "plugins": {
+    "count": 70,
+    "versionsMatch": true,
+    "allActive": true,
+    "allArchiveHashesMatch": true
+  },
+  "authentication": {
+    "anonymousStatus": 403,
+    "originalApiTokenStatus": 200,
+    "originalPasswordStatus": 200,
+    "credentialsReset": false
+  },
+  "api": {
+    "publicHealthStatus": 200,
+    "localHealthStatus": 200,
+    "pid": 64657,
+    "unchanged": true
+  },
+  "mutations": false,
+  "activated": false,
+  "checkedAt": "2026-10-06T01:45:41.219Z",
+  "sourceHashes": {
+    "deploy/containers/verify-home-migration.mjs": "687b53a688ed72733afc39b127e265b44f3f7ebec8081552a07a7b8d1d3ee9b9",
+    "deploy/containers/verify-home-migration.test.mjs": "f7f25d0e5392ea87fa09a4270e9f491b95576343bac8b9d706eee8d2d08aa247"
+  }
+}

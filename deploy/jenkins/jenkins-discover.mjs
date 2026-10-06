@@ -6,6 +6,14 @@ import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { validRef, SHA } from "./jenkins-ci.mjs";
 import { createStatusApp } from "./github-status-app.mjs";
+import { userInfo } from "node:os";
+import { buildSystem } from "./ci-platform.mjs";
+import {
+  deploymentContext,
+  assertDeploymentLayout,
+  jenkinsTransport,
+  canonicalJenkinsLocation,
+} from "./deployment-platform.mjs";
 import {
   REPOSITORIES,
   ROOT as DEPLOY_ROOT,
@@ -137,7 +145,12 @@ async function privateFile(path) {
   }
 }
 async function jsonFile(path) {
-  return JSON.parse(await privateFile(path));
+  const contents = await privateFile(path);
+  try {
+    return JSON.parse(contents);
+  } catch {
+    throw new Error("Discovery JSON invalid");
+  }
 }
 async function atomic(path, value) {
   const next = path + "." + randomUUID();
@@ -203,6 +216,10 @@ async function gitRefs(spec) {
   });
 }
 export function createDiscoverer(overrides = {}) {
+  const context = deploymentContext(
+    overrides.identity ?? userInfo(),
+    overrides.system ?? buildSystem(),
+  );
   const tools = resolve(overrides.tools ?? TOOLS),
     deployRoot = resolve(overrides.deployRoot ?? DEPLOY_ROOT);
   const statePath = join(tools, "discovery-state.json");
@@ -287,7 +304,7 @@ export function createDiscoverer(overrides = {}) {
     if (match && !Object.values(DISCOVERY_JOBS).includes(match[1]))
       throw new Error("Untrusted discovery job");
     const auth = await jsonFile(join(tools, "admin-api.json"));
-    return request(JENKINS + path, {
+    return request(jenkinsTransport(JENKINS + path, context), {
       ...options,
       headers: {
         authorization:
@@ -308,7 +325,10 @@ export function createDiscoverer(overrides = {}) {
           body: new URLSearchParams(params),
         },
       );
-      return response.headers.get("location");
+      return canonicalJenkinsLocation(
+        response.headers.get("location"),
+        context,
+      );
     },
   };
   const changedImage =
@@ -326,6 +346,12 @@ export function createDiscoverer(overrides = {}) {
       );
     });
   return async function discover() {
+    if (context.platform === "linux")
+      await (overrides.assertLayout ?? assertDeploymentLayout)({
+        ...context,
+        root: deployRoot,
+        tools,
+      });
     let state = await jsonFile(statePath).catch((error) => {
       if (error.code === "ENOENT")
         return { schemaVersion: 2, refs: {}, pending: [], statuses: [] };

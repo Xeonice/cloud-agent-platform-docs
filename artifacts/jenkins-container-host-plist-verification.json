@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "state": "fixed-plists-real-plutil-verified",
+  "node": "22.23.3",
+  "platform": "darwin",
+  "arch": "arm64",
+  "sourceHashes": {
+    "deploy/containers/host-services.mjs": "e8dc47ded168e12f74ed7ec90f92f11da19b97155c70c90730db066d4efdeb7d",
+    "deploy/containers/host-services.test.mjs": "ab896a3b65b160ef0cfd742d55894ca2835b0b0cead7fc4474dfb2185240f25d"
+  },
+  "records": [
+    {
+      "label": "com.douglasdong.agent-platform.jenkins-docker",
+      "user": "douglasdong",
+      "plistSha256": "667a7c02bf0f2e1567238a2a86a06aa2547a7a3188b79f85ac7828973554cff8",
+      "lintExit": 0,
+      "roundTripMatches": true
+    },
+    {
+      "label": "com.douglasdong.agent-platform.build-docker",
+      "user": "douglasdong",
+      "plistSha256": "abbea5069ff57f6c917b8f9cbd135af70a442165732b9778866ca6e5b2e8ad4c",
+      "lintExit": 0,
+      "roundTripMatches": true
+    },
+    {
+      "label": "com.douglasdong.agent-platform.jenkins-deploy-agent",
+      "user": "douglasdong",
+      "plistSha256": "cba4aad127c76d35b5951250094345f5c2ff5b5d7f53fe1baa269232ef9369dd",
+      "lintExit": 0,
+      "roundTripMatches": true
+    },
+    {
+      "label": "com.douglasdong.agent-platform.jenkins-ci-agent",
+      "user": "_agentplatformci",
+      "plistSha256": "6f7cdee553fea23b185fe597b58f56abfcf245578fd523c936b23dc4766887f5",
+      "lintExit": 0,
+      "roundTripMatches": true
+    }
+  ],
+  "dockerConfiguration": {
+    "actualReadOnlyValidationPassed": true,
+    "fixedOrbStackCliPluginsAllowed": true,
+    "configurationChanged": false
+  },
+  "existingLabelQueries": {
+    "domains": [
+      "system",
+      "gui/501"
+    ],
+    "queries": 8,
+    "allFixedLabelsAbsent": true
+  },
+  "servicesInstalled": false,
+  "serviceOperationsPerformed": false,
+  "uid401StartupTested": false,
+  "coldBootTested": false,
+  "productionApiOrTunnelChanged": false
+}

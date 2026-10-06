@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "state": "system-container-engine-entries-installed",
+  "records": [
+    {
+      "profile": "agent-platform-jenkins",
+      "plistUid": 0,
+      "plistMode": "0o644",
+      "user": "douglasdong",
+      "group": "staff",
+      "arguments": [
+        "/opt/homebrew/bin/colima",
+        "--profile",
+        "agent-platform-jenkins",
+        "start",
+        "--foreground",
+        "--activate=false",
+        "--save-config=false",
+        "--ssh-agent=false",
+        "--ssh-config=false"
+      ],
+      "loaded": true,
+      "runAtLoad": true,
+      "startInterval": 60,
+      "lastExitZero": true
+    },
+    {
+      "profile": "agent-platform-build",
+      "plistUid": 0,
+      "plistMode": "0o644",
+      "user": "douglasdong",
+      "group": "staff",
+      "arguments": [
+        "/opt/homebrew/bin/colima",
+        "--profile",
+        "agent-platform-build",
+        "start",
+        "--foreground",
+        "--activate=false",
+        "--save-config=false",
+        "--ssh-agent=false",
+        "--ssh-config=false"
+      ],
+      "loaded": true,
+      "runAtLoad": true,
+      "startInterval": 60,
+      "lastExitZero": true
+    },
+    {
+      "profile": "agent-platform-runtime",
+      "plistUid": 0,
+      "plistMode": "0o644",
+      "user": "douglasdong",
+      "group": "staff",
+      "arguments": [
+        "/opt/homebrew/bin/colima",
+        "--profile",
+        "agent-platform-runtime",
+        "start",
+        "--foreground",
+        "--activate=false",
+        "--save-config=false",
+        "--ssh-agent=false",
+        "--ssh-config=false"
+      ],
+      "loaded": true,
+      "runAtLoad": true,
+      "startInterval": 60,
+      "lastExitZero": true
+    }
+  ],
+  "profilesRestarted": false,
+  "macColdBootTested": false,
+  "applicationStartup": "Docker restart unless-stopped",
+  "applicationsInDockerPendingApiCutover": true,
+  "capturedAt": "2026-10-06T03:22:44.756630+00:00"
+}

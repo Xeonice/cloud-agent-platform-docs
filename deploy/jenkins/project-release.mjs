@@ -11,11 +11,18 @@ import {
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { userInfo } from "node:os";
 import { validateManifest as validateWebManifest } from "./jenkins-web.mjs";
+import {
+  DEPLOYMENT,
+  deploymentContext,
+  assertDeploymentLayout,
+  deploymentEnvironment,
+  jenkinsTransport,
+} from "./deployment-platform.mjs";
 
-export const ROOT = "/Users/douglasdong/.local/share/agent-platform-deploy";
-export const TOOLS =
-  "/Users/douglasdong/.local/share/agent-platform-jenkins-tools";
+export const ROOT = DEPLOYMENT.root;
+export const TOOLS = DEPLOYMENT.tools;
 export const REPOSITORIES = Object.freeze({
   project: {
     name: "Xeonice/cloud-agent-platform-docs",
@@ -32,7 +39,7 @@ export const REPOSITORIES = Object.freeze({
 });
 export const SHA = /^[a-f0-9]{40}$/;
 export const ASSETS = Object.freeze([
-  "agent-platform-api-darwin-arm64.tgz",
+  "agent-platform-api-linux-arm64.tgz",
   "agent-platform-web-prebuilt.tgz",
   "agent-platform-web-source.tgz",
   "agent-platform-storybook.tgz",
@@ -82,20 +89,12 @@ export function buildUrl(job, number) {
     throw new Error("Invalid fixed Jenkins job/build");
   return "http://127.0.0.1:8080/job/" + job + "/" + number + "/";
 }
-export function releaseEnvironment(node, home) {
-  return {
-    PATH: dirname(node) + ":/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
-    HOME: home,
-    CI: "true",
-    HUSKY: "0",
-    LANG: "en_US.UTF-8",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
-  };
+export function releaseEnvironment(node, home, platform = process.platform) {
+  return deploymentEnvironment(node, home, platform);
 }
 export function buildParameters(kind, plan) {
-  if (kind === "api") return { SHA: plan.commits.api };
+  if (kind === "api")
+    return { SHA: plan.commits.api, ROOT_SHA: plan.commits.project };
   if (kind === "web")
     return {
       SHA: plan.commits.web,
@@ -134,26 +133,208 @@ export function validateBuild(value, kind, number, plan) {
       throw new Error("Jenkins build checked different pinned commits");
   return value;
 }
-export function validateApiPackage(value, number, sha) {
+export function validateApiPackage(value, number, sha, rootSha) {
   if (
     value?.state !== "packaged" ||
     value.sha !== sha ||
+    !SHA.test(rootSha ?? "") ||
+    value.rootSha !== rootSha ||
     typeof value.artifact !== "string" ||
     basename(value.artifact) !== "api-package-" + number + ".tgz" ||
     !/^[a-f0-9]{64}$/.test(value.sha256 ?? "") ||
     !Number.isSafeInteger(value.sizeBytes) ||
     value.sizeBytes < 1 ||
     value.sizeBytes > MAX_ASSET ||
-    value.relocatedNativeProbe !== "passed" ||
-    !Array.isArray(value.nativeDependencies) ||
-    value.nativeDependencies.length < 2 ||
+    value.platform !== "linux" ||
+    value.arch !== "arm64" ||
+    value.nodeMajor !== 22 ||
+    !/^sha256:[a-f0-9]{64}$/.test(value.imageId ?? "") ||
+    value.boxliteVersion !== "0.9.7" ||
+    value.nativeProbe !== "passed" ||
     !Number.isSafeInteger(value.files) ||
     value.files < 1
   )
     throw new Error(
-      "API package does not attest the pinned native relocated archive",
+      "API package does not attest the pinned Linux Docker archive and native probe",
     );
   return value;
+}
+
+export async function verifyDockerSaveArchive(path, imageId, run = execute) {
+  if (!/^sha256:[a-f0-9]{64}$/.test(imageId ?? ""))
+    throw new Error("Invalid pinned Docker image identity");
+  const names = (await run("/usr/bin/tar", ["-tf", path]))
+    .split("\n")
+    .filter(Boolean);
+  const types = (await run("/usr/bin/tar", ["-tvf", path]))
+    .split("\n")
+    .filter(Boolean);
+  if (
+    new Set(names).size !== names.length ||
+    !names.includes("manifest.json") ||
+    names.some((name) => !sourcePathAllowed(name.replace(/\/$/, ""))) ||
+    types.some((line) => !/^[d-]/.test(line))
+  )
+    throw new Error("Docker save archive contains an unsafe entry");
+  let manifest;
+  try {
+    manifest = JSON.parse(
+      await run("/usr/bin/tar", ["-xOf", path, "manifest.json"]),
+    );
+  } catch {
+    throw new Error("Docker save manifest is invalid");
+  }
+  const config = manifest?.[0]?.Config;
+  if (
+    !Array.isArray(manifest) ||
+    manifest.length !== 1 ||
+    typeof config !== "string" ||
+    !/^(?:[a-f0-9]{64}\.json|blobs\/sha256\/[a-f0-9]{64})$/.test(config) ||
+    !names.includes(config) ||
+    !Array.isArray(manifest[0].Layers) ||
+    manifest[0].Layers.some(
+      (name) =>
+        typeof name !== "string" ||
+        !sourcePathAllowed(name) ||
+        !names.includes(name),
+    )
+  )
+    throw new Error("Docker save archive does not contain one complete image");
+  const text = await run("/usr/bin/tar", ["-xOf", path, config]);
+  let metadata;
+  try {
+    metadata = JSON.parse(text);
+  } catch {
+    throw new Error("Docker image configuration is invalid");
+  }
+  const configDigest =
+    "sha256:" + createHash("sha256").update(text).digest("hex");
+  if (metadata.os !== "linux" || metadata.architecture !== "arm64")
+    throw new Error(
+      "Docker image bytes, OS or architecture differ from the pinned API image",
+    );
+  if (!names.includes("index.json")) {
+    if (configDigest !== imageId)
+      throw new Error(
+        "Legacy Docker image configuration differs from its image ID",
+      );
+    return {
+      imageId,
+      configDigest,
+      platform: "linux",
+      arch: "arm64",
+      format: "docker-save-legacy",
+    };
+  }
+  const indexes = [
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+  ];
+  const manifests = [
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+  ];
+  const configs = [
+    "application/vnd.oci.image.config.v1+json",
+    "application/vnd.docker.container.image.v1+json",
+  ];
+  async function descriptorJson(descriptor, allowed) {
+    if (
+      !descriptor ||
+      !allowed.includes(descriptor.mediaType) ||
+      !/^sha256:[a-f0-9]{64}$/.test(descriptor.digest ?? "") ||
+      !Number.isSafeInteger(descriptor.size) ||
+      descriptor.size < 1 ||
+      descriptor.size > 2_000_000
+    )
+      throw new Error("Invalid Docker OCI descriptor");
+    const blob = "blobs/sha256/" + descriptor.digest.slice(7);
+    if (!names.includes(blob))
+      throw new Error("Docker OCI descriptor blob missing");
+    const content = await run("/usr/bin/tar", ["-xOf", path, blob]);
+    if (
+      Buffer.byteLength(content) !== descriptor.size ||
+      "sha256:" + createHash("sha256").update(content).digest("hex") !==
+        descriptor.digest
+    )
+      throw new Error("Docker OCI descriptor bytes differ from their digest");
+    try {
+      return JSON.parse(content);
+    } catch {
+      throw new Error("Docker OCI descriptor JSON invalid");
+    }
+  }
+  async function runtimeConfigurations(descriptor, depth = 0) {
+    if (depth > 4) throw new Error("Docker OCI index nesting exceeds policy");
+    const object = await descriptorJson(descriptor, [...indexes, ...manifests]);
+    if (object.schemaVersion !== 2 || object.mediaType !== descriptor.mediaType)
+      throw new Error("Docker OCI descriptor type differs from its object");
+    if (indexes.includes(descriptor.mediaType)) {
+      if (!Array.isArray(object.manifests) || object.manifests.length > 32)
+        throw new Error("Docker OCI index inventory invalid");
+      const matches = [];
+      for (const child of object.manifests)
+        if (
+          !child.platform ||
+          (child.platform.os === "linux" &&
+            child.platform.architecture === "arm64")
+        )
+          matches.push(...(await runtimeConfigurations(child, depth + 1)));
+      return matches;
+    }
+    if (
+      !Array.isArray(object.layers) ||
+      object.layers.some(
+        (layer) =>
+          !/^sha256:[a-f0-9]{64}$/.test(layer.digest ?? "") ||
+          !Number.isSafeInteger(layer.size) ||
+          layer.size < 1 ||
+          !names.includes("blobs/sha256/" + layer.digest.slice(7)),
+      )
+    )
+      throw new Error("Docker OCI runtime layer inventory incomplete");
+    const runtime = await descriptorJson(object.config, configs);
+    if (
+      runtime.os !== "linux" ||
+      runtime.architecture !== "arm64" ||
+      object.config.digest !== configDigest
+    )
+      throw new Error(
+        "Docker OCI runtime configuration differs from saved ARM64 image",
+      );
+    return [object.config.digest];
+  }
+  let index, layout;
+  try {
+    index = JSON.parse(await run("/usr/bin/tar", ["-xOf", path, "index.json"]));
+    layout = JSON.parse(
+      await run("/usr/bin/tar", ["-xOf", path, "oci-layout"]),
+    );
+  } catch {
+    throw new Error("Docker OCI layout or index invalid");
+  }
+  if (
+    index.schemaVersion !== 2 ||
+    !indexes.includes(index.mediaType) ||
+    layout.imageLayoutVersion !== "1.0.0" ||
+    !Array.isArray(index.manifests) ||
+    index.manifests.length !== 1 ||
+    index.manifests[0].digest !== imageId
+  )
+    throw new Error(
+      "Docker OCI root image identity differs from the pinned Docker ID",
+    );
+  if ((await runtimeConfigurations(index.manifests[0])).length !== 1)
+    throw new Error(
+      "Docker OCI image must have exactly one Linux ARM64 runtime",
+    );
+  return {
+    imageId,
+    configDigest,
+    platform: "linux",
+    arch: "arm64",
+    format: "docker-save-oci",
+  };
 }
 async function regular(path, privateOnly = false) {
   const handle = await fs.open(
@@ -179,7 +360,12 @@ async function readJson(path, privateOnly = true) {
   try {
     const stat = await handle.stat();
     if (stat.size > 2_000_000) throw new Error("Release JSON oversized");
-    return JSON.parse(await handle.readFile("utf8"));
+    const contents = await handle.readFile("utf8");
+    try {
+      return JSON.parse(contents);
+    } catch {
+      throw new Error("Release JSON invalid");
+    }
   } finally {
     await handle.close();
   }
@@ -293,7 +479,7 @@ async function execute(command, args, cwd, capture = true) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
       cwd,
-      env: releaseEnvironment(process.execPath, "/Users/douglasdong"),
+      env: releaseEnvironment(process.execPath, DEPLOYMENT.home),
       stdio: capture
         ? ["ignore", "pipe", "pipe"]
         : ["ignore", "inherit", "inherit"],
@@ -389,7 +575,7 @@ export async function verifyPackage(folder, plan) {
     manifest.key !== plan.key ||
     projectKey(manifest.commits) !== plan.key ||
     manifest.tag !== plan.tag ||
-    manifest.builtOn?.platform !== "darwin" ||
+    !["darwin", "linux"].includes(manifest.builtOn?.platform) ||
     manifest.builtOn?.arch !== "arm64" ||
     manifest.builtOn?.nodeMajor !== 22 ||
     manifest.frontendOrigin !== "https://agent.douglasdong.com" ||
@@ -471,12 +657,17 @@ export function createReleaseRunner(overrides = {}) {
     tools = resolve(overrides.tools ?? TOOLS);
   const releases = join(root, "project-releases");
   const identity = overrides.identity ?? {
+    ...userInfo(),
     uid: process.getuid(),
     platform: process.platform,
     arch: process.arch,
     nodeMajor: Number(process.versions.node.split(".")[0]),
   };
   const run = overrides.execute ?? execute;
+  const context = deploymentContext(identity, {
+    ...identity,
+    node: identity.node ?? process.execPath,
+  });
   const fetcher = overrides.fetch ?? globalThis.fetch;
   async function github(path, options = {}) {
     const token = (await readPrivate(join(tools, "github-token"))).trim();
@@ -548,7 +739,7 @@ export function createReleaseRunner(overrides = {}) {
         path.includes("..")
       )
         throw new Error("Invalid fixed Jenkins evidence path");
-      const result = await fetcher(prefix + path, {
+      const result = await fetcher(jenkinsTransport(prefix + path, context), {
         headers: { authorization: auth },
         redirect: "error",
         signal: AbortSignal.timeout(
@@ -594,30 +785,39 @@ export function createReleaseRunner(overrides = {}) {
     if (
       ci.sha !== plan.commits.api ||
       ci.runId !== proof.number ||
-      ![
-        join(root, "releases", plan.commits.api),
-        join(root, "ci-workspaces", plan.commits.api),
-      ].includes(ci.artifactPath) ||
+      ci.rootSha !== plan.commits.project ||
+      ci.artifactPath !==
+        join(root, "releases", plan.commits.project + "-" + plan.commits.api) ||
       ci.state !== "ci-passed" ||
+      ci.nativeProbe !== "passed" ||
+      !/^sha256:[a-f0-9]{64}$/.test(ci.imageId ?? "") ||
       !["current", "deployed"].includes(deployment.state) ||
-      deployment.sha !== plan.commits.api
+      deployment.sha !== plan.commits.api ||
+      deployment.rootSha !== plan.commits.project ||
+      deployment.imageId !== ci.imageId
     )
       throw new Error(
-        "API child evidence is not the pinned completed native release",
+        "API child evidence is not the pinned completed Docker release",
       );
     if (overrides.apiReceipt) await overrides.apiReceipt(proof, plan, ci);
     else {
-      const library = await import(
-        pathToFileURL(join(root, "tools/lib.mjs")).href
+      const receipt = await readJson(
+        join(
+          root,
+          "jenkins-receipts",
+          `${plan.commits.api}-${proof.number}.json`,
+        ),
       );
-      const config = library.validateConfig(
-        await readJson(join(root, "config.json")),
-      );
-      const receipt = await library.readJenkinsReceipt(config, {
-        sha: plan.commits.api,
-        buildNumber: proof.number,
-      });
-      if (!receipt || receipt.artifactPath !== ci.artifactPath)
+      if (
+        !receipt ||
+        receipt.sha !== plan.commits.api ||
+        receipt.rootSha !== plan.commits.project ||
+        receipt.runId !== proof.number ||
+        receipt.state !== "ci-passed" ||
+        receipt.artifactPath !== ci.artifactPath ||
+        receipt.imageId !== ci.imageId ||
+        receipt.nativeProbe !== "passed"
+      )
         throw new Error(
           "Trusted local API receipt does not match Jenkins artifact evidence",
         );
@@ -643,12 +843,17 @@ export function createReleaseRunner(overrides = {}) {
     if (size !== expected.size || hash.digest("hex") !== expected.sha256)
       throw new Error("Jenkins artifact digest differs from verified manifest");
   }
-  async function downloadApi(proof, plan, target) {
+  async function downloadApi(proof, plan, target, expectedImageId) {
     const manifest = validateApiPackage(
       await proof.get("artifact/api-package.json"),
       proof.number,
       plan.commits.api,
+      plan.commits.project,
     );
+    if (manifest.imageId !== expectedImageId)
+      throw new Error(
+        "Packaged API image differs from the deployed trusted receipt",
+      );
     await download(
       proof,
       "artifact/api-package-" + proof.number + ".tgz",
@@ -672,6 +877,15 @@ export function createReleaseRunner(overrides = {}) {
       )
     )
       throw new Error("API archive contains an unsafe path or private state");
+    const types = (await run("/usr/bin/tar", ["-tvzf", target]))
+      .split("\n")
+      .filter(Boolean);
+    if (types.some((line) => !/^[d-]/.test(line)))
+      throw new Error("API archive contains a link or special entry");
+    if (types.filter((line) => line.startsWith("-")).length !== manifest.files)
+      throw new Error(
+        "API archive file inventory differs from its package proof",
+      );
     const release = JSON.parse(
       await run("/usr/bin/tar", [
         "-xzOf",
@@ -681,13 +895,40 @@ export function createReleaseRunner(overrides = {}) {
     );
     if (
       release.sha !== plan.commits.api ||
-      release.platform !== "darwin" ||
+      release.rootSha !== plan.commits.project ||
+      release.schemaVersion !== 2 ||
+      release.platform !== "linux" ||
       release.arch !== "arm64" ||
-      release.nodeMajor !== 22
+      release.nodeMajor !== 22 ||
+      release.imageId !== manifest.imageId ||
+      release.boxliteVersion !== manifest.boxliteVersion ||
+      release.nativeProbe !== "passed" ||
+      release.imageArchive !== "api-image.tar" ||
+      !Number.isFinite(Date.parse(release.builtAt)) ||
+      !paths.includes("agent-platform-api/api-image.tar")
     )
       throw new Error(
         "API archive release provenance differs from verified source",
       );
+    const scratch = await fs.mkdtemp(join(dirname(target), ".api-image-"));
+    await fs.chmod(scratch, 0o700);
+    try {
+      await run("/usr/bin/tar", [
+        "-xzf",
+        target,
+        "--no-same-owner",
+        "-C",
+        scratch,
+        "agent-platform-api/api-image.tar",
+      ]);
+      await verifyDockerSaveArchive(
+        join(scratch, "agent-platform-api/api-image.tar"),
+        manifest.imageId,
+        run,
+      );
+    } finally {
+      await fs.rm(scratch, { recursive: true, force: true });
+    }
     return manifest;
   }
   async function verifyRetainedWeb(plan, record, folder) {
@@ -888,7 +1129,7 @@ export function createReleaseRunner(overrides = {}) {
       },
     );
     if (
-      kind !== "web" &&
+      kind === "contract" &&
       existing[kind]?.number === Number(number) &&
       (await savedBuilds(plan, folder))[kind] === Number(number)
     )
@@ -1102,15 +1343,12 @@ export function createReleaseRunner(overrides = {}) {
     throw new Error("Release tag nesting exceeds limit");
   }
   return async function release(action, ...args) {
-    if (
-      identity.uid !== 501 ||
-      identity.platform !== "darwin" ||
-      identity.arch !== "arm64" ||
-      identity.nodeMajor !== 22
-    )
-      throw new Error(
-        "Publishing requires the trusted Mac mini deploy account and Node22",
-      );
+    if (context.platform === "linux")
+      await (overrides.assertLayout ?? assertDeploymentLayout)({
+        ...context,
+        root,
+        tools,
+      });
     if (action === "plan") {
       const commits = {};
       for (const [name, spec] of Object.entries(REPOSITORIES))
@@ -1214,7 +1452,7 @@ export function createReleaseRunner(overrides = {}) {
       const api = await jenkins("api", args[1], plan),
         web = await webProof(plan, args[2]),
         contract = await jenkins("contract", args[3], plan);
-      await apiEvidence(api, plan);
+      const apiCi = await apiEvidence(api, plan);
       const webRoot = join(root, "web-releases", plan.key);
       const webManifest = validateWebManifest(
         await readJson(join(webRoot, "manifest.json")),
@@ -1243,7 +1481,7 @@ export function createReleaseRunner(overrides = {}) {
       const stage = join(folder, ".package-" + randomUUID());
       await fs.mkdir(stage, { mode: 0o700 });
       try {
-        await downloadApi(api, plan, join(stage, ASSETS[0]));
+        await downloadApi(api, plan, join(stage, ASSETS[0]), apiCi.imageId);
         for (const [from, to] of Object.entries(ARCHIVES)) {
           const actual = await fileDigest(join(webRoot, from)),
             expected = webManifest.archives[from];
@@ -1319,7 +1557,11 @@ export function createReleaseRunner(overrides = {}) {
           tag: plan.tag,
           commits: plan.commits,
           createdAt: now(),
-          builtOn: { platform: "darwin", arch: "arm64", nodeMajor: 22 },
+          builtOn: {
+            platform: context.platform,
+            arch: context.arch,
+            nodeMajor: 22,
+          },
           jenkins: {
             api: { number: api.number, url: api.url },
             web: { number: web.number, url: web.url },
@@ -1392,7 +1634,7 @@ export function createReleaseRunner(overrides = {}) {
               plan.commits.api +
               ", web " +
               plan.commits.web +
-              ". API: native macOS ARM64 / Node22; frontend: Vercel prebuilt; source and Storybook included. Verify every downloaded asset and manifest with SHA256SUMS. Production data and private runtime files are excluded.",
+              ". API: Docker Linux ARM64 / Node22; frontend: Vercel prebuilt; source and Storybook included. Verify every downloaded asset and manifest with SHA256SUMS. Production data and private runtime files are excluded.",
             draft: true,
             prerelease: false,
           }),

@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "state": "already-running-foreground-exit-verified",
+  "records": [
+    {
+      "profile": "agent-platform-jenkins",
+      "beforeStatus": "Running",
+      "exitCode": 0,
+      "elapsedMs": 312,
+      "configurationSha256": "5ab53a969206d8c2973dc31cc3403a11882f95af6b929f866254d8caf35a2f77",
+      "configurationUnchanged": true,
+      "coldBootTested": false
+    },
+    {
+      "profile": "agent-platform-build",
+      "beforeStatus": "Running",
+      "exitCode": 0,
+      "elapsedMs": 327,
+      "configurationSha256": "5ffe43fcc4ba347195b6659bd3bcb18b98450b04fd5f93249e4559323b68efd9",
+      "configurationUnchanged": true,
+      "coldBootTested": false
+    }
+  ],
+  "servicesInstalled": false,
+  "vmRestarted": false,
+  "productionApiTouched": false
+}

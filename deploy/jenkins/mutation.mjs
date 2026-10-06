@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ciEnvironment, REPOSITORY, SHA, validRef } from "./jenkins-ci.mjs";
+import { userInfo } from "node:os";
+import { apiCiContext, REPOSITORY, SHA, validRef } from "./jenkins-ci.mjs";
+import { buildSystem, ciChildEnvironment } from "./ci-platform.mjs";
 
 export const MUTATION_BRANCH = "refs/heads/feat/design-v2-migration";
 
@@ -129,25 +131,14 @@ async function execute(
   }
 }
 
-function isolatedEnvironment() {
-  if (
-    process.platform !== "darwin" ||
-    process.arch !== "arm64" ||
-    process.versions.node.split(".")[0] !== "22"
-  )
-    throw new Error("Mutation CI requires native macOS ARM64 Node 22");
-  const home = process.env.HOME;
-  if (
-    home !== "/Users/Shared/agent-platform-ci" ||
-    process.getuid() === 0 ||
-    process.getuid() === 501
-  )
-    throw new Error(
-      "Mutation jobs must run under the isolated CI service account",
-    );
+export function mutationEnvironment(
+  identity = userInfo(),
+  system = buildSystem(),
+) {
+  const context = apiCiContext(identity, system);
   return {
-    home,
-    env: ciEnvironment(process.execPath, home, join(home, "tmp")),
+    home: context.home,
+    env: ciChildEnvironment(context.node, context),
   };
 }
 
@@ -156,7 +147,7 @@ export async function mutationHead(ref = MUTATION_BRANCH, run = execute) {
     throw new Error(
       "Nightly mutation resolves only the fixed production branch",
     );
-  const { home, env } = isolatedEnvironment();
+  const { home, env } = mutationEnvironment();
   const output = await run(
     "/usr/bin/git",
     ["ls-remote", "--exit-code", REPOSITORY, ref],
@@ -302,7 +293,7 @@ export async function mutationRun(
   workspace = process.cwd(),
 ) {
   const request = mutationRequest(sha, ref, mode, baseSha, baseRef);
-  const { home, env } = isolatedEnvironment();
+  const { home, env } = mutationEnvironment();
   const source = await fs.realpath(join(resolve(workspace), "source"));
   if (!source.startsWith(`${home}/`))
     throw new Error("Mutation workspace escaped its CI home");

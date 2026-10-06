@@ -2,23 +2,28 @@ import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { userInfo } from "node:os";
+import { buildSystem } from "./ci-platform.mjs";
+import {
+  LINUX_DEPLOY,
+  deploymentContext,
+  assertDeploymentLayout,
+  deploymentEnvironment,
+} from "./deployment-platform.mjs";
 
 export const IMAGE_REPOSITORY =
   "https://github.com/Xeonice/agent-platform-api.git";
 export const IMAGE_BRANCH = "refs/heads/feat/design-v2-migration";
 export const IMAGE_TAG_REF =
   /^refs\/tags\/sandbox-image-v[0-9]+(?:\.[0-9]+){0,2}(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
-export const DOCKER = "/Users/douglasdong/.orbstack/bin/docker";
-export const DOCKER_HOST =
-  "unix:///Users/douglasdong/.colima/agent-platform-build/docker.sock";
-export const BUILDER = "colima-agent-platform-build";
-export const DOCKER_PLUGINS = "/Applications/OrbStack.app/Contents/MacOS/xbin";
-export const TOOLS =
-  "/Users/douglasdong/.local/share/agent-platform-jenkins-tools";
-export const WORKSPACES =
-  "/Users/douglasdong/.local/share/agent-platform-deploy/jenkins-agent";
+export const DOCKER = "/usr/local/bin/docker";
+export const DOCKER_HOST = "unix:///var/run/docker.sock";
+export const BUILDER = "agent-platform-runtime";
+export const DOCKER_PLUGINS = "/usr/local/lib/docker/cli-plugins";
+export const TOOLS = LINUX_DEPLOY.tools;
+export const WORKSPACES = join(LINUX_DEPLOY.home, "agent");
 const SHA = /^[a-f0-9]{40}$/;
 const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const ACCEPT = [
@@ -170,15 +175,8 @@ export async function imagePlan(source, request) {
 
 export function imageEnvironment(node, dockerConfig, temporary) {
   return {
-    PATH: `${dirname(node)}:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin`,
-    HOME: "/Users/douglasdong",
+    ...deploymentEnvironment(node, LINUX_DEPLOY.home, "linux"),
     TMPDIR: temporary,
-    CI: "true",
-    HUSKY: "0",
-    LANG: "en_US.UTF-8",
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_NOSYSTEM: "1",
-    GIT_CONFIG_GLOBAL: "/dev/null",
     DOCKER_HOST,
     DOCKER_CONFIG: dockerConfig,
   };
@@ -272,7 +270,7 @@ async function execute(
   }
 }
 
-async function tokenValue(path, expectedUid = 501) {
+export async function tokenValue(path, expectedUid = LINUX_DEPLOY.uid) {
   const handle = await fs.open(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -282,7 +280,8 @@ async function tokenValue(path, expectedUid = 501) {
     if (
       !stat.isFile() ||
       stat.uid !== expectedUid ||
-      stat.mode & 0o077 ||
+      (stat.mode & 0o777) !== 0o600 ||
+      stat.nlink !== 1 ||
       stat.size > 65_536 ||
       stat.size < 1
     )
@@ -442,31 +441,26 @@ export function createImagePublisher(overrides = {}) {
   const token =
     overrides.token ?? (() => tokenValue(join(TOOLS, "ghcr-token")));
   const workspaceRoot = resolve(overrides.workspaceRoot ?? WORKSPACES);
-  const identity = overrides.identity ?? {
-    uid: process.getuid(),
-    platform: process.platform,
-    arch: process.arch,
-    node: Number(process.versions.node.split(".")[0]),
-  };
+  const identity = overrides.identity ?? userInfo();
+  const system = overrides.system ?? buildSystem();
+  const checkLayout = overrides.checkLayout ?? assertDeploymentLayout;
   const signal = overrides.signal;
-  function guard() {
-    if (
-      identity.uid !== 501 ||
-      identity.platform !== "darwin" ||
-      identity.arch !== "arm64" ||
-      identity.node !== 22
-    )
+  async function guard() {
+    const context = deploymentContext(identity, system);
+    if (context.platform !== "linux")
       throw new Error(
-        "Image publication requires the trusted native Mac deploy account and Node 22",
+        "Image publication requires the dedicated Linux ARM64 deployment container",
       );
+    await checkLayout(context);
     signal?.throwIfAborted();
+    return context;
   }
   async function head(ref = IMAGE_BRANCH) {
-    guard();
+    const context = await guard();
     if (!(ref === IMAGE_BRANCH || IMAGE_TAG_REF.test(ref)))
       throw new Error("Invalid trusted image ref");
     const env = imageEnvironment(
-      process.execPath,
+      context.node,
       join(TOOLS, "anonymous-docker-unused"),
       join(TOOLS, "tmp"),
     );
@@ -501,7 +495,7 @@ export function createImagePublisher(overrides = {}) {
     mode = "check",
     workspace = process.cwd(),
   ) {
-    guard();
+    const context = await guard();
     const request = imageRequest(sha, ref, tag, mode);
     const work = await fs.realpath(resolve(workspace));
     const inside = relative(workspaceRoot, work);
@@ -526,11 +520,7 @@ export function createImagePublisher(overrides = {}) {
       JSON.stringify({ cliPluginsExtraDirs: [DOCKER_PLUGINS] }),
       { mode: 0o600 },
     );
-    const env = imageEnvironment(
-      process.execPath,
-      privateDocker,
-      privateDocker,
-    );
+    const env = imageEnvironment(context.node, privateDocker, privateDocker);
     const log = join(work, "sandbox-images.log");
     await fs.rm(log, { force: true });
     const result = {
@@ -575,7 +565,7 @@ export function createImagePublisher(overrides = {}) {
       result.platforms = plan.platforms;
       await advance("default-image");
       await invoke(
-        process.execPath,
+        context.node,
         ["scripts/check-default-image-consistency.mjs"],
         { log },
       );
@@ -593,7 +583,7 @@ export function createImagePublisher(overrides = {}) {
       const builder = await invoke(DOCKER, ["buildx", "inspect", BUILDER]);
       if (!builder.includes("linux/amd64") || !builder.includes("linux/arm64"))
         throw new Error(
-          "Dedicated native builder lacks one of the two required Linux architectures",
+          "Dedicated runtime builder lacks one of the two required Linux architectures",
         );
       if (mode === "check") {
         result.status = "checked";

@@ -1,10 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname, resolve, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { LINUX_CI, browserVerificationScript } from "./ci-platform.mjs";
+import { assertDeploymentLayout } from "./deployment-platform.mjs";
 import {
   WEB,
   GATES,
@@ -17,6 +19,7 @@ import {
   treeEvidence,
   validateManifest,
   testReport,
+  readExecutedTestReport,
   archivePaths,
   deploymentResult,
   releaseKey,
@@ -28,14 +31,15 @@ const execute = promisify(execFile);
 const WEB_SHA = "a".repeat(40),
   ROOT_SHA = "b".repeat(40),
   API_SHA = "c".repeat(40);
-const RUNS_NATIVE =
-  process.platform === "darwin" &&
-  process.arch === "arm64" &&
-  process.versions.node.startsWith("22.");
+// Pipeline fixtures simulate the legacy Mac dispatcher with real filesystem
+// and tar boundaries. They also run on Linux; no native VM or Mac service is used.
+const legacySystem = {
+  platform: "darwin",
+  arch: "arm64",
+  nodeMajor: 22,
+  node: process.execPath,
+};
 const native = {
-  skip: RUNS_NATIVE
-    ? false
-    : "Pipeline integration requires native macOS ARM64 Node 22",
   concurrency: false,
 };
 const project = () => ({
@@ -127,6 +131,16 @@ async function fixture(t) {
   });
   const fakeExecute = async (command, args, cwd, env, capture) => {
     state.calls.push({ command, args, cwd, env, capture });
+    if (command === LINUX_CI.node && args[0] === "--input-type=module") {
+      assert.deepEqual(args, [
+        "--input-type=module",
+        "-e",
+        browserVerificationScript(),
+      ]);
+      if (state.fail === "browser-verification")
+        throw new Error("Preinstalled browser revision is missing");
+      return "";
+    }
     if (command === "/usr/bin/tar")
       return (await execute(command, args, { cwd, env })).stdout.trim();
     if (command === "/usr/bin/git") {
@@ -163,7 +177,7 @@ async function fixture(t) {
       }
       return "";
     }
-    if (args[0] === WEB.cli) {
+    if ([WEB.cli, LINUX_CI.cli].includes(args[0])) {
       const action = args[1];
       if (action === "pull") {
         const cache = join(args[2], ".vercel");
@@ -188,7 +202,22 @@ async function fixture(t) {
         await put(join(output, "functions/index.func/.vc-config.json"), {
           runtime: "nodejs22.x",
           handler: "index.js",
+          ...(state.functionArchitecture
+            ? { architecture: state.functionArchitecture }
+            : {}),
         });
+        if (state.elfMachine) {
+          const elf = Buffer.alloc(64);
+          elf.write("ELF", 1);
+          elf[0] = 0x7f;
+          elf[4] = 2;
+          elf[5] = 1;
+          elf.writeUInt16LE(state.elfMachine, 18);
+          await fs.writeFile(
+            join(output, "functions/index.func/sharp.node"),
+            elf,
+          );
+        }
         if (state.mach)
           await fs.writeFile(
             join(output, "functions/index.func/sharp.node"),
@@ -260,6 +289,7 @@ async function fixture(t) {
     throw new Error("Unexpected command");
   };
   const overrides = {
+    system: legacySystem,
     cliVersion: "62.2.0",
     paths,
     execute: fakeExecute,
@@ -282,9 +312,36 @@ async function fixture(t) {
   ) =>
     runWebPhase(phase, sha, ref, workspace, root, api, {
       ...overrides,
+      ...(state.system ? { system: state.system } : {}),
+      ...(["prepare-env", "adopt", "upload", "promote"].includes(phase) &&
+      state.trustedLinux
+        ? {
+            system: {
+              platform: "linux",
+              arch: "arm64",
+              nodeMajor: 22,
+              node: LINUX_CI.node,
+            },
+            ...(state.layoutGuard ? { assertLayout: state.layoutGuard } : {}),
+          }
+        : {}),
       identity: ["prepare-env", "adopt", "upload", "promote"].includes(phase)
-        ? { username: "douglasdong", homedir: WEB.ownerHome }
-        : { username: "_agentplatformci", homedir: WEB.ciHome },
+        ? state.trustedLinux
+          ? {
+              username: "jenkins",
+              uid: 1000,
+              gid: 1000,
+              homedir: LINUX_CI.home,
+            }
+          : { username: "douglasdong", uid: 501, homedir: WEB.ownerHome }
+        : state.system?.platform === "linux"
+          ? {
+              username: "jenkins",
+              uid: 1000,
+              gid: 1000,
+              homedir: LINUX_CI.home,
+            }
+          : { username: "_agentplatformci", homedir: WEB.ciHome },
     });
   const release = join(
     paths.root,
@@ -300,6 +357,203 @@ async function build(f) {
   await f.invoke("package");
 }
 
+test(
+  "trusted Linux adopts identical CI bits and authenticates only fixed Vercel commands after private volume validation",
+  { concurrency: false },
+  async (t) => {
+    const f = await fixture(t);
+    await build(f);
+    f.state.trustedLinux = true;
+    let checks = 0;
+    f.state.layoutGuard = async (layout) => {
+      checks++;
+      assert.equal(layout.root, "/srv/agent-platform/deploy");
+      assert.equal(layout.tools, "/run/agent-platform/jenkins-tools");
+      assert.equal(
+        layout.auth,
+        "/run/agent-platform/jenkins-tools/vercel/auth.json",
+      );
+    };
+    await f.invoke("adopt");
+    await f.invoke("upload");
+    await f.invoke("promote");
+    assert.equal(checks, 3);
+    assert.equal(f.state.uploads, 1);
+    assert.equal(f.state.promotes, 1);
+    const authenticated = f.state.calls.filter(
+      (call) =>
+        call.command === LINUX_CI.node &&
+        call.args[0] === LINUX_CI.cli &&
+        call.args.includes("--global-config"),
+    );
+    assert.equal(authenticated.length > 0, true);
+    for (const call of authenticated) {
+      assert.equal(call.args.at(-1), f.path);
+      assert.equal(call.env.PATH.includes("homebrew"), false);
+      for (const name of [
+        "ACCESS_PASSCODE",
+        "VERCEL_TOKEN",
+        "GH_TOKEN",
+        "NODE_OPTIONS",
+        "DOCKER_HOST",
+      ])
+        assert.equal(call.env[name], undefined);
+      assert.equal(JSON.stringify(call.args).includes("fake-private"), false);
+    }
+    assert.equal(
+      f.state.calls
+        .filter((call) => call.url)
+        .every((call) => call.url.startsWith("http://127.0.0.1:3101/api/")),
+      true,
+    );
+  },
+);
+
+test(
+  "Linux CI identity without trusted private volumes cannot invoke credential-bearing web publication",
+  { concurrency: false },
+  async (t) => {
+    const f = await fixture(t);
+    f.state.trustedLinux = true;
+    f.state.layoutGuard = (layout) =>
+      assertDeploymentLayout({
+        ...layout,
+        root: join(f.path, "missing-production-volume"),
+        tools: join(f.path, "missing-credentials-volume"),
+      });
+    await assert.rejects(f.invoke("upload"));
+    assert.equal(f.state.calls.length, 0);
+    assert.equal(f.state.uploads, 0);
+  },
+);
+
+async function publicFixture(f) {
+  const cache = join(f.workspace, "public-vercel-cache");
+  await fs.mkdir(cache);
+  await put(join(cache, "project.json"), safeProject(project()));
+  await put(
+    join(cache, "production.env"),
+    Object.entries(PUBLIC_ENV)
+      .map(([key, value]) => key + "=" + value)
+      .join("\n"),
+  );
+  await put(join(cache, "provenance.json"), {
+    sha: WEB_SHA,
+    rootSha: ROOT_SHA,
+    apiSha: API_SHA,
+    projectId: WEB.projectId,
+  });
+}
+
+test(
+  "Linux AMD64 production CI runs every local gate with no publication credentials and packages verified ELF targets",
+  { concurrency: false },
+  async (t) => {
+    const f = await fixture(t);
+    await publicFixture(f);
+    f.state.system = {
+      platform: "linux",
+      arch: "x64",
+      nodeMajor: 22,
+      node: LINUX_CI.node,
+    };
+    f.state.elfMachine = 62;
+    await f.invoke("checkout");
+    for (const gate of GATES) await f.invoke(gate);
+    await f.invoke("package");
+    const manifest = await read(
+      join(f.workspace, "web-artifacts/manifest.json"),
+    );
+    validateManifest(manifest, WEB_SHA, ROOT_SHA, true, API_SHA);
+    assert.deepEqual(manifest.buildSystem, { platform: "linux", arch: "x64" });
+    assert.deepEqual(manifest.trees.output.nativeArchitectures, ["x86_64"]);
+    const ciCalls = f.state.calls.filter((c) => c.command === LINUX_CI.node);
+    assert.equal(
+      ciCalls.some((c) => c.args[0] === "--input-type=module"),
+      true,
+    );
+    assert.equal(
+      ciCalls.some(
+        (c) =>
+          c.args.slice(-4).join(" ") === "exec playwright install chromium",
+      ),
+      false,
+    );
+    const buildCall = ciCalls.find(
+      (c) => c.args[0] === LINUX_CI.cli && c.args[1] === "build",
+    );
+    assert.equal(buildCall.args.includes("--standalone"), true);
+    assert.equal(buildCall.env.PLAYWRIGHT_BROWSERS_PATH, LINUX_CI.browsers);
+    for (const call of ciCalls) {
+      assert.equal(Object.hasOwn(call.env, "VERCEL_TOKEN"), false);
+      assert.equal(Object.hasOwn(call.env, "ACCESS_PASSCODE"), false);
+      assert.equal(JSON.stringify(call.args).includes("fake-private"), false);
+    }
+    await assert.rejects(f.invoke("upload"), /Trusted deployment account/);
+    assert.equal(f.state.uploads, 0);
+  },
+);
+
+test(
+  "Linux browser verification failure makes install fail and prevents packaging",
+  { concurrency: false },
+  async (t) => {
+    const f = await fixture(t);
+    f.state.system = {
+      platform: "linux",
+      arch: "x64",
+      nodeMajor: 22,
+      node: LINUX_CI.node,
+    };
+    f.state.fail = "browser-verification";
+    await f.invoke("checkout");
+    await assert.rejects(f.invoke("install"), /browser revision is missing/);
+    const report = await read(join(f.workspace, "web-artifacts/web-ci.json"));
+    assert.equal(report.state, "failed");
+    assert.equal(report.gates.install.state, "failed");
+    await assert.rejects(f.invoke("package"), /previous gate failed/);
+    assert.equal(
+      await fs
+        .lstat(join(f.workspace, "web-artifacts/manifest.json"))
+        .catch(() => null),
+      null,
+    );
+  },
+);
+
+test(
+  "Linux ARM64 output may be pure JS but cannot package ARM ELF for a default x86_64 function",
+  { concurrency: false },
+  async (t) => {
+    const f = await fixture(t);
+    await publicFixture(f);
+    f.state.system = {
+      platform: "linux",
+      arch: "arm64",
+      nodeMajor: 22,
+      node: LINUX_CI.node,
+    };
+    await f.invoke("checkout");
+    await f.invoke("build");
+    assert.deepEqual(
+      (await read(join(f.workspace, "web-artifacts/web-ci.json"))).gates.build
+        .output.nativeArchitectures,
+      [],
+    );
+    await fs.rm(join(f.workspace, "web-source/.vercel"), { recursive: true });
+    await fs.rm(join(f.workspace, "empty-vercel-global"), { recursive: true });
+    f.state.elfMachine = 183;
+    await assert.rejects(f.invoke("build"), /ELF architecture does not match/);
+    await assert.rejects(f.invoke("package"), /previous gate failed/);
+    assert.equal(
+      await fs
+        .lstat(join(f.workspace, "web-artifacts/manifest.json"))
+        .catch(() => null),
+      null,
+    );
+  },
+);
+
 test("only valid fixed-repository ref syntax and isolated/trusted OS identities are accepted", () => {
   for (const ref of ["refs/heads/main", WEB.ref, "refs/pull/12/head"])
     assert.equal(validRef(ref), true);
@@ -313,7 +567,11 @@ test("only valid fixed-repository ref syntax and isolated/trusted OS identities 
   ])
     assert.equal(validRef(ref), false);
   assert.equal(
-    roleFor("install", { username: "_agentplatformci", homedir: WEB.ciHome }),
+    roleFor(
+      "install",
+      { username: "_agentplatformci", homedir: WEB.ciHome },
+      legacySystem,
+    ),
     "ci",
   );
   assert.throws(() =>
@@ -365,6 +623,19 @@ test("public cache drops unknown/private project env values and pins exact produ
       settings: { ...project().settings, installCommand: "curl evil | sh" },
     }),
   );
+});
+
+test("browser report metadata above the configuration limit remains readable, while links and oversized reports fail", async (t) => {
+  const directory = await fs.mkdtemp(join(tmpdir(), "web-browser-report-"));
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "storybook.json");
+  await put(path, { ...passed(), browserMetadata: "x".repeat(3_000_000) });
+  assert.deepEqual(await readExecutedTestReport(path), testReport(passed()));
+  const link = join(directory, "linked.json");
+  await fs.symlink(path, link);
+  await assert.rejects(readExecutedTestReport(link));
+  await fs.truncate(path, 64 * 1024 * 1024 + 1);
+  await assert.rejects(readExecutedTestReport(path), /Unsafe input file/);
 });
 
 test("real executed test reports reject missing counts, skips, contradictory suites and failures", () => {
@@ -470,6 +741,59 @@ test("build walker hashes real files and refuses Darwin binaries, symlinks and e
   await fs.rm(join(path, "alias.js"));
   await put(join(path, ".env.production.local"), "private");
   await assert.rejects(treeEvidence(path), /Private configuration/);
+});
+
+test("ELF machine is verified against each function target, including shared libraries and explicit arm64", async (t) => {
+  const root = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "web-elf-target-")),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const fn = join(root, "functions/handler.func");
+  await fs.mkdir(fn, { recursive: true });
+  await put(join(fn, ".vc-config.json"), {
+    runtime: "nodejs22.x",
+    handler: "index.js",
+  });
+  const elf = Buffer.alloc(64);
+  elf[0] = 0x7f;
+  elf.write("ELF", 1);
+  elf[4] = 2;
+  elf[5] = 1;
+  elf.writeUInt16LE(183, 18);
+  await fs.writeFile(join(fn, "libvips.so.42"), elf);
+  await assert.rejects(
+    treeEvidence(root, { linux: true }),
+    /ELF architecture does not match/,
+  );
+  await put(join(fn, ".vc-config.json"), {
+    runtime: "nodejs22.x",
+    handler: "index.js",
+    architecture: "arm64",
+  });
+  assert.deepEqual(
+    (await treeEvidence(root, { linux: true })).nativeArchitectures,
+    ["arm64"],
+  );
+  elf.writeUInt16LE(62, 18);
+  await fs.writeFile(join(fn, "libvips.so.42"), elf);
+  await assert.rejects(
+    treeEvidence(root, { linux: true }),
+    /ELF architecture does not match/,
+  );
+  await put(join(fn, ".vc-config.json"), {
+    runtime: "nodejs22.x",
+    handler: "index.js",
+  });
+  assert.deepEqual(
+    (await treeEvidence(root, { linux: true })).nativeArchitectures,
+    ["x86_64"],
+  );
+  elf.writeUInt16LE(3, 18);
+  await fs.writeFile(join(fn, "libvips.so.42"), elf);
+  await assert.rejects(
+    treeEvidence(root, { linux: true }),
+    /Unsupported native ELF architecture/,
+  );
 });
 
 test("standalone normalization flattens internal aliases while refusing source links and cycles", async (t) => {
@@ -918,10 +1242,10 @@ test(
     assert.equal(provenance.apiSha, API_SHA);
     const call = f.state.calls.find((c) => c.args?.[1] === "pull");
     assert.equal(call.args.at(-1), f.path);
-    assert.equal(
-      call.env.HOME.startsWith("/var/") ||
-        call.env.HOME.startsWith("/private/"),
-      true,
+    assert.equal(resolve(dirname(call.env.HOME)), resolve(tmpdir()));
+    assert.match(
+      basename(call.env.HOME),
+      /^agent-platform-vercel-[A-Za-z0-9]+$/,
     );
     assert.equal(call.env.HOME === WEB.ownerHome, false);
     await assert.rejects(f.invoke("adopt"), /ENOENT/);

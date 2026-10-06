@@ -1,0 +1,581 @@
+{
+  "version": 1,
+  "state": "passed",
+  "startedAt": "2026-10-06T03:36:30.818Z",
+  "finishedAt": "2026-10-06T03:36:32.688Z",
+  "exitCode": 0,
+  "runtime": {
+    "platform": "linux",
+    "arch": "arm64",
+    "node": "v22.23.3",
+    "uid": 1000,
+    "gid": 1000
+  },
+  "container": "334961bda715bcf4d55a02675bc1cb3e877d0410b0cd2294c03e4effdfbaa6ad",
+  "volumes": [
+    "agent-platform-linux-deploy-tests-d3fa894d-c4e5-4bd3-8ca3-18bb4d54cb49",
+    "eb062e77acbca48c1b6961909b62df6dd21cb9374e69c1b1714e5ea210092777"
+  ],
+  "contextPath": "/home/jenkins/agent/final-source-lo5NX5",
+  "contextSha256": "37d848473e6b70f8fcc43b18a0ecad9ff88f4b2bf61615ac64b7206f42d33997",
+  "sourceHashes": [
+    {
+      "path": "api/scripts/check-default-image-consistency.mjs",
+      "sha256": "c05238ad39454591d685398eb0c377f8561e5ea020a9f10c3e18d9cd46ffc6f8"
+    },
+    {
+      "path": "deploy/containers/Dockerfile.api",
+      "sha256": "aa8edecabf59196b9b24e731bad232fdb66896b85888785355ca0689c01b807a"
+    },
+    {
+      "path": "deploy/containers/Dockerfile.boxlite-proof",
+      "sha256": "35260adffec5a30c5205319861f511d412c8415c86f93d86516f199e16a6f497"
+    },
+    {
+      "path": "deploy/containers/Dockerfile.boxlite-proof.dockerignore",
+      "sha256": "1ee65cd81741ee8004bce9d42d8d93a77967bd32ee01f34c5a81a16cf3db3a4d"
+    },
+    {
+      "path": "deploy/containers/api-container.mjs",
+      "sha256": "f9fe8c74160e8f25e7233d048c623ef475c3cc8fe4900d0c1c9dc7667f3307a2"
+    },
+    {
+      "path": "deploy/containers/api-context.mjs",
+      "sha256": "d4599168e3ccbd989b40ecc720e57d9fde147cc1604f1973cd449195d58c5df5"
+    },
+    {
+      "path": "deploy/containers/api-context.test.mjs",
+      "sha256": "37245c7c6f3aefab9385412841f961987dda08e302cd8ef71bff5cf84c85bd3b"
+    },
+    {
+      "path": "deploy/containers/api-entrypoint.mjs",
+      "sha256": "8ffd4a6113d25063ef66c655ce49a2f5f9f943ece8e5349de27c2d4c71b6b262"
+    },
+    {
+      "path": "deploy/containers/api-smoke.mjs",
+      "sha256": "bd0378a002a2176809c6ba04aa94948d2e8abf75cdbd7f90977cb65e975e6ea8"
+    },
+    {
+      "path": "deploy/containers/bootstrap-host.mjs",
+      "sha256": "5e694190c586e160a7bdc75772691a86185dc8ba88dadc8766690f6b22220cb9"
+    },
+    {
+      "path": "deploy/containers/boxlite-proof/README.md",
+      "sha256": "ca1064cbf49cfe2d3632de337f9be40f59f68968d456f4a26e907ea1151db90e"
+    },
+    {
+      "path": "deploy/containers/boxlite-proof/materialize-certs.py",
+      "sha256": "9a4d17436ee18513c4daa8a72d5187dfd4f386c523271f1a43af90c789cb0a1f"
+    },
+    {
+      "path": "deploy/containers/boxlite-proof/package-lock.json",
+      "sha256": "e3c6e191a62b7bc67e1b9a21d0b54137ada6b864ba328bed5bb37b07b9476a47"
+    },
+    {
+      "path": "deploy/containers/boxlite-proof/package.json",
+      "sha256": "e4ce76227dfca6c8f65fbf2247f74f87415a16a4eb6b826aab7324fcd462c3d9"
+    },
+    {
+      "path": "deploy/containers/boxlite-proof/prepare-runtime.py",
+      "sha256": "99f87664308ca867fdadb06371c06b1b31cff8cafea887e9bdc95f3ad0e3a26e"
+    },
+    {
+      "path": "deploy/containers/boxlite-smoke.mjs",
+      "sha256": "1e7b1d880291295f4a3823e1d3a27282b9c77d7d59848e67019e62da4a179dfb"
+    },
+    {
+      "path": "deploy/containers/ci-image.test.mjs",
+      "sha256": "62b8d1dc4eca08882611e8630f40bc79bbf8544fe81d59f54d40898260e14678"
+    },
+    {
+      "path": "deploy/containers/ci-smoke.mjs",
+      "sha256": "bae20b036305eca25740ad8103eee59743676c717e65b277fd82530b186a02d2"
+    },
+    {
+      "path": "deploy/containers/ci-tools/package-lock.json",
+      "sha256": "9ad5bd7800fb971e3afa6b27a9637e5498a8b02b88ce2e1718511e9b58204408"
+    },
+    {
+      "path": "deploy/containers/ci-tools/package.json",
+      "sha256": "de3f6901fe8ba883c71a908f489395712001bd8ea17ec0c74c27a34fd849e3be"
+    },
+    {
+      "path": "deploy/containers/ci.Dockerfile",
+      "sha256": "8ca025f2c05ba0fbaa40f7951e8e28cd3e0c758f37deec7d006aff2e00a2b39a"
+    },
+    {
+      "path": "deploy/containers/compose.ci.json",
+      "sha256": "8f0b05b74aee4b0e9d3a233eab1ec0fb5602a8b640f1c0c8eac0f81509758763"
+    },
+    {
+      "path": "deploy/containers/compose.controller.json",
+      "sha256": "3281c3f94704d12d102a949b5d9ce9f56a88552e7fe47034c9926ba473808817"
+    },
+    {
+      "path": "deploy/containers/compose.lab.json",
+      "sha256": "e99b88acaa0d2226286bcc62d408396e80aff76595fdcd7b51c2aa2e95cac0c6"
+    },
+    {
+      "path": "deploy/containers/compose.runtime.json",
+      "sha256": "628195dff30398e2e2c7c079a8f705ae38a5ca9df9f9af8d4a17bc9e765245fb"
+    },
+    {
+      "path": "deploy/containers/controller-entrypoint.sh",
+      "sha256": "f8cdbadac17106f2dcdd7295d3f0632fbeceb2e84664997ef3601e09469d401f"
+    },
+    {
+      "path": "deploy/containers/controller.Dockerfile",
+      "sha256": "a6d2f4deee2090e43ba15b209adb924b2052067964eb787fb73da273636056cc"
+    },
+    {
+      "path": "deploy/containers/controller.mjs",
+      "sha256": "a46c962a0f2fcb268ef6d5ee885646d462ea68143048bd319e1a38d9d24181f8"
+    },
+    {
+      "path": "deploy/containers/controller.test.mjs",
+      "sha256": "a84f4d82b0c0ad9a20669a96429a32380af5b413efc5e1694ac6804afdbe7e07"
+    },
+    {
+      "path": "deploy/containers/deploy-agent-entrypoint.mjs",
+      "sha256": "6abdd891300f07818a6f636f86bbf00d290aec909e6764a78f4c224ffcdc4481"
+    },
+    {
+      "path": "deploy/containers/deploy.Dockerfile",
+      "sha256": "deea2fa72725fff0252487ca9270b5bf59b2c3e8ea88146a11973245990c8f97"
+    },
+    {
+      "path": "deploy/containers/export-jenkins-home.mjs",
+      "sha256": "e6943a8321c30d2c2da293f34cbfa6870f7b7426c51ec1a7f3ec408699c929a1"
+    },
+    {
+      "path": "deploy/containers/export-jenkins-home.test.mjs",
+      "sha256": "fbe0e36fe96896a5b85d0eb346b8864453e038425835163cea7f93e65d5fa895"
+    },
+    {
+      "path": "deploy/containers/host-services.mjs",
+      "sha256": "e8dc47ded168e12f74ed7ec90f92f11da19b97155c70c90730db066d4efdeb7d"
+    },
+    {
+      "path": "deploy/containers/host-services.test.mjs",
+      "sha256": "ab896a3b65b160ef0cfd742d55894ca2835b0b0cead7fc4474dfb2185240f25d"
+    },
+    {
+      "path": "deploy/containers/import-jenkins-home.mjs",
+      "sha256": "d2c034d3f7546f5cbc94b5401b3a17fcd66de1d3538d7a49a233d3e6bf01e693"
+    },
+    {
+      "path": "deploy/containers/import-jenkins-home.test.mjs",
+      "sha256": "0bd40f09d56958b5f10d0831327a0df17270b05142c3719bc2989c4c6d32d1e1"
+    },
+    {
+      "path": "deploy/containers/init.groovy.d/10-container-guard.groovy",
+      "sha256": "fb64bb49d288b67d0d3485dd8bd88811429527cecece6370f43bd2270071f3a6"
+    },
+    {
+      "path": "deploy/containers/migrate-data.mjs",
+      "sha256": "ebadcb9632435a1002b9240a916e7d66774486ea5b0d7dfbd1bb3e019af8fef5"
+    },
+    {
+      "path": "deploy/containers/migrate-data.test.mjs",
+      "sha256": "d0e8d2ea7a260054d3e23eac5ae9f57fc0184121f6dfefe45dba7eea618a444d"
+    },
+    {
+      "path": "deploy/containers/plugins.mjs",
+      "sha256": "8ad036e6603aa483ef5c2d570a248b0e57d431107c7a73ba2fac2022242af7e9"
+    },
+    {
+      "path": "deploy/containers/prepare-context.mjs",
+      "sha256": "5afa82539a3b76b958718bb4ed7cc4944b5d9fd5c004eaf92e079b1b0ae98ae1"
+    },
+    {
+      "path": "deploy/containers/prepare-context.test.mjs",
+      "sha256": "a803068506a473c3175b9c3e950b098acc157cd3d7082276df59b231ac11bc1c"
+    },
+    {
+      "path": "deploy/containers/prepare-deploy-context.mjs",
+      "sha256": "580f831ec9c8aaf37e83fc6db3268a9e7258d2a8def7ecf64f2e3966239b8a00"
+    },
+    {
+      "path": "deploy/containers/verify-controller.mjs",
+      "sha256": "4887b881ba60b12857859d99bc88a07c51d544395b4e4b1cdae7134f8f7f5d12"
+    },
+    {
+      "path": "deploy/containers/verify-home-migration.mjs",
+      "sha256": "687b53a688ed72733afc39b127e265b44f3f7ebec8081552a07a7b8d1d3ee9b9"
+    },
+    {
+      "path": "deploy/containers/verify-home-migration.test.mjs",
+      "sha256": "f7f25d0e5392ea87fa09a4270e9f491b95576343bac8b9d706eee8d2d08aa247"
+    },
+    {
+      "path": "deploy/jenkins/api.groovy",
+      "sha256": "69b085c47354447d78f4a33ccee4409e076a3feb1755fa25a96c4f06ea460ceb"
+    },
+    {
+      "path": "deploy/jenkins/bootstrap.groovy",
+      "sha256": "1fecc144a8b7ce9addcdf41ac1da824def13c63a1c411aef9ad7d0ca215f8d26"
+    },
+    {
+      "path": "deploy/jenkins/ci-agent-entrypoint.mjs",
+      "sha256": "925ed40d161ac0f041f3f0534794469df7506e915e57eee4eced0b95c043af5a"
+    },
+    {
+      "path": "deploy/jenkins/ci-cutover.md",
+      "sha256": "d105f3c280b0e5142a6ffb4f9132ae13aa919012b0e2961058570e537d660856"
+    },
+    {
+      "path": "deploy/jenkins/ci-cutover.mjs",
+      "sha256": "ecc3c8e69514aeca29c0f1daae79aad3bf09a948cf0cc29b06a4cb4c6b5534a2"
+    },
+    {
+      "path": "deploy/jenkins/ci-cutover.test.mjs",
+      "sha256": "ffda8ff650507fce72d10cb3d70728a0c6c4432ebfa4076cfb8861e0b61d7539"
+    },
+    {
+      "path": "deploy/jenkins/ci-platform.mjs",
+      "sha256": "a8528d7044b9578721f7a847043b3a069b3ac3d21da745125c122799ff8bef87"
+    },
+    {
+      "path": "deploy/jenkins/ci-platform.test.mjs",
+      "sha256": "ac313c522c6f74a6af4cc30249fdefe97f614dd8f78cc56d558e470a7c645813"
+    },
+    {
+      "path": "deploy/jenkins/collect-api-reports.mjs",
+      "sha256": "3f009f30909935231565db8c2b56908dce6c2dca960a7550011a8f16c816158d"
+    },
+    {
+      "path": "deploy/jenkins/contract.groovy",
+      "sha256": "ab2f44b7f0861f1fcc9df511740d11ac4b96bb71f5d07655134c47948128ba0f"
+    },
+    {
+      "path": "deploy/jenkins/deployment-platform.mjs",
+      "sha256": "2089c63cd5457e9fc105681ad5763b89bbbd1f9253fc4b0d7959ed93a1e41df9"
+    },
+    {
+      "path": "deploy/jenkins/discover.groovy",
+      "sha256": "5bb4c73e11003e4ca2e207fb1a0cab7b7553f843e9a7f4a8d4d8636cec8dcb82"
+    },
+    {
+      "path": "deploy/jenkins/fixtures/docker-save.mjs",
+      "sha256": "a0a94353ec4edf5bac5e4e4672bc8942e9e27f1acefbac715599b2e2f3a861bd"
+    },
+    {
+      "path": "deploy/jenkins/fixtures/web-manual-package-shape.json",
+      "sha256": "e86e312c477e9b3b1880b359e2aa477c73eb0f91b483321767e12ec26c534365"
+    },
+    {
+      "path": "deploy/jenkins/github-status-app.md",
+      "sha256": "435cdb277c7a888e2373e661de084a6b5a64d03da93e99b5c9bee1a5956e787f"
+    },
+    {
+      "path": "deploy/jenkins/github-status-app.mjs",
+      "sha256": "d2bb52ba9987ae2ab85341a66153d6768e95887f7d76ada22889a0432e124b4e"
+    },
+    {
+      "path": "deploy/jenkins/github-status-app.test.mjs",
+      "sha256": "7d47aae10025a203db017f645f5066583c97d6d56fa910e47471352efdf2be77"
+    },
+    {
+      "path": "deploy/jenkins/import-ghcr-token.mjs",
+      "sha256": "e6793dbc070704beaa9481921c772d98a30c487499ff497e629a178c6138d80c"
+    },
+    {
+      "path": "deploy/jenkins/jenkins-ci.mjs",
+      "sha256": "b0e8091af75fbf752c0da927b1388b131199fa8a5b5dd57a36e618ed39eaaa13"
+    },
+    {
+      "path": "deploy/jenkins/jenkins-ci.test.mjs",
+      "sha256": "a0f940dcdf60793ebaf9ab4c76d7a32a244402c5b2e3a7635906927f512573a6"
+    },
+    {
+      "path": "deploy/jenkins/jenkins-discover.mjs",
+      "sha256": "ea59f432d468c8fe2f56edc02c339869a9dc6699bcd4ecdfe1f01a7001498f14"
+    },
+    {
+      "path": "deploy/jenkins/jenkins-web.mjs",
+      "sha256": "943340b38691f7f03334deac92cff08b7160f3a9ae278d14db26e526dc1874b1"
+    },
+    {
+      "path": "deploy/jenkins/jenkins-web.test.mjs",
+      "sha256": "f9246f33fb8a2718156ed6501870cf97f8a546c0a68a5ad3ac017606b2635a73"
+    },
+    {
+      "path": "deploy/jenkins/jenkins.test.mjs",
+      "sha256": "d5c2e43ba5595137cad3733c9668f2bbfbd7fc4c3faa68cdf9f41866bc03e962"
+    },
+    {
+      "path": "deploy/jenkins/manage.mjs",
+      "sha256": "0b30d84361b0d02cf13e4554ad744866b1f04649fea463c0d01b7e1269277984"
+    },
+    {
+      "path": "deploy/jenkins/monitor.groovy",
+      "sha256": "0212c6fbcadeb80d4f67cc835d9fb035107e143bd784c40e773f099818df7e86"
+    },
+    {
+      "path": "deploy/jenkins/mutation.groovy",
+      "sha256": "95dca161b53c3e9cfadec53dc2debde9532eaea46a65c350294f18d280705b40"
+    },
+    {
+      "path": "deploy/jenkins/mutation.mjs",
+      "sha256": "ba6a22cdc62c5ed7cfe05bf282bc43428a40eafedcc52b3e88e809f3b82d8b24"
+    },
+    {
+      "path": "deploy/jenkins/mutation.test.mjs",
+      "sha256": "124a1a4b6c73f684e835fe42c8e25b434ca54514c14c7ff62ee1753f5696f1da"
+    },
+    {
+      "path": "deploy/jenkins/native-ci.groovy",
+      "sha256": "5d017ba56d0e5be06856eb4a3253e8c880091d8bfb7a1c3d89c63b0eb579475c"
+    },
+    {
+      "path": "deploy/jenkins/package-api.mjs",
+      "sha256": "84ee85384ae93d387228bddfc4aae37dc126b2291a8c964ad8dd014216fdf0a1"
+    },
+    {
+      "path": "deploy/jenkins/package-api.test.mjs",
+      "sha256": "60ecae4325bf9f2f859c27b0cf8235561215fa6991a56e365283a9b3dd3aa2a6"
+    },
+    {
+      "path": "deploy/jenkins/plugins.lock.json",
+      "sha256": "a49def49783c182434f15656038c2625d63f0174f9f07832562eabf267ae6760"
+    },
+    {
+      "path": "deploy/jenkins/prepare.mjs",
+      "sha256": "cfc1235a98d0c0de766c99434527680c79d2eb1b7dc278ea56c19f143dac7270"
+    },
+    {
+      "path": "deploy/jenkins/project-ci.mjs",
+      "sha256": "acf4caa87c1b8c9b022f9bf42b9b5d759063549e0d8815cf4b8dab3dc65f6692"
+    },
+    {
+      "path": "deploy/jenkins/project-ci.test.mjs",
+      "sha256": "a580fcf306efdfcb53965593798e6b8adbab35a99a7e7971f11754239a5e317b"
+    },
+    {
+      "path": "deploy/jenkins/project-release-container.test.mjs",
+      "sha256": "47b1d22839e24be397bcd76ef31fc917233c5838a53f1e662dc279bbba9de4b1"
+    },
+    {
+      "path": "deploy/jenkins/project-release.mjs",
+      "sha256": "61c5acdaf25dcef256dfbd60ba697dec703d74472412b347106bb6aba3620388"
+    },
+    {
+      "path": "deploy/jenkins/release.groovy",
+      "sha256": "1c3bd750c588dc254fccc0e082128d1a02db55f43bfa22c6c02ec82a8f3e8113"
+    },
+    {
+      "path": "deploy/jenkins/sandbox-images.groovy",
+      "sha256": "63d28102f4029644dd77ffeb1670832a5fcb5bcf1f0116747558a1923f8766ae"
+    },
+    {
+      "path": "deploy/jenkins/sandbox-images.mjs",
+      "sha256": "49ce4b7b0b90e10a2c5c275a35debaa79cda1bc0269f5a6a93859a0017cfd74e"
+    },
+    {
+      "path": "deploy/jenkins/sandbox-images.test.mjs",
+      "sha256": "3bb7a050c596ee9d12f4037c5b245e983024cb61b856cce8028d3193258cc899"
+    },
+    {
+      "path": "deploy/jenkins/sandbox-publication-config.test.mjs",
+      "sha256": "89e5e8ae7ee2aa9d77bfa94f96e8ffc5fda7ce09d63573ca641a9ad715c44c88"
+    },
+    {
+      "path": "deploy/jenkins/setup-github-app.mjs",
+      "sha256": "31a175b081bce337a6c04166d25bf67481f04977f8e02a33260891db55435130"
+    },
+    {
+      "path": "deploy/jenkins/web.groovy",
+      "sha256": "18709723f375dcf9ce13a6f2fa036f5a9aae2238072ca456f181a0904fb5b959"
+    },
+    {
+      "path": "deploy/jenkins/web.md",
+      "sha256": "35647e073bbfcbca14121b97a1deaad59e56fb7cb7037a612f8bcc5aad7e380c"
+    },
+    {
+      "path": "deploy/macmini/api-cutover.test.mjs",
+      "sha256": "ead84bd36eba456975a3b476837cf3f9a2a4cccb44344271d4953f5be77e262e"
+    },
+    {
+      "path": "deploy/macmini/cloudflare-ingress.example.json",
+      "sha256": "eaa4bf8e8d1e9f2305cdf4d2b621752da6fc9b848ad708ced20291340dad962a"
+    },
+    {
+      "path": "deploy/macmini/config.example.json",
+      "sha256": "43e318b398a529a332c34115deb248606e65cd64a48bd801dae7601ffa129ca2"
+    },
+    {
+      "path": "deploy/macmini/controller.mjs",
+      "sha256": "2cc4f164c76902487234b5059e5ca104f40cf03512b8caab61e4d59bce8ccb35"
+    },
+    {
+      "path": "deploy/macmini/controller.test.mjs",
+      "sha256": "485d1b543d37c5ee7399875fea4221563768bb42e1b20011cb86c13b5466b24c"
+    },
+    {
+      "path": "deploy/macmini/install-system-services.mjs",
+      "sha256": "44bbf8c686f2ad92537308666410d2c28a633cb6c18269ce5e9b1ac45a798ef4"
+    },
+    {
+      "path": "deploy/macmini/install-system-services.test.mjs",
+      "sha256": "c88d8134701c1f24299b57c95a012c73cb1e61a74950676c6df6c1114148104c"
+    },
+    {
+      "path": "deploy/macmini/install-tunnel.mjs",
+      "sha256": "d9c5ff14cd76f47abb1ae7f03a664deae45175496aa62b99000cd63e66b0390d"
+    },
+    {
+      "path": "deploy/macmini/install.mjs",
+      "sha256": "496ade3df4f0e477a2384d86db1731901a0b5273e97015d6407589145f35bf68"
+    },
+    {
+      "path": "deploy/macmini/jenkins-monitor.mjs",
+      "sha256": "71a63a3535742042f147e7dc85cc13fd73f555a2f8ade21261bf12e287b336bb"
+    },
+    {
+      "path": "deploy/macmini/jenkins-monitor.test.mjs",
+      "sha256": "ad8cc0bdf6c545df53558d05fbadf4f2f58d43b9b05ef133ba4dc95e4e022afa"
+    },
+    {
+      "path": "deploy/macmini/lib.mjs",
+      "sha256": "d4817936812f78fced529f982e9ef3ef62f3d63e6a387a4e9353dc395c6d4153"
+    },
+    {
+      "path": "deploy/macmini/plist-test-support.mjs",
+      "sha256": "74b81706350ad2f8fadae6f8b93e2602e39967f11462bbf33d499cd5de0e9915"
+    },
+    {
+      "path": "deploy/macmini/public-build-tools.mjs",
+      "sha256": "188007903654d2427a438574fca56c51f4596469e38b0f3c3a50c04dccdcafb8"
+    },
+    {
+      "path": "deploy/macmini/public-build-tools.test.mjs",
+      "sha256": "0d4a4bb81573748b0db511df2b91ac7312f26b4e13aa917d5429532e787943f0"
+    },
+    {
+      "path": "deploy/macmini/runtime.mjs",
+      "sha256": "5dc4699b98122445d0722280d15489a43336240822f90e939c1bfde0a357e411"
+    },
+    {
+      "path": "deploy/macmini/system-services.mjs",
+      "sha256": "8df8e902abbbedec1f3ba681f8ec780e21045d794b76c68feac9d126db745119"
+    }
+  ],
+  "testFiles": [
+    "deploy/containers/api-context.test.mjs",
+    "deploy/containers/ci-image.test.mjs",
+    "deploy/containers/controller.test.mjs",
+    "deploy/containers/export-jenkins-home.test.mjs",
+    "deploy/containers/host-services.test.mjs",
+    "deploy/containers/import-jenkins-home.test.mjs",
+    "deploy/containers/migrate-data.test.mjs",
+    "deploy/containers/prepare-context.test.mjs",
+    "deploy/containers/verify-home-migration.test.mjs",
+    "deploy/jenkins/ci-cutover.test.mjs",
+    "deploy/jenkins/ci-platform.test.mjs",
+    "deploy/jenkins/github-status-app.test.mjs",
+    "deploy/jenkins/jenkins-ci.test.mjs",
+    "deploy/jenkins/jenkins-web.test.mjs",
+    "deploy/jenkins/jenkins.test.mjs",
+    "deploy/jenkins/mutation.test.mjs",
+    "deploy/jenkins/package-api.test.mjs",
+    "deploy/jenkins/project-ci.test.mjs",
+    "deploy/jenkins/project-release-container.test.mjs",
+    "deploy/jenkins/sandbox-images.test.mjs",
+    "deploy/jenkins/sandbox-publication-config.test.mjs",
+    "deploy/macmini/api-cutover.test.mjs",
+    "deploy/macmini/controller.test.mjs",
+    "deploy/macmini/install-system-services.test.mjs",
+    "deploy/macmini/jenkins-monitor.test.mjs",
+    "deploy/macmini/public-build-tools.test.mjs"
+  ],
+  "scope": {
+    "publicDeploymentSourceOnly": true,
+    "allowedApiFile": "api/scripts/check-default-image-consistency.mjs",
+    "network": "none",
+    "privileged": false,
+    "hostBindMounts": false,
+    "hostDockerSocket": false,
+    "kvm": false,
+    "privateConfiguration": false,
+    "syntheticJenkinsEvidence": false,
+    "productionServiceMutation": false,
+    "additionalImageDeclaredVolume": {
+      "destination": "/home/jenkins/.jenkins",
+      "ownCreated": true,
+      "emptyBeforeFinalRun": true
+    }
+  },
+  "totals": {
+    "tests": 420,
+    "suites": 0,
+    "pass": 414,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 6,
+    "todo": 0
+  },
+  "skippedCases": [
+    "ok 266 - packaging rejects active releases, current symlinks and persistent-data outputs before invoking any build # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance",
+    "ok 268 - a real tar roundtrip excludes source, private env and data identities and probes its relocated production tree # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance",
+    "ok 269 - Linux native addons and build-host-only dylib dependencies fail packaging without leaving a publishable tarball # SKIP Retired native Mac package flow requires actual Darwin ARM64 Node22; active Docker packaging has separate Linux acceptance",
+    "ok 363 - SIGKILL of the actual runtime wrapper leaves its live child protected by both the stale lock and process guard # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22",
+    "ok 364 - normal child exit releases the actual wrapper's runtime lock and permits one subsequent child # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22",
+    "ok 365 - actual runtime wrapper refuses every persistent-path mismatch before spawning its dummy API # SKIP runtime-wrapper fixture requires macOS ARM64 and Node 22"
+  ],
+  "sourceChangedDuringExecution": [],
+  "logPath": "artifacts/jenkins-linux-deployment-source-tests.tap",
+  "method": "Actual Node22 --test in an isolated Linux ARM64 Docker container running UID/GID1000; public deployment source copied through tar stdin, with no host mounts or private credentials.",
+  "logSha256": "70c77a59f4816c057d964f0edff1226da5ae5ba71e6d7ba25dbc1ab59e4307fd",
+  "totalPublicSourceFiles": 110,
+  "totalTestFiles": 26,
+  "imageReference": "sha256:f2fa6136753873ad891c89e560b1bd7a220ab8de1825b5d1a257b119fc1a5813",
+  "imageMetadataAvailableAtFinalRun": false,
+  "imageMetadataNote": "The immutable parent image existed at fixture creation; its image metadata was later removed from the daemon while this already-running fixture continued. Platform/architecture/Node/UID/GID were read from the actual fixture at final execution.",
+  "outcomes": {
+    "portableAndActiveChecks": {
+      "passed": 414,
+      "failed": 0,
+      "skipped": 0
+    },
+    "historicalNativeMacChecks": {
+      "skippedOnLinux": 6,
+      "reason": "Actual Darwin ARM64 Node22 wrapper and retired portable native-package checks remain platform-specific."
+    }
+  },
+  "macVerification": {
+    "command": "node --test deploy/macmini/controller.test.mjs deploy/macmini/install-system-services.test.mjs deploy/jenkins/package-api.test.mjs",
+    "platform": "darwin",
+    "arch": "arm64",
+    "nodeMajor": 22,
+    "tests": 96,
+    "passed": 96,
+    "failed": 0,
+    "skipped": 0,
+    "scope": "Associated source suites, including all six historical native checks, were actually executed on macOS after the portability changes."
+  },
+  "cleanup": {
+    "state": "passed",
+    "finishedAt": "2026-10-06T03:37:48.812Z",
+    "steps": [
+      {
+        "operation": "stop",
+        "status": 0
+      },
+      {
+        "operation": "rm",
+        "status": 0
+      },
+      {
+        "operation": "remove-own-volume",
+        "status": 0
+      },
+      {
+        "operation": "remove-own-volume",
+        "status": 0
+      }
+    ],
+    "containerAbsent": true,
+    "volumesAbsent": true,
+    "scope": "Only this proof container and its two explicitly identified own-created volumes; no image pruning or daemon/service changes."
+  }
+}

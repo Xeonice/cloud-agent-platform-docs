@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "kind": "manual-actual-linux-ci-and-prebuilt-not-jenkins-release",
+  "commits": {
+    "root": "aea0c60a2c8a0cd38ac785a9ac36d721936ccc9a",
+    "api": "5a94ea9dc6bca7f584aaf4c8248c1541041f8b51",
+    "web": "0a7794b34fef53b564bc7216fd29ef03b0d360da"
+  },
+  "container": "agent-platform-web-proof-20261006",
+  "hostMounts": [],
+  "credentials": false,
+  "publicPreparation": "read-only-fixed-Vercel-project-public-only",
+  "syntheticBuildNumber": 900000006,
+  "published": false,
+  "startedAt": "2026-10-06T01:33:36.716Z",
+  "phases": [
+    {
+      "phase": "checkout",
+      "startedAt": "2026-10-06T01:33:36.959Z",
+      "state": "passed",
+      "code": 0,
+      "signal": null,
+      "finishedAt": "2026-10-06T01:33:39.775Z"
+    },
+    {
+      "phase": "install",
+      "startedAt": "2026-10-06T01:33:39.775Z",
+      "state": "failed",
+      "code": 137,
+      "signal": null,
+      "finishedAt": "2026-10-06T01:39:07.804Z"
+    }
+  ],
+  "status": "failed",
+  "error": "Actual phase failed: install",
+  "finishedAt": "2026-10-06T01:39:07.804Z",
+  "installInterruption": {
+    "reason": "deterministic readonly browser cache lock EACCES confirmed; installer retries up to 10min",
+    "containerExit": "stopped owner test container after 10s grace; not OOM",
+    "projectTestsStarted": false
+  },
+  "originalLocalReport": "/tmp/agent-platform-web-linux-full-proof-first-install-failure.json"
+}

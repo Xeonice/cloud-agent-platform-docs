@@ -21,10 +21,440 @@ import {
   tunnelListenerMetadata,
   tunnelJobMetadata,
   restoreTunnelAfterExit,
+  targetAccess,
+  targetCommand,
+  assertPrivatePathsInaccessible,
+  isolatedAccountUid,
+  accountRecordFound,
 } from "./install-system-services.mjs";
 import { DEPLOY_ROOT, servicePlist } from "./system-services.mjs";
 import { releaseMaintenanceBarrier } from "./lib.mjs";
+import {
+  parsePlistFixture,
+  serializePlistFixture,
+} from "./plist-test-support.mjs";
 const sha = "a".repeat(40);
+const isolatedRecord = (name, uid) => ({
+  "dsAttrTypeStandard:UniqueID": [String(uid)],
+  "dsAttrTypeStandard:PrimaryGroupID": ["20"],
+  "dsAttrTypeStandard:NFSHomeDirectory": [
+    `/Users/Shared/${name === "_agentplatformjenkins" ? "agent-platform-jenkins" : "agent-platform-ci"}`,
+  ],
+  "dsAttrTypeStandard:UserShell": ["/usr/bin/false"],
+  "dsAttrTypeNative:IsHidden": ["1"],
+  "dsAttrTypeStandard:Password": ["*"],
+  // This protected value is a fixture; unprivileged actual reads omit it.
+  "dsAttrTypeStandard:AuthenticationAuthority": [";DisabledUser;"],
+});
+
+test("real plist conversion retains Native IsHidden and Standard identity attributes for idempotent account validation", () => {
+  for (const [name, uid] of [
+    ["_agentplatformjenkins", 400],
+    ["_agentplatformci", 401],
+  ]) {
+    const record = isolatedRecord(name, uid);
+    const parsed = parsePlistFixture(serializePlistFixture(record));
+    assert.deepEqual(parsed, record);
+    assert.equal(isolatedAccountUid(parsed, name), uid);
+  }
+});
+
+test("account validation refuses missing, duplicate, wrong namespace and invalid identity fields without exposing values", () => {
+  const name = "_agentplatformjenkins";
+  for (const key of Object.keys(isolatedRecord(name, 400))) {
+    const missing = isolatedRecord(name, 400);
+    delete missing[key];
+    assert.throws(
+      () => isolatedAccountUid(missing, name),
+      new RegExp(key.split(":")[1]),
+    );
+    const duplicate = isolatedRecord(name, 400);
+    duplicate[key.split(":")[1]] = duplicate[key];
+    assert.throws(() => isolatedAccountUid(duplicate, name), /ambiguous/);
+    const wrong = isolatedRecord(name, 400);
+    wrong[
+      key.replace(
+        key.startsWith("dsAttrTypeNative:")
+          ? "dsAttrTypeNative:"
+          : "dsAttrTypeStandard:",
+        key.startsWith("dsAttrTypeNative:")
+          ? "dsAttrTypeStandard:"
+          : "dsAttrTypeNative:",
+      )
+    ] = wrong[key];
+    delete wrong[key];
+    assert.throws(
+      () => isolatedAccountUid(wrong, name),
+      /missing or ambiguous/,
+    );
+  }
+  for (const [field, value] of [
+    ["UniqueID", "501"],
+    ["PrimaryGroupID", "0"],
+    ["NFSHomeDirectory", "/private-home"],
+    ["UserShell", "/bin/zsh"],
+    ["IsHidden", "0"],
+    ["Password", "do-not-log-secret"],
+  ]) {
+    const record = isolatedRecord(name, 400);
+    const key = Object.keys(record).find((key) => key.endsWith(":" + field));
+    record[key] = [value];
+    assert.throws(
+      () => isolatedAccountUid(record, name),
+      (error) =>
+        error.message.includes(field) && !error.message.includes(value),
+    );
+  }
+  assert.throws(
+    () => isolatedAccountUid(isolatedRecord(name, 400), "root"),
+    /Invalid isolated/,
+  );
+});
+
+test("omitted protected AuthenticationAuthority is never inferred as disabled; every authority must carry the disabled marker", () => {
+  const name = "_agentplatformci";
+  const key = "dsAttrTypeStandard:AuthenticationAuthority";
+  const omitted = isolatedRecord(name, 401);
+  delete omitted[key];
+  assert.throws(
+    () => isolatedAccountUid(omitted, name),
+    /AuthenticationAuthority; privileged account verification/,
+  );
+  for (const value of [
+    [],
+    ["DisabledUser"],
+    [";ShadowHash;DisabledUser;"],
+    [";DisabledUser;", ";ShadowHash;enabled"],
+    ";DisabledUser;",
+    [null],
+  ]) {
+    const record = isolatedRecord(name, 401);
+    record[key] = value;
+    assert.throws(
+      () => isolatedAccountUid(record, name),
+      /AuthenticationAuthority/,
+    );
+  }
+  const disabled = isolatedRecord(name, 401);
+  disabled[key] = [";DisabledUser;;ShadowHash;fixture-only"];
+  assert.equal(isolatedAccountUid(disabled, name), 401);
+});
+
+test("Directory Services record-not-found command result permits creation; command/permission failures remain refusals", () => {
+  assert.equal(accountRecordFound({ status: 0 }), true);
+  const absent =
+    process.platform === "darwin"
+      ? spawnSync(
+          "/usr/bin/dscl",
+          [
+            "-plist",
+            ".",
+            "-read",
+            `/Users/_agentplatform_absent_probe_${process.pid}`,
+          ],
+          { encoding: "utf8", timeout: 10000, cwd: "/" },
+        )
+      : spawnSync(
+          process.execPath,
+          [
+            "-e",
+            "process.stderr.write('eDSRecordNotFound'); process.exitCode=56",
+          ],
+          { encoding: "utf8", timeout: 10000, cwd: "/" },
+        );
+  assert.equal(absent.status, 56);
+  assert.equal(accountRecordFound(absent), false);
+  for (const result of [
+    { status: 56, stderr: "permission denied" },
+    { status: 1, stderr: "eDSRecordNotFound" },
+    { status: null },
+    { status: 0, error: Object.assign(new Error(), { code: "ENOENT" }) },
+    { status: 56, signal: "SIGTERM", stderr: "eDSRecordNotFound" },
+  ])
+    assert.throws(
+      () => accountRecordFound(result),
+      /Cannot read isolated Directory Services/,
+    );
+});
+
+const probeIdentity = (home) => ({
+  uid: process.getuid(),
+  user: "probe_fixture",
+  home,
+});
+
+// The production adapter chooses Darwin's staff GID20. A Linux unprivileged
+// fixture executes the same real command under its current UID/GID instead;
+// it cannot set GID20 and does not claim to test a Darwin account switch.
+const fixtureTargetRun = (file, args, options) => {
+  if (process.platform !== "darwin") {
+    assert.equal(options.uid, process.getuid());
+    assert.equal(options.gid, 20);
+  }
+  return spawnSync(file, args, {
+    ...options,
+    ...(process.platform === "darwin" ? {} : { gid: process.getgid() }),
+  });
+};
+
+test("real /bin/test distinguishes accessible files from absent files without inheriting cwd or secrets", async (t) => {
+  const home = await fs.mkdtemp(join(tmpdir(), "cutover-access-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const file = join(home, "readable");
+  await fs.writeFile(file, "permission fixture", { mode: 0o600 });
+  const target = probeIdentity(home);
+  assert.equal(targetAccess("-r", file, target, fixtureTargetRun), true);
+  assert.equal(
+    targetAccess("-r", join(home, "absent"), target, fixtureTargetRun),
+    false,
+  );
+  assert.equal(
+    targetAccess("-x", process.execPath, target, fixtureTargetRun),
+    true,
+  );
+  assert.equal(targetAccess("-d", home, target, fixtureTargetRun), true);
+  assert.equal(targetAccess("-w", home, target, fixtureTargetRun), true);
+  const actual = JSON.parse(
+    targetCommand(
+      "Node identity",
+      process.execPath,
+      [
+        "-e",
+        "console.log(JSON.stringify({uid:process.getuid(),cwd:process.cwd(),env:process.env}))",
+      ],
+      target,
+      fixtureTargetRun,
+    ),
+  );
+  assert.equal(actual.uid, process.getuid());
+  assert.equal(actual.cwd, "/");
+  assert.equal(actual.env.HOME, home);
+  assert.equal(actual.env.USER, target.user);
+  assert.equal(actual.env.LOGNAME, target.user);
+  assert.equal(actual.env.COREPACK_ENABLE_NETWORK, "0");
+  // macOS may add CoreFoundation's own encoding hint during Node startup.
+  delete actual.env.__CF_USER_TEXT_ENCODING;
+  assert.deepEqual(Object.keys(actual.env).sort(), [
+    "COREPACK_ENABLE_NETWORK",
+    "HOME",
+    "LANG",
+    "LOGNAME",
+    "PATH",
+    "USER",
+  ]);
+});
+
+test("positive and negative access probes fail closed on missing/error/signalled/null/invalid exit results", () => {
+  const target = probeIdentity(tmpdir());
+  const missing = Object.assign(new Error("do not expose details"), {
+    code: "ENOENT",
+  });
+  const failures = [
+    { error: missing, status: null },
+    { error: missing, status: 0 },
+    {
+      error: Object.assign(new Error("private details"), { code: "EACCES" }),
+      status: 1,
+    },
+    {
+      error: Object.assign(new Error("timeout"), { code: "ETIMEDOUT" }),
+      status: null,
+    },
+    { signal: "SIGTERM", status: 1 },
+    { status: null },
+    { status: 2 },
+    { status: -1 },
+    { status: "1" },
+  ];
+  for (const result of failures)
+    for (const flag of ["-x", "-r"])
+      assert.throws(
+        () =>
+          targetAccess(
+            flag,
+            process.execPath,
+            target,
+            (file, args, options) => {
+              assert.equal(file, "/bin/test");
+              assert.deepEqual(args, [flag, process.execPath]);
+              assert.equal(options.cwd, "/");
+              assert.equal(options.uid, process.getuid());
+              assert.equal(options.env.NODE_OPTIONS, undefined);
+              assert.equal(options.env.ACCESS_PASSCODE, undefined);
+              return result;
+            },
+          ),
+        result.error?.code === "ENOENT"
+          ? /command is missing: \/bin\/test/
+          : /command failed: \/bin\/test/,
+      );
+  assert.equal(
+    targetAccess("-r", process.execPath, target, () => ({ status: 1 })),
+    false,
+  );
+  assert.throws(
+    () => targetAccess("-r", "relative", target),
+    /Invalid startup permission/,
+  );
+  assert.throws(
+    () => targetAccess("-e", process.execPath, target),
+    /Invalid startup permission/,
+  );
+});
+
+test("actual startup command absence is reported separately from an unreadable path and output is never leaked", () => {
+  const target = probeIdentity(tmpdir());
+  assert.throws(
+    () =>
+      targetCommand(
+        "Node version",
+        "/not-present/startup-command",
+        [],
+        target,
+        fixtureTargetRun,
+      ),
+    /command is missing: Node version/,
+  );
+  for (const result of [
+    { status: 1, stderr: "Bearer do-not-log" },
+    { status: null },
+    { signal: "SIGTERM", status: 0 },
+    { status: 0, error: new Error("do-not-log") },
+  ])
+    assert.throws(
+      () =>
+        targetCommand(
+          "Node version",
+          process.execPath,
+          ["--version"],
+          target,
+          () => result,
+        ),
+      (error) => error.message === "Startup probe command failed: Node version",
+    );
+});
+
+test("negative isolation checks first require existing private metadata and reject accessible real files or probe failures", async (t) => {
+  const home = await fs.mkdtemp(join(tmpdir(), "cutover-private-access-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const path = join(home, "private-fixture");
+  const target = probeIdentity(home);
+  let calls = 0;
+  await assert.rejects(
+    assertPrivatePathsInaccessible([path], target, process.getuid(), () => {
+      calls++;
+      return { status: 1 };
+    }),
+    { code: "ENOENT" },
+  );
+  assert.equal(calls, 0);
+  await fs.writeFile(path, "fixture, never read by the check", { mode: 0o600 });
+  await assert.rejects(
+    assertPrivatePathsInaccessible(
+      [path],
+      target,
+      process.getuid(),
+      fixtureTargetRun,
+    ),
+    /can read a production secret/,
+  );
+  await assert.rejects(
+    assertPrivatePathsInaccessible([path], target, process.getuid(), () => ({
+      status: null,
+      error: Object.assign(new Error(), { code: "ENOENT" }),
+    })),
+    /command is missing/,
+  );
+  await assertPrivatePathsInaccessible(
+    [path],
+    target,
+    process.getuid(),
+    () => ({ status: 1 }),
+  );
+  await fs.chmod(path, 0o644);
+  await assert.rejects(
+    assertPrivatePathsInaccessible([path], target, process.getuid(), () => ({
+      status: 1,
+    })),
+    /existing owner-only/,
+  );
+});
+
+test("busy preflight and failed real startup prerequisite leave config/poller/barrier untouched before transition", async (t) => {
+  const home = await fs.mkdtemp(join(tmpdir(), "cutover-before-barrier-"));
+  t.after(() => fs.rm(home, { recursive: true, force: true }));
+  const config = join(home, "config.json"),
+    poller = join(home, "poller.plist"),
+    marker = join(home, "maintenance");
+  await fs.writeFile(config, '{"deployEnabled":true}\n');
+  await fs.writeFile(poller, "poller unchanged");
+  const before = await fs.readFile(config);
+  const events = [];
+  const transition = async (prepared) => {
+    events.push("transition");
+    assert.equal(prepared.node, true);
+    await fs.writeFile(marker, "barrier");
+    return "done";
+  };
+  const prepare = async () => {
+    events.push("prerequisites");
+    targetCommand(
+      "Missing prerequisite",
+      join(home, "missing-executable"),
+      [],
+      probeIdentity(home),
+      fixtureTargetRun,
+    );
+  };
+  await assert.rejects(
+    cutoverAfterPreflight(
+      async () => ({ ...status(), sha, inFlightHTTP: 1, idle: false }),
+      true,
+      transition,
+      prepare,
+    ),
+    /busy/,
+  );
+  assert.deepEqual(events, []);
+  await assert.rejects(
+    cutoverAfterPreflight(
+      async () => ({ ...status(), sha }),
+      true,
+      transition,
+      prepare,
+    ),
+    /command is missing/,
+  );
+  assert.deepEqual(events, ["prerequisites"]);
+  assert.deepEqual(await fs.readFile(config), before);
+  assert.equal(await fs.readFile(poller, "utf8"), "poller unchanged");
+  await assert.rejects(fs.access(marker));
+  events.length = 0;
+  assert.equal(
+    await cutoverAfterPreflight(
+      async () => {
+        events.push("busy-check");
+        return { ...status(), sha };
+      },
+      true,
+      transition,
+      async () => {
+        events.push("prerequisites");
+        return {
+          node: targetAccess(
+            "-x",
+            process.execPath,
+            probeIdentity(home),
+            fixtureTargetRun,
+          ),
+        };
+      },
+    ),
+    "done",
+  );
+  assert.deepEqual(events, ["busy-check", "prerequisites", "transition"]);
+});
+
 const status = () => ({
   ready: true,
   idle: true,
@@ -76,13 +506,7 @@ test("actual historical dedicated GUI plist and current generated plist both val
     validateGuiTunnelPlist(historicalTunnelPlist, tunnelConfig, tunnelMetadata),
     true,
   );
-  const generated = spawnSync(
-    "/usr/bin/plutil",
-    ["-convert", "json", "-o", "-", "--", "-"],
-    { input: servicePlist("tunnel", tunnelConfig), encoding: "utf8" },
-  );
-  assert.equal(generated.status, 0);
-  const plist = JSON.parse(generated.stdout);
+  const plist = parsePlistFixture(servicePlist("tunnel", tunnelConfig));
   assert.equal(
     validateGuiTunnelPlist(plist, tunnelConfig, tunnelMetadata),
     true,
