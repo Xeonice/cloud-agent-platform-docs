@@ -618,6 +618,24 @@ export async function verifyPackage(folder, plan) {
   return { manifest, evidence };
 }
 export function validateRemoteAssets(release, evidence, complete = false) {
+  const prefix =
+    "https://github.com/" + REPOSITORIES.project.name + "/releases/tag/";
+  const namespace =
+    release.draft === true &&
+    typeof release.html_url === "string" &&
+    release.html_url.startsWith(prefix)
+      ? release.html_url.slice(prefix.length)
+      : release.tag_name;
+  if (
+    typeof namespace !== "string" ||
+    release.html_url !== prefix + namespace ||
+    (release.draft === true
+      ? !/^untagged-[a-f0-9]+(?![\s\S])/.test(namespace)
+      : release.draft !== false ||
+        validateTag(namespace) !== namespace ||
+        encodeURIComponent(namespace) !== namespace)
+  )
+    throw new Error("GitHub release URL is not the fixed release source");
   const seen = new Set();
   for (const asset of release.assets ?? []) {
     if (!ASSETS.includes(asset.name) || seen.has(asset.name))
@@ -635,14 +653,13 @@ export function validateRemoteAssets(release, evidence, complete = false) {
         "Existing GitHub asset bytes are different; never overwrite an immutable asset",
       );
     if (
-      release.tag_name &&
       asset.browser_download_url !==
-        "https://github.com/" +
-          REPOSITORIES.project.name +
-          "/releases/download/" +
-          release.tag_name +
-          "/" +
-          asset.name
+      "https://github.com/" +
+        REPOSITORIES.project.name +
+        "/releases/download/" +
+        namespace +
+        "/" +
+        asset.name
     )
       throw new Error(
         "GitHub asset download URL is not the fixed release source",
@@ -1352,6 +1369,60 @@ export function createReleaseRunner(overrides = {}) {
     }
     throw new Error("Release tag nesting exceeds limit");
   }
+  async function uploadRelease(folder, plan, evidence) {
+    const receipt = await readJson(join(folder, "upload.json")).catch(
+      (error) => {
+        if (error.code === "ENOENT") return undefined;
+        throw error;
+      },
+    );
+    if (receipt !== undefined) {
+      const pending = receipt?.pendingAsset;
+      if (
+        !receipt ||
+        typeof receipt !== "object" ||
+        Array.isArray(receipt) ||
+        receipt.key !== plan.key ||
+        receipt.tag !== plan.tag ||
+        !Number.isSafeInteger(receipt.releaseId) ||
+        receipt.releaseId < 1 ||
+        !["draft", "uploading"].includes(receipt.state) ||
+        (receipt.state === "uploading" && !pending) ||
+        (pending &&
+          (!ASSETS.includes(pending.name) ||
+            pending.size !== evidence[pending.name].size ||
+            pending.sha256 !== evidence[pending.name].sha256))
+      )
+        throw new Error("Private upload receipt differs from pinned release");
+      const release = await gh("releases/" + receipt.releaseId, {
+        optional: true,
+      });
+      if (!release || release.id !== receipt.releaseId)
+        throw new Error("Recorded GitHub release is unavailable or changed");
+      return release;
+    }
+    const byTag = await gh("releases/tags/" + encodeURIComponent(plan.tag), {
+      optional: true,
+    });
+    if (byTag) return byTag;
+    // Drafts may be absent from the tag endpoint. Scan the complete bounded
+    // inventory before creating one, including a prior POST with a lost reply.
+    const matches = [];
+    for (let page = 1; page <= 20; page++) {
+      const items = await gh("releases?per_page=100&page=" + page);
+      if (!Array.isArray(items) || items.length > 100)
+        throw new Error("Invalid bounded GitHub releases inventory");
+      matches.push(...items.filter((item) => item?.tag_name === plan.tag));
+      if (matches.length > 1)
+        throw new Error("Multiple GitHub releases have the reserved tag");
+      if (items.length < 100) {
+        if (matches.length && matches[0].draft !== true)
+          throw new Error("Unlisted published release requires review");
+        return matches[0] ?? null;
+      }
+    }
+    throw new Error("GitHub releases inventory exceeds the bounded scan");
+  }
   return async function release(action, ...args) {
     if (context.platform === "linux")
       await (overrides.assertLayout ?? assertDeploymentLayout)({
@@ -1612,12 +1683,12 @@ export function createReleaseRunner(overrides = {}) {
     }
     if (action === "upload") {
       const { evidence } = await verifyPackage(join(folder, "assets"), plan);
-      let release = await gh("releases/tags/" + encodeURIComponent(plan.tag), {
-        optional: true,
-      });
+      let release = await uploadRelease(folder, plan, evidence);
       if (
         release &&
         (!Number.isSafeInteger(release.id) ||
+          release.id < 1 ||
+          typeof release.draft !== "boolean" ||
           release.tag_name !== plan.tag ||
           release.target_commitish !== plan.commits.project)
       )
@@ -1692,13 +1763,16 @@ export function createReleaseRunner(overrides = {}) {
         // Only our proven zero-byte unpublished failed upload is disposable.
         // Uploaded immutable bytes are never deleted or replaced.
         await gh("releases/assets/" + asset.id, { method: "DELETE" });
-        release = await gh("releases/" + release.id);
+        const refreshed = await gh("releases/" + release.id);
         if (
-          !release.draft ||
-          release.tag_name !== plan.tag ||
-          release.target_commitish !== plan.commits.project
+          refreshed.id !== release.id ||
+          refreshed.html_url !== release.html_url ||
+          !refreshed.draft ||
+          refreshed.tag_name !== plan.tag ||
+          refreshed.target_commitish !== plan.commits.project
         )
           throw new Error("Draft changed during failed-upload recovery");
+        release = refreshed;
       }
       validateRemoteAssets(release, evidence);
       await writeJson(join(folder, "upload.json"), {
@@ -1766,12 +1840,14 @@ export function createReleaseRunner(overrides = {}) {
           throw new Error(
             "Upload response changed the requested asset identity",
           );
-        validateRemoteAssets({ tag_name: plan.tag, assets: [item] }, evidence);
+        validateRemoteAssets({ ...release, assets: [item] }, evidence);
         release.assets ??= [];
         release.assets.push(item);
       }
       const confirmed = await gh("releases/" + release.id);
       if (
+        confirmed.id !== release.id ||
+        confirmed.html_url !== release.html_url ||
         !confirmed.draft ||
         confirmed.tag_name !== plan.tag ||
         confirmed.target_commitish !== plan.commits.project
@@ -1789,7 +1865,10 @@ export function createReleaseRunner(overrides = {}) {
       });
       const published = await gh("releases/" + release.id);
       if (
-        published.draft ||
+        published.id !== release.id ||
+        published.tag_name !== plan.tag ||
+        published.target_commitish !== plan.commits.project ||
+        published.draft !== false ||
         (await tagCommit(plan.tag)) !== plan.commits.project
       )
         throw new Error(

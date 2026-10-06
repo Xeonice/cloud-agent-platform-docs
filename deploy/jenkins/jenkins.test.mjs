@@ -24,6 +24,7 @@ import {
   sourcePathAllowed,
   validateBuild,
   validateApiPackage,
+  validateRemoteAssets,
   validateSourceTree,
   verifyPackage,
 } from "./project-release.mjs";
@@ -215,6 +216,7 @@ async function packageFixture(f) {
   return { assets, ...(await verifyPackage(assets, f.plan)) };
 }
 function releaseRemote(f, evidence, count = ASSETS.length, draft = false) {
+  const namespace = draft ? "untagged-638fc49470ae7e474d83" : f.plan.tag;
   return {
     id: 91,
     tag_name: f.plan.tag,
@@ -224,7 +226,7 @@ function releaseRemote(f, evidence, count = ASSETS.length, draft = false) {
       "https://github.com/" +
       REPOSITORIES.project.name +
       "/releases/tag/" +
-      f.plan.tag,
+      namespace,
     published_at: draft ? null : "2026-10-06T01:00:00.000Z",
     assets: ASSETS.slice(0, count).map((name, i) => ({
       id: i + 1,
@@ -236,11 +238,28 @@ function releaseRemote(f, evidence, count = ASSETS.length, draft = false) {
         "https://github.com/" +
         REPOSITORIES.project.name +
         "/releases/download/" +
-        f.plan.tag +
+        namespace +
         "/" +
         name,
     })),
   };
+}
+function publishRemote(remote) {
+  remote.draft = false;
+  remote.published_at = "2026-10-06T01:00:00.000Z";
+  remote.html_url =
+    "https://github.com/" +
+    REPOSITORIES.project.name +
+    "/releases/tag/" +
+    remote.tag_name;
+  for (const asset of remote.assets)
+    asset.browser_download_url =
+      "https://github.com/" +
+      REPOSITORIES.project.name +
+      "/releases/download/" +
+      remote.tag_name +
+      "/" +
+      asset.name;
 }
 test("untrusted refs cannot turn a pure-CI checkout into shell or Git options", () => {
   assert.equal(validRef("refs/pull/12/head"), true);
@@ -692,21 +711,25 @@ test("a fresh GitHub draft describes the packaged Docker Linux API before publis
         return remote && !remote.draft
           ? { object: { type: "commit", sha: commits.project } }
           : null;
+      if (path.startsWith("releases?"))
+        return remote ? [structuredClone(remote)] : [];
       if (path === "releases" && options.method === "POST") {
         requested = JSON.parse(options.body);
         remote = releaseRemote(f, p.evidence, 0, true);
       }
       if (options.method === "PATCH") {
-        remote.draft = false;
-        remote.published_at = "2026-10-06T01:00:00.000Z";
+        publishRemote(remote);
       }
       return structuredClone(remote);
     },
     uploadAsset: async (_, name, path, evidence) => {
       assert.equal((await fileDigest(path)).sha256, evidence.sha256);
-      const item = releaseRemote(f, p.evidence).assets.find(
-        (asset) => asset.name === name,
-      );
+      const item = releaseRemote(
+        f,
+        p.evidence,
+        ASSETS.length,
+        true,
+      ).assets.find((asset) => asset.name === name);
       remote.assets.push(item);
       return item;
     },
@@ -722,6 +745,90 @@ test("a fresh GitHub draft describes the packaged Docker Linux API before publis
   assert.deepEqual(
     remote.assets.map((asset) => asset.name),
     ASSETS,
+  );
+});
+test("an observed draft namespace is accepted only for its fixed repository, exact asset and draft release", () => {
+  const name = ASSETS[0],
+    namespace = "untagged-638fc49470ae7e474d83",
+    prefix = "https://github.com/" + REPOSITORIES.project.name,
+    evidence = {
+      [name]: {
+        size: 325189424,
+        sha256:
+          "7eac0edf1c542cc49a19c5f18a2ae0b16d3bbd27265ad9ce9c71f612e42623bb",
+      },
+    },
+    remote = {
+      id: 404366506,
+      tag_name: "v0.3.0",
+      target_commitish: "74d886de0ec7dc09380141cb203fb3c7502c8d7e",
+      draft: true,
+      html_url: prefix + "/releases/tag/" + namespace,
+      assets: [
+        {
+          id: 1,
+          name,
+          state: "uploaded",
+          size: evidence[name].size,
+          digest: "sha256:" + evidence[name].sha256,
+          browser_download_url:
+            prefix + "/releases/download/" + namespace + "/" + name,
+        },
+      ],
+    };
+  assert.doesNotThrow(() => validateRemoteAssets(remote, evidence));
+  for (const invalid of [
+    prefix + "/releases/download/untagged-0000000000000000/" + name,
+    prefix + "/releases/download/v0.3.0/" + name,
+    prefix + "/releases/download/" + namespace + "/../" + name,
+    prefix + "/releases/download/" + namespace + "/foreign.tgz",
+    remote.assets[0].browser_download_url + "?download=1",
+    remote.assets[0].browser_download_url + "#asset",
+    remote.assets[0].browser_download_url.replace(
+      "cloud-agent-platform-docs",
+      "agent-platform-api",
+    ),
+    remote.assets[0].browser_download_url.replace(
+      "https://github.com",
+      "https://user:password@github.com",
+    ),
+    remote.assets[0].browser_download_url.replace("github.com", "evil.invalid"),
+    remote.assets[0].browser_download_url.replace("https:", "http:"),
+  ]) {
+    const bad = structuredClone(remote);
+    bad.assets[0].browser_download_url = invalid;
+    assert.throws(() => validateRemoteAssets(bad, evidence), /download URL/);
+  }
+  for (const invalid of [
+    remote.html_url.replace("cloud-agent-platform-docs", "agent-platform-api"),
+    prefix + "/releases/tag/v0.3.0",
+    remote.html_url + "?draft=1",
+    remote.html_url + "#draft",
+    remote.html_url + "\n",
+    remote.html_url.replace("untagged-", "untagged-nothex-"),
+    remote.html_url.replace(
+      "https://github.com",
+      "https://user:password@github.com",
+    ),
+  ])
+    assert.throws(
+      () => validateRemoteAssets({ ...remote, html_url: invalid }, evidence),
+      /release URL/,
+    );
+  const published = structuredClone(remote);
+  publishRemote(published);
+  assert.doesNotThrow(() => validateRemoteAssets(published, evidence));
+  published.assets[0].browser_download_url =
+    remote.assets[0].browser_download_url;
+  assert.throws(
+    () => validateRemoteAssets(published, evidence),
+    /download URL/,
+  );
+  published.assets[0].browser_download_url =
+    prefix + "/releases/download/v0.3.1/" + name;
+  assert.throws(
+    () => validateRemoteAssets(published, evidence),
+    /download URL/,
   );
 });
 test("draft partial-upload retry skips exact immutable bytes and publishes only a complete inventory", async () => {
@@ -746,17 +853,19 @@ test("draft partial-upload retry skips exact immutable bytes and publishes only 
           : { object: { type: "commit", sha: commits.project } };
       if (options.method === "PATCH") {
         patches++;
-        remote.draft = false;
-        remote.published_at = "2026-10-06T01:00:00.000Z";
+        publishRemote(remote);
       }
       return structuredClone(remote);
     },
     uploadAsset: async (_, name, path, evidence) => {
       assert.equal((await fileDigest(path)).sha256, evidence.sha256);
       uploads.push(name);
-      const item = releaseRemote(f, p.evidence).assets.find(
-        (asset) => asset.name === name,
-      );
+      const item = releaseRemote(
+        f,
+        p.evidence,
+        ASSETS.length,
+        true,
+      ).assets.find((asset) => asset.name === name);
       remote.assets.push(item);
       return item;
     },
@@ -766,6 +875,311 @@ test("draft partial-upload retry skips exact immutable bytes and publishes only 
   assert.deepEqual(uploads, ASSETS.slice(2));
   assert.equal(result.recovered, false);
   assert.equal((await read(join(f.folder, "published.json"))).assets.length, 7);
+});
+test("a private draft receipt selects its exact release even when tag lookup hides drafts and historical duplicates exist", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f),
+    remote = releaseRemote(f, p.evidence, ASSETS.length, true);
+  await json(join(f.folder, "upload.json"), {
+    state: "draft",
+    key: f.plan.key,
+    releaseId: remote.id,
+    tag: f.plan.tag,
+  });
+  const reads = [];
+  let patches = 0;
+  const run = createReleaseRunner({
+    root: f.root,
+    identity,
+    head: async (spec) =>
+      commits[
+        Object.keys(REPOSITORIES).find(
+          (name) => REPOSITORIES[name].name === spec.name,
+        )
+      ],
+    github: async (path, options = {}) => {
+      reads.push(path);
+      if (path.startsWith("git/"))
+        return remote.draft
+          ? null
+          : { object: { type: "commit", sha: commits.project } };
+      assert.equal(path, "releases/" + remote.id);
+      if (options.method === "PATCH") {
+        patches++;
+        publishRemote(remote);
+      } else assert.equal(options.method, undefined);
+      return structuredClone(remote);
+    },
+    uploadAsset: async () => {
+      throw new Error("Already uploaded immutable bytes must be reused");
+    },
+  });
+  assert.equal((await run("upload", f.planPath)).state, "published");
+  assert.equal(patches, 1);
+  assert.ok(
+    reads.every(
+      (path) =>
+        !path.startsWith("releases/tags/") && !path.startsWith("releases?"),
+    ),
+  );
+});
+test("tag lookup 404 discovers the unique actual draft and skips its uploaded first asset", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f),
+    remote = releaseRemote(f, p.evidence, 1, true),
+    uploads = [];
+  let lists = 0,
+    creates = 0;
+  const run = createReleaseRunner({
+    root: f.root,
+    identity,
+    head: async (spec) =>
+      commits[
+        Object.keys(REPOSITORIES).find(
+          (name) => REPOSITORIES[name].name === spec.name,
+        )
+      ],
+    github: async (path, options = {}) => {
+      if (path.startsWith("git/"))
+        return remote.draft
+          ? null
+          : { object: { type: "commit", sha: commits.project } };
+      if (path.startsWith("releases/tags/")) {
+        assert.equal(options.optional, true);
+        return null;
+      }
+      if (path === "releases?per_page=100&page=1") {
+        lists++;
+        return [structuredClone(remote)];
+      }
+      if (options.method === "POST") {
+        creates++;
+        throw new Error("Existing draft must not be recreated");
+      }
+      assert.equal(path, "releases/" + remote.id);
+      if (options.method === "PATCH") publishRemote(remote);
+      return structuredClone(remote);
+    },
+    uploadAsset: async (id, name, path, digest) => {
+      assert.equal(id, remote.id);
+      assert.deepEqual(await fileDigest(path), digest);
+      uploads.push(name);
+      const asset = releaseRemote(
+        f,
+        p.evidence,
+        ASSETS.length,
+        true,
+      ).assets.find((item) => item.name === name);
+      remote.assets.push(asset);
+      return asset;
+    },
+  });
+  assert.equal((await run("upload", f.planPath)).state, "published");
+  assert.deepEqual(uploads, ASSETS.slice(1));
+  assert.equal(creates, 0);
+  assert.equal(lists, 1);
+});
+test("a lost draft creation response is recovered from the release inventory without another POST", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f);
+  let remote = null,
+    creates = 0,
+    uploaded = 0;
+  const run = createReleaseRunner({
+    root: f.root,
+    identity,
+    head: async (spec) =>
+      commits[
+        Object.keys(REPOSITORIES).find(
+          (name) => REPOSITORIES[name].name === spec.name,
+        )
+      ],
+    github: async (path, options = {}) => {
+      if (path.startsWith("git/"))
+        return remote && !remote.draft
+          ? { object: { type: "commit", sha: commits.project } }
+          : null;
+      if (path.startsWith("releases/tags/")) return null;
+      if (path.startsWith("releases?"))
+        return remote ? [structuredClone(remote)] : [];
+      if (options.method === "POST") {
+        creates++;
+        remote = releaseRemote(f, p.evidence, 0, true);
+        throw new Error("Draft POST response was lost");
+      }
+      assert.equal(path, "releases/" + remote.id);
+      if (options.method === "PATCH") publishRemote(remote);
+      return structuredClone(remote);
+    },
+    uploadAsset: async (_, name) => {
+      uploaded++;
+      const asset = releaseRemote(
+        f,
+        p.evidence,
+        ASSETS.length,
+        true,
+      ).assets.find((item) => item.name === name);
+      remote.assets.push(asset);
+      return asset;
+    },
+  });
+  await assert.rejects(run("upload", f.planPath), /response was lost/);
+  await assert.rejects(fs.stat(join(f.folder, "upload.json")), {
+    code: "ENOENT",
+  });
+  assert.equal((await run("upload", f.planPath)).state, "published");
+  assert.equal(creates, 1);
+  assert.equal(uploaded, ASSETS.length);
+});
+test("ambiguous draft tags, foreign source and a truncated release inventory cannot create or publish", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f),
+    remote = releaseRemote(f, p.evidence, 1, true);
+  const cases = [
+    {
+      items: [remote, { ...remote, id: 92 }],
+      error: /Multiple GitHub releases/,
+    },
+    {
+      items: [{ ...remote, target_commitish: "d".repeat(40) }],
+      error: /different source/,
+    },
+    {
+      items: [{ ...remote, draft: false }],
+      error: /published release requires review/,
+    },
+    {
+      items: Array.from({ length: 100 }, (_, i) => ({
+        id: 1000 + i,
+        tag_name: "v0.0." + i,
+      })),
+      error: /bounded scan/,
+      pages: 20,
+    },
+  ];
+  for (const scenario of cases) {
+    let writes = 0,
+      lists = 0;
+    const run = createReleaseRunner({
+      root: f.root,
+      identity,
+      github: async (path, options = {}) => {
+        if (options.method) writes++;
+        if (path.startsWith("releases/tags/")) return null;
+        assert.equal(path, "releases?per_page=100&page=" + ++lists);
+        return structuredClone(scenario.items);
+      },
+    });
+    await assert.rejects(run("upload", f.planPath), scenario.error);
+    assert.equal(writes, 0);
+    assert.equal(lists, scenario.pages ?? 1);
+  }
+});
+test("invalid or unavailable private release receipts never fall back to creating an unrelated draft", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f),
+    remote = releaseRemote(f, p.evidence, 1, true),
+    receipt = {
+      state: "draft",
+      key: f.plan.key,
+      tag: f.plan.tag,
+      releaseId: remote.id,
+    };
+  for (const invalid of [
+    null,
+    false,
+    [],
+    { ...receipt, key: "0".repeat(64) },
+    { ...receipt, tag: "v9.9.9" },
+    { ...receipt, releaseId: -1 },
+    { ...receipt, state: "published" },
+    { ...receipt, state: "uploading" },
+    {
+      ...receipt,
+      state: "uploading",
+      pendingAsset: { name: ASSETS[0], size: 1, sha256: "0".repeat(64) },
+    },
+  ]) {
+    await json(join(f.folder, "upload.json"), invalid);
+    const run = createReleaseRunner({
+      root: f.root,
+      identity,
+      github: async () => {
+        throw new Error("Invalid receipt cannot query or mutate remote state");
+      },
+    });
+    await assert.rejects(run("upload", f.planPath), /Private upload receipt/);
+  }
+  await json(join(f.folder, "upload.json"), receipt);
+  for (const response of [
+    null,
+    { ...remote, id: 92 },
+    { ...remote, target_commitish: "d".repeat(40) },
+  ]) {
+    const run = createReleaseRunner({
+      root: f.root,
+      identity,
+      github: async (path, options) => {
+        assert.equal(path, "releases/" + receipt.releaseId);
+        assert.equal(options.optional, true);
+        return response;
+      },
+    });
+    await assert.rejects(
+      run("upload", f.planPath),
+      /unavailable or changed|different source/,
+    );
+  }
+  await fs.chmod(join(f.folder, "upload.json"), 0o644);
+  const run = createReleaseRunner({
+    root: f.root,
+    identity,
+    github: async () => {
+      throw new Error("Unsafe receipt must fail locally");
+    },
+  });
+  await assert.rejects(
+    run("upload", f.planPath),
+    /Unsafe regular\/private release file/,
+  );
+});
+test("draft confirmation cannot switch release IDs or observed namespaces before publication", async () => {
+  const f = await fixture(),
+    p = await packageFixture(f),
+    remote = releaseRemote(f, p.evidence, ASSETS.length, true);
+  for (const changed of [
+    { id: 92 },
+    {
+      html_url: remote.html_url.replace(
+        "638fc49470ae7e474d83",
+        "00000000000000000000",
+      ),
+    },
+  ]) {
+    await fs.rm(join(f.folder, "upload.json"), { force: true });
+    let writes = 0;
+    const run = createReleaseRunner({
+      root: f.root,
+      identity,
+      head: async (spec) =>
+        commits[
+          Object.keys(REPOSITORIES).find(
+            (name) => REPOSITORIES[name].name === spec.name,
+          )
+        ],
+      github: async (path, options = {}) => {
+        if (options.method) writes++;
+        if (path.startsWith("releases/tags/")) return structuredClone(remote);
+        assert.equal(path, "releases/" + remote.id);
+        return { ...structuredClone(remote), ...changed };
+      },
+    });
+    await assert.rejects(
+      run("upload", f.planPath),
+      /Draft source\/state changed/,
+    );
+    assert.equal(writes, 0);
+  }
 });
 test("failed local published-state write can retry after remote publication without duplicate uploads", async () => {
   const f = await fixture(),
@@ -802,6 +1216,7 @@ test("failed zero-byte draft upload is removed only with the exact private pendi
     digest: null,
   });
   await json(join(f.folder, "upload.json"), {
+    state: "uploading",
     key: f.plan.key,
     releaseId: remote.id,
     tag: f.plan.tag,
@@ -828,14 +1243,15 @@ test("failed zero-byte draft upload is removed only with the exact private pendi
         return null;
       }
       if (options.method === "PATCH") {
-        remote.draft = false;
-        remote.published_at = "2026-10-06T01:00:00Z";
+        publishRemote(remote);
       }
       return structuredClone(remote);
     },
     uploadAsset: async (_, name) => {
       assert.equal(name, "SHA256SUMS");
-      const asset = releaseRemote(f, p.evidence).assets.at(-1);
+      const asset = releaseRemote(f, p.evidence, ASSETS.length, true).assets.at(
+        -1,
+      );
       remote.assets.push(asset);
       return asset;
     },
@@ -855,6 +1271,7 @@ test("unknown starter or nonempty failed upload refuses destructive recovery", a
     digest: null,
   });
   await json(join(f.folder, "upload.json"), {
+    state: "uploading",
     key: f.plan.key,
     releaseId: remote.id,
     tag: f.plan.tag,
