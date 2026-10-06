@@ -253,7 +253,8 @@ export function createDiscoverer(overrides = {}) {
   }
   const refsFor = overrides.refs ?? gitRefs;
   const statusApp =
-    overrides.statusApp ?? createStatusApp({ tools, fetch: fetcher });
+    overrides.statusApp ??
+    createStatusApp({ tools, uid: context.uid, fetch: fetcher });
   const pullsFor =
     overrides.pulls ??
     (async (repo) => {

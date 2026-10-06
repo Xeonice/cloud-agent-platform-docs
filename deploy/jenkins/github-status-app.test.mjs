@@ -610,7 +610,7 @@ async function discoveryOptions(tools) {
     queued,
   };
 }
-test("real discovery uses App for statuses while keeping App JWT/token away from OAuth branch queries", async () => {
+test("default discovery factory reads deployment-owned App credentials and keeps App JWT/token away from OAuth branch queries", async () => {
   const f = await fixture(),
     opts = await discoveryOptions(f.tools),
     appCalls = f.remote.calls;
@@ -623,9 +623,9 @@ test("real discovery uses App for statuses while keeping App JWT/token away from
   const result = await createDiscoverer({
     ...opts,
     pulls: undefined,
-    statusApp: f.app,
     fetch: async (url, options) => {
-      assert.equal(new URL(url).pathname.endsWith("/pulls"), true);
+      if (!new URL(url).pathname.endsWith("/pulls"))
+        return f.remote.fetcher(url, options);
       assert.equal(
         options.headers.Authorization,
         "Bearer synthetic_oauth_branch_token",
