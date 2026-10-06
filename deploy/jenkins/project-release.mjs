@@ -1239,8 +1239,18 @@ export function createReleaseRunner(overrides = {}) {
     if (manifest.jenkins.buildNumber !== proof.number)
       throw new Error("Downloaded web manifest belongs to another build");
     const work = resolve(workspace);
-    const rel = relative(join(root, "jenkins-agent"), work);
-    if (!rel || rel === ".." || rel.startsWith("../") || isAbsolute(rel))
+    const workspaceRoot =
+      context.platform === "linux"
+        ? join(context.home, "agent", "workspace")
+        : join(root, "jenkins-agent");
+    const rel = relative(workspaceRoot, work);
+    if (
+      (context.platform === "linux" && workspace !== work) ||
+      !rel ||
+      rel === ".." ||
+      rel.startsWith("../") ||
+      isAbsolute(rel)
+    )
       throw new Error(
         "Web evidence destination must be an isolated trusted Jenkins workspace",
       );

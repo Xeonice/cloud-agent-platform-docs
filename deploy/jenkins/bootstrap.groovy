@@ -79,6 +79,11 @@ JenkinsLocationConfiguration.get().setUrl('http://127.0.0.1:8080/')
         'agent-platform-mutation': ['SHA', 'REF', 'MODE', 'BASE_SHA', 'BASE_REF'],
         'agent-platform-sandbox-images': ['SHA', 'REF', 'TAG', 'MODE']
     ][spec.name]
+    // Job.addProperty appends; remove every legacy group, including duplicates.
+    // Use the complete property list so an old SHA-only first group cannot hide ROOT_SHA.
+    job.getAllProperties().findAll { it instanceof ParametersDefinitionProperty }.each { property ->
+        job.removeProperty(property)
+    }
     if (parameters) job.addProperty(new ParametersDefinitionProperty(parameters.collect { name ->
         if (name == 'MODE') return new ChoiceParameterDefinition(name, spec.name == 'agent-platform-mutation' ? 'full\nchanged' : 'check\npublish', 'Managed build mode')
         def value = name == 'REF' ? (spec.name in ['agent-platform-mutation', 'agent-platform-sandbox-images'] ? 'refs/heads/feat/design-v2-migration' : 'refs/heads/main') : ''

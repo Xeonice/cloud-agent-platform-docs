@@ -2,7 +2,7 @@
 
 Mac mini 已安装三个 Docker 引擎的系统启动项：Jenkins controller、隔离构建、生产运行时。用户已执行管理员安装并验证三个 LaunchDaemon 已加载；日常容器启动、构建和发布不需要手工初始化。参见[已完成的开机配置](container-boot-commands.md)。
 
-Jenkins controller 和 Linux ARM64、AMD64、部署节点已连接。完整 Linux 部署回归 420 项零失败；正式 API CI 首次构建已成功。生产 API、BoxLite 和 Tunnel 的初次数据迁移与正式 Release 仍在执行，具体完成状态应查看 Jenkins 实际构建记录。
+生产 API、BoxLite 和 Tunnel 的初次 Docker 数据迁移已完成。API 保留原有项目、基线文件、口令与会话配置；实际 HTTPS 健康、登录 cookie、精确 Origin 及 BoxLite KVM 虚拟机均已验证。原生 API/Tunnel 启动项已停用，原目录和迁移备份保留。日常发布及下载包以上述 Jenkins 的实际构建、上传收据和 GitHub Release 为准，不需要重跑本文件的安装命令。
 
 ## 1 Docker 引擎开机配置已完成
 
@@ -22,7 +22,7 @@ sudo '/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bi
 
 导出已成功，实际停止状态检查及归档完整校验通过。完整归档和 manifest 保存在上述 migration 目录，权限为 `0600`，其中包含加密密钥，不能上传到 GitHub 或聊天。导出源码 SHA-256 为 `e6943a8321c30d2c2da293f34cbfa6870f7b7426c51ec1a7f3ec408699c929a1`；实际停止状态检查已通过。
 
-配置、用户、密钥及构建历史已导入新的 Docker 持久卷；旧插件、启动脚本、工作区和待执行队列已排除。正式 `8080` 在迁移模式下完成 Home 验证，随后切到 active 模式；9 个 job 仍禁用。验证结果见 [Home 迁移证据](jenkins-controller-home-migration-verification.json)及[模式验证](jenkins-controller-active-mode-verification.json)。此导出和导入不等于完整 CI/CD 已完成。
+配置、用户、密钥及构建历史已导入新的 Docker 持久卷；旧插件、启动脚本、工作区和待执行队列已排除。正式 `8080` 在迁移模式下完成 Home 验证，随后切到 active 模式。导入时九个作业禁用，之后按验收结果启用；当前状态查看 [Jenkins](http://127.0.0.1:8080/)。原始导入验证见 [Home 迁移证据](jenkins-controller-home-migration-verification.json)及[模式验证](jenkins-controller-active-mode-verification.json)。
 
 第 2—4 节已完成，无需重跑。既有[命令诊断](jenkins-system-cutover-command-probe-diagnosis.json)、[账户验证](jenkins-system-isolated-account-record-readonly.json)与 [Tunnel 生命周期验证](jenkins-system-cutover-live-lifecycle.json)保留作为历史证据；它们不表示 Docker 服务已经部署。
 
@@ -56,7 +56,7 @@ gh auth refresh -h github.com -s workflow
 
 本次 App 已成功创建，ID 为 `5204009`，名称为 `Xeonice Agent Platform Jenkins`，installation 为 `168317369`。已改为 **Only select repositories**，实际短期 token 的有效仓库集合验证恰好三仓，`verify` 已通过。此步骤无需重复执行；[安装设置](https://github.com/settings/installations/168317369)保留供日后维护。
 
-三个仓库的 main 必需检查目前指定 GitHub Actions 的来源，普通 CLI 登录发送同名状态也无法替代。完整 CI 迁移需要专属 Jenkins App。脚本已通过 21 项回归；它只准备注册和验证，不修改分支保护。
+三个仓库的 main 必需检查已切到专属 Jenkins App `5204009`，六个旧 GitHub Actions 工作流已停用，其余分支保护保持原值。注册脚本只准备和验证 App；检查来源的切换由独立 CI 迁移工具在真实 Jenkins 验收通过后执行。
 
 下面的注册命令仅供首次创建时使用，本次已创建完成，无需重复执行。Terminal 会保持本机注册页面开启十五分钟：
 

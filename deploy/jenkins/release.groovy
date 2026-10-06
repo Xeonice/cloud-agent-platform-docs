@@ -97,10 +97,10 @@ pipeline {
       when { allOf { environment name: 'RELEASE_REQUIRED', value: 'true'; environment name: 'RELEASE_READY', value: 'true' } }
       steps {
         sh 'mkdir -m 700 "$WORKSPACE/web-upload-$BUILD_NUMBER"'
-        sh '"$NODE22" "$RELEASE_TOOL" fetch-web "$PLAN_PATH" "$WEB_BUILD" "web-upload-$BUILD_NUMBER" > web-adoption.json'
-        sh '"$NODE22" "$WEB_TOOL" adopt "$WEB_SHA" refs/heads/feat/design-v2-migration "web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > web-adopted.json'
-        sh '"$NODE22" "$WEB_TOOL" upload "$WEB_SHA" refs/heads/feat/design-v2-migration "web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-upload.json'
-        sh '"$NODE22" "$WEB_TOOL" promote "$WEB_SHA" refs/heads/feat/design-v2-migration "web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-promoted.json'
+        sh '"$NODE22" "$RELEASE_TOOL" fetch-web "$PLAN_PATH" "$WEB_BUILD" "$WORKSPACE/web-upload-$BUILD_NUMBER" > web-adoption.json'
+        sh '"$NODE22" "$WEB_TOOL" adopt "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > web-adopted.json'
+        sh '"$NODE22" "$WEB_TOOL" upload "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-upload.json'
+        sh '"$NODE22" "$WEB_TOOL" promote "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-promoted.json'
       }
     }
     stage('Package complete downloadable release') {

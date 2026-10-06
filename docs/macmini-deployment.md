@@ -60,6 +60,8 @@ Vercel 使用 `--prebuilt` 上传已验收字节，不再次远端构建。Jenki
 
 一次性管理员安装完成后，日常初始化、构建和发布无需在 Terminal 手工运行应用。命令和审阅校验见 [开机自启文档](../artifacts/container-boot-commands.md)，安装证据见 [系统启动项](../artifacts/container-system-boot-verification.json)。配置中的 `StartInterval` 会重试引擎启动，容器使用 `restart: unless-stopped`。整台 Mac 的断电冷启动与 profile 重启是不同验收，证据会分别标识。
 
+2026-10-06 已分别实际停止并验证三个 profile 由系统启动项自动拉起；Jenkins 历史、配置和三个 Linux 节点自动恢复，未手工运行 `colima start`、容器启动或初始化命令。测试期间生产域名继续由独立 runtime 服务提供。整机断电冷启动尚未执行。
+
 早期 `system-review-20261007*` 与四个宿主服务 review 已退休，不要再执行。旧 native 源码保留用于历史恢复；Linux 回归会明确列出仅支持实际 Darwin 原生包的退休测试，不伪造 OS 或 native 验收。
 
 ## 生产数据迁移
@@ -69,6 +71,8 @@ SQLite 使用 WAL；只复制 `.db` 会漏数据。[migrate-data.mjs](../deploy/
 原生 API 没有用户任务，但 BoxLite 内部有预热授权 helper。该 helper 不在任务表里，迁移会在原 API 退出后停止它并保留原 home；目标 Linux API 按需重建。不能把原 BoxLite home 的数据库和 macOS 绝对路径直接搬到 Linux。一般用户 VM 的跨平台磁盘应使用官方导出/导入；独立 Darwin ARM64→Linux ARM64 roundtrip 已验证 marker、PTY、停止恢复和第二个容器重建。证据：[平台数据恢复](../artifacts/native-linux-data-migration-rehearsal.json)、[BoxLite 跨平台恢复](../artifacts/boxlite-darwin-linux-portability-rehearsal.json)。
 
 切换前生成最终备份、保持单一生产数据 owner，验证公开健康、原项目与终端。旧数据目录与原 native 发布均保留，不共享给第二个运行时，也不恢复已退休的旧轮询器。
+
+初次接管已于 2026-10-06 完成：API 与专属 Tunnel 在 Docker 中运行，原项目及基线、口令与会话配置保留。已验证公开 HTTPS 健康、未登录 401、Secure/HttpOnly 会话 cookie、精确 Origin 和拒绝外来 Origin，以及生产 BoxLite 的真实 KVM 虚拟机。失败尝试的完整数据、锁、收据和日志均归档；原 native 启动项保持停用。
 
 ## 当前实施证据
 
