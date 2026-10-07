@@ -18,6 +18,7 @@ import {
   roleFor,
   treeEvidence,
   validateManifest,
+  validateHistoricalManifest,
   testReport,
   readExecutedTestReport,
   archivePaths,
@@ -925,7 +926,7 @@ test(
 );
 
 test(
-  "PR/main CI never receives production settings or trusted upload and still executes all gates",
+  "PR CI never receives production settings or trusted upload and still executes all gates",
   native,
   async (t) => {
     const f = await fixture(t);
@@ -943,7 +944,7 @@ test(
       f.state.calls.some((c) => c.args?.[0] === WEB.cli),
       false,
     );
-    await assert.rejects(f.invoke("upload"), /PR or main/);
+    await assert.rejects(f.invoke("upload"), /Only main/);
   },
 );
 
@@ -1014,6 +1015,62 @@ test(
       (await read(join(f.workspace, "web-artifacts/web-ci.json"))).gates.build
         .state,
       "failed",
+    );
+  },
+);
+
+test(
+  "main is the only new production source; retained migration manifests stay read-only and cannot authorize trusted phases",
+  native,
+  async (t) => {
+    const f = await fixture(t);
+    assert.equal(WEB.ref, "refs/heads/main");
+    await build(f);
+    const manifest = await read(
+      join(f.workspace, "web-artifacts/manifest.json"),
+    );
+    const historical = {
+      ...manifest,
+      ref: "refs/heads/feat/design-v2-migration",
+    };
+    const before = JSON.stringify(historical);
+    assert.equal(
+      validateHistoricalManifest(historical, WEB_SHA, ROOT_SHA, API_SHA),
+      historical,
+    );
+    assert.equal(JSON.stringify(historical), before);
+    assert.throws(
+      () => validateManifest(historical, WEB_SHA, ROOT_SHA, true, API_SHA),
+      /provenance/,
+    );
+    for (const ref of [
+      historical.ref,
+      "refs/heads/feature/unapproved",
+      "refs/pull/9/head",
+    ])
+      for (const phase of ["prepare-env", "adopt", "upload", "promote"])
+        await assert.rejects(f.invoke(phase, ref), /Only main/);
+    assert.equal(f.state.uploads, 0);
+    assert.equal(f.state.promotes, 0);
+    assert.throws(
+      () =>
+        validateHistoricalManifest(
+          { ...historical, ref: "refs/heads/feature/unapproved" },
+          WEB_SHA,
+          ROOT_SHA,
+          API_SHA,
+        ),
+      /provenance/,
+    );
+    assert.throws(
+      () =>
+        validateHistoricalManifest(
+          { ...historical, apiSha: "d".repeat(40) },
+          WEB_SHA,
+          ROOT_SHA,
+          API_SHA,
+        ),
+      /provenance/,
     );
   },
 );

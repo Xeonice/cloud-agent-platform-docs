@@ -9,7 +9,7 @@ pipeline {
   }
   parameters {
     string(name: 'SHA', defaultValue: '', description: 'Pinned API commit; blank resolves the trusted REF before check/publish')
-    string(name: 'REF', defaultValue: 'refs/heads/feat/design-v2-migration', description: 'Trusted API branch or refs/tags/sandbox-image-v<version>; never a PR')
+    string(name: 'REF', defaultValue: 'refs/heads/main', description: 'Trusted API branch or refs/tags/sandbox-image-v<version>; never a PR')
     string(name: 'TAG', defaultValue: '', description: 'Immutable OCI version; Git sandbox-image tag must match, blank derives pinned CLI versions + SHA')
     choice(name: 'MODE', choices: ['check', 'publish'], description: 'Check coordinates and dedicated runtime builder, or explicitly publish both provider tiers')
   }

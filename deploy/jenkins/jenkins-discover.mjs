@@ -582,8 +582,7 @@ export function createDiscoverer(overrides = {}) {
         const pull = ref.startsWith("refs/pull/");
         const shouldBuild =
           repo === "api"
-            ? !production &&
-              !ref.startsWith("refs/tags/") &&
+            ? !ref.startsWith("refs/tags/") &&
               (!first || ref === "refs/heads/main" || pull)
             : ref === "refs/heads/main" || pull;
         const params =
@@ -597,6 +596,26 @@ export function createDiscoverer(overrides = {}) {
                   API_SHA: commits.api,
                 }
               : { ROOT_SHA: sha, API_SHA: commits.api, WEB_SHA: commits.web };
+        if (
+          repo === "api" &&
+          production &&
+          !first &&
+          before &&
+          (await changedImage(before, sha))
+        ) {
+          try {
+            await enqueue({
+              sha,
+              ref,
+              key: "image-check:" + sha,
+              job: DISCOVERY_JOBS.images,
+              params: { SHA: sha, REF: ref, TAG: "", MODE: "check" },
+            });
+          } catch (error) {
+            errors.push({ key: sourceKey, error: error.message });
+            continue;
+          }
+        }
         if (shouldBuild) {
           try {
             await enqueue({
@@ -625,26 +644,6 @@ export function createDiscoverer(overrides = {}) {
                   TAG: ref.slice("refs/tags/sandbox-image-".length),
                   MODE: "publish",
                 },
-              });
-            } catch (error) {
-              errors.push({ key: sourceKey, error: error.message });
-              continue;
-            }
-          }
-          if (
-            repo === "api" &&
-            production &&
-            !first &&
-            before &&
-            (await changedImage(before, sha))
-          ) {
-            try {
-              await enqueue({
-                sha,
-                ref,
-                key: "image-check:" + sha,
-                job: DISCOVERY_JOBS.images,
-                params: { SHA: sha, REF: ref, TAG: "", MODE: "check" },
               });
             } catch (error) {
               errors.push({ key: sourceKey, error: error.message });

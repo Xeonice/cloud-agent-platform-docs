@@ -46,7 +46,7 @@ pipeline {
       when { allOf { environment name: 'RELEASE_REQUIRED', value: 'true'; expression { !env.WEB_BUILD } } }
       steps {
         script {
-          def result = build job: 'agent-platform-web', parameters: [string(name: 'SHA', value: env.WEB_SHA), string(name: 'REF', value: 'refs/heads/feat/design-v2-migration'), string(name: 'ROOT_SHA', value: env.ROOT_SHA), string(name: 'API_SHA', value: env.API_SHA)], wait: true, propagate: false
+          def result = build job: 'agent-platform-web', parameters: [string(name: 'SHA', value: env.WEB_SHA), string(name: 'REF', value: 'refs/heads/main'), string(name: 'ROOT_SHA', value: env.ROOT_SHA), string(name: 'API_SHA', value: env.API_SHA)], wait: true, propagate: false
           env.WEB_BUILD = result.number.toString()
           if (result.result != 'SUCCESS') { error("Frontend CI ${result.result}; nothing is uploaded") }
         }
@@ -98,9 +98,9 @@ pipeline {
       steps {
         sh 'mkdir -m 700 "$WORKSPACE/web-upload-$BUILD_NUMBER"'
         sh '"$NODE22" "$RELEASE_TOOL" fetch-web "$PLAN_PATH" "$WEB_BUILD" "$WORKSPACE/web-upload-$BUILD_NUMBER" > web-adoption.json'
-        sh '"$NODE22" "$WEB_TOOL" adopt "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > web-adopted.json'
-        sh '"$NODE22" "$WEB_TOOL" upload "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-upload.json'
-        sh '"$NODE22" "$WEB_TOOL" promote "$WEB_SHA" refs/heads/feat/design-v2-migration "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-promoted.json'
+        sh '"$NODE22" "$WEB_TOOL" adopt "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > web-adopted.json'
+        sh '"$NODE22" "$WEB_TOOL" upload "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-upload.json'
+        sh '"$NODE22" "$WEB_TOOL" promote "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-promoted.json'
       }
     }
     stage('Package complete downloadable release') {

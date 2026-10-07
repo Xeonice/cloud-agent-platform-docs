@@ -15,7 +15,7 @@ import {
 
 export const IMAGE_REPOSITORY =
   "https://github.com/Xeonice/agent-platform-api.git";
-export const IMAGE_BRANCH = "refs/heads/feat/design-v2-migration";
+export const IMAGE_BRANCH = "refs/heads/main";
 export const IMAGE_TAG_REF =
   /^refs\/tags\/sandbox-image-v[0-9]+(?:\.[0-9]+){0,2}(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/;
 export const DOCKER = "/usr/local/bin/docker";

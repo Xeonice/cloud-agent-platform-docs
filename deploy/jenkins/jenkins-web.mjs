@@ -30,7 +30,7 @@ import {
 // never the source of a trusted deployment command or its configuration.
 export const WEB = Object.freeze({
   repository: "https://github.com/Xeonice/agent-platform-web.git",
-  ref: "refs/heads/feat/design-v2-migration",
+  ref: "refs/heads/main",
   projectId: "prj_XYIzK6r7LgRrV5NHCwWff489J73r",
   orgId: "team_jHE2oyEyN6YIl1u1OPhZAQof",
   scope: "xeonices-projects",
@@ -41,6 +41,7 @@ export const WEB = Object.freeze({
   root: "/Users/douglasdong/.local/share/agent-platform-deploy",
   cli: "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
 });
+const HISTORICAL_PRODUCTION_REF = "refs/heads/feat/design-v2-migration";
 export const SHA = /^[a-f0-9]{40}$/;
 export function releaseKey(rootSha, apiSha, webSha) {
   if (![rootSha, apiSha, webSha].every((sha) => SHA.test(sha ?? "")))
@@ -347,6 +348,16 @@ export function validateManifest(
   production = true,
   apiSha = value?.apiSha,
 ) {
+  return checkedManifest(value, sha, rootSha, production, apiSha, false);
+}
+
+// Read-only inspection of already retained evidence. Publication phases use
+// validateManifest and still require the current main ref and fresh head checks.
+export function validateHistoricalManifest(value, sha, rootSha, apiSha) {
+  return checkedManifest(value, sha, rootSha, true, apiSha, true);
+}
+
+function checkedManifest(value, sha, rootSha, production, apiSha, historical) {
   if (
     value?.schemaVersion !== 1 ||
     value?.repository !== WEB.repository ||
@@ -354,7 +365,9 @@ export function validateManifest(
     value?.rootSha !== rootSha ||
     value?.apiSha !== apiSha ||
     !SHA.test(apiSha ?? "") ||
-    (value?.ref !== WEB.ref && production) ||
+    (production &&
+      value?.ref !== WEB.ref &&
+      !(historical && value?.ref === HISTORICAL_PRODUCTION_REF)) ||
     value?.production !== production ||
     value?.nodeMajor !== 22 ||
     value?.vercelCli !== "62.2.0" ||
@@ -747,9 +760,7 @@ export async function runWebPhase(
   const pnpm = (args) => run(node, [corepack, "pnpm", ...args]);
   const production = ref === WEB.ref;
   if (role === "trusted" && !production)
-    throw new Error(
-      "PR or main builds cannot use production publication phases",
-    );
+    throw new Error("Only main builds can use production publication phases");
 
   if (phase === "prepare-env") {
     await recheckHead(operations, work, env, sha);

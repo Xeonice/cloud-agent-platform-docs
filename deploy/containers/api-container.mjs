@@ -15,11 +15,11 @@ export const SHA = /^[a-f0-9]{40}$/;
 export const REPOSITORIES = Object.freeze({
   api: {
     name: "Xeonice/agent-platform-api",
-    branch: "feat/design-v2-migration",
+    branch: "main",
   },
   root: {
     name: "Xeonice/cloud-agent-platform-docs",
-    branch: "Xeonice/初始化一下项目开发",
+    branch: "main",
   },
 });
 const docker = "/usr/local/bin/docker";
@@ -214,6 +214,274 @@ export function idle(status) {
     BLOCKERS.every((name) => status.blockers[name] === 0),
   );
 }
+
+// Read inside the already-owned API PID namespace. Never open a second BoxLite
+// runtime: its home lock and SDK recovery would make this a mutating probe.
+function stoppedReservationsProbe() {
+  const fs = require("node:fs"),
+    D = require("better-sqlite3"),
+    hash = require("node:crypto").createHash,
+    platformPath = "/data/platform.db",
+    boxPath = "/data/boxlite/db/boxlite.db",
+    boxes = "/data/boxlite/boxes",
+    prefix =
+      "platform-boxlite-" +
+      hash("sha256").update(platformPath).digest("hex").slice(0, 16) +
+      "-";
+  const fail = () => {
+    throw Error("Stopped reservation proof unavailable");
+  };
+  function named(path, directory = false) {
+    const s = fs.lstatSync(path);
+    if (
+      s.isSymbolicLink() ||
+      fs.realpathSync(path) !== path ||
+      s.uid !== process.getuid() ||
+      (directory ? !s.isDirectory() : !s.isFile() || s.nlink !== 1)
+    )
+      fail();
+    return s;
+  }
+  function absentPid(id) {
+    const path = boxes + "/" + id;
+    named(path, true);
+    try {
+      fs.lstatSync(path + "/shim.pid");
+      fail();
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
+  const before = [named(platformPath), named(boxPath)],
+    opened = [];
+  try {
+    const platform = new D(platformPath, {
+      readonly: true,
+      fileMustExist: true,
+    });
+    opened.push(platform);
+    const box = new D(boxPath, { readonly: true, fileMustExist: true });
+    opened.push(box);
+    for (const db of opened) db.exec("PRAGMA query_only=ON");
+    function rows() {
+      return {
+        allocations: platform
+          .prepare(
+            "SELECT a.id allocation_id,a.sandbox_id,a.node_id,a.reconciliation_status,s.id,s.status,s.provider,s.provider_handle FROM resource_allocations a LEFT JOIN sandboxes s ON s.id=a.sandbox_id WHERE a.released_at IS NULL ORDER BY a.id",
+          )
+          .all(),
+        handles: platform
+          .prepare(
+            "SELECT id,provider_handle FROM sandboxes WHERE provider_handle IS NOT NULL ORDER BY id",
+          )
+          .all(),
+        boxes: box
+          .prepare(
+            "SELECT c.id,c.name,s.status,s.pid FROM box_config c LEFT JOIN box_state s ON s.id=c.id ORDER BY c.id",
+          )
+          .all(),
+        states: box.prepare("SELECT id FROM box_state ORDER BY id").all(),
+      };
+    }
+    const first = rows(),
+      allocated = new Set(),
+      handles = new Set();
+    if (
+      !first.allocations.length ||
+      first.allocations.length > 10000 ||
+      first.boxes.length !== first.states.length
+    )
+      fail();
+    const byId = new Map(first.boxes.map((b) => [b.id, b]));
+    if (
+      byId.size !== first.boxes.length ||
+      first.states.some((s) => !byId.has(s.id))
+    )
+      fail();
+    for (const a of first.allocations) {
+      if (
+        a.node_id !== "local" ||
+        a.reconciliation_status !== "confirmed" ||
+        a.id !== a.sandbox_id ||
+        a.status !== "stopped" ||
+        a.provider !== "boxlite" ||
+        !/^[A-Za-z0-9_-]{1,128}$/.test(a.provider_handle ?? "") ||
+        allocated.has(a.id) ||
+        handles.has(a.provider_handle)
+      )
+        fail();
+      allocated.add(a.id);
+      handles.add(a.provider_handle);
+      const b = byId.get(a.provider_handle);
+      if (
+        !b ||
+        b.name !== prefix + a.id ||
+        b.status !== "stopped" ||
+        b.pid !== null ||
+        first.handles.filter((s) => s.provider_handle === a.provider_handle)
+          .length !== 1
+      )
+        fail();
+      absentPid(b.id);
+    }
+    if (first.boxes.filter((b) => b.name === prefix + "auth-helper").length > 1)
+      fail();
+    let helper = null;
+    for (const b of first.boxes) {
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(b.id ?? "")) fail();
+      if (b.name === prefix + "auth-helper" && b.status === "running") {
+        if (
+          helper ||
+          !Number.isSafeInteger(b.pid) ||
+          b.pid < 1 ||
+          first.handles.some((s) => s.provider_handle === b.id)
+        )
+          fail();
+        helper = b;
+      } else {
+        if (
+          !["stopped", "configured", "failed"].includes(b.status) ||
+          b.pid !== null
+        )
+          fail();
+        absentPid(b.id);
+      }
+    }
+    function processes() {
+      const result = new Map();
+      for (const id of fs
+        .readdirSync("/proc")
+        .filter((p) => /^[1-9]\d*$/.test(p))) {
+        let stat, status, executable;
+        try {
+          stat = fs.readFileSync("/proc/" + id + "/stat", "utf8");
+          status = fs.readFileSync("/proc/" + id + "/status", "utf8");
+          try {
+            executable = fs.readlinkSync("/proc/" + id + "/exe");
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+            executable = null;
+          }
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
+        }
+        const s = stat.match(/^(\d+) \((.*)\) (\S) (\d+) /),
+          uid = status.match(/^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m);
+        const fields = stat
+          .slice(stat.lastIndexOf(")") + 2)
+          .trim()
+          .split(/\s+/);
+        if (!s || s[1] !== id || !uid || !/^\d+$/.test(fields[19] ?? ""))
+          fail();
+        result.set(Number(id), {
+          comm: s[2],
+          state: s[3],
+          parent: Number(s[4]),
+          uid: uid.slice(1).map(Number),
+          executable,
+          startTime: fields[19],
+        });
+      }
+      return result;
+    }
+    function verifyProcesses() {
+      const all = processes(),
+        root = helper && all.get(helper.pid);
+      if (helper) {
+        const p = boxes + "/" + helper.id + "/shim.pid";
+        named(boxes + "/" + helper.id, true);
+        const fd = fs.openSync(
+          p,
+          fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+        );
+        try {
+          const s = fs.fstatSync(fd);
+          if (
+            !s.isFile() ||
+            s.nlink !== 1 ||
+            s.uid !== process.getuid() ||
+            s.size > 64
+          )
+            fail();
+          const text = fs.readFileSync(fd, "utf8");
+          if (!/^[1-9]\d*\s*$/.test(text) || Number(text.trim()) !== helper.pid)
+            fail();
+        } finally {
+          fs.closeSync(fd);
+        }
+        if (
+          !root ||
+          root.comm !== "bwrap" ||
+          root.executable !== "/opt/boxlite-runtime/bwrap" ||
+          !["R", "S", "D", "I"].includes(root.state) ||
+          root.uid.some((u) => u !== process.getuid())
+        )
+          fail();
+      }
+      let vms = 0;
+      const identities = [];
+      for (const [pid, p] of all) {
+        if (
+          !/^(?:bwrap|boxlite-shim|libkrun VM)$/.test(p.comm) &&
+          !/(?:^|\/)(?:bwrap|boxlite-shim)(?: \(deleted\))?$/.test(
+            p.executable ?? "",
+          )
+        )
+          continue;
+        if (
+          !helper ||
+          !["R", "S", "D", "I"].includes(p.state) ||
+          p.uid.some((u) => u !== process.getuid())
+        )
+          fail();
+        if (
+          p.comm === "libkrun VM" &&
+          p.executable !== boxes + "/" + helper.id + "/bin/boxlite-shim"
+        )
+          fail();
+        const seen = new Set();
+        let ancestor = pid;
+        while (ancestor !== helper.pid) {
+          if (seen.has(ancestor) || !all.has(ancestor)) fail();
+          seen.add(ancestor);
+          ancestor = all.get(ancestor).parent;
+        }
+        if (p.comm === "libkrun VM") vms++;
+        // Scheduling states may change S/R while the same idle helper remains
+        // alive. Compare identity, not scheduler state; invalid states fail above.
+        identities.push([
+          pid,
+          {
+            comm: p.comm,
+            parent: p.parent,
+            uid: p.uid,
+            executable: p.executable,
+            startTime: p.startTime,
+          },
+        ]);
+      }
+      if (helper && vms !== 1) fail();
+      return identities.sort((a, b) => a[0] - b[0]);
+    }
+    const processIdentities = verifyProcesses();
+    if (JSON.stringify(first) !== JSON.stringify(rows())) fail();
+    for (const id of handles) absentPid(id);
+    if (JSON.stringify(processIdentities) !== JSON.stringify(verifyProcesses()))
+      fail();
+    for (const [i, path] of [platformPath, boxPath].entries()) {
+      const s = named(path);
+      if (s.dev !== before[i].dev || s.ino !== before[i].ino) fail();
+    }
+    return { stoppedReservations: first.allocations.length };
+  } finally {
+    for (const db of opened) db.close();
+  }
+}
+export const STOPPED_RESERVATIONS_PROBE =
+  "console.log(JSON.stringify((" +
+  stoppedReservationsProbe.toString() +
+  ")()))";
 export function runtimePolicy(text) {
   const env = parseEnv(text);
   const origins = (env.API_ALLOWED_ORIGINS ?? "").split(",");
@@ -753,6 +1021,39 @@ export function createDeployer(options = {}) {
     if (values.length !== 1) throw Error("Ambiguous API container");
     return values[0];
   }
+  async function deploymentIdle(value, expected) {
+    if (idle(value)) return true;
+    const count = value?.blockers?.resourceAllocations;
+    if (
+      !Number.isSafeInteger(count) ||
+      count < 1 ||
+      count > 10000 ||
+      !idle({
+        ...value,
+        blockers: { ...value.blockers, resourceAllocations: 0 },
+      })
+    )
+      return false;
+    await exactContainer(expected);
+    let proof;
+    try {
+      proof = JSON.parse(
+        await d(
+          ["exec", expected.id, "node", "-e", STOPPED_RESERVATIONS_PROBE],
+          { quiet: true },
+        ),
+      );
+    } catch {
+      // An unreadable DB, transitional VM or unknown PID is busy, never permission
+      // to stop the API. Only exact durable stopped reservations can be exempted.
+      return false;
+    }
+    await exactContainer(expected);
+    return (
+      Object.keys(proof ?? {}).join(",") === "stoppedReservations" &&
+      proof.stoppedReservations === count
+    );
+  }
   async function exactContainer(expected) {
     const actual = await inspectApi();
     if (!ownedContainer(actual, expected))
@@ -938,7 +1239,9 @@ export function createDeployer(options = {}) {
           ...request,
           imageId: release.imageId,
         };
-      if (!idle(await status())) return { state: "waiting-idle", ...request };
+      const original = { id: old.Id, imageId: old.Image };
+      if (!(await deploymentIdle(await status(), original)))
+        return { state: "waiting-idle", ...request };
       let held,
         holdAttempted = false,
         stopped = false,
@@ -977,7 +1280,7 @@ export function createDeployer(options = {}) {
           await sleep(1000);
           await barrier("check", held, old.Image, old.Id);
           const value = await status();
-          if (!value.draining || !idle(value)) {
+          if (!value.draining || !(await deploymentIdle(value, original))) {
             await barrier("release", held, old.Image, old.Id);
             held = null;
             return { state: "waiting-idle", ...request };
@@ -990,7 +1293,7 @@ export function createDeployer(options = {}) {
         }
         // Admission is still held and every real work/auth/HTTP counter remains zero immediately before stop.
         await barrier("check", held, old.Image, old.Id);
-        if (!idle(await status()))
+        if (!(await deploymentIdle(await status(), original)))
           throw Error("Production became active before stop");
         stopped = true;
         await checkpoint({

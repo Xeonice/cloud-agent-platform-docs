@@ -2,7 +2,8 @@
 
 `agent-platform-web` accepts the fixed Web repository's full `SHA` and `REF`, plus
 the umbrella project's `ROOT_SHA` and `API_SHA`. Production builds use
-`refs/heads/feat/design-v2-migration`; main and PR runs use the same CI gates.
+`refs/heads/main`; feature branches and PRs use the same isolated CI gates without
+production settings or publication credentials.
 
 The job runs all local static gates, acceptance tests, Storybook tests, the static
 Storybook build, production build and package phases on `agent-platform-web-build`.
@@ -77,6 +78,13 @@ Web Jenkins build's completed `SUCCESS` and exact parameters before adopting it.
 The umbrella release job reuses this child only after verifying the archived
 report, the child's actual completed `SUCCESS` and all three parameters. Missing
 or pruned child evidence requires another real contract build.
+
+New production plans, trusted phases and artifact consumers accept only `main`.
+Already retained migration-branch manifests and build records can be inspected
+with the pure `validateHistoricalManifest` and `validateHistoricalBuild` checkers.
+They preserve the original ref, three commits and evidence bytes; they do not
+authorize publication or rewrite an old build as a main build. Active retries
+and artifact adoption continue to use the strict current-production validators.
 
 Trusted preparation, adoption, upload and promotion run on
 `agent-platform-linux-deploy`. This separate ARM64 deployment container has

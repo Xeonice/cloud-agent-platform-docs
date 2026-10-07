@@ -6,7 +6,7 @@
 
 前端以共享 AppFrame 承载工作台与设置页，任务、项目与管理流程采用同一组实际查询和操作。后端提供 REST/MCP、终端 WebSocket、诊断 SSE、SQLite 事务和 BoxLite 生命周期。接口与前端类型从同源契约生成，读取失败不伪装为空或健康，取消与失败保留可恢复状态。
 
-正式构建与发布由本地 Jenkins 管理，生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。运行状态、日志、持久数据和维护操作见 [Mac mini 部署](./docs/macmini-deployment.md)。本页不保存容易过期的 PID、构建号或部署快照。
+正式构建与发布由本地 Jenkins 管理，发布来源固定为主仓及 API/Web 三仓 `main` 的精确 SHA；PR 构建用于验收。生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。运行状态、日志、持久数据和维护操作见 [Mac mini 部署](./docs/macmini-deployment.md)。本页不保存容易过期的 PID、构建号或部署快照。
 
 ## 持续验收
 

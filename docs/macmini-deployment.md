@@ -1,6 +1,6 @@
 # Mac mini Docker 与 Jenkins 构建发布
 
-Mac mini 负责三个仓库的发现、测试、构建、打包和上传。前端在 Linux AMD64 构建为 Vercel production prebuilt，再由 Jenkins 上传并提升至 `agent.douglasdong.com`。API 与 BoxLite 使用 Linux ARM64 镜像，Cloudflare Tunnel 将 `agent-api.douglasdong.com` 转发到同一 Linux VM 内的 API。Jenkins 保存阶段日志、测试报告、镜像标识、校验和、备份与 GitHub Release 记录。
+Mac mini 负责三个仓库的发现、测试、构建、打包和上传。生产来源固定为三个仓库各自的 `main`；前端在 Linux AMD64 构建为 Vercel production prebuilt，再由 Jenkins 上传并提升至 `agent.douglasdong.com`。API 与 BoxLite 使用 Linux ARM64 镜像，Cloudflare Tunnel 将 `agent-api.douglasdong.com` 转发到同一 Linux VM 内的 API。Jenkins 保存阶段日志、测试报告、镜像标识、校验和、备份与 GitHub Release 记录。
 
 ## 运行结构
 
@@ -44,11 +44,17 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 后端镜像和收据绑定 `ROOT_SHA` 与 `API_SHA`；不可变目录为 `<ROOT_SHA>-<API_SHA>`。相同组合复用已验证的镜像与打包字节，不覆盖旧缓存。Docker 29 的 image ID 可能是 OCI index digest，包验证会核对 index→manifest→config 的实际链和 Linux ARM64，不能把 config digest 误当 image ID。
 
+新发布会重新读取三仓 `main`，要求构建提交仍等于这些分支的真实 head。API/Web PR 合并后，主仓必须钉住各自合并后的提交再合并；不要在三仓来源尚未一致时启用新生产工具。历史已签收的分支收据与发布资产保留原字节，只读校验不将它们重新签为 `main`。
+
 生产替换先严格检查任务、沙箱、自动化、资源、克隆、清理、授权与正在执行的 HTTP。维护屏障生效后复查，再停止 API、备份一致的持久卷并替换。纯浏览器连接可在重启后恢复；它不会让零任务的服务永远无法发布。数据库 schema fingerprint 改变时停止自动切换，返回迁移审阅状态。失败恢复保留明确 checkpoint；没有成功收据就不会继续前端与 GitHub 发布。
+
+停止任务会保留 VM 磁盘、工作区和资源名额。只有这些保留登记全部 confirmed、对应沙箱及 BoxLite 实际状态都为 stopped，且只读 SQLite 与真实进程核验一致时，发布工具才将其视为可安全切换。运行、孤儿、未知或无法核验的实例仍阻止发布；持有维护屏障后持续复查，切换不删除登记或数据。新 API 的状态检查不会调用可能隐式启动非运行 VM 的执行指标。
 
 维护屏障只在已知候选容器的 ID、镜像、挂载与版本标签保持一致，且 API readiness 和 Docker `healthy` 同时通过后解除。HTTP 已可用但 Docker 仍 `starting` 时继续等待；失败或超时走原恢复流程，不能把这种状态当作发布成功。
 
 Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service status and logs` 页面、Console Output、Artifacts 和 fingerprint 可追溯结果。Docker 的 restart policy 管理进程退出恢复；健康检查和监控记录失健康状态。容器日志为旋转的 `json-file`，报告按私有口令与 token 脱敏。
+
+更新可信构建工具时，先等待 Jenkins 作业和 executor 空闲，再用 `prepare-context.mjs ci` 的公开输入重建 ARM64/AMD64 CI 镜像，用 `prepare-deploy-context.mjs` 重建可信 deploy 镜像。核对新镜像 ID 后只替换两个 CI agent 与 deploy agent，保留它们的 named volume；同步管理模板并验证三节点重新在线。该步骤不重启 API、Tunnel、DNS 或 controller；业务 API 的更新仍交由后续正式发布作业执行维护、备份与 readiness 流程。
 
 ## 公网 Jenkins 与 Cloudflare Zero Trust
 
@@ -68,7 +74,7 @@ Vercel 使用 `--prebuilt` 上传已验收字节，不再次远端构建。Jenki
 
 Vercel 项目名为 `agent-platform`，GitHub 前端仓库名为 `agent-platform-web`；生成的部署地址使用前者。校验同时绑定实际项目 ID、team、三仓 SHA、构建号与部署状态，域名提升复用同一已验收部署。
 
-三个仓库的 CI 已由 Jenkins 执行。main 的必需状态检查绑定专属 Jenkins App `5204009`，保留 strict、reviews 和管理员规则。App 的安装只限三仓；不接受任意 App 来源。状态认证和本机配置见 [GitHub App 配置](../deploy/jenkins/github-status-app.md)。
+三个仓库的 CI 已由 Jenkins 执行。main 的必需状态检查绑定专属 Jenkins App `5204009`，管理员同样受保护；当前 strict 为 false，未要求 review 审批，必须解决会话。发布工具不修改这些保护规则。App 的安装只限三仓；不接受任意 App 来源。状态认证和本机配置见 [GitHub App 配置](../deploy/jenkins/github-status-app.md)。
 
 ## Mac 自动启动
 

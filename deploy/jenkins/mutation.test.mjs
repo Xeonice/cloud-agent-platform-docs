@@ -16,7 +16,7 @@ import {
 import { REPOSITORY } from "./jenkins-ci.mjs";
 
 const exec = promisify(execFile);
-const ref = "refs/heads/feat/design-v2-migration";
+const ref = "refs/heads/main";
 const baseRef = "refs/heads/base";
 
 test("mutation uses the isolated ARM64 Linux CI account and clean fixed tools/cache environment without deployment credentials", () => {
@@ -112,7 +112,7 @@ async function fixture(t, sourceChanged = true) {
   await git(["add", "."]);
   await git(["commit", "-m", "base"]);
   const baseSha = await git(["rev-parse", "HEAD"]);
-  await git(["switch", "-c", "feat/design-v2-migration"]);
+  await git(["switch", "-c", "main"]);
   await fs.writeFile(join(remote, "README.md"), "changed documentation\n");
   if (sourceChanged) {
     await fs.writeFile(

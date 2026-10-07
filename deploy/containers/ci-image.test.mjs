@@ -111,3 +111,35 @@ test("Web releases their CI executor before contract waits, and contract runs de
   );
   assert.equal(contract.includes("catchError"), false);
 });
+
+test("all managed production child requests and trusted web phases use main, while image version tags remain explicit", async () => {
+  for (const name of [
+    "api",
+    "release",
+    "web",
+    "mutation",
+    "sandbox-images",
+    "bootstrap",
+  ]) {
+    const pipeline = await fs.readFile(
+      new URL(`../jenkins/${name}.groovy`, import.meta.url),
+      "utf8",
+    );
+    assert.doesNotMatch(
+      pipeline,
+      /feat\/design-v2-migration|Xeonice\/初始化一下项目开发/,
+    );
+    assert.match(pipeline, /refs\/heads\/main/);
+  }
+  const release = await fs.readFile(
+    new URL("../jenkins/release.groovy", import.meta.url),
+    "utf8",
+  );
+  for (const phase of ["adopt", "upload", "promote"])
+    assert.ok(release.includes(`${phase} "$WEB_SHA" refs/heads/main`));
+  const images = await fs.readFile(
+    new URL("../jenkins/sandbox-images.groovy", import.meta.url),
+    "utf8",
+  );
+  assert.match(images, /refs\/tags\/sandbox-image-v/);
+});

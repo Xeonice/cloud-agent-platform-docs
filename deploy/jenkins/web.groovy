@@ -28,7 +28,7 @@ pipeline {
       }
     }
     stage('Prepare public production build settings') {
-      when { expression { params.REF == 'refs/heads/feat/design-v2-migration' } }
+      when { expression { params.REF == 'refs/heads/main' } }
       agent { label 'agent-platform-linux-deploy' }
       steps {
         // No checkout and no repository code in this credential-bearing stage.
@@ -48,7 +48,7 @@ pipeline {
           steps {
             deleteDir()
             sh '"$NODE22" "$PUBLIC_WEB_TOOL" checkout "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"'
-            script { if (params.REF == 'refs/heads/feat/design-v2-migration') unstash 'public-vercel-cache' }
+            script { if (params.REF == 'refs/heads/main') unstash 'public-vercel-cache' }
           }
         }
         stage('Install locked dependencies and Chromium') { steps { sh '"$NODE22" "$PUBLIC_WEB_TOOL" install "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"' } }

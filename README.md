@@ -34,7 +34,7 @@ pnpm --dir web dev
 
 本地 Jenkins 负责构建、验收、打包、API 发布与 GitHub Release，前端发布 Vercel prebuilt 产物。生产 API、BoxLite 与 Cloudflare Tunnel 使用专属运行 VM；Jenkins controller 与通用 CI 使用独立 Docker 环境。服务启动、持久卷、日志、空闲切换与恢复命令见 [Mac mini 部署](./docs/macmini-deployment.md)。
 
-API、web 与主仓 SHA 是同一发布计划的组成部分。部署使用已验证的不可变产物，不能用本机未提交文件替代发布来源。
+API、web 与主仓的 `main` SHA 是同一发布计划的组成部分；PR 分支用于验收。部署使用已验证的不可变产物，不能用本机未提交文件替代发布来源。
 
 ## 5. 访问与凭证
 

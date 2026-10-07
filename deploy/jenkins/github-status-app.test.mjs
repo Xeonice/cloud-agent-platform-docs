@@ -621,9 +621,9 @@ async function discoveryOptions(tools) {
   return {
     tools,
     deployRoot: root,
+    commits,
     refs: async (spec, repo) => [
       { ref: "refs/heads/" + spec.branch, sha: commits[repo] },
-      ...(repo === "api" ? [{ ref: "refs/heads/main", sha: commits.api }] : []),
     ],
     pulls: async () => [],
     jenkins: {
@@ -667,9 +667,22 @@ test("default discovery factory reads deployment-owned App credentials and keeps
   assert.equal(result.pendingStatuses, 0);
   assert.equal(
     appCalls.filter((call) => call.path.includes("/statuses/")).length,
-    1,
+    3,
   );
-  assert.equal(opts.queued.length, 1);
+  assert.equal(opts.queued.length, 3);
+  assert.equal(result.errors.length, 0);
+  assert.deepEqual(
+    new Set(
+      appCalls
+        .filter((call) => call.path.includes("/statuses/"))
+        .map((call) => call.path),
+    ),
+    new Set(
+      Object.entries(REPOSITORIES).map(
+        ([repo, spec]) => `/repos/${spec.name}/statuses/${opts.commits[repo]}`,
+      ),
+    ),
+  );
   assert.equal(branchReads, 3);
 });
 test("real discovery without App retains OAuth statuses and explicitly reports unsatisfied Actions source", async () => {
@@ -682,12 +695,12 @@ test("real discovery without App retains OAuth statuses and explicitly reports u
   const result = await createDiscoverer({
     ...opts,
     fetch: async (url, options) => {
-      assert.equal(
-        url,
-        "https://api.github.com/repos/" +
-          REPOSITORIES.api.name +
-          "/statuses/" +
-          "b".repeat(40),
+      assert.ok(
+        Object.entries(REPOSITORIES).some(
+          ([repo, spec]) =>
+            url ===
+            `https://api.github.com/repos/${spec.name}/statuses/${opts.commits[repo]}`,
+        ),
       );
       assert.equal(
         options.headers.Authorization,
@@ -699,7 +712,8 @@ test("real discovery without App retains OAuth statuses and explicitly reports u
       });
     },
   })();
-  assert.equal(writes, 1);
+  assert.equal(writes, 3);
+  assert.equal(result.errors.length, 0);
   assert.deepEqual(result.githubStatusSource, {
     kind: "oauth",
     reason: "github-app-not-configured",

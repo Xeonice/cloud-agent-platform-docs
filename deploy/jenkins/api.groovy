@@ -33,7 +33,7 @@ pipeline {
     stage('Complete isolated backend CI') {
       steps {
         script {
-          def result = build job: 'agent-platform-native-ci', parameters: [string(name: 'SHA', value: env.RELEASE_SHA), string(name: 'REF', value: 'refs/heads/feat/design-v2-migration')], wait: true, propagate: false
+          def result = build job: 'agent-platform-native-ci', parameters: [string(name: 'SHA', value: env.RELEASE_SHA), string(name: 'REF', value: 'refs/heads/main')], wait: true, propagate: false
           if (result.result != 'SUCCESS') { error("Backend validation ${result.result}; no image is published") }
           writeJSON file: 'api-validation.json', json: [sha: env.RELEASE_SHA, build: result.number, url: result.absoluteUrl, result: result.result]
         }

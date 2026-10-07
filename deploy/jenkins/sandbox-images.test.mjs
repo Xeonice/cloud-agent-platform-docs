@@ -136,6 +136,12 @@ function registryFetcher(
 }
 
 test("image requests/configuration bind both provider coordinates and reject PRs, tag drift, mutable version and missing architecture", async (t) => {
+  assert.equal(IMAGE_BRANCH, "refs/heads/main");
+  assert.equal(imageRequest(sha).ref, "refs/heads/main");
+  assert.throws(
+    () => imageRequest(sha, "refs/heads/feat/design-v2-migration"),
+    /pinned/,
+  );
   assert.equal(
     imageRequest(sha, "refs/tags/sandbox-image-v1.2.3", "", "publish").tag,
     "v1.2.3",

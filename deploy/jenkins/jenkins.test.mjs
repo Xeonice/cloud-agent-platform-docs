@@ -23,6 +23,7 @@ import {
   releaseEnvironment,
   sourcePathAllowed,
   validateBuild,
+  validateHistoricalBuild,
   validateApiPackage,
   validateRemoteAssets,
   validateSourceTree,
@@ -116,6 +117,43 @@ function webManifest(
     ),
   };
 }
+
+test("new publication binds three main heads while already retained feature build evidence remains read-only", () => {
+  assert.deepEqual(
+    Object.values(REPOSITORIES).map((spec) => spec.branch),
+    ["main", "main", "main"],
+  );
+  const plan = { commits };
+  const current = build("web", 7, plan);
+  assert.equal(buildParameters("web", plan).REF, "refs/heads/main");
+  assert.equal(validateBuild(current, "web", 7, plan), current);
+  const historical = structuredClone(current);
+  historical.actions[0].parameters.find((item) => item.name === "REF").value =
+    "refs/heads/feat/design-v2-migration";
+  const before = JSON.stringify(historical);
+  assert.throws(
+    () => validateBuild(historical, "web", 7, plan),
+    /different pinned/,
+  );
+  assert.equal(validateHistoricalBuild(historical, "web", 7, plan), historical);
+  assert.equal(JSON.stringify(historical), before);
+  for (const ref of ["refs/heads/unapproved", "refs/pull/9/head"]) {
+    const forged = structuredClone(historical);
+    forged.actions[0].parameters.find((item) => item.name === "REF").value =
+      ref;
+    assert.throws(
+      () => validateHistoricalBuild(forged, "web", 7, plan),
+      /different pinned/,
+    );
+  }
+  const wrongSha = structuredClone(historical);
+  wrongSha.actions[0].parameters.find((item) => item.name === "API_SHA").value =
+    "d".repeat(40);
+  assert.throws(
+    () => validateHistoricalBuild(wrongSha, "web", 7, plan),
+    /different pinned/,
+  );
+});
 function webArtifacts(manifest, crossReport) {
   return async (path) => {
     if (path === "artifact/web-artifacts/manifest.json") return manifest;
@@ -1481,7 +1519,7 @@ test("cross report must match its parent, canonical child, all three commits and
       r.parameters.API_SHA = "d".repeat(40);
     },
     (r) => {
-      r.parameters.REF = "refs/heads/main";
+      r.parameters.REF = "refs/heads/feat/design-v2-migration";
     },
   ];
   for (const mutate of mutations) {
@@ -2035,16 +2073,16 @@ test("persisted requests cannot supply alternate refs or unreviewed job paramete
 test("first discovery builds main/open PR across three repos while baselining historical API branches", async () => {
   const f = await discoveryFixture({
     api: [
-      { ref: "refs/heads/main", sha: "d".repeat(40) },
+      { ref: "refs/heads/main", sha: commits.api },
       { ref: "refs/heads/old", sha: "e".repeat(40) },
       { ref: "refs/pull/2/head", sha: "f".repeat(40) },
     ],
-    web: [{ ref: "refs/heads/main", sha: "1".repeat(40) }],
+    web: [{ ref: "refs/heads/main", sha: commits.web }],
     project: [{ ref: "refs/pull/3/head", sha: "2".repeat(40) }],
   });
   await markCurrent(f);
   const result = await f.discover();
-  assert.equal(result.queued.length, 4);
+  assert.equal(result.queued.length, 5);
   assert.equal(
     f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.api).length,
     2,
@@ -2071,14 +2109,14 @@ test("GitHub status failure cannot discard queued work or queue twice on the nex
     ...f.options,
     status: async () => {
       const s = await f.state();
-      assert.equal(s.pending.length, 1);
+      assert.equal(s.pending.length, 3);
       assert.equal(s.refs["api:refs/heads/main"], commits.api);
       throw new Error("GitHub unavailable");
     },
   });
-  assert.equal((await failing()).pendingStatuses, 1);
+  assert.equal((await failing()).pendingStatuses, 3);
   await failing();
-  assert.equal(f.queueCalls.length, 1);
+  assert.equal(f.queueCalls.length, 3);
   assert.equal((await f.discover()).pendingStatuses, 0);
 });
 test("queue 404 recovers the actual build by matching source parameters and completes repo-specific status", async () => {
@@ -2087,9 +2125,11 @@ test("queue 404 recovers the actual build by matching source parameters and comp
   });
   await markCurrent(f);
   await f.discover();
-  const item = (await f.state()).pending[0],
+  const item = (await f.state()).pending.find((item) => item.repo === "web"),
     number = 22;
-  f.queueItems.clear();
+  f.queueItems.delete(
+    Number(new URL(item.location).pathname.split("/").at(-2)),
+  );
   f.builds[DISCOVERY_JOBS.web] = [
     {
       number,
@@ -2108,8 +2148,12 @@ test("queue 404 recovers the actual build by matching source parameters and comp
     },
   ];
   const result = await f.discover();
-  assert.equal(result.pending, 0);
-  assert.equal(f.queueCalls.length, 1);
+  assert.equal(result.pending, 2);
+  assert.equal(
+    (await f.state()).pending.some((item) => item.repo === "web"),
+    false,
+  );
+  assert.equal(f.queueCalls.length, 3);
   assert.equal(f.statuses.at(-1).context, "jenkins/web-ci");
   assert.equal(f.statuses.at(-1).state, "success");
 });
@@ -2119,23 +2163,36 @@ test("vanished queue without actual matching build retries instead of remaining 
   });
   await markCurrent(f);
   await f.discover();
-  f.queueItems.clear();
+  const item = (await f.state()).pending.find((item) => item.repo === "api");
+  f.queueItems.delete(
+    Number(new URL(item.location).pathname.split("/").at(-2)),
+  );
   const result = await f.discover();
   assert.equal(result.completed[0].result, "LOST_QUEUE_RETRY");
-  assert.equal(f.queueCalls.length, 2);
-  assert.equal(result.pending, 1);
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.api).length,
+    2,
+  );
+  assert.equal(f.queueCalls.length, 4);
+  assert.equal(result.pending, 3);
 });
 test("three-head production changes queue one full release; unchanged current and live duplicate do not", async () => {
   const f = await discoveryFixture();
   const first = await f.discover();
-  assert.equal(first.queued.length, 1);
-  assert.equal(f.queueCalls[0].job, DISCOVERY_JOBS.release);
-  assert.equal(f.queueCalls[0].params.REQUEST_KEY, projectKey(commits));
+  assert.equal(first.queued.length, 4);
+  const release = f.queueCalls.find(
+    (item) => item.job === DISCOVERY_JOBS.release,
+  );
+  assert.equal(release.params.REQUEST_KEY, projectKey(commits));
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.release).length,
+    1,
+  );
   await f.discover();
-  assert.equal(f.queueCalls.length, 1);
+  assert.equal(f.queueCalls.length, 4);
   await markCurrent(f);
   await f.discover();
-  assert.equal(f.queueCalls.length, 1);
+  assert.equal(f.queueCalls.length, 4);
 });
 test("discovery recovers an already queued full release after local state loss", async () => {
   const f = await discoveryFixture();
@@ -2144,14 +2201,22 @@ test("discovery recovers an already queued full release after local state loss",
     REQUEST_KEY: projectKey(commits),
   });
   await f.discover();
-  assert.equal(f.queueCalls.length, 1);
-  assert.equal((await f.state()).pending.length, 1);
+  assert.equal(f.queueCalls.length, 4);
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.release).length,
+    1,
+  );
+  assert.equal((await f.state()).pending.length, 4);
 });
 test("UNSTABLE full publication is retried by the next discovery rather than treated as published", async () => {
   const f = await discoveryFixture();
   await f.discover();
-  const item = (await f.state()).pending[0];
-  f.queueItems.clear();
+  const item = (await f.state()).pending.find(
+    (item) => item.job === DISCOVERY_JOBS.release,
+  );
+  f.queueItems.delete(
+    Number(new URL(item.location).pathname.split("/").at(-2)),
+  );
   f.builds[DISCOVERY_JOBS.release] = [
     {
       number: 11,
@@ -2170,7 +2235,11 @@ test("UNSTABLE full publication is retried by the next discovery rather than tre
   ];
   const result = await f.discover();
   assert.equal(result.completed[0].result, "UNSTABLE");
-  assert.equal(f.queueCalls.length, 2);
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.release).length,
+    2,
+  );
+  assert.equal(f.queueCalls.length, 5);
 });
 test("ordinary source CI failure is recorded once until a new source commit, without a busy retry loop", async () => {
   const f = await discoveryFixture({
@@ -2178,8 +2247,10 @@ test("ordinary source CI failure is recorded once until a new source commit, wit
   });
   await markCurrent(f);
   await f.discover();
-  const item = (await f.state()).pending[0];
-  f.queueItems.clear();
+  const item = (await f.state()).pending.find((item) => item.repo === "api");
+  f.queueItems.delete(
+    Number(new URL(item.location).pathname.split("/").at(-2)),
+  );
   f.builds[DISCOVERY_JOBS.api] = [
     {
       number: 18,
@@ -2197,10 +2268,18 @@ test("ordinary source CI failure is recorded once until a new source commit, wit
     },
   ];
   const result = await f.discover();
-  assert.equal(result.pending, 0);
+  assert.equal(result.pending, 2);
+  assert.equal(
+    (await f.state()).pending.some((item) => item.repo === "api"),
+    false,
+  );
   assert.equal(f.statuses.at(-1).state, "failure");
   await f.discover();
-  assert.equal(f.queueCalls.length, 1);
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.api).length,
+    1,
+  );
+  assert.equal(f.queueCalls.length, 3);
 });
 test("new image tag publishes only its own pinned API source and never historical tags at bootstrap", async () => {
   const f = await discoveryFixture({
@@ -2208,22 +2287,69 @@ test("new image tag publishes only its own pinned API source and never historica
   });
   await markCurrent(f);
   await f.discover();
-  assert.equal(f.queueCalls.length, 0);
+  assert.equal(
+    f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.images).length,
+    0,
+  );
   f.refs.api.push({
     ref: "refs/tags/sandbox-image-v1.2.4",
     sha: "d".repeat(40),
   });
   await f.discover();
-  assert.deepEqual(f.queueCalls[0], {
-    job: DISCOVERY_JOBS.images,
-    params: {
-      SHA: "d".repeat(40),
-      REF: "refs/tags/sandbox-image-v1.2.4",
-      TAG: "v1.2.4",
-      MODE: "publish",
+  assert.deepEqual(
+    f.queueCalls.find((item) => item.job === DISCOVERY_JOBS.images),
+    {
+      job: DISCOVERY_JOBS.images,
+      params: {
+        SHA: "d".repeat(40),
+        REF: "refs/tags/sandbox-image-v1.2.4",
+        TAG: "v1.2.4",
+        MODE: "publish",
+      },
     },
-  });
+  );
 });
+test("a failed main image-check queue preserves the old source marker so the next discovery retries before recording main CI", async () => {
+  const f = await discoveryFixture();
+  await markCurrent(f);
+  await f.discover();
+  const next = "d".repeat(40);
+  f.refs.api = [{ ref: "refs/heads/main", sha: next }];
+  let attempts = 0;
+  const original = f.options.jenkins.queue;
+  f.options.jenkins.queue = async (job, params) => {
+    if (job === DISCOVERY_JOBS.images && attempts++ === 0)
+      throw new Error("Queue temporarily unavailable");
+    return original(job, params);
+  };
+  const discover = createDiscoverer({
+    ...f.options,
+    changedImage: async () => true,
+  });
+  const failed = await discover();
+  assert.ok(failed.errors.some((item) => item.key === "api:refs/heads/main"));
+  assert.equal((await f.state()).refs["api:refs/heads/main"], commits.api);
+  assert.equal(
+    f.queueCalls.some(
+      (item) => item.job === DISCOVERY_JOBS.api && item.params.SHA === next,
+    ),
+    false,
+  );
+  const recovered = await discover();
+  assert.equal(recovered.errors.length, 0);
+  assert.equal(attempts, 2);
+  assert.equal((await f.state()).refs["api:refs/heads/main"], next);
+  assert.deepEqual(
+    f.queueCalls.find((item) => item.job === DISCOVERY_JOBS.images).params,
+    { SHA: next, REF: "refs/heads/main", TAG: "", MODE: "check" },
+  );
+  assert.ok(
+    f.queueCalls.some(
+      (item) => item.job === DISCOVERY_JOBS.api && item.params.SHA === next,
+    ),
+  );
+});
+
 test("changed production Dockerfile schedules check, while PR does not publish an image", async () => {
   const f = await discoveryFixture();
   await markCurrent(f);

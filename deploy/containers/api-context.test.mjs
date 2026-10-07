@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
+import * as syncFs from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
@@ -30,6 +31,7 @@ import {
   CLEAR_DATA_SCRIPT,
   MIGRATION_DATA_PROBE,
   NATIVE_ADDON_PROBE,
+  STOPPED_RESERVATIONS_PROBE,
 } from "./api-container.mjs";
 
 const SHA = "a".repeat(40),
@@ -270,6 +272,35 @@ test("the complete migration input set participates in the schema guard", async 
     second.manifest.schemaFingerprint,
   );
 });
+test("API deployment resolves only the two fixed main heads without querying retired branches", async (t) => {
+  const path = await fs.mkdtemp(join(tmpdir(), "api-main-heads-"));
+  t.after(() => fs.rm(path, { recursive: true, force: true }));
+  await fs.writeFile(join(path, "github-token"), "fixture-token", {
+    mode: 0o600,
+  });
+  const previous = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url, options) => {
+    urls.push(url);
+    assert.equal(options.redirect, "error");
+    return Response.json({
+      sha: url.includes("/agent-platform-api/") ? SHA : ROOT_SHA,
+    });
+  };
+  try {
+    assert.deepEqual(
+      await createDeployer({ root: path, tools: path }).heads(),
+      { sha: SHA, rootSha: ROOT_SHA },
+    );
+    assert.deepEqual(urls, [
+      "https://api.github.com/repos/Xeonice/agent-platform-api/commits/main",
+      "https://api.github.com/repos/Xeonice/cloud-agent-platform-docs/commits/main",
+    ]);
+  } finally {
+    globalThis.fetch = previous;
+  }
+});
+
 test("requests pin both commits and numeric Jenkins identity", () => {
   assert.deepEqual(buildRequest(SHA, "12", ROOT_SHA), {
     sha: SHA,
@@ -428,6 +459,333 @@ async function marker(path, action, arg) {
     { quiet: true },
   );
 }
+async function stoppedReservationFixture(t, { helper = true } = {}) {
+  const root = await temp(t),
+    data = join(root, "data"),
+    proc = join(root, "proc");
+  await fs.mkdir(join(data, "boxlite", "db"), { recursive: true });
+  await fs.mkdir(join(data, "boxlite", "boxes", "userbox"), {
+    recursive: true,
+  });
+  await fs.mkdir(proc);
+  const platformPath = join(data, "platform.db"),
+    boxPath = join(data, "boxlite", "db", "boxlite.db"),
+    prefix =
+      "platform-boxlite-" +
+      createHash("sha256").update(platformPath).digest("hex").slice(0, 16) +
+      "-";
+  const platform = new DatabaseSync(platformPath),
+    box = new DatabaseSync(boxPath);
+  platform.exec(
+    "PRAGMA journal_mode=WAL; CREATE TABLE sandboxes(id TEXT PRIMARY KEY,status TEXT,provider TEXT,provider_handle TEXT); CREATE TABLE resource_allocations(id TEXT PRIMARY KEY,sandbox_id TEXT,node_id TEXT,reconciliation_status TEXT,released_at INTEGER); INSERT INTO sandboxes VALUES('task-1','stopped','boxlite','userbox'); INSERT INTO resource_allocations VALUES('allocation-1','task-1','local','confirmed',NULL)",
+  );
+  box.exec(
+    "PRAGMA journal_mode=WAL; CREATE TABLE box_config(id TEXT PRIMARY KEY,name TEXT); CREATE TABLE box_state(id TEXT PRIMARY KEY,status TEXT,pid INTEGER)",
+  );
+  box
+    .prepare("INSERT INTO box_config VALUES(?,?)")
+    .run("userbox", prefix + "task-1");
+  box.exec("INSERT INTO box_state VALUES('userbox','stopped',NULL)");
+  async function processRow(
+    pid,
+    comm,
+    parent,
+    uid = process.getuid(),
+    state = "S",
+    startTime = "700",
+  ) {
+    await fs.mkdir(join(proc, String(pid)), { recursive: true });
+    await fs.writeFile(
+      join(proc, String(pid), "stat"),
+      `${pid} (${comm}) ${state} ${parent} ${Array(17).fill("0").join(" ")} ${startTime} 0\n`,
+    );
+    await fs.writeFile(
+      join(proc, String(pid), "status"),
+      `Name:\t${comm}\nUid:\t${uid}\t${uid}\t${uid}\t${uid}\n`,
+    );
+    await fs.rm(join(proc, String(pid), "exe"), { force: true });
+    await fs.symlink(
+      comm === "libkrun VM"
+        ? join(data, "boxlite", "boxes", "helperbox", "bin", "boxlite-shim")
+        : "/opt/boxlite-runtime/bwrap",
+      join(proc, String(pid), "exe"),
+    );
+  }
+  if (helper) {
+    await fs.mkdir(join(data, "boxlite", "boxes", "helperbox"));
+    await fs.writeFile(
+      join(data, "boxlite", "boxes", "helperbox", "shim.pid"),
+      "30\n",
+    );
+    box
+      .prepare("INSERT INTO box_config VALUES(?,?)")
+      .run("helperbox", prefix + "auth-helper");
+    box.exec("INSERT INTO box_state VALUES('helperbox','running',30)");
+    await processRow(30, "bwrap", 1);
+    await processRow(31, "bwrap", 30);
+    await processRow(32, "libkrun VM", 31);
+  }
+  t.after(() => {
+    platform.close();
+    box.close();
+  });
+  const program = STOPPED_RESERVATIONS_PROBE.replaceAll(
+    "/data",
+    data,
+  ).replaceAll("/proc", proc);
+  let output,
+    readConnections = 0,
+    onRead = null;
+  class ReadonlyFixture extends DatabaseSync {
+    constructor(path, options) {
+      assert.deepEqual({ ...options }, { readonly: true, fileMustExist: true });
+      super(path, { readOnly: true });
+      readConnections++;
+    }
+  }
+  const probe = () => {
+    output = undefined;
+    runInNewContext(program, {
+      require: (name) => {
+        if (name === "better-sqlite3") return ReadonlyFixture;
+        if (name === "node:crypto") return { createHash };
+        if (name === "node:fs")
+          return {
+            ...syncFs,
+            readFileSync: (...args) => {
+              const result = syncFs.readFileSync(...args);
+              onRead?.(args[0]);
+              return result;
+            },
+          };
+        throw Error("Unexpected module; SDK must never load");
+      },
+      process: { getuid: process.getuid },
+      console: {
+        log: (text) => {
+          output = text;
+        },
+      },
+    });
+    return JSON.parse(output);
+  };
+  return {
+    root,
+    data,
+    proc,
+    platformPath,
+    boxPath,
+    platform,
+    box,
+    prefix,
+    probe,
+    processRow,
+    get readConnections() {
+      return readConnections;
+    },
+    set onRead(value) {
+      onRead = value;
+    },
+  };
+}
+
+test("durable stopped quota is proved from actual WAL SQLite and exact idle auth-helper PID tree without changing stored quota, disks or DB bytes", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  await fs.writeFile(
+    join(f.data, "boxlite", "boxes", "userbox", "disk.raw"),
+    "retained workspace bytes",
+  );
+  const before = await Promise.all(
+    [f.platformPath, f.boxPath].map((p) => fs.readFile(p)),
+  );
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  assert.equal(f.readConnections, 4);
+  assert.deepEqual(
+    await Promise.all([f.platformPath, f.boxPath].map((p) => fs.readFile(p))),
+    before,
+  );
+  assert.equal(
+    f.platform.prepare("SELECT released_at FROM resource_allocations").get()
+      .released_at,
+    null,
+  );
+  assert.equal(
+    f.box.prepare("SELECT status FROM box_state WHERE id='userbox'").get()
+      .status,
+    "stopped",
+  );
+  assert.equal(
+    await fs.readFile(
+      join(f.data, "boxlite", "boxes", "userbox", "disk.raw"),
+      "utf8",
+    ),
+    "retained workspace bytes",
+  );
+  const noHelper = await stoppedReservationFixture(t, { helper: false });
+  assert.deepEqual(noHelper.probe(), { stoppedReservations: 1 });
+});
+
+test("stopped-slot proof fails closed for transitional or orphan allocations, wrong provider/handle/name/state and persistent shim PID", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  const platformChanges = [
+    "UPDATE resource_allocations SET reconciliation_status='pending'",
+    "UPDATE resource_allocations SET reconciliation_status='orphaned'",
+    "UPDATE resource_allocations SET node_id='other'",
+    "UPDATE sandboxes SET status='starting'",
+    "UPDATE sandboxes SET provider='aio'",
+    "UPDATE sandboxes SET provider_handle='missing'",
+    "INSERT INTO sandboxes VALUES('task-2','stopped','boxlite','userbox')",
+    "INSERT INTO resource_allocations VALUES('allocation-2','task-1','local','confirmed',NULL)",
+    "DELETE FROM sandboxes",
+  ];
+  for (const change of platformChanges) {
+    f.platform.exec(change);
+    assert.throws(f.probe, /proof unavailable/, change);
+    f.platform.exec(
+      "DELETE FROM resource_allocations; DELETE FROM sandboxes; INSERT INTO sandboxes VALUES('task-1','stopped','boxlite','userbox'); INSERT INTO resource_allocations VALUES('allocation-1','task-1','local','confirmed',NULL)",
+    );
+  }
+  for (const change of [
+    "UPDATE box_config SET name='wrong-name' WHERE id='userbox'",
+    "UPDATE box_state SET status='running',pid=99 WHERE id='userbox'",
+    "UPDATE box_state SET status='paused' WHERE id='userbox'",
+    "UPDATE box_state SET status='unknown' WHERE id='userbox'",
+    "UPDATE box_state SET pid=0 WHERE id='userbox'",
+    "UPDATE box_state SET pid=99999 WHERE id='userbox'",
+    "DELETE FROM box_state WHERE id='userbox'",
+    "DELETE FROM box_config WHERE id='userbox'",
+    "INSERT INTO box_state VALUES('unregistered','stopped',NULL)",
+  ]) {
+    f.box.exec(change);
+    assert.throws(f.probe, /proof unavailable/, change);
+    f.box.exec(
+      "DELETE FROM box_config; DELETE FROM box_state; INSERT INTO box_state VALUES('userbox','stopped',NULL),('helperbox','running',30)",
+    );
+    f.box
+      .prepare("INSERT INTO box_config VALUES(?,?)")
+      .run("userbox", f.prefix + "task-1");
+    f.box
+      .prepare("INSERT INTO box_config VALUES(?,?)")
+      .run("helperbox", f.prefix + "auth-helper");
+  }
+  await fs.writeFile(
+    join(f.data, "boxlite", "boxes", "userbox", "shim.pid"),
+    "99999\n",
+  );
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.unlink(join(f.data, "boxlite", "boxes", "userbox", "shim.pid"));
+  await fs.rename(
+    join(f.data, "boxlite", "boxes", "userbox"),
+    join(f.data, "boxlite", "boxes", "moved"),
+  );
+  assert.throws(f.probe, { code: "ENOENT" });
+});
+
+test("only the complete canonical auth-helper identity is exempt; lookalikes, user bindings and unrelated live/zombie PID trees are busy", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  for (const change of [
+    "UPDATE box_config SET name='foreign-auth-helper' WHERE id='helperbox'",
+    "UPDATE box_state SET pid=31 WHERE id='helperbox'",
+    "UPDATE box_state SET status='stopping' WHERE id='helperbox'",
+    "INSERT INTO box_config VALUES('orphanvm','unknown'); INSERT INTO box_state VALUES('orphanvm','running',80)",
+  ]) {
+    f.box.exec(change);
+    assert.throws(f.probe, /proof unavailable/, change);
+    f.box.exec(
+      "DELETE FROM box_config; DELETE FROM box_state; INSERT INTO box_state VALUES('userbox','stopped',NULL),('helperbox','running',30)",
+    );
+    f.box
+      .prepare("INSERT INTO box_config VALUES(?,?)")
+      .run("userbox", f.prefix + "task-1");
+    f.box
+      .prepare("INSERT INTO box_config VALUES(?,?)")
+      .run("helperbox", f.prefix + "auth-helper");
+  }
+  f.platform.exec(
+    "INSERT INTO sandboxes VALUES('foreign-task','failed','boxlite','helperbox')",
+  );
+  assert.throws(f.probe, /proof unavailable/);
+  f.platform.exec("DELETE FROM sandboxes WHERE id='foreign-task'");
+  await f.processRow(32, "libkrun VM", 1);
+  assert.throws(f.probe, /proof unavailable/);
+  await f.processRow(32, "libkrun VM", 31, process.getuid(), "Z");
+  assert.throws(f.probe, /proof unavailable/);
+  await f.processRow(32, "libkrun VM", 31, process.getuid() + 1);
+  assert.throws(f.probe, /proof unavailable/);
+  await f.processRow(32, "libkrun VM", 31);
+  await f.processRow(80, "bwrap", 1);
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "80"), { recursive: true });
+  await f.processRow(80, "renamed-worker", 1);
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "80"), { recursive: true });
+  await fs.rm(join(f.proc, "30"), { recursive: true });
+  assert.throws(f.probe, /proof unavailable/);
+});
+
+test("a durable task restart during the readonly PID scan invalidates the second database snapshot", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  f.onRead = (path) => {
+    if (path === join(f.proc, "30", "stat")) {
+      f.onRead = null;
+      f.platform.exec("UPDATE sandboxes SET status='starting'");
+    }
+  };
+  assert.throws(f.probe, /proof unavailable/);
+  assert.equal(
+    f.platform.prepare("SELECT released_at FROM resource_allocations").get()
+      .released_at,
+    null,
+  );
+  assert.equal(
+    f.platform.prepare("SELECT status FROM sandboxes").get().status,
+    "starting",
+  );
+});
+
+test("helper PID reuse between readonly scans and unreadable proc evidence fail closed", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  f.onRead = (path) => {
+    if (path === join(f.proc, "32", "stat")) {
+      f.onRead = null;
+      const path30 = join(f.proc, "30", "stat");
+      syncFs.writeFileSync(
+        path30,
+        syncFs.readFileSync(path30, "utf8").replace("700 0", "701 0"),
+      );
+    }
+  };
+  assert.throws(f.probe, /proof unavailable/);
+  f.onRead = () => {
+    throw Object.assign(Error("Unreadable process metadata"), {
+      code: "EACCES",
+    });
+  };
+  assert.throws(f.probe, { code: "EACCES" });
+});
+
+test("normal helper S-to-R scheduling changes preserve PID identity while stopped and unknown process states are rejected", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  f.onRead = (path) => {
+    if (path === join(f.proc, "32", "stat")) {
+      f.onRead = null;
+      for (const pid of [30, 31, 32]) {
+        const p = join(f.proc, String(pid), "stat");
+        syncFs.writeFileSync(
+          p,
+          syncFs.readFileSync(p, "utf8").replace(") S ", ") R "),
+        );
+      }
+    }
+  };
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  await f.processRow(32, "libkrun VM", 31, process.getuid(), "T");
+  assert.throws(f.probe, /proof unavailable/);
+  await f.processRow(32, "libkrun VM", 31, process.getuid(), "?");
+  assert.throws(f.probe, /proof unavailable/);
+});
+
 test("real maintenance file preserves manual markers and operator replacements", async (t) => {
   const root = await temp(t),
     path = join(root, "drain");
@@ -595,7 +953,15 @@ async function harness(t, configuration = {}) {
       ]);
     }
     if (a[0] === "inspect") return JSON.stringify(current ? [current] : []);
-    if (a[0] === "exec") return marker(drain, a.at(-2), a.at(-1));
+    if (a[0] === "exec") {
+      if (a.at(-1) === STOPPED_RESERVATIONS_PROBE) {
+        assert.equal(a[1], current.Id);
+        assert.equal(opts.quiet, true);
+        if (!configuration.stoppedProof) throw Error("No stopped-slot proof");
+        return JSON.stringify(await configuration.stoppedProof());
+      }
+      return marker(drain, a.at(-2), a.at(-1));
+    }
     if (a[0] === "stop") {
       if (configuration.stopFailure) throw Error("stop outcome unknown");
       current.State.Running = false;
@@ -1051,6 +1417,144 @@ test("successful drain samples every quiet second, backs up, starts behind barri
   await assert.rejects(fs.stat(join(h.root, "deployment.lock")), {
     code: "ENOENT",
   });
+});
+
+test("deployment revalidates retained stopped slots against real persistent databases before and throughout the owned drain, while preserving quota and disk", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  await fs.writeFile(
+    join(f.data, "boxlite", "boxes", "userbox", "disk.raw"),
+    "unchanged disk",
+  );
+  let samples = 0;
+  const h = await deployHarness(t, {
+    status: () => ({
+      ...quietStatus,
+      blockers: { ...quietStatus.blockers, resourceAllocations: 1 },
+    }),
+    stoppedProof: () => {
+      samples++;
+      return f.probe();
+    },
+  });
+  assert.equal((await h.service.deploy(SHA, 12)).state, "deployed");
+  assert.equal(samples, 12);
+  assert.equal(
+    h.calls.filter((c) => c.args.at(-1) === STOPPED_RESERVATIONS_PROBE).length,
+    12,
+  );
+  assert.equal(
+    f.platform.prepare("SELECT released_at FROM resource_allocations").get()
+      .released_at,
+    null,
+  );
+  assert.equal(
+    f.box.prepare("SELECT status,pid FROM box_state WHERE id='userbox'").get()
+      .status,
+    "stopped",
+  );
+  assert.equal(
+    await fs.readFile(
+      join(f.data, "boxlite", "boxes", "userbox", "disk.raw"),
+      "utf8",
+    ),
+    "unchanged disk",
+  );
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+});
+
+test("stopped reservation compatibility never exempts other blockers, mismatched counts, unknown proof fields or unreadable evidence", async (t) => {
+  for (const configuration of [
+    ...Object.keys(quietStatus.blockers)
+      .filter((k) => k !== "resourceAllocations")
+      .map((key) => ({ blocker: key })),
+    { auth: 1 },
+    { http: 1 },
+    { proof: { stoppedReservations: 2 } },
+    { proof: { stoppedReservations: 1, unknown: true } },
+    { unreadable: true },
+  ]) {
+    let reads = 0;
+    const h = await deployHarness(t, {
+      status: () => ({
+        ...quietStatus,
+        credentialAuth: configuration.auth ?? 0,
+        inFlightHTTP: configuration.http ?? 0,
+        blockers: {
+          ...quietStatus.blockers,
+          resourceAllocations: 1,
+          ...(configuration.blocker ? { [configuration.blocker]: 1 } : {}),
+        },
+      }),
+      stoppedProof: () => {
+        reads++;
+        if (configuration.unreadable) throw Error("Unreadable SQLite/proc");
+        return configuration.proof ?? { stoppedReservations: 1 };
+      },
+    });
+    assert.equal((await h.service.deploy(SHA, 12)).state, "waiting-idle");
+    if (configuration.blocker || configuration.auth || configuration.http)
+      assert.equal(reads, 0);
+    assert.ok(!h.calls.some((c) => c.args[2] === "stop"));
+    await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  }
+});
+
+test("a task restarted during maintenance releases only the owned barrier and never stops or rewrites its retained reservation", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  let samples = 0;
+  const h = await deployHarness(t, {
+    status: () => ({
+      ...quietStatus,
+      blockers: { ...quietStatus.blockers, resourceAllocations: 1 },
+    }),
+    stoppedProof: () => {
+      if (++samples === 5)
+        f.platform.exec("UPDATE sandboxes SET status='starting'");
+      return f.probe();
+    },
+  });
+  assert.equal((await h.service.deploy(SHA, 12)).state, "waiting-idle");
+  assert.equal(samples, 5);
+  assert.ok(!h.calls.some((c) => c.args[2] === "stop"));
+  assert.equal(
+    f.platform
+      .prepare(
+        "SELECT status,released_at FROM sandboxes JOIN resource_allocations ON sandbox_id=sandboxes.id",
+      )
+      .get().status,
+    "starting",
+  );
+  assert.equal(
+    f.platform.prepare("SELECT released_at FROM resource_allocations").get()
+      .released_at,
+    null,
+  );
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+});
+
+test("the final stopped-slot proof immediately before stop also rejects a restarted VM after all ten quiet samples", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  let samples = 0;
+  const h = await deployHarness(t, {
+    status: () => ({
+      ...quietStatus,
+      blockers: { ...quietStatus.blockers, resourceAllocations: 1 },
+    }),
+    stoppedProof: () => {
+      if (++samples === 12)
+        f.box.exec(
+          "UPDATE box_state SET status='running',pid=99 WHERE id='userbox'",
+        );
+      return f.probe();
+    },
+  });
+  await assert.rejects(
+    h.service.deploy(SHA, 12),
+    /Production became active before stop/,
+  );
+  assert.equal(samples, 12);
+  assert.ok(!h.calls.some((c) => c.args[2] === "stop"));
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
 });
 test("failed replacement restores original image behind the owned barrier; ambiguous stop preserves checkpoint", async (t) => {
   const h = await deployHarness(t, { failNewReadiness: true });

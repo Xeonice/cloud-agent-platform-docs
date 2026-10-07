@@ -7,7 +7,7 @@ import { userInfo } from "node:os";
 import { apiCiContext, REPOSITORY, SHA, validRef } from "./jenkins-ci.mjs";
 import { buildSystem, ciChildEnvironment } from "./ci-platform.mjs";
 
-export const MUTATION_BRANCH = "refs/heads/feat/design-v2-migration";
+export const MUTATION_BRANCH = "refs/heads/main";
 
 export function mutableFiles(files) {
   return [...new Set(files)]

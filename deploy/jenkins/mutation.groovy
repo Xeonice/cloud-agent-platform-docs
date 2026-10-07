@@ -10,7 +10,7 @@ pipeline {
   triggers { cron('TZ=Asia/Shanghai\n0 2 * * *') }
   parameters {
     string(name: 'SHA', defaultValue: '', description: 'Exact API commit; blank resolves the fixed branch for nightly full mode only')
-    string(name: 'REF', defaultValue: 'refs/heads/feat/design-v2-migration', description: 'API branch or pull-request head')
+    string(name: 'REF', defaultValue: 'refs/heads/main', description: 'API branch or pull-request head')
     choice(name: 'MODE', choices: ['full', 'changed'], description: 'Nightly full trend or nonblocking PR changed-source report')
     string(name: 'BASE_SHA', defaultValue: '', description: 'Discovered PR base commit for changed mode')
     string(name: 'BASE_REF', defaultValue: '', description: 'Discovered refs/heads/base branch for changed mode')

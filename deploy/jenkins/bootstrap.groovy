@@ -88,7 +88,7 @@ JenkinsLocationConfiguration.get().setUrl(location)
     }
     if (parameters) job.addProperty(new ParametersDefinitionProperty(parameters.collect { name ->
         if (name == 'MODE') return new ChoiceParameterDefinition(name, spec.name == 'agent-platform-mutation' ? 'full\nchanged' : 'check\npublish', 'Managed build mode')
-        def value = name == 'REF' ? (spec.name in ['agent-platform-mutation', 'agent-platform-sandbox-images'] ? 'refs/heads/feat/design-v2-migration' : 'refs/heads/main') : ''
+        def value = name == 'REF' ? 'refs/heads/main' : ''
         return new StringParameterDefinition(name, value, 'Managed immutable build input')
     }))
     job.setDisabled(!settings.enabled)

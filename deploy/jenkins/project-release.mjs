@@ -27,15 +27,15 @@ export const TOOLS = DEPLOYMENT.tools;
 export const REPOSITORIES = Object.freeze({
   project: {
     name: "Xeonice/cloud-agent-platform-docs",
-    branch: "Xeonice/初始化一下项目开发",
+    branch: "main",
   },
   api: {
     name: "Xeonice/agent-platform-api",
-    branch: "feat/design-v2-migration",
+    branch: "main",
   },
   web: {
     name: "Xeonice/agent-platform-web",
-    branch: "feat/design-v2-migration",
+    branch: "main",
   },
 });
 export const SHA = /^[a-f0-9]{40}$/;
@@ -112,6 +112,28 @@ export function buildParameters(kind, plan) {
   throw new Error("Invalid child build kind");
 }
 export function validateBuild(value, kind, number, plan) {
+  return checkedBuild(value, kind, number, plan, buildParameters(kind, plan));
+}
+
+// This pure checker keeps old retained build records inspectable. New plans and
+// every publication path continue to call validateBuild, which requires main.
+export function validateHistoricalBuild(value, kind, number, plan) {
+  const expected = buildParameters(kind, plan);
+  if (
+    kind === "web" &&
+    (value.actions ?? []).some((action) =>
+      (action.parameters ?? []).some(
+        (item) =>
+          item.name === "REF" &&
+          item.value === "refs/heads/feat/design-v2-migration",
+      ),
+    )
+  )
+    expected.REF = "refs/heads/feat/design-v2-migration";
+  return checkedBuild(value, kind, number, plan, expected);
+}
+
+function checkedBuild(value, kind, number, plan, expectedParameters) {
   if (
     value?.number !== Number(number) ||
     value.result !== "SUCCESS" ||
@@ -129,7 +151,7 @@ export function validateBuild(value, kind, number, plan) {
       throw new Error("Duplicate Jenkins parameter");
     parameters[item.name] = String(item.value);
   }
-  for (const [name, expected] of Object.entries(buildParameters(kind, plan)))
+  for (const [name, expected] of Object.entries(expectedParameters))
     if (parameters[name] !== expected)
       throw new Error("Jenkins build checked different pinned commits");
   return value;
