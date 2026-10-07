@@ -32,6 +32,7 @@ import {
 import {
   createDiscoverer,
   DISCOVERY_JOBS,
+  eligiblePulls,
   isTrustedJenkinsLocation,
   parametersMatch,
   validRequest,
@@ -1930,10 +1931,14 @@ function sourceRefs(extra = {}) {
     ]),
   );
 }
-async function discoveryFixture(extra = {}) {
+// `extra` adds ref-listing entries; `open` adds already eligible PR heads.
+async function discoveryFixture(extra = {}, open = {}) {
   const tools = await temporary(),
     deployRoot = await temporary(),
     refs = sourceRefs(extra),
+    pulls = Object.fromEntries(
+      Object.keys(REPOSITORIES).map((name) => [name, [...(open[name] ?? [])]]),
+    ),
     queueCalls = [],
     statuses = [],
     builds = {},
@@ -1982,7 +1987,7 @@ async function discoveryFixture(extra = {}) {
     tools,
     deployRoot,
     refs: async (_, name) => refs[name],
-    pulls: async () => [],
+    pulls: async (name) => pulls[name],
     jenkins,
     status: async (item) => {
       statuses.push(item);
@@ -1993,6 +1998,7 @@ async function discoveryFixture(extra = {}) {
     tools,
     deployRoot,
     refs,
+    pulls,
     queueCalls,
     statuses,
     builds,
@@ -2070,16 +2076,20 @@ test("persisted requests cannot supply alternate refs or unreviewed job paramete
     false,
   );
 });
-test("first discovery builds main/open PR across three repos while baselining historical API branches", async () => {
-  const f = await discoveryFixture({
-    api: [
-      { ref: "refs/heads/main", sha: commits.api },
-      { ref: "refs/heads/old", sha: "e".repeat(40) },
-      { ref: "refs/pull/2/head", sha: "f".repeat(40) },
-    ],
-    web: [{ ref: "refs/heads/main", sha: commits.web }],
-    project: [{ ref: "refs/pull/3/head", sha: "2".repeat(40) }],
-  });
+test("first discovery builds main/open PR across three repos while ignoring other API branches", async () => {
+  const f = await discoveryFixture(
+    {
+      api: [
+        { ref: "refs/heads/main", sha: commits.api },
+        { ref: "refs/heads/old", sha: "e".repeat(40) },
+      ],
+      web: [{ ref: "refs/heads/main", sha: commits.web }],
+    },
+    {
+      api: [{ ref: "refs/pull/2/head", sha: "f".repeat(40) }],
+      project: [{ ref: "refs/pull/3/head", sha: "2".repeat(40) }],
+    },
+  );
   await markCurrent(f);
   const result = await f.discover();
   assert.equal(result.queued.length, 5);
@@ -2089,6 +2099,10 @@ test("first discovery builds main/open PR across three repos while baselining hi
   );
   assert.equal(
     f.queueCalls.some((item) => item.params.REF === "refs/heads/old"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn((await f.state()).refs, "api:refs/heads/old"),
     false,
   );
   assert.deepEqual(
@@ -2355,7 +2369,7 @@ test("changed production Dockerfile schedules check, while PR does not publish a
   await markCurrent(f);
   await f.discover();
   f.refs.api[0].sha = "d".repeat(40);
-  f.refs.api.push({ ref: "refs/pull/4/head", sha: "e".repeat(40) });
+  f.pulls.api.push({ ref: "refs/pull/4/head", sha: "e".repeat(40) });
   await createDiscoverer({
     ...f.options,
     changedImage: async (before, after) => {
@@ -2364,6 +2378,13 @@ test("changed production Dockerfile schedules check, while PR does not publish a
       return true;
     },
   })();
+  assert.ok(
+    f.queueCalls.some(
+      (item) =>
+        item.job === DISCOVERY_JOBS.api &&
+        item.params.REF === "refs/pull/4/head",
+    ),
+  );
   assert.equal(
     f.queueCalls.filter((item) => item.job === DISCOVERY_JOBS.images).length,
     1,
@@ -2376,4 +2397,328 @@ test("changed production Dockerfile schedules check, while PR does not publish a
     f.queueCalls.some((item) => item.params.MODE === "publish"),
     false,
   );
+});
+const pullSha = (number) => number.toString(16).padStart(40, "0");
+function githubPull(number, headRepo, base, draft = false) {
+  return {
+    number,
+    draft,
+    head: { sha: pullSha(number), repo: headRepo && { full_name: headRepo } },
+    base: { ref: base },
+  };
+}
+// Runs the real default pullsFor against open[repo], a list of GitHub pages.
+async function githubPulls(f, open) {
+  await fs.writeFile(join(f.tools, "github-token"), "synthetic_token", {
+    mode: 0o600,
+  });
+  const requested = [];
+  const discover = createDiscoverer({
+    ...f.options,
+    pulls: undefined,
+    fetch: async (url, options) => {
+      const match =
+        /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/pulls\?state=open&per_page=100&page=([1-9][0-9]*)$/.exec(
+          url,
+        );
+      assert.ok(match, url);
+      assert.equal(options.headers.Authorization, "Bearer synthetic_token");
+      const repo = Object.keys(REPOSITORIES).find(
+        (name) => REPOSITORIES[name].name === match[1],
+      );
+      requested.push(repo + "#" + match[2]);
+      return Response.json(open[repo]?.[match[2] - 1] ?? []);
+    },
+  });
+  return { discover, requested };
+}
+test("eligible PRs are same-repository heads into an allowed base, drafts included; forks, deleted forks and stacked PRs are not", () => {
+  const name = REPOSITORIES.api.name;
+  const pulls = [
+    githubPull(1, name, "main"),
+    githubPull(2, "someone/agent-platform-api", "main"),
+    githubPull(3, null, "main"),
+    githubPull(4, name, "feat/base"),
+    githubPull(5, name, "main", true),
+    githubPull(6, name.toUpperCase(), "main"),
+  ];
+  const kept = [1, 5, 6].map((number) => ({
+    ref: "refs/pull/" + number + "/head",
+    sha: pullSha(number),
+  }));
+  assert.deepEqual(eligiblePulls(pulls, name, ["main"]), kept);
+  assert.deepEqual(eligiblePulls(pulls, name.toLowerCase(), ["main"]), kept);
+  assert.deepEqual(eligiblePulls(pulls, name, ["feat/base"]), [
+    { ref: "refs/pull/4/head", sha: pullSha(4) },
+  ]);
+  assert.deepEqual(eligiblePulls(pulls, name, []), []);
+});
+test("listed refs other than main and API image tags are ignored before validation, so they neither fail the poll nor get recorded or queued", async () => {
+  // These names used to abort the whole poll in validation.
+  const invalid = [
+    "refs/heads/修复中文分支",
+    "refs/heads/main-修复",
+    "refs/heads/feat+plus",
+    "refs/heads/_draft",
+    "refs/pull/77/merge",
+  ];
+  for (const ref of invalid) assert.equal(validRef(ref), false);
+  const ignored = [
+    ...invalid,
+    "refs/heads/unknown",
+    // Prefix and tail look-alikes of the fixed branch or an image tag.
+    "refs/heads/mainline",
+    "refs/heads/main/hotfix",
+    "refs/heads/x/refs/heads/main",
+    "refs/heads/foo/refs/tags/sandbox-image-v9",
+    // PR heads come only from the pulls API, never from the ref listing.
+    "refs/pull/77/head",
+    "refs/tags/v1.0.0",
+  ];
+  const f = await discoveryFixture(
+    Object.fromEntries(
+      Object.keys(REPOSITORIES).map((repo) => [
+        repo,
+        [
+          ...ignored,
+          // Image tags are followed in the API repository only.
+          ...(repo === "api" ? [] : ["refs/tags/sandbox-image-v9"]),
+        ].map((ref) => ({ ref, sha: "e".repeat(40) })),
+      ]),
+    ),
+  );
+  await markCurrent(f);
+  const first = await f.discover();
+  assert.equal(first.state, "observed");
+  assert.deepEqual(first.errors, []);
+  assert.equal(first.queued.length, 3);
+  for (const refs of Object.values(f.refs))
+    for (const entry of refs)
+      if (entry.ref !== "refs/heads/main") entry.sha = "d".repeat(40);
+  const pushed = await f.discover();
+  assert.equal(pushed.state, "observed");
+  assert.deepEqual(pushed.errors, []);
+  assert.deepEqual(pushed.queued, []);
+  assert.deepEqual(Object.keys((await f.state()).refs).sort(), [
+    "api:refs/heads/main",
+    "project:refs/heads/main",
+    "web:refs/heads/main",
+  ]);
+  assert.equal(f.queueCalls.length, 3);
+  assert.equal(
+    f.queueCalls
+      .flatMap((item) => Object.values(item.params))
+      .some(
+        (value) =>
+          (value.startsWith("refs/") && value !== "refs/heads/main") ||
+          value === "e".repeat(40) ||
+          value === "d".repeat(40),
+      ),
+    false,
+  );
+  assert.deepEqual(
+    new Set(f.statuses.map((item) => item.sha)),
+    new Set(Object.values(commits)),
+  );
+});
+test("pushing an API branch without a PR no longer queues native CI, while main and PR heads still build after the first poll", async () => {
+  const f = await discoveryFixture();
+  await markCurrent(f);
+  await f.discover();
+  const branch = { ref: "refs/heads/feature/no-pr", sha: "e".repeat(40) };
+  f.refs.api.push(branch);
+  for (const sha of ["e".repeat(40), "d".repeat(40)]) {
+    branch.sha = sha;
+    const result = await f.discover();
+    assert.equal(result.state, "observed");
+    assert.deepEqual(result.queued, []);
+  }
+  assert.equal(
+    Object.hasOwn((await f.state()).refs, "api:" + branch.ref),
+    false,
+  );
+  f.refs.api[0].sha = "9".repeat(40);
+  f.pulls.api.push({ ref: "refs/pull/8/head", sha: "8".repeat(40) });
+  await f.discover();
+  assert.deepEqual(
+    f.queueCalls
+      .filter((item) => item.job === DISCOVERY_JOBS.api)
+      .map((item) => item.params),
+    [
+      { SHA: commits.api, REF: "refs/heads/main" },
+      { SHA: "9".repeat(40), REF: "refs/heads/main" },
+      { SHA: "8".repeat(40), REF: "refs/pull/8/head" },
+    ],
+  );
+});
+test("a stacked PR is neither built nor recorded, so its unchanged head builds once retargeted to main", async () => {
+  const f = await discoveryFixture();
+  await markCurrent(f);
+  const stacked = githubPull(12, REPOSITORIES.web.name, "feat/base"),
+    ref = "refs/pull/12/head";
+  const { discover } = await githubPulls(f, { web: [[stacked]] });
+  assert.deepEqual((await discover()).errors, []);
+  assert.equal(
+    f.queueCalls.some((item) => item.params.REF === ref),
+    false,
+  );
+  assert.equal(Object.hasOwn((await f.state()).refs, "web:" + ref), false);
+  stacked.base.ref = "main";
+  assert.deepEqual((await discover()).errors, []);
+  assert.deepEqual(
+    f.queueCalls.find((item) => item.params.REF === ref),
+    {
+      job: DISCOVERY_JOBS.web,
+      params: {
+        SHA: pullSha(12),
+        REF: ref,
+        ROOT_SHA: commits.project,
+        API_SHA: commits.api,
+      },
+    },
+  );
+  assert.equal((await f.state()).refs["web:" + ref], pullSha(12));
+  assert.deepEqual(
+    f.statuses
+      .filter((item) => item.sha === pullSha(12))
+      .map((item) => [item.context, item.state]),
+    [["jenkins/web-ci", "pending"]],
+  );
+});
+test("default PR discovery pages by raw GitHub results and builds only same-repository PRs into main", async () => {
+  const f = await discoveryFixture();
+  await markCurrent(f);
+  const api = REPOSITORIES.api.name;
+  const open = { api: [[], []] };
+  // A full first page of mostly forks must still lead to the second page.
+  for (let number = 1; number <= 98; number++)
+    open.api[0].push(githubPull(number, "someone/agent-platform-api", "main"));
+  open.api[0].push(
+    githubPull(99, api, "feat/base"),
+    githubPull(100, api, "main", true),
+  );
+  open.api[1].push(
+    githubPull(101, null, "main"),
+    githubPull(102, api.toLowerCase(), "main"),
+  );
+  const { discover, requested } = await githubPulls(f, open);
+  const result = await discover();
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(requested.sort(), ["api#1", "api#2", "project#1", "web#1"]);
+  assert.deepEqual(
+    f.queueCalls
+      .filter((item) => item.params.REF?.startsWith("refs/pull/"))
+      .map((item) => [item.job, item.params.REF, item.params.SHA]),
+    [
+      [DISCOVERY_JOBS.api, "refs/pull/100/head", pullSha(100)],
+      [DISCOVERY_JOBS.api, "refs/pull/102/head", pullSha(102)],
+    ],
+  );
+  assert.deepEqual(
+    Object.keys((await f.state()).refs)
+      .filter((key) => key.includes(":refs/pull/"))
+      .sort(),
+    ["api:refs/pull/100/head", "api:refs/pull/102/head"],
+  );
+});
+test("refs recorded by the previous discoverer stay untouched and never queue, while its pending branch build still completes", async () => {
+  const f = await discoveryFixture({
+    project: [{ ref: "refs/heads/docs/y", sha: "5".repeat(40) }],
+    api: [
+      { ref: "refs/heads/old", sha: "e".repeat(40) },
+      { ref: "refs/tags/sandbox-image-v1", sha: "1".repeat(40) },
+    ],
+    web: [{ ref: "refs/heads/feat/x", sha: "4".repeat(40) }],
+  });
+  await markCurrent(f);
+  const fork = githubPull(2, "someone/agent-platform-api", "main"),
+    stacked = githubPull(3, REPOSITORIES.api.name, "feat/base");
+  const legacy = {
+    "project:refs/heads/main": commits.project,
+    "project:refs/heads/docs/y": "5".repeat(40),
+    "api:refs/heads/main": commits.api,
+    "api:refs/heads/old": "e".repeat(40),
+    "api:refs/tags/sandbox-image-v1": "1".repeat(40),
+    "api:refs/pull/2/head": pullSha(2),
+    "api:refs/pull/3/head": pullSha(3),
+    "web:refs/heads/main": commits.web,
+    "web:refs/heads/feat/x": "4".repeat(40),
+  };
+  const params = { SHA: "e".repeat(40), REF: "refs/heads/old" },
+    location = "http://127.0.0.1:8080/job/" + DISCOVERY_JOBS.api + "/5/";
+  f.builds[DISCOVERY_JOBS.api] = [
+    {
+      number: 5,
+      url: location,
+      building: false,
+      result: "SUCCESS",
+      actions: [
+        {
+          parameters: Object.entries(params).map(([name, value]) => ({
+            name,
+            value,
+          })),
+        },
+      ],
+    },
+  ];
+  await json(join(f.tools, "discovery-state.json"), {
+    schemaVersion: 2,
+    initializedAt: "2026-10-01T00:00:00.000Z",
+    refs: legacy,
+    pending: [
+      {
+        repo: "api",
+        sha: params.SHA,
+        ref: params.REF,
+        key: "api:refs/heads/old",
+        job: DISCOVERY_JOBS.api,
+        params,
+        location,
+        queuedAt: "2026-10-01T00:00:00.000Z",
+      },
+    ],
+    statuses: [],
+  });
+  const { discover } = await githubPulls(f, { api: [[fork, stacked]] });
+  const upgraded = await discover();
+  assert.deepEqual(upgraded.errors, []);
+  assert.deepEqual(
+    upgraded.completed.map((item) => [item.key, item.result]),
+    [["api:refs/heads/old", "SUCCESS"]],
+  );
+  assert.deepEqual(
+    f.statuses.map((item) => [item.repo, item.sha, item.state]),
+    [["api", "e".repeat(40), "success"]],
+  );
+  assert.deepEqual((await f.state()).refs, legacy);
+  for (const refs of Object.values(f.refs))
+    for (const entry of refs)
+      if (
+        entry.ref.startsWith("refs/heads/") &&
+        entry.ref !== "refs/heads/main"
+      )
+        entry.sha = "6".repeat(40);
+  fork.head.sha = "7".repeat(40);
+  stacked.head.sha = "8".repeat(40);
+  const pushed = await discover();
+  assert.deepEqual(pushed.errors, []);
+  assert.deepEqual(f.queueCalls, []);
+  assert.equal(f.statuses.length, 1);
+  assert.deepEqual((await f.state()).refs, legacy);
+});
+test("followed refs keep fail-closed validation while ignored refs are never validated", async () => {
+  const f = await discoveryFixture({
+    api: [{ ref: "refs/heads/feature/garbled", sha: "not-a-commit" }],
+  });
+  await markCurrent(f);
+  assert.deepEqual((await f.discover()).errors, []);
+  f.refs.api.push({ ref: "refs/heads/main", sha: "d".repeat(40) });
+  await assert.rejects(
+    f.discover(),
+    /Conflicting discovered source identities/,
+  );
+  f.refs.api.pop();
+  f.pulls.api.push({ ref: "refs/pull/9/head", sha: "not-a-commit" });
+  await assert.rejects(f.discover(), /Invalid discovered repository ref/);
 });

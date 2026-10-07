@@ -37,10 +37,24 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 | `agent-platform-contract`        | 三仓精确 SHA、Linux 部署回归、文档与浏览器→Nest→SQLite 验收                               |
 | `agent-platform-api`             | 完整后端 CI 子作业、构建 API/BoxLite 镜像、本机打包、空闲检查、备份、替换、恢复与运行报告 |
 | `agent-platform-release`         | 三仓统一计划，复核子作业 SUCCESS，上传 Vercel，打包并上传 GitHub Release                  |
-| `agent-platform-ci-discovery`    | 定时发现主分支、PR 与发布版本；GitHub App 写聚合状态；触发统一发布                        |
+| `agent-platform-ci-discovery`    | 定时发现 `main`、同仓指向 `main` 的 PR 与镜像标签；GitHub App 写聚合状态；触发统一发布    |
 | `agent-platform-service-monitor` | 每五分钟归档 Docker 状态、健康、镜像、重启次数和脱敏日志                                  |
 | `agent-platform-mutation`        | Linux 隔离节点执行 nightly/full 或 PR changed 的非阻断 mutation                           |
 | `agent-platform-sandbox-images`  | 本机专属 Docker 构建两档、两架构 guest image，并验证 GHCR 匿名 digest                     |
+
+发现作业每两分钟读取三仓的分支、标签与 open PR，按下表处理。表外的分支和标签不论名称（含中文、`+` 或以 `_` 开头）都在校验前忽略：不触发构建、不写入发现状态，也不会让发现作业整轮失败。
+
+| 来源                                   | 处理                                                        |
+| -------------------------------------- | ----------------------------------------------------------- |
+| 三仓 `main`                            | 构建并回写 `jenkins/*`；三仓组合变化时触发统一发布          |
+| 同仓、base 为 `main` 的 PR（含 draft） | 构建并回写 `jenkins/*`                                      |
+| API 仓 `sandbox-image-v*` 标签         | 首次发现只记录已有标签；之后新增或改指向的标签触发镜像发布  |
+| fork PR                                | 不构建、不记录；先把改动推到同仓分支，再开指向 `main` 的 PR |
+| 栈式 PR（base 不是 `main`）            | 不构建、不记录；改 base 到 `main` 后按新条目构建            |
+
+API 仓与另外两仓相同：没有 PR 的分支不会触发 `agent-platform-native-ci`，也没有 `jenkins/native-ci` 状态；需要 CI 时开指向 `main` 的 PR（可为 draft）。未经 PR 构建的提交直接推送 `main`，会因缺少必需状态被拒。
+
+不要创建名称以 `/refs/heads/main` 或 `/refs/tags/sandbox-image-v*` 结尾的分支（如 `x/refs/heads/main`）。发现作业会忽略它们，但发布、Web、镜像与 mutation 工具用 `git ls-remote` 按尾部匹配读取 `main` 或镜像标签，会多匹配到这类分支而拒绝执行。
 
 后端镜像和收据绑定 `ROOT_SHA` 与 `API_SHA`；不可变目录为 `<ROOT_SHA>-<API_SHA>`。相同组合复用已验证的镜像与打包字节，不覆盖旧缓存。Docker 29 的 image ID 可能是 OCI index digest，包验证会核对 index→manifest→config 的实际链和 Linux ARM64，不能把 config digest 误当 image ID。
 
@@ -52,7 +66,7 @@ API 使用 `/data` 持久卷与只读 `/run/secrets/runtime.env`，限定 6 CPU/
 
 维护屏障只在已知候选容器的 ID、镜像、挂载与版本标签保持一致，且 API readiness 和 Docker `healthy` 同时通过后解除。HTTP 已可用但 Docker 仍 `starting` 时继续等待；失败或超时走原恢复流程，不能把这种状态当作发布成功。
 
-Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service status and logs` 页面、Console Output、Artifacts 和 fingerprint 可追溯结果。Docker 的 restart policy 管理进程退出恢复；健康检查和监控记录失健康状态。容器日志为旋转的 `json-file`，报告按私有口令与 token 脱敏。
+Jenkins 地址：<http://127.0.0.1:8080/>。每次发布作业的 `Service status and logs` 页面、Console Output、Artifacts 和 fingerprint 可追溯结果。`agent-platform-api` 只保留最近 10 次构建的 Artifacts（API 包与运行报告等），更早的会被删除且无法找回；需要留证的构建先设为永久保留（Keep this build forever）。Docker 的 restart policy 管理进程退出恢复；健康检查和监控记录失健康状态。容器日志为旋转的 `json-file`，报告按私有口令与 token 脱敏。
 
 更新可信构建工具时，先等待 Jenkins 作业和 executor 空闲，再用 `prepare-context.mjs ci` 的公开输入重建 ARM64/AMD64 CI 镜像，用 `prepare-deploy-context.mjs` 重建可信 deploy 镜像。核对新镜像 ID 后只替换两个 CI agent 与 deploy agent，保留它们的 named volume；同步管理模板并验证三节点重新在线。该步骤不重启 API、Tunnel、DNS 或 controller；业务 API 的更新仍交由后续正式发布作业执行维护、备份与 readiness 流程。
 
@@ -93,6 +107,17 @@ Vercel 项目名为 `agent-platform`，GitHub 前端仓库名为 `agent-platform
 候选服务的 Docker 健康、版本、数据库、默认 provider 和预制镜像 readiness 全部通过后，才解除维护屏障并写成功收据。失败时验证备份和旧容器身份，恢复数据并等待原版本健康；恢复无法确认时保留维护屏障与 checkpoint，交由管理员核查，不继续发布。不要删除备份、checkpoint、私有收据或生产 named volume 来绕过阻断。
 
 Jenkins 的配置、用户、主密钥、插件配置与构建历史保存在独立 external Home 卷；controller 镜像替换会复用该卷。需要独立 Home 备份时，应在作业和队列空闲后停止 controller，再完整备份该卷，并将含密钥的归档保存在私有目录。恢复到空的独立卷后先核对原用户、密钥、历史与锁定插件；不要将 Home 挂载给多个同时运行的 controller，也不要把其中的秘密上传为公开构建产物。
+
+回退发现作业前，先禁用 `agent-platform-ci-discovery` 与 `agent-platform-release`，并关闭 fork PR（改由同仓分支重开）：旧规则会自动构建全部 open PR。优先只撤销 PR 过滤、保留固定分支过滤；若整体回退到旧版（按 [`validRef`](../deploy/jenkins/jenkins-ci.mjs) 校验全部分支、构建 API 全部分支），还要先删除或改名三仓中不满足 `validRef` 的分支，否则旧版每轮都会整轮失败。在本仓根目录执行下面的检查，输出为空才能换回：
+
+```sh
+for repo in cloud-agent-platform-docs agent-platform-api agent-platform-web; do
+  git ls-remote --heads "https://github.com/Xeonice/$repo.git" |
+    node --input-type=module -e 'import { readFileSync } from "node:fs"; import { validRef } from "./deploy/jenkins/jenkins-ci.mjs"; for (const line of readFileSync(0, "utf8").split("\n")) { const ref = line.split("\t")[1]; if (ref && !validRef(ref)) console.log(process.argv[1], ref); }' "$repo"
+done
+```
+
+换回后首轮会构建状态中没有记录或已变化的 API 分支与 PR；等这些构建结束再启用 release，避免发布排在它们之后等待子作业超时。不要删除 `discovery-state.json` 的 `initializedAt` 来跳过补跑，否则期间新推的镜像标签只会被记录、不会发布。
 
 ## 当前验证入口
 
