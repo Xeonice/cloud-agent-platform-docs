@@ -404,8 +404,15 @@ function stoppedReservationsProbe() {
             s.size > 64
           )
             fail();
-          const text = fs.readFileSync(fd, "utf8");
-          if (!/^[1-9]\d*\s*$/.test(text) || Number(text.trim()) !== helper.pid)
+          // BoxLite 0.9.7 writes "<pid>\n<starttime>\n"; the start time must match
+          // the live root so a reused PID cannot pass as the helper.
+          const text = fs.readFileSync(fd, "utf8"),
+            pid = /^([1-9]\d*)\n(?:([1-9]\d*)\n)?$/.exec(text);
+          if (
+            !pid ||
+            Number(pid[1]) !== helper.pid ||
+            (pid[2] !== undefined && pid[2] !== root?.startTime)
+          )
             fail();
         } finally {
           fs.closeSync(fd);
@@ -429,6 +436,9 @@ function stoppedReservationsProbe() {
           )
         )
           continue;
+        // An exited, unreaped entry has no executable and holds no VM or disk.
+        // A dead helper VM still fails below because the live VM count drops.
+        if (p.state === "Z" && p.executable === null) continue;
         if (
           !helper ||
           !["R", "S", "D", "I"].includes(p.state) ||

@@ -724,6 +724,34 @@ test("only the complete canonical auth-helper identity is exempt; lookalikes, us
   assert.throws(f.probe, /proof unavailable/);
 });
 
+test("BoxLite 0.9.7 helper shim.pid carries the root start time and exited unreaped entries hold no VM", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  const shim = join(f.data, "boxlite", "boxes", "helperbox", "shim.pid");
+  await fs.writeFile(shim, "30\n700\n");
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  for (const text of [
+    "30\n701\n",
+    "31\n700\n",
+    "30\n700\n9\n",
+    "30 700\n",
+    "30\n0\n",
+  ]) {
+    await fs.writeFile(shim, text);
+    assert.throws(f.probe, /proof unavailable/, JSON.stringify(text));
+  }
+  await fs.writeFile(shim, "30\n700\n");
+  // Exited sandbox wrapper reparented to the API process and never reaped.
+  await f.processRow(1601, "bwrap", 1, process.getuid(), "Z");
+  await fs.rm(join(f.proc, "1601", "exe"));
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  await fs.symlink("/opt/boxlite-runtime/bwrap", join(f.proc, "1601", "exe"));
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "1601"), { recursive: true });
+  await f.processRow(32, "libkrun VM", 31, process.getuid(), "Z");
+  await fs.rm(join(f.proc, "32", "exe"));
+  assert.throws(f.probe, /proof unavailable/);
+});
+
 test("a durable task restart during the readonly PID scan invalidates the second database snapshot", async (t) => {
   const f = await stoppedReservationFixture(t);
   f.onRead = (path) => {
