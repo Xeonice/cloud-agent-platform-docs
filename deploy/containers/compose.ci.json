@@ -1,0 +1,137 @@
+{
+  "name": "agent-platform-linux-ci",
+  "services": {
+    "agent": {
+      "image": "${CI_IMAGE:?Provide verified Linux CI image digest}",
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "environment": {
+        "HOME": "/home/jenkins",
+        "JENKINS_URL": "${JENKINS_URL:?Provide verified controller URL reachable from this profile}",
+        "JENKINS_AGENT_NAME": "linux-ci",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "workspace",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "ci_agent",
+          "target": "/home/jenkins/agent"
+        },
+        {
+          "type": "volume",
+          "source": "ci_state",
+          "target": "/home/jenkins/.jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "ci_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        }
+      ],
+      "networks": ["ci"],
+      "restart": "unless-stopped",
+      "security_opt": ["no-new-privileges:true"],
+      "cap_drop": ["ALL"],
+      "mem_limit": "3g",
+      "cpus": 2,
+      "pids_limit": 2048,
+      "stop_grace_period": "90s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    },
+    "web": {
+      "image": "${WEB_CI_IMAGE:?Provide verified AMD64 Web CI image digest}",
+      "platform": "linux/amd64",
+      "user": "1000:1000",
+      "environment": {
+        "HOME": "/home/jenkins",
+        "JENKINS_URL": "${JENKINS_URL:?Provide verified controller URL reachable from this profile}",
+        "JENKINS_AGENT_NAME": "linux-web-amd64",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "web_workspace",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "web_agent",
+          "target": "/home/jenkins/agent"
+        },
+        {
+          "type": "volume",
+          "source": "web_state",
+          "target": "/home/jenkins/.jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "web_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        }
+      ],
+      "networks": ["ci"],
+      "restart": "unless-stopped",
+      "security_opt": ["no-new-privileges:true"],
+      "cap_drop": ["ALL"],
+      "mem_limit": "4g",
+      "cpus": 2,
+      "pids_limit": 2048,
+      "stop_grace_period": "90s",
+      "logging": {
+        "driver": "json-file",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+    }
+  },
+  "volumes": {
+    "workspace": {
+      "name": "agent-platform-linux-ci-workspace"
+    },
+    "web_workspace": {
+      "name": "agent-platform-linux-web-workspace"
+    },
+    "ci_credentials": {
+      "name": "agent-platform-linux-ci-credentials",
+      "external": true
+    },
+    "web_credentials": {
+      "name": "agent-platform-linux-web-credentials",
+      "external": true
+    },
+    "ci_agent": {
+      "name": "agent-platform-linux-ci-agent-workspace"
+    },
+    "ci_state": {
+      "name": "agent-platform-linux-ci-jenkins-state"
+    },
+    "web_agent": {
+      "name": "agent-platform-linux-web-agent-workspace"
+    },
+    "web_state": {
+      "name": "agent-platform-linux-web-jenkins-state"
+    }
+  },
+  "networks": {
+    "ci": {
+      "name": "agent-platform-linux-ci",
+      "driver": "bridge"
+    }
+  }
+}

@@ -16,5 +16,5 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["specs/**/*.ts", "fixtures/**/*.ts", "server/**/*.ts", "*.ts"]
+  "include": ["acceptance/**/*.ts", "server/**/*.ts", "*.ts"]
 }

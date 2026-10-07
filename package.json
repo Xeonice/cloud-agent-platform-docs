@@ -1,14 +1,15 @@
 {
   "name": "cloud-agent-platform-docs",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
-  "description": "云 Agent 管理平台 · 文档主仓（docs/ + api/web 两个 submodule）。只承载文档一致性门禁，不发布、不构建产物。",
+  "description": "云 Agent 管理平台 · 三仓文档契约与 Mac mini Jenkins 容器构建、打包、部署和 GitHub Release 发布。",
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
     "node": ">=20.11.0"
   },
   "scripts": {
+    "deploy:test": "node --test deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs",
     "docs:check": "node scripts/docs-check.mjs"
   }
 }

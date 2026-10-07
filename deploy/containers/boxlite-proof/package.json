@@ -1,0 +1,9 @@
+{
+  "name": "agent-platform-boxlite-docker-proof",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "dependencies": {
+    "@boxlite-ai/boxlite": "0.9.7"
+  }
+}

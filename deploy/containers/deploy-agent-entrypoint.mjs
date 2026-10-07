@@ -1,0 +1,13 @@
+import * as fs from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { trusted } from "./api-container.mjs";
+import { validateSecretFile } from "./ci-agent-entrypoint.mjs";
+await trusted();
+if (process.env.JENKINS_AGENT_NAME !== "linux-deploy" || process.env.JENKINS_URL !== "http://host.lima.internal:8080/") throw Error("Fixed production deployment agent required");
+await validateSecretFile();
+await fs.mkdir("/home/jenkins/agent", { recursive: true, mode: 0o700 });
+await fs.mkdir("/home/jenkins/tmp", { recursive: true, mode: 0o700 });
+const child = spawn("/opt/java/openjdk/bin/java", ["-jar", "/usr/share/jenkins/agent.jar", "-url", process.env.JENKINS_URL, "-name", "linux-deploy", "-secret", "@/run/secrets/jenkins_agent_secret", "-webSocket", "-workDir", "/home/jenkins/agent"], { stdio: "inherit", env: { PATH: "/usr/local/bin:/usr/bin:/bin", HOME: "/home/jenkins", USER: "jenkins", LOGNAME: "jenkins", JAVA_HOME: "/opt/java/openjdk", LANG: "C.UTF-8" } });
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"]) process.on(signal, () => child.kill(signal));
+child.on("error", () => { console.error("Deployment agent Java did not start"); process.exitCode = 1; });
+child.on("exit", (code, signal) => { process.exitCode = signal ? 1 : (code ?? 1); });

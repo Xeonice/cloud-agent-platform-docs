@@ -2,12 +2,16 @@
 
 > 全部 **30 篇**编号文档已完成，可逐篇评审（00 + 01–18 + P19–P22 + 23–27 + 28 前后端各一份）；
 > 另有 **16 篇**逐页规格（`product/pages/` 与 `frontend/pages/` 各 8 篇）与 **3 份**决策存档。
-> 架构审计的裁决存档见 [AUDIT-DECISIONS.md](./AUDIT-DECISIONS.md)——**它与技术文档冲突时以它为准**；
+> 历史架构裁决见 [AUDIT-DECISIONS.md](./AUDIT-DECISIONS.md)——产品与视觉冲突以2026-10领域规格为准；
 > 沙箱运行时的架构决策见 [SANDBOX-RUNTIME-DECISIONS.md](./SANDBOX-RUNTIME-DECISIONS.md)（S1 定基线的 ADR）；
-> Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5 开工前的 ADR，同样**与技术文档冲突时以它为准**）。
+> Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5历史ADR；产品行为以2026-10规格为准）。
 > 本轮**跑起来才发现**的 9 件事见 [LIVE-RUN-FINDINGS.md](./LIVE-RUN-FINDINGS.md)（与上面三份的分工：那三份记开工前的裁决，这份记做完之后跑起来才知道错了的部分）。
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
 > 目录已按归属切分，对应未来拆仓去向：`backend/` 整体归后端仓库，`frontend/` 整体归前端仓库，`shared/` 与 `00` 双仓各持一份（或放独立契约仓）。
+
+当前产品行为见 [领域需求索引](./product/requirements/README.md)，REQ/AC 保持稳定编号；适用范围见 [产品裁决](./product/requirements/decisions.md)。当前实现和执行入口见 [主仓状态](../IMPLEMENTATION-STATUS.md)。
+
+Mac mini 后端的构建、发布和服务管理见 [Mac mini 部署](./macmini-deployment.md)。
 
 ## 目录结构
 
@@ -20,12 +24,11 @@ docs/
 ├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
+│   ├── requirements/        #   当前 11 域 REQ/AC 与产品裁决
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
 │   ├── 20-核心使用链路.md     #   主链路 + §8 页面跳转总图（跨页面导航唯一权威）
 │   ├── 21-页面信息架构与交互.md  # 页面层总览 + 逐页索引
 │   ├── 22-异常场景与产品补充要求.md
-│   ├── prototypes/          #   HTML 原型稿（线框级，浏览器直接打开）
-│   │   └── app-flow-prototype.html   # 流程贯通式全应用原型：冷启动→建项目→发起 Task→凭证→项目管理，状态连续可走通
 │   └── pages/               #   逐页面细化规格（统一九节模板）
 │       ├── 21-1-工作台.md
 │       ├── 21-2-发起任务向导.md
@@ -46,7 +49,7 @@ docs/
 │   ├── 13-后端数据库设计.md    #   按限界上下文分节：逐列定义 + 上下文内 ER + 跨上下文关联
 │   ├── 23-领域模型与聚合设计.md #   聚合/不变量/值对象/领域事件/统一语言（DDD 战术层）
 │   ├── 24-产品子链路后端设计.md #   八条产品链路的时序 + 事务边界 + 失败补偿
-│   ├── 25-后端测试体系.md      #   五层金字塔 + 逐上下文/逐链路测试设计 + CI 装配
+│   ├── 25-后端测试体系.md      #   fresh SQLite + service/protocol + 完整 Nest
 │   ├── 26-调用图与文件级设计.md #   命名规则 + 十二张 `文件#函数` 调用图 + 全仓文件索引
 │   ├── 27-接口暴露设计（DDD到API与MCP）.md #  **前端主用**：逐上下文能力目录 + 按页面反查速查
 │   └── 28-类型与领域类型详细设计.md #  branded ID/聚合类型/DB row/三层映射
@@ -85,7 +88,7 @@ docs/
 | 09 | [工程化规范：lint / prettier / precommit / CI](./shared/09-工程化规范.md) | 需求 2（强制手段，前后端两套） | ✅ 可评审 |
 | 10 | [前后端接口契约与类型共享](./shared/10-接口契约与类型共享.md) | 分仓前提下的 OpenAPI codegen / WS 类型同步 | ✅ 可评审 |
 | 11 | [部署形态与扩展预留](./shared/11-部署与扩展预留.md) | 需求 10（单机部署、无帐号体系、预留 auth/多节点扩展点） | ✅ 可评审 |
-| 12 | [前端测试体系：Storybook 逐层验证 + Bun 单测 + 集成测试](./frontend/12-前端测试体系.md) | 补充需求（Storybook 逐层验证、bun 单测、集成测试、测试金字塔分工） | ✅ 可评审 |
+| 12 | [前端测试体系：新版组件验收 + Storybook + 生产浏览器](./frontend/12-前端测试体系.md) | 补充需求（Storybook 逐层验证、新版 Vitest 验收、集成测试、测试金字塔分工） | ✅ 可评审 |
 | 13 | [后端数据库设计](./backend/13-后端数据库设计.md) | 补充需求 1（表结构、索引、状态机持久化、对账、双方言、迁移、ER 图） | ✅ 可评审 |
 | 14 | [跨仓类型安全：实时感知与防绕过](./shared/14-跨仓类型安全.md) | 补充需求 2、3（后端变更前端实时类型感知；禁止 as unknown as 等逃逸写法） | ✅ 可评审 |
 | 15 | [前端状态管理](./frontend/15-前端状态管理.md) | 补充需求 4（状态分类学、Query/Zustand 细化、terminal registry 生命周期） | ✅ 可评审 |

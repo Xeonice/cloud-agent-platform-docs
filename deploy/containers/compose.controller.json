@@ -1,0 +1,48 @@
+{
+  "name": "agent-platform-jenkins-controller",
+  "services": {
+    "controller": {
+      "image": "${CONTROLLER_IMAGE:?Provide verified controller image digest}",
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "ports": [
+        {
+          "target": 8080,
+          "published": "8080",
+          "host_ip": "127.0.0.1",
+          "protocol": "tcp"
+        }
+      ],
+      "environment": {
+        "AGENT_PLATFORM_CONTROLLER_MODE": "${CONTROLLER_MODE:-migration}",
+        "AGENT_PLATFORM_JENKINS_URL": "${AGENT_PLATFORM_JENKINS_URL:-http://127.0.0.1:8080/}"
+      },
+      "volumes": [
+        { "type": "volume", "source": "home", "target": "/var/jenkins_home" }
+      ],
+      "networks": ["controller"],
+      "restart": "unless-stopped",
+      "read_only": true,
+      "tmpfs": ["/tmp:rw,nosuid,nodev,size=256m"],
+      "security_opt": ["no-new-privileges:true"],
+      "cap_drop": ["ALL"],
+      "mem_limit": "1536m",
+      "cpus": 1.5,
+      "pids_limit": 512,
+      "stop_grace_period": "90s",
+      "logging": {
+        "driver": "json-file",
+        "options": { "max-size": "10m", "max-file": "3" }
+      }
+    }
+  },
+  "volumes": {
+    "home": { "external": true, "name": "agent-platform-jenkins-home" }
+  },
+  "networks": {
+    "controller": {
+      "name": "agent-platform-jenkins-controller",
+      "driver": "bridge"
+    }
+  }
+}
