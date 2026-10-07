@@ -92,6 +92,33 @@ export function validRequest(item) {
     SHA.test(p.WEB_SHA)
   );
 }
+// Only same-repository PRs into an allowed base run automatic CI, drafts
+// included. Forks (a deleted fork has a null head.repo) and stacked PRs are
+// neither built nor recorded, so a later retarget builds them as new entries.
+export function eligiblePulls(pulls, repository, bases) {
+  const name = repository.toLowerCase();
+  return pulls
+    .filter(
+      (pull) =>
+        typeof pull.head?.repo?.full_name === "string" &&
+        pull.head.repo.full_name.toLowerCase() === name &&
+        bases.includes(pull.base?.ref),
+    )
+    .map((pull) => ({
+      ref: "refs/pull/" + pull.number + "/head",
+      sha: pull.head.sha,
+    }));
+}
+// From the ref listing, follow only the exact fixed branch (never a look-alike
+// such as refs/heads/x/refs/heads/main) and anchored API image tags. Anything
+// else, PR refs included, is dropped unvalidated, so no name can fail a poll;
+// PR heads come only from pullsFor.
+function followedRef(repo, ref) {
+  return (
+    ref === "refs/heads/" + REPOSITORIES[repo].branch ||
+    (repo === "api" && IMAGE_TAG.test(ref))
+  );
+}
 export function isTrustedJenkinsLocation(location, job) {
   try {
     const url = new URL(canonicalJenkinsLocation(location));
@@ -257,10 +284,9 @@ export function createDiscoverer(overrides = {}) {
           await github(repo, "pulls?state=open&per_page=100&page=" + page)
         ).json();
         all.push(
-          ...values.map((pull) => ({
-            ref: "refs/pull/" + pull.number + "/head",
-            sha: pull.head.sha,
-          })),
+          ...eligiblePulls(values, REPOSITORIES[repo].name, [
+            REPOSITORIES[repo].branch,
+          ]),
         );
         if (values.length < 100) return all;
       }
@@ -507,14 +533,14 @@ export function createDiscoverer(overrides = {}) {
     const discovered = {},
       commits = {};
     for (const [repo, spec] of Object.entries(REPOSITORIES)) {
-      const refs = [...(await refsFor(spec, repo)), ...(await pullsFor(repo))];
+      const refs = [
+        ...(await refsFor(spec, repo)).filter((entry) =>
+          followedRef(repo, entry.ref),
+        ),
+        ...(await pullsFor(repo)),
+      ];
       const unique = new Map();
       for (const entry of refs) {
-        if (
-          entry.ref.startsWith("refs/tags/") &&
-          !(repo === "api" && IMAGE_TAG.test(entry.ref))
-        )
-          continue;
         if (
           !SHA.test(entry.sha) ||
           !(
@@ -581,10 +607,7 @@ export function createDiscoverer(overrides = {}) {
         const production = ref === "refs/heads/" + REPOSITORIES[repo].branch;
         const pull = ref.startsWith("refs/pull/");
         const shouldBuild =
-          repo === "api"
-            ? !ref.startsWith("refs/tags/") &&
-              (!first || ref === "refs/heads/main" || pull)
-            : ref === "refs/heads/main" || pull;
+          !ref.startsWith("refs/tags/") && (production || pull);
         const params =
           repo === "api"
             ? { SHA: sha, REF: ref }

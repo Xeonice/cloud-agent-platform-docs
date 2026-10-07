@@ -5,7 +5,7 @@ pipeline {
     skipDefaultCheckout(true)
     timestamps()
     timeout(time: 90, unit: 'MINUTES')
-    buildDiscarder(logRotator(daysToKeepStr: '60', numToKeepStr: '300', artifactNumToKeepStr: '100'))
+    buildDiscarder(logRotator(daysToKeepStr: '60', numToKeepStr: '300', artifactNumToKeepStr: '10'))
   }
   parameters {
     string(name: 'SHA', defaultValue: '', description: 'Exact approved production API commit')
