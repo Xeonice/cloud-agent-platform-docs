@@ -28,6 +28,9 @@ interface ResourcePoolSnapshot {
   - ⚠️ **这两个 API 在容器里报的是宿主的值，不是 cgroup 限额**，而平台自己就是以 docker-compose 形态部署的：一个被限到 2 核 4GB 的 api 容器会以为自己有 64 核 512GB，然后按那个数发配额。落地时因此加了三个显式覆盖 `SCHEDULER_HOST_CORES` / `SCHEDULER_HOST_RAM_MB` / `SCHEDULER_HOST_DISK_MB`（不填则退回探测；裸装单机时探测是对的）。**可用空间刻意不可覆盖** —— 声明总量是策略，声明可用量就是直接对着 `statfs` 撒谎。
 - **安全余量**：默认保留 15% 给宿主 OS 与平台自身进程（可配置：`SCHEDULER_SAFETY_MARGIN`，取值 `[0,1)`）。
 - **超配策略**：CPU 允许超配（`overcommit.cpuRatio`，如 1.5——AI CLI 多为突发负载）；**内存不超配**（防 OOM）；**磁盘不超配**（超配等于必然写满）。落地为 `SCHEDULER_CPU_OVERCOMMIT`（默认 1.5）；内存与磁盘只乘安全余量，没有对应旋钮 —— 那是有意的，不是漏了。
+- **平台常驻预留（2026-10-08 定案）**：auth helper（11 §1.1）常驻 1 核 / 512 MiB，不经 `ResourceAllocator.reserve`。⛔ **它不能写进 `resource_allocations` 或 `sandboxes`**：`sandbox_id` 有外键，未释放的登记会让发版 idle 判定永远不空闲，部署探针也要求每条未释放登记都对应 stopped 的沙箱。
+  - 落地为常量 `PLATFORM_RESERVATIONS`（runtime 模块提供：1 核 / 512 MiB / 磁盘 0）。`snapshotOf` 在乘完安全余量与超配后从池子总量里扣：`totalCores = max(0, 宿主核数 × (1 − 余量) × 超配 − 预留核数)`，内存同理，磁盘不扣；`capacityOf` 的 basis 写明这份预留，`registeredTasks` 不含它。
+  - 预留是静态的，不随 helper 实际状态变化，免得容量读数在预热前后跳变。按生产 6 核 / 14 GiB、余量 0.15、超配 1 测算：CPU 池 5.1 → 4.1 核，内存池 12185 → 11673 MiB，默认 2 核 / 2 GiB 任务的最大并发仍为 2。
 - **磁盘参与调度（审计 P1-9）**：工作区是宿主目录（§7.1），一个 Task 副本 ≈ 仓库体积；十几个 Task 就能写满盘，而 CPU/内存往往还很闲——**磁盘才是本平台的真实瓶颈**，必须进调度而不是只在准备阶段做一次预检。
   - 登记：创建时在**互斥区内**按 `projects.baseline_size_bytes × 1.2`（空项目取配置下限，默认 512MB）登记 `resource_allocations.disk_mb_reserved`；**消除 TOCTOU**——原先"准备阶段才预检"的写法在并发下会让 N 个 Task 同时通过预检然后一起写满盘。
     - ✅ **已落地**（`diskMbForBaseline` / `planQuota`，见 §3 的落点说明）。⚠️ 实现把「配置下限」做成了**全局下限**（`max(下限, ×1.2)`）而不是只在「空项目」那一格生效：按 ×1.2 直算，一个 3MB 的仓库会登记 4MB —— 而工作区里最终躺着的不只是基线（git 对象、依赖、构建产物、agent 写下的东西），`disk_mb_reserved > 0` 的 CHECK 也不接受向下取整成 0 的算法。下限旋钮是 `SANDBOX_DISK_FLOOR_MB`。

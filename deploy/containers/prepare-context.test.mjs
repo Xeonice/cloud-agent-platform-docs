@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { contextInputs, prepareContext } from "./prepare-context.mjs";
 import { prepareDeployContext } from "./prepare-deploy-context.mjs";
+import { CONTAINER_INPUTS } from "./api-context.mjs";
 
 async function fixture(component, callback) {
   const temporary = await fs.mkdtemp(join(tmpdir(), "container-context-test-"));
@@ -135,6 +136,20 @@ test("the current trusted deploy context builds without retired Mac sources and 
         `Missing public dependency of ${target}`,
       );
   }
+});
+
+test("the trusted deploy image carries exactly the API image inputs the build pins", async (t) => {
+  const temporary = await fs.mkdtemp(join(tmpdir(), "current-deploy-inputs-"));
+  t.after(() => fs.rm(temporary, { recursive: true, force: true }));
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+  const { manifest } = await prepareDeployContext(root, temporary);
+  assert.deepEqual(
+    manifest.files
+      .filter(({ target }) => target.startsWith("container-tools/"))
+      .map(({ target }) => target.slice("container-tools/".length))
+      .sort(),
+    [...CONTAINER_INPUTS].sort(),
+  );
 });
 
 test("a linked trusted tool directory is refused before a deploy build context is created", async (t) => {

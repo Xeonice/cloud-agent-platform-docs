@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, readlinkSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -8,6 +9,17 @@ const REPORT = "/data/proof/api-smoke.json";
 const WS_HASH = "sb-terminal-v4";
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const require = createRequire("/app/package.json");
+const PLATFORM_DB = "/data/platform.db";
+const BOXLITE_DB = "/data/boxlite/db/boxlite.db";
+const BOXES = "/data/boxlite/boxes";
+const BOXLITE_LOGS = "/data/boxlite/logs";
+const CGROUP = "/sys/fs/cgroup";
+// Same derivation as the release probe in api-container.mjs: the canonical
+// helper name is a deployment contract, not an API implementation detail.
+export const HELPER_NAME =
+  "platform-boxlite-" +
+  createHash("sha256").update(PLATFORM_DB).digest("hex").slice(0, 16) +
+  "-auth-helper";
 
 function assert(condition, code) {
   if (!condition) throw new Error(code);
@@ -61,7 +73,7 @@ async function request(
 async function waitFor(
   read,
   accepts,
-  { timeout = 900000, interval = 1000 } = {},
+  { timeout = 900000, interval = 1000, code = "POLL_TIMEOUT" } = {},
 ) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -69,7 +81,7 @@ async function waitFor(
     if (accepts(value)) return value;
     await sleep(interval);
   }
-  throw new Error("POLL_TIMEOUT");
+  throw new Error(code);
 }
 
 async function waitRunning(id, states) {
@@ -180,6 +192,498 @@ async function terminalProof(id) {
   }
 }
 
+// Opt-in stages; leaving both variables unset runs exactly the original chain.
+//   API_SMOKE_STAGES=listeners,helper,cgroup (any subset)
+//     listeners  no wildcard LISTEN socket owned by a BoxLite VM and no
+//                published box port in the BoxLite logs
+//     helper     diagnosis auth-helper=ok; one canonical helper whose bwrap root
+//                holds the only VM and every BoxLite process (the release
+//                probe's rule), outside sandboxes and the reservation ledger,
+//                with its reservation in the capacity basis; after cleanup only
+//                its box directory and process tree remain
+//     cgroup     API and docker exec in the delegated /api leaf; per-box BoxLite
+//                cgroups with pids.max; no "Cgroup setup failed"
+//   API_SMOKE_HELPER_CHAOS=1 kills the helper VM, but only when PID 1 is the
+//     isolated API on 3191. The release probe must stop accepting the helper at
+//     once; the diagnosis is only recorded (see helperChaos). Its heal trigger
+//     begins a claude-code setup-token login and cancels it at once, then a new
+//     canonical helper must replace the dead one. API_SMOKE_HELPER_CHAOS_LOGIN=0
+//     skips that call, and then nothing rebuilds the helper within this run.
+const OPTIONAL_STAGES = ["listeners", "helper", "cgroup"];
+export function smokeStages(env = process.env) {
+  const names = (env.API_SMOKE_STAGES ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  assert(
+    names.every((name) => OPTIONAL_STAGES.includes(name)),
+    "UNKNOWN_SMOKE_STAGE",
+  );
+  const chaos = env.API_SMOKE_HELPER_CHAOS === "1";
+  return {
+    listeners: names.includes("listeners"),
+    helper: names.includes("helper"),
+    cgroup: names.includes("cgroup"),
+    chaos,
+    chaosLogin: chaos && env.API_SMOKE_HELPER_CHAOS_LOGIN !== "0",
+    names: [...new Set(names), ...(chaos ? ["helper-chaos"] : [])],
+  };
+}
+
+const words = (text) => text.split(/\s+/).filter(Boolean);
+// A process that exits during a /proc scan reads as ENOENT or ESRCH.
+const gone = (error) => error.code === "ENOENT" || error.code === "ESRCH";
+
+export function parseProcStat(text) {
+  const match = /^(\d+) \((.*)\) (\S) (\d+) /.exec(text);
+  return match && { comm: match[2], state: match[3], parent: Number(match[4]) };
+}
+
+function processTable() {
+  const table = new Map(),
+    pids = readdirSync("/proc").filter((name) => /^[1-9]\d*$/.test(name));
+  for (const id of pids) {
+    let stat,
+      exe = null;
+    try {
+      stat = parseProcStat(readFileSync("/proc/" + id + "/stat", "utf8"));
+      try {
+        exe = readlinkSync("/proc/" + id + "/exe");
+      } catch (error) {
+        // Zombies and kernel threads have no executable.
+        if (!gone(error)) throw error;
+      }
+    } catch (error) {
+      if (gone(error)) continue;
+      throw error;
+    }
+    if (stat) table.set(Number(id), { ...stat, exe });
+  }
+  return table;
+}
+
+const liveVms = (processes) =>
+  [...processes].filter(([, p]) => p.comm === "libkrun VM" && p.state !== "Z");
+
+function readonlyRows(path, sql, ...params) {
+  const Database = require("better-sqlite3");
+  const database = new Database(path, { readonly: true, fileMustExist: true });
+  try {
+    database.pragma("query_only = ON");
+    return database.prepare(sql).all(...params);
+  } finally {
+    database.close();
+  }
+}
+
+const helperRows = () =>
+  existsSync(BOXLITE_DB)
+    ? readonlyRows(
+        BOXLITE_DB,
+        "select c.id, c.name, s.status, s.pid from box_config c left join box_state s on s.id = c.id where c.name = ? order by c.id",
+        HELPER_NAME,
+      )
+    : [];
+
+const boxRootPid = (id) =>
+  readonlyRows(BOXLITE_DB, "select pid from box_state where id = ?", id)[0]
+    ?.pid;
+
+/** The release probe's idle helper: one running canonical box whose bwrap root holds exactly one live VM of that box. */
+export function canonicalHelper(rows, processes, boxes = BOXES) {
+  assert(rows.length <= 1, "DUPLICATE_CANONICAL_HELPER");
+  const [row] = rows;
+  if (
+    row?.status !== "running" ||
+    !Number.isSafeInteger(row.pid) ||
+    row.pid < 1
+  )
+    return null;
+  const root = processes.get(row.pid),
+    vms = liveVms(processes).filter(
+      ([, p]) => p.exe === boxes + "/" + row.id + "/bin/boxlite-shim",
+    );
+  if (root?.comm !== "bwrap" || root.state === "Z" || vms.length !== 1)
+    return null;
+  for (
+    let pid = vms[0][0], hops = 0;
+    pid && hops < 64;
+    pid = processes.get(pid)?.parent, hops++
+  )
+    if (pid === row.pid) return { id: row.id, pid: row.pid, vmPid: vms[0][0] };
+  return null;
+}
+
+const BOXLITE_COMM = /^(?:bwrap|boxlite-shim|libkrun VM)$/,
+  BOXLITE_EXE = /(?:^|\/)(?:bwrap|boxlite-shim)(?: \(deleted\))?$/,
+  RUNNABLE = ["R", "S", "D", "I"];
+
+/**
+ * The release probe's process rule over the boxes expected to run: every live
+ * bwrap, shim or VM descends from one of their bwrap roots, and each root holds
+ * exactly one VM of its own box. Anything left by a removed box fails.
+ */
+export function vmTreeMatches(processes, roots, boxes = BOXES) {
+  const owners = new Map(roots.map(({ id, pid }) => [pid, id])),
+    vms = new Map(roots.map(({ pid }) => [pid, 0]));
+  for (const { pid } of roots) {
+    const root = processes.get(pid);
+    if (
+      root?.comm !== "bwrap" ||
+      root.exe !== "/opt/boxlite-runtime/bwrap" ||
+      !RUNNABLE.includes(root.state)
+    )
+      return false;
+  }
+  for (const [pid, p] of processes) {
+    if (!BOXLITE_COMM.test(p.comm) && !BOXLITE_EXE.test(p.exe ?? "")) continue;
+    // An exited, unreaped wrapper holds no VM or disk.
+    if (p.state === "Z" && p.exe === null) continue;
+    if (!RUNNABLE.includes(p.state)) return false;
+    let root = pid;
+    for (let hops = 0; !owners.has(root); hops++) {
+      if (hops >= 64 || !processes.has(root)) return false;
+      root = processes.get(root).parent;
+    }
+    if (p.comm === "libkrun VM") {
+      if (p.exe !== boxes + "/" + owners.get(root) + "/bin/boxlite-shim")
+        return false;
+      vms.set(root, vms.get(root) + 1);
+    }
+  }
+  return [...vms.values()].every((count) => count === 1);
+}
+
+function waitCanonicalHelper(code, { timeout = 900000, replacing } = {}) {
+  return waitFor(
+    async () => canonicalHelper(helperRows(), processTable()),
+    (helper) => helper !== null && helper.id !== replacing,
+    { timeout, interval: 1000, code },
+  );
+}
+
+// Same identity as the API's AUTH_HELPER_SANDBOX_ID; never a sandbox or a reservation.
+function helperOutsideLedger(boxId) {
+  const [row] = readonlyRows(
+    PLATFORM_DB,
+    "select (select count(*) from sandboxes where id = 'auth-helper' or provider_handle = ?) as sandboxes, (select count(*) from resource_allocations where sandbox_id = 'auth-helper') as allocations",
+    boxId,
+  );
+  return row.sandboxes === 0 && row.allocations === 0;
+}
+
+/** POST /api/system/diagnose streams SSE frames; returns the auth-helper status. */
+async function diagnoseHelper() {
+  const response = await fetch(BASE + "/api/system/diagnose", {
+    method: "POST",
+    headers: { authorization: "Bearer " + process.env.ACCESS_PASSCODE },
+    signal: AbortSignal.timeout(120000),
+    redirect: "error",
+  });
+  assert(response.status === 200, "HTTP_POST_" + response.status);
+  const frames = (await response.text())
+    .split("\n")
+    .filter((line) => line.startsWith("data: "))
+    .map((line) => JSON.parse(line.slice("data: ".length)));
+  const check = frames.find(
+    (frame) => frame.event === "check" && frame.id === "auth-helper",
+  );
+  assert(
+    check && frames.some((frame) => frame.event === "done"),
+    "HELPER_DIAGNOSIS_MISSING",
+  );
+  return check.status;
+}
+
+/** LISTEN sockets in /proc/net/tcp or tcp6 text, keeping the kernel's hex address. */
+export function parseListeners(text) {
+  const sockets = [];
+  for (const line of text.split("\n").slice(1)) {
+    const fields = line.trim().split(/\s+/);
+    const [address = "", port = ""] = (fields[1] ?? "").split(":");
+    if (fields[3] === "0A" && /^[1-9]\d*$/.test(fields[9] ?? ""))
+      sockets.push({ address, port: parseInt(port, 16), inode: fields[9] });
+  }
+  return sockets;
+}
+
+/** Wildcard (0.0.0.0 or ::) LISTEN sockets in /proc/net/tcp and tcp6 text. */
+export function parseWildcardListeners(tcp, tcp6) {
+  return [
+    [tcp, 4],
+    [tcp6, 6],
+  ].flatMap(([text, family]) =>
+    parseListeners(text)
+      .filter(({ address }) => /^0+$/.test(address))
+      .map(({ port, inode }) => ({ family, port, inode })),
+  );
+}
+
+/**
+ * docker exec -e can fake every variable assertIsolation reads, while the
+ * chaos stage kills a VM of this container. PID 1's environment cannot be
+ * overridden that way, and the API answering on 127.0.0.1:3191 must be it.
+ */
+export function boundToThisApi(environ, tcp, pid1Sockets) {
+  const env = environ.split("\0"),
+    // 127.0.0.1:3191 as /proc/net/tcp prints it on little-endian ARM64.
+    api = parseListeners(tcp).find(
+      ({ address, port }) => address === "0100007F" && port === 3191,
+    );
+  return (
+    env.includes("API_SMOKE_ISOLATED=1") &&
+    env.includes("PORT=3191") &&
+    api !== undefined &&
+    pid1Sockets.includes(api.inode)
+  );
+}
+
+function assertChaosTarget() {
+  const sockets = [];
+  for (const fd of readdirSync("/proc/1/fd"))
+    try {
+      const inode = /^socket:\[(\d+)\]$/.exec(
+        readlinkSync("/proc/1/fd/" + fd),
+      )?.[1];
+      if (inode) sockets.push(inode);
+    } catch (error) {
+      if (!gone(error)) throw error;
+    }
+  assert(
+    boundToThisApi(
+      readFileSync("/proc/1/environ", "utf8"),
+      readFileSync("/proc/net/tcp", "utf8"),
+      sockets,
+    ),
+    "CHAOS_TARGET_NOT_THIS_API",
+  );
+}
+
+const vmProcess = (p) =>
+  p.comm === "libkrun VM" ||
+  p.comm === "boxlite-shim" ||
+  /\/boxlite-shim(?: \(deleted\))?$/.test(p.exe ?? "");
+
+function wildcardListeners() {
+  const net = (name) => {
+    try {
+      return readFileSync("/proc/net/" + name, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    }
+  };
+  const sockets = new Map(
+    parseWildcardListeners(net("tcp"), net("tcp6")).map((socket) => [
+      socket.inode,
+      { ...socket, owners: [] },
+    ]),
+  );
+  for (const [pid, p] of processTable()) {
+    let fds;
+    try {
+      fds = readdirSync("/proc/" + pid + "/fd");
+    } catch (error) {
+      if (gone(error)) continue;
+      // A VM whose sockets cannot be read would make this check vacuous.
+      assert(!vmProcess(p), "LISTENER_OWNER_UNREADABLE");
+      continue;
+    }
+    for (const fd of fds) {
+      let target = "";
+      try {
+        target = readlinkSync("/proc/" + pid + "/fd/" + fd);
+      } catch (error) {
+        if (!gone(error)) throw error;
+      }
+      const socket = sockets.get(/^socket:\[(\d+)\]$/.exec(target)?.[1]);
+      if (socket) socket.owners.push({ pid, comm: p.comm, vm: vmProcess(p) });
+    }
+  }
+  return [...sockets.values()];
+}
+
+/** BoxLite logs "Port mappings: N (image: a, user: b, overridden: c)" just before that box's socket path. */
+export function parsePortMappings(texts) {
+  const boxes = new Map();
+  for (const text of texts) {
+    let pending = null;
+    for (const line of text.split("\n")) {
+      const counts =
+        /Port mappings: (\d+) \(image: (\d+), user: (\d+), overridden: (\d+)\)/.exec(
+          line,
+        );
+      if (counts) {
+        const [total, image, user, overridden] = counts.slice(1).map(Number);
+        pending = { total, image, user, overridden };
+        continue;
+      }
+      const box =
+        /\/bl-\d+\/([A-Za-z0-9_-]+)\/box\.sock|\bbox_id=([A-Za-z0-9_-]+)/.exec(
+          line,
+        );
+      if (pending && box) {
+        const id = box[1] ?? box[2];
+        boxes.set(id, [...(boxes.get(id) ?? []), pending]);
+        pending = null;
+      }
+    }
+  }
+  return boxes;
+}
+
+const boxliteLogs = () =>
+  readdirSync(BOXLITE_LOGS)
+    .filter((name) => name.startsWith("boxlite.log"))
+    .sort()
+    .map((name) => readFileSync(BOXLITE_LOGS + "/" + name, "utf8"));
+
+function listenerSample(at, boxIds) {
+  const sockets = wildcardListeners();
+  assert(
+    sockets.every((socket) => socket.owners.every((owner) => !owner.vm)),
+    "VM_WILDCARD_LISTENER",
+  );
+  const mappings = parsePortMappings(boxliteLogs());
+  for (const id of boxIds) {
+    assert(mappings.has(id), "PORT_MAPPINGS_NOT_LOGGED");
+    // The platform image declares no port, so nothing may be published for it.
+    assert(
+      mappings.get(id).every((m) => m.total === 0 && m.user === 0),
+      "BOX_PORT_PUBLISHED",
+    );
+  }
+  return {
+    at,
+    wildcard: sockets.map(({ family, port, owners }) => ({
+      family,
+      port,
+      owners: owners.map((owner) => owner.comm),
+    })),
+    portMappings: Object.fromEntries(
+      boxIds.map((id) => [id, mappings.get(id)]),
+    ),
+  };
+}
+
+const unifiedCgroup = (path) =>
+  /^0::(\/\S*)$/m.exec(readFileSync(path, "utf8"))?.[1] ?? null;
+
+function delegatedCgroup() {
+  const api = unifiedCgroup("/proc/1/cgroup"),
+    exec = unifiedCgroup("/proc/self/cgroup"),
+    subtree = words(readFileSync(CGROUP + "/cgroup.subtree_control", "utf8"));
+  assert(api === "/api", "API_NOT_IN_DELEGATED_LEAF");
+  // docker exec cannot join the delegated root; runc falls back to PID 1's cgroup.
+  assert(exec === "/api", "EXEC_OUTSIDE_DELEGATED_LEAF");
+  assert(
+    ["cpu", "memory", "pids"].every((name) => subtree.includes(name)),
+    "CGROUP_CONTROLLERS_NOT_DELEGATED",
+  );
+  assert(
+    words(readFileSync(CGROUP + "/cgroup.procs", "utf8")).length === 0,
+    "PROCESS_IN_DELEGATED_ROOT",
+  );
+  return { api, exec, subtreeControl: subtree };
+}
+
+function boxCgroup(id, rootPid) {
+  const directory = CGROUP + "/boxlite/" + id;
+  assert(existsSync(directory), "BOX_CGROUP_MISSING");
+  // BoxLite 0.9.7's default per-box max_processes.
+  assert(
+    readFileSync(directory + "/pids.max", "utf8").trim() === "1024",
+    "BOX_PIDS_LIMIT_MISSING",
+  );
+  assert(
+    words(readFileSync(directory + "/cgroup.procs", "utf8")).includes(
+      String(rootPid),
+    ),
+    "BOX_OUTSIDE_ITS_CGROUP",
+  );
+  return { box: id, pidsMax: 1024, rootPid };
+}
+
+// Count only lines logged since this run started: a reused volume can keep
+// failures from an earlier container started with API_CGROUP_DELEGATION=off
+// or an older image. A line without a leading timestamp still counts.
+export function countCgroupSetupFailures(texts, since) {
+  return texts
+    .flatMap((text) => text.split("\n"))
+    .filter((line) => line.includes("Cgroup setup failed"))
+    .filter((line) => !(Date.parse(line.slice(0, line.indexOf(" "))) < since))
+    .length;
+}
+
+const cgroupSetupFailures = (since) =>
+  countCgroupSetupFailures(boxliteLogs(), since);
+
+async function helperChaos(stages, task) {
+  const before = await waitCanonicalHelper("HELPER_NOT_CANONICAL");
+  // The VM is chosen from this container's /proc and /data.
+  assertChaosTarget();
+  process.kill(before.vmPid, "SIGKILL");
+  await waitFor(
+    async () => processTable().get(before.vmPid),
+    (vm) => !vm || vm.state === "Z",
+    { timeout: 30000, interval: 200, code: "HELPER_VM_SURVIVED_KILL" },
+  );
+  // Deterministic: without its VM the box is no longer the probe's idle helper.
+  assert(
+    canonicalHelper(helperRows(), processTable())?.id !== before.id,
+    "DEAD_HELPER_STILL_ACCEPTED",
+  );
+  const result = {
+    killedBox: before.id,
+    deadHelperRejected: true,
+    // Evidence, not a verdict. Without a health check BoxLite 0.9.7 keeps the
+    // box "running" until an exec or metrics attach fails, and whether
+    // inspect's metrics reuses the cached live state (answering ok) depends on
+    // when the JS box handle is garbage collected.
+    diagnosisAfterKill: await diagnoseHelper(),
+    healTrigger: stages.chaosLogin ? "claude-code-setup-token-cancelled" : null,
+  };
+  // Diagnosis is read-only and there is no background healing.
+  if (!stages.chaosLogin) return result;
+  const challenge = await request("/api/runtimes/claude-code/auth/begin", {
+    method: "POST",
+    body: { method: "setup-token" },
+  });
+  assert(
+    typeof challenge?.challengeRef === "string" && challenge.challengeRef,
+    "HELPER_LOGIN_NOT_STARTED",
+  );
+  await request(
+    "/api/runtimes/claude-code/auth/sessions/" +
+      encodeURIComponent(challenge.challengeRef),
+    { method: "DELETE", expected: 204 },
+  );
+  const healed = await waitCanonicalHelper("HELPER_NOT_HEALED", {
+    timeout: 300000,
+    replacing: before.id,
+  });
+  assert(!existsSync(BOXES + "/" + before.id), "DEAD_HELPER_LEFT_BEHIND");
+  // With the task still running: no process of the dead box survives, and
+  // each root holds exactly its own VM.
+  await waitFor(
+    async () => vmTreeMatches(processTable(), [healed, task]),
+    Boolean,
+    { timeout: 30000, interval: 500, code: "VM_TREE_UNEXPECTED" },
+  );
+  assert(helperOutsideLedger(healed.id), "HELPER_IN_LEDGER");
+  await waitFor(diagnoseHelper, (status) => status === "ok", {
+    timeout: 120000,
+    interval: 3000,
+    code: "HEALED_HELPER_DIAGNOSIS_NOT_OK",
+  });
+  await waitFor(
+    () => request("/api/deployment/status"),
+    (status) => status.credentialAuth === 0,
+    { timeout: 30000, interval: 500, code: "LOGIN_SESSION_NOT_RECLAIMED" },
+  );
+  return { ...result, healedBox: healed.id };
+}
+
 export async function runSmoke() {
   assertIsolation();
   const proof = {
@@ -193,6 +697,7 @@ export async function runSmoke() {
     cleanup: {},
   };
   let stage = "boot";
+  let stages = null;
   let projectId;
   let sandboxId;
   let ownedBoxId;
@@ -209,6 +714,8 @@ export async function runSmoke() {
   };
   await mkdir("/data/proof", { recursive: true, mode: 0o700 });
   try {
+    stages = smokeStages();
+    if (stages.names.length) proof.stages = stages.names;
     await waitFor(
       async () => {
         try {
@@ -220,6 +727,8 @@ export async function runSmoke() {
       (value) => value?.status === "ok",
       { timeout: 120000 },
     );
+    // Refuse a destructive run up front instead of after the whole chain.
+    if (stages.chaos) assertChaosTarget();
     await request("/api/projects", { authorized: false, expected: 401 });
     const version = await request("/api/system/version");
     assert(
@@ -261,6 +770,39 @@ export async function runSmoke() {
     proof.checks.defaultProvider = "boxlite";
     proof.checks.sdkVersion = "0.9.7";
 
+    let helper = null;
+    if (stages.helper || stages.cgroup || stages.listeners) {
+      stage = "helper";
+      helper = await waitCanonicalHelper("HELPER_NOT_CANONICAL");
+    }
+    if (stages.helper) {
+      const diagnosis = await waitFor(diagnoseHelper, (s) => s === "ok", {
+        timeout: 120000,
+        interval: 3000,
+        code: "HELPER_DIAGNOSIS_NOT_OK",
+      });
+      assert(vmTreeMatches(processTable(), [helper]), "UNEXPECTED_VM");
+      assert(helperOutsideLedger(helper.id), "HELPER_IN_LEDGER");
+      proof.checks.helper = {
+        box: helper.id,
+        name: HELPER_NAME,
+        diagnosis,
+        onlyVm: true,
+        outsideLedger: true,
+      };
+    }
+    if (stages.cgroup) {
+      stage = "cgroup";
+      proof.checks.cgroup = {
+        delegation: delegatedCgroup(),
+        boxes: [boxCgroup(helper.id, helper.pid)],
+      };
+    }
+    if (stages.listeners) {
+      stage = "listeners";
+      proof.checks.listeners = [listenerSample("helper", [helper.id])];
+    }
+
     stage = "capacity";
     const {
       OsHostCapacityProbe,
@@ -298,6 +840,18 @@ export async function runSmoke() {
       initial: initialCapacity,
       imageQuota: image.resourceDefaults,
     };
+    if (stages.helper) {
+      // At 4 cores / 6 GiB the helper's 1-core / 512 MB reservation leaves
+      // maxTasks unchanged (floor(3.4 / 2) = floor(2.4 / 2)); the basis is the
+      // only HTTP evidence that the scheduling pool deducts it.
+      assert(
+        /帐号登录环境预留 1 核 CPU、512 MB 内存/.test(
+          initialCapacity.basis ?? "",
+        ),
+        "HELPER_RESERVATION_MISSING",
+      );
+      proof.checks.helper.reservationInBasis = true;
+    }
 
     stage = "project";
     const project = await request("/api/projects", {
@@ -359,6 +913,20 @@ export async function runSmoke() {
         "REJECTED_TASK_LEFT_RECORD",
       );
       proof.checks.capacity.exhaustionRejectedWithoutRecord = true;
+    }
+    // The task box is created after boxlite/ exists: the branch that used to
+    // fail with EACCES on pids.max.
+    if (stages.cgroup) {
+      stage = "cgroup";
+      proof.checks.cgroup.boxes.push(
+        boxCgroup(ownedBoxId, boxRootPid(ownedBoxId)),
+      );
+    }
+    if (stages.listeners) {
+      stage = "listeners";
+      proof.checks.listeners.push(
+        listenerSample("task", [helper.id, ownedBoxId]),
+      );
     }
 
     stage = "guest-exec";
@@ -423,6 +991,36 @@ export async function runSmoke() {
       diskPreserved: true,
       stoppedAllocationRetained: true,
     };
+    if (stages.listeners) {
+      stage = "listeners";
+      proof.checks.listeners.push(
+        listenerSample("restart", [helper.id, ownedBoxId]),
+      );
+    }
+    if (stages.chaos) {
+      stage = "helper-chaos";
+      proof.checks.helperChaos = await helperChaos(stages, {
+        id: ownedBoxId,
+        pid: boxRootPid(ownedBoxId),
+      });
+      const healed = proof.checks.helperChaos.healedBox;
+      if (healed && stages.cgroup)
+        proof.checks.cgroup.boxes.push(boxCgroup(healed, boxRootPid(healed)));
+      if (healed && stages.listeners)
+        proof.checks.listeners.push(
+          listenerSample("healed", [healed, ownedBoxId]),
+        );
+    }
+    if (stages.cgroup) {
+      stage = "cgroup";
+      proof.checks.cgroup.setupFailures = cgroupSetupFailures(
+        Date.parse(proof.startedAt),
+      );
+      assert(
+        proof.checks.cgroup.setupFailures === 0,
+        "BOX_CGROUP_SETUP_FAILED",
+      );
+    }
     proof.state = "passed";
   } catch (error) {
     proof.error = {
@@ -458,10 +1056,13 @@ export async function runSmoke() {
       }
     }
     try {
+      // Each diagnose run leaves an engine.io polling session that counts as
+      // an active WebSocket until it expires (pingInterval 25s + pingTimeout
+      // 20s), so idle can trail the last diagnose by about 45 seconds.
       proof.finalStatus = await waitFor(
         () => request("/api/deployment/status"),
         (value) => value.idle && value.ready,
-        { timeout: 30000, interval: 500 },
+        { timeout: 90000, interval: 500 },
       );
       proof.cleanup.finalProjectsEmpty =
         (await request("/api/projects")).length === 0;
@@ -475,6 +1076,37 @@ export async function runSmoke() {
       proof.remainingNonTaskBoxDirectories = boxes.length;
     } catch {
       proof.cleanup.finalIdle = false;
+    }
+    if (stages?.helper || stages?.chaos) {
+      try {
+        // Only the canonical helper's box may outlive the smoke's own task.
+        const boxes = await readdir(BOXES);
+        const [helper, ...others] = helperRows();
+        proof.cleanup.onlyHelperBoxLeft =
+          boxes.length === 1 && others.length === 0 && boxes[0] === helper?.id;
+      } catch {
+        proof.cleanup.onlyHelperBoxLeft = false;
+      }
+      // The release probe's steady state: a live canonical helper whose root
+      // holds the only VM and every BoxLite process. A completed chaos run
+      // without its login trigger rebuilt nothing, so then none may live.
+      const chaos = proof.checks.helperChaos,
+        helperExpected = !chaos || Boolean(chaos.healedBox);
+      try {
+        await waitFor(
+          async () => {
+            const processes = processTable();
+            if (!helperExpected) return vmTreeMatches(processes, []);
+            const helper = canonicalHelper(helperRows(), processes);
+            return helper !== null && vmTreeMatches(processes, [helper]);
+          },
+          Boolean,
+          { timeout: 30000, interval: 500 },
+        );
+        proof.cleanup.vmTreeAsReleaseProbe = true;
+      } catch {
+        proof.cleanup.vmTreeAsReleaseProbe = false;
+      }
     }
     if (
       !Object.values(proof.cleanup).every(Boolean) ||

@@ -18,6 +18,7 @@ export async function prepareDeployContext(root, temporary = tmpdir()) {
   for (const name of [
     "Dockerfile.api",
     "api-entrypoint.mjs",
+    "api-cgroup.mjs",
     "boxlite-proof/prepare-runtime.py",
     "boxlite-proof/materialize-certs.py",
   ])

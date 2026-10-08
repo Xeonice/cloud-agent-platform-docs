@@ -272,6 +272,33 @@ test("the complete migration input set participates in the schema guard", async 
     second.manifest.schemaFingerprint,
   );
 });
+test("every root file the API image copies, and every module its entrypoint imports, is a pinned container input", async () => {
+  const dockerfile = await fs.readFile(
+    new URL("./Dockerfile.api", import.meta.url),
+    "utf8",
+  );
+  const copies = [...dockerfile.matchAll(/^COPY (?!--)(\S+) (\S+)$/gm)].filter(
+    ([, from]) => !from.endsWith("/"),
+  );
+  assert.ok(copies.length > 0);
+  for (const [, from] of copies)
+    assert.ok(CONTAINER_INPUTS.includes(from), from);
+  const entrypoint = await fs.readFile(
+    new URL("./api-entrypoint.mjs", import.meta.url),
+    "utf8",
+  );
+  const modules = [...entrypoint.matchAll(/\bfrom "\.\/([^"]+)"/g)].map(
+    ([, name]) => name,
+  );
+  assert.ok(modules.includes("api-cgroup.mjs"));
+  for (const name of modules)
+    assert.ok(
+      copies.some(
+        ([, from, to]) => from === name && to === "/opt/agent-platform/" + name,
+      ),
+      name + " must sit next to the entrypoint",
+    );
+});
 test("API deployment resolves only the two fixed main heads without querying retired branches", async (t) => {
   const path = await fs.mkdtemp(join(tmpdir(), "api-main-heads-"));
   t.after(() => fs.rm(path, { recursive: true, force: true }));
@@ -493,6 +520,9 @@ async function stoppedReservationFixture(t, { helper = true } = {}) {
     uid = process.getuid(),
     state = "S",
     startTime = "700",
+    executable = comm === "libkrun VM"
+      ? join(data, "boxlite", "boxes", "helperbox", "bin", "boxlite-shim")
+      : "/opt/boxlite-runtime/bwrap",
   ) {
     await fs.mkdir(join(proc, String(pid)), { recursive: true });
     await fs.writeFile(
@@ -504,12 +534,7 @@ async function stoppedReservationFixture(t, { helper = true } = {}) {
       `Name:\t${comm}\nUid:\t${uid}\t${uid}\t${uid}\t${uid}\n`,
     );
     await fs.rm(join(proc, String(pid), "exe"), { force: true });
-    await fs.symlink(
-      comm === "libkrun VM"
-        ? join(data, "boxlite", "boxes", "helperbox", "bin", "boxlite-shim")
-        : "/opt/boxlite-runtime/bwrap",
-      join(proc, String(pid), "exe"),
-    );
+    await fs.symlink(executable, join(proc, String(pid), "exe"));
   }
   if (helper) {
     await fs.mkdir(join(data, "boxlite", "boxes", "helperbox"));
@@ -812,6 +837,115 @@ test("normal helper S-to-R scheduling changes preserve PID identity while stoppe
   assert.throws(f.probe, /proof unavailable/);
   await f.processRow(32, "libkrun VM", 31, process.getuid(), "?");
   assert.throws(f.probe, /proof unavailable/);
+});
+
+test("a killed helper VM keeps the release busy while BoxLite still records the helper as running", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  await fs.writeFile(
+    join(f.data, "boxlite", "boxes", "helperbox", "shim.pid"),
+    "30\n700\n",
+  );
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  // SIGKILL reaches the VM first; its wrappers exit after it, and the outer
+  // bwrap may stay an unreaped zombie of the API process.
+  await fs.rm(join(f.proc, "32"), { recursive: true });
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "31"), { recursive: true });
+  await f.processRow(30, "bwrap", 1, process.getuid(), "Z");
+  await fs.rm(join(f.proc, "30", "exe"));
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "30"), { recursive: true });
+  assert.throws(f.probe, /proof unavailable/);
+  // The recorded root PID reused by an unrelated process proves nothing.
+  await f.processRow(
+    30,
+    "git",
+    1,
+    process.getuid(),
+    "S",
+    "700",
+    "/usr/bin/git",
+  );
+  assert.throws(f.probe, /proof unavailable/);
+  assert.deepEqual(
+    {
+      ...f.box
+        .prepare("SELECT status,pid FROM box_state WHERE id='helperbox'")
+        .get(),
+    },
+    { status: "running", pid: 30 },
+  );
+});
+
+test("with no helper box and no BoxLite process the stopped slot alone is provable; a VM without a canonical helper is busy", async (t) => {
+  const f = await stoppedReservationFixture(t, { helper: false });
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  await f.processRow(50, "bwrap", 1);
+  await f.processRow(51, "bwrap", 50);
+  await f.processRow(52, "libkrun VM", 51);
+  assert.throws(f.probe, /proof unavailable/);
+});
+
+test("a self-healed helper passes: the destroy-to-create gap and the new canonical box id both prove the stopped slot", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  for (const pid of [30, 31, 32])
+    await fs.rm(join(f.proc, String(pid)), { recursive: true });
+  // The API removes the dead helper by its canonical name before creating the next.
+  f.box.exec(
+    "DELETE FROM box_config WHERE id='helperbox'; DELETE FROM box_state WHERE id='helperbox'",
+  );
+  await fs.rm(join(f.data, "boxlite", "boxes", "helperbox"), {
+    recursive: true,
+  });
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  // A wrapper that outlives the destroyed helper box is still a live VM tree.
+  await f.processRow(30, "bwrap", 1);
+  assert.throws(f.probe, /proof unavailable/);
+  await fs.rm(join(f.proc, "30"), { recursive: true });
+  // Same canonical name with a new BoxLite id and PID tree.
+  const healed = join(f.data, "boxlite", "boxes", "helpernew");
+  await fs.mkdir(healed);
+  await fs.writeFile(join(healed, "shim.pid"), "40\n900\n");
+  f.box
+    .prepare("INSERT INTO box_config VALUES(?,?)")
+    .run("helpernew", f.prefix + "auth-helper");
+  f.box.exec("INSERT INTO box_state VALUES('helpernew','running',40)");
+  await f.processRow(40, "bwrap", 1, process.getuid(), "S", "900");
+  await f.processRow(41, "bwrap", 40, process.getuid(), "S", "900");
+  await f.processRow(
+    42,
+    "libkrun VM",
+    41,
+    process.getuid(),
+    "S",
+    "900",
+    join(healed, "bin", "boxlite-shim"),
+  );
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
+  // Healing replaces the old helper; leaving it beside the new one is busy.
+  await fs.mkdir(join(f.data, "boxlite", "boxes", "helperbox"));
+  f.box
+    .prepare("INSERT INTO box_config VALUES(?,?)")
+    .run("helperbox", f.prefix + "auth-helper");
+  f.box.exec("INSERT INTO box_state VALUES('helperbox','stopped',NULL)");
+  assert.throws(f.probe, /proof unavailable/);
+});
+
+test("the auth helper never enters sandboxes or the reservation ledger: either registration keeps the release busy", async (t) => {
+  const f = await stoppedReservationFixture(t);
+  for (const change of [
+    "INSERT INTO sandboxes VALUES('auth-helper','running','boxlite','helperbox')",
+    "INSERT INTO sandboxes VALUES('auth-helper','stopped','boxlite','helperbox')",
+    "INSERT INTO resource_allocations VALUES('allocation-helper','auth-helper','local','confirmed',NULL)",
+    "INSERT INTO sandboxes VALUES('auth-helper','stopped','boxlite','helperbox'); INSERT INTO resource_allocations VALUES('allocation-helper','auth-helper','local','confirmed',NULL)",
+  ]) {
+    f.platform.exec(change);
+    assert.throws(f.probe, /proof unavailable/, change);
+    f.platform.exec(
+      "DELETE FROM resource_allocations WHERE sandbox_id='auth-helper'; DELETE FROM sandboxes WHERE id='auth-helper'",
+    );
+  }
+  assert.deepEqual(f.probe(), { stoppedReservations: 1 });
 });
 
 test("real maintenance file preserves manual markers and operator replacements", async (t) => {
