@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { mkdirSync, statSync, existsSync } from "node:fs";
+import { delegateCgroupControllers, reportCgroupDelegation } from "./api-cgroup.mjs";
 if (process.platform !== "linux" || process.arch !== "arm64" || process.versions.node.split(".")[0] !== "22") throw new Error("API image requires Linux ARM64 Node22");
 process.umask(0o077);
 mkdirSync("/data", { recursive: true, mode: 0o700 });
@@ -7,4 +8,7 @@ if (!statSync("/data").isDirectory()) throw new Error("Missing API data volume")
 if (existsSync("/run/secrets/runtime.env")) process.loadEnvFile("/run/secrets/runtime.env");
 process.chdir("/app");
 process.env.MIGRATIONS_DIR = "/app/drizzle";
+// Before BoxLite creates its first box cgroup. Fail-open: a failure is one stderr line;
+// API_CGROUP_DELEGATION=off in runtime.env (loaded above) skips it on the next start.
+reportCgroupDelegation(await delegateCgroupControllers());
 createRequire("/app/package.json")("/app/apps/api/dist/main.js");

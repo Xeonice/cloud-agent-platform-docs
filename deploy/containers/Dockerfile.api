@@ -32,6 +32,7 @@ COPY --from=builder /app/packages ./packages
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/package.json ./package.json
 COPY api-entrypoint.mjs /opt/agent-platform/api-entrypoint.mjs
+COPY api-cgroup.mjs /opt/agent-platform/api-cgroup.mjs
 RUN node -e "const D=require('better-sqlite3');const d=new D(':memory:');d.close();require('node:module').createRequire('/app/packages/modules/sandbox/package.json')('@boxlite-ai/boxlite')"
 ARG APP_COMMIT
 ARG APP_BUILT_AT

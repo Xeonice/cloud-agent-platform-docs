@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 export const CONTAINER_INPUTS = Object.freeze([
   "Dockerfile.api",
   "api-entrypoint.mjs",
+  "api-cgroup.mjs",
   "boxlite-proof/prepare-runtime.py",
   "boxlite-proof/materialize-certs.py",
 ]);
