@@ -645,9 +645,11 @@ export const NATIVE_ADDON_PROBE =
   "const D=require('better-sqlite3');const d=new D(':memory:');if(d.prepare('SELECT 7 AS value').get().value!==7)throw Error('SQLite failed');d.close();const B=require('node:module').createRequire('/app/packages/modules/sandbox/package.json')('@boxlite-ai/boxlite');if(typeof B.JsBoxlite!=='function'||typeof B.getNativeModule().JsBoxlite!=='function')throw Error('BoxLite native binding failed');console.log('native-probe-passed')";
 
 // Run only in a disposable candidate container with /data mounted read-only.
-// SQLite's backup API includes committed WAL pages; copying platform.db alone
-// would silently validate an older database. Migration code touches only /tmp.
-export async function migrationReviewProbe() {
+// Live review uses SQLite's backup API to include committed WAL pages. Only
+// the controller's verified stopped/fully-backed-up phase may copy a sealed
+// database: opening a WAL-mode DB on a read-only mount without sidecars asks
+// SQLite to create them and fails. All migration writes remain under /tmp.
+export async function migrationReviewProbe(sealed = false) {
   const fs = require("node:fs"),
     crypto = require("node:crypto"),
     D = require("better-sqlite3"),
@@ -665,11 +667,43 @@ export async function migrationReviewProbe() {
     fs.realpathSync(path) !== path
   )
     throw Error("Unsafe migration source database");
-  const source = new D(path, { readonly: true, fileMustExist: true });
-  try {
-    await source.backup(copy);
-  } finally {
-    source.close();
+  if (typeof sealed !== "boolean")
+    throw Error("Invalid migration snapshot mode");
+  if (sealed) {
+    const noSidecars = () => {
+      for (const suffix of ["-wal", "-shm"]) {
+        try {
+          fs.lstatSync(path + suffix);
+        } catch (error) {
+          if (error.code === "ENOENT") continue;
+          throw error;
+        }
+        throw Error("Stopped migration database is not sealed");
+      }
+    };
+    noSidecars();
+    fs.copyFileSync(path, copy, fs.constants.COPYFILE_EXCL);
+    noSidecars();
+    const after = fs.lstatSync(path);
+    if (
+      !after.isFile() ||
+      after.isSymbolicLink() ||
+      after.nlink !== 1 ||
+      fs.realpathSync(path) !== path ||
+      ["dev", "ino", "size", "mtimeMs", "ctimeMs"].some(
+        (key) => after[key] !== stat[key],
+      )
+    )
+      throw Error("Sealed migration source changed during copy");
+  } else {
+    // Never fall back to copying the live main file if the SQLite snapshot
+    // fails: committed WAL pages could otherwise be silently omitted.
+    const source = new D(path, { readonly: true, fileMustExist: true });
+    try {
+      await source.backup(copy);
+    } finally {
+      source.close();
+    }
   }
   const databaseSha256 = crypto
       .createHash("sha256")
@@ -756,12 +790,13 @@ export async function migrationReviewProbe() {
       preservedTables: counts.length,
       appliedMigrations: applied.length,
       appendedMigrations: migrations.length - applied.length,
+      snapshot: sealed ? "sealed-copy" : "sqlite-backup",
     };
   } finally {
     db.close();
   }
 }
-export const MIGRATION_REVIEW_PROBE = `(${migrationReviewProbe.toString()})().then(r=>console.log(JSON.stringify(r)),()=>{console.error('Migration copy validation failed');process.exitCode=1;})`;
+export const MIGRATION_REVIEW_PROBE = `(${migrationReviewProbe.toString()})(process.argv[1] === 'sealed').then(r=>console.log(JSON.stringify(r)),()=>{console.error('Migration copy validation failed');process.exitCode=1;})`;
 
 export function migrationReviewMatches(
   permit,
@@ -783,6 +818,7 @@ export function migrationReviewMatches(
     permit.previousRootSha === previous.rootSha &&
     permit.previousSchemaFingerprint === previous.schemaFingerprint &&
     permit.probe?.state === "migration-probe-passed" &&
+    permit.probe.snapshot === "sqlite-backup" &&
     /^[a-f0-9]{64}$/.test(permit.probe.databaseSha256 ?? "") &&
     Number.isSafeInteger(permit.probe.preservedTables) &&
     permit.probe.preservedTables > 0 &&
@@ -1371,7 +1407,7 @@ export function createDeployer(options = {}) {
       );
     return { request, release };
   }
-  async function probeMigration(release) {
+  async function probeMigration(release, { sealed = false } = {}) {
     const result = JSON.parse(
       await d(
         [
@@ -1386,12 +1422,14 @@ export function createDeployer(options = {}) {
           release.imageId,
           "-e",
           MIGRATION_REVIEW_PROBE,
+          ...(sealed ? ["sealed"] : []),
         ],
         { quiet: true },
       ),
     );
     if (
       result.state !== "migration-probe-passed" ||
+      result.snapshot !== (sealed ? "sealed-copy" : "sqlite-backup") ||
       !/^[a-f0-9]{64}$/.test(result.databaseSha256 ?? "") ||
       !Number.isSafeInteger(result.preservedTables) ||
       result.preservedTables < 1 ||
@@ -1621,10 +1659,20 @@ export function createDeployer(options = {}) {
         });
         // Rehearse against the final stopped database only after its complete
         // backup is verified. The production volume is still read-only here.
-        const migrationProbe = migrationReview
-          ? await probeMigration(release)
-          : undefined;
-        await exactContainer({ id: old.Id, imageId: old.Image });
+        let migrationProbe;
+        if (migrationReview) {
+          const sealedOld = await exactContainer(original);
+          if (sealedOld.State?.Running !== false)
+            throw Error(
+              "Original API restarted before sealed migration validation",
+            );
+          await barrier("check", held, old.Image);
+          migrationProbe = await probeMigration(release, { sealed: true });
+          await barrier("check", held, old.Image);
+        }
+        const finalOld = await exactContainer(original);
+        if (finalOld.State?.Running !== false)
+          throw Error("Original API restarted during post-stop preparation");
         await d(["rm", old.Id]);
         const id = (await d(runtimeArguments(release.imageId, release))).trim();
         replacement = { id, imageId: release.imageId };
@@ -1728,8 +1776,9 @@ export function createDeployer(options = {}) {
             imageId: old.Image,
             failedImageId: release.imageId,
             backup,
-            reason:
-              "Replacement did not complete readiness; original release restored",
+            reason: replacement
+              ? "Replacement publication failed; verified backup and original release restored"
+              : "Post-stop preparation failed; unchanged original release restarted",
           };
           await atomic(join(root, "runtime-state.json"), result);
           return result;
