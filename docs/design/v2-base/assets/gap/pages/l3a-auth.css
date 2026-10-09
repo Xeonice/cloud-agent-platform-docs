@@ -1,0 +1,180 @@
+/*
+ * 凭证组 A（crd-a）· 页面局部样式——F-AUTH-PANEL（Agent 登录面板，三处共用）、F-CRD-MODE（切换生效方式）、F-ACC-UNLOCK（访问口令门）
+ * 用在：f-auth-panel-01…09、f-crd-mode-01、f-acc-unlock-01…03（gap/drafts/）
+ *
+ * 样式链（顺序固定）：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → assets/pages/l3a-auth.css（本文件）
+ * 约束：只用 tokens-v2 的变量（颜色一律 token，亮暗两套自动切换）；字阶只用 14 / 13 / 12（标题 14 / 20 / 24），禁 11、10；不改 pilot/assets/*-v2.css；
+ *       能用 components-v2 / gap-shared 表达的不在这里重写（对话框、设置卡、选项行、标签页、字段、.note、.toast、.link 都用共享类）。
+ * 需要上提的件写在 notes/crd-a.md「shared_css_requests」：§1 新建任务弹层的四个排版类（与 F-LCH-FORM 共用）、§2 登录面板整件、§4 口令门。
+ *
+ *   §1 新建任务弹层里的排版（原型 proto.css 的 .proto-dlg__lead / .proto-fieldset / .proto-choice / .proto-gate / .proto-counter 同值移植，
+ *      F-LCH-FORM 上提共享类之前先放这里；W2 一致性：类名与值对齐 l2a-lch.css 的 .nt-agents / .nt-choice / .nt-meta / .nt-counter，
+ *      本组只多 .nt-gate / .nt-auth 两个闸门件）
+ *   §2 登录面板 .auth-panel（三处共用：新建任务闸门、凭证页卡内、初始化向导第 4 步）：外壳 · 设备码 · 授权码 · API Key · 已连上
+ *   §3 凭证页卡内的面板位（设置卡最后一行）
+ *   §4 访问口令门 .gate（全屏、中性底、不挂工作台；DR-28）
+ *   §5 宿主机终端示意 .host-shot（首次启动日志里的口令；不是产品界面）
+ *   §6 视口定位（对话框正文初始停在登录面板那一组；与 crd-b §1 同一写法）
+ *   §7 窄屏（< 640）与高对比
+ */
+
+/* ==========================================================================
+   §1 新建任务弹层里的排版（F-LCH-FORM 的容器；本组只画到 Agent 一组为止）
+   值与原型 pilot/proto/proto.css「对话框里的几处排版」逐条相同，保证与原型里已接好的新建任务弹层逐像素同源
+   ========================================================================== */
+.nt-lead { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.nt-lead strong { font-weight: var(--weight-medium); color: var(--foreground); }
+.nt-agents { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.nt-agents > legend { padding: 0; margin-bottom: 8px; font: var(--text-label-14-strong); color: var(--foreground); }
+.nt-choice { display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; min-height: 20px; cursor: pointer; font: var(--text-label-14); color: var(--foreground); }
+.nt-choice__id { font: var(--text-mono-13); }
+.nt-choice__desc { color: var(--foreground-muted); }
+/* 闸门（折叠态）：一句 13 次要灰 + [配置凭证]；与原型 .proto-gate 同值 */
+.nt-gate { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+/* 面板展开后：面板 + [收起]（面板占满 Agent 一组的宽度） */
+.nt-auth { display: flex; flex-direction: column; align-items: stretch; gap: 8px; min-width: 0; margin-top: 4px; }
+.nt-auth > .auth-collapse { align-self: flex-start; }
+.nt-meta { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; min-height: 18px; }
+/* 左边一句说明（.field__help：13 次要灰、不带图标、折行）——深链刷新后的「刷新后指令未保留，请重新输入」与重新发起的「原来的任务指令没有带过来…」同一写法
+   （W2 统一：实现 NewSandboxPanel.view.tsx:416-423 是一行灰字、无图标）；有说明时贴顶对齐，计数跟第一行 */
+.nt-meta:has(> .field__help) { align-items: flex-start; gap: 16px; }
+.nt-meta > .field__help { flex: 1; min-width: 0; }
+.nt-meta:has(> .field__help) > .nt-counter { margin-top: 1px; }
+.nt-counter { flex: none; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ==========================================================================
+   §2 登录面板 .auth-panel（AuthGateContainer 的 v2 外观）
+   材质：嵌入区底（--surface-inset）、r8、不加环——宿主（对话框 / 设置卡）已经是一层描边，一个表面一层描边（lint E5，foundation §3.12「卡内分组」）
+   结构：头（标题 + 一次性说明）→ 方式标签页（帐号登录 / API Key）→ 取舍说明 → 分支内容（slot）→ 页脚（[管理所有凭证]，只在新建任务闸门里）
+   字号：说明句 14 次要灰（面板是这一屏的主角，说明不降到 13）；字段帮助、等待中、按钮下的附注 13；错误 13 红（比 .field__error 的 12 多一档，长句好读）
+   ========================================================================== */
+.auth-panel { --focus-gap: var(--surface-inset); display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 16px; border-radius: var(--radius-lg); background: var(--surface-inset); color: var(--foreground); text-align: left; }
+.auth-panel__head { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.auth-panel__title { font: var(--text-heading-14); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.auth-panel__notice { font: var(--text-copy-14); color: var(--foreground-muted); }
+.auth-panel .tabs { margin-top: -4px; }
+.auth-panel__hint { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.auth-panel__slot { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.auth-panel__foot { display: flex; align-items: center; padding-top: 12px; border-top: 1px solid var(--border); font: var(--text-label-14); }
+/* [收起]：tertiary 28，挂在面板下面、与面板左缘对齐 */
+.auth-collapse { margin-left: -2px; }
+
+/* 一步 = 主动作 / 标签 + 一句附注（13 次要灰） */
+.auth-step { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.auth-help { font: var(--text-copy-13); color: var(--foreground-muted); }
+.auth-label { font: var(--text-copy-14); color: var(--foreground-muted); }
+.auth-label strong { font-weight: var(--weight-medium); color: var(--foreground); }
+
+/* 空闲态（FE1 / DR-32）：[开始帐号登录] 撑满 + 两句说明 */
+.auth-idle { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+/* 设备码（Codex，oauth-device）：码是标识符 → 等宽；24/32、字距 .12em、可全选；嵌入区上的 fill 底、无环 */
+.auth-code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.auth-code { display: inline-block; padding: 4px 12px; border-radius: var(--radius-md); background: var(--fill); color: var(--foreground); font: 500 var(--fs-24)/var(--lh-24) var(--font-mono); letter-spacing: 0.12em; user-select: all; white-space: nowrap; }
+/* 倒计时：14 tabular、14 计时图标；≤ 5 分钟转警示色，到期 / 已停止等待转错误色（DeviceCodeAuth.view.tsx:95-100） */
+.auth-countdown { --tone-fg: var(--foreground-muted); display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font: var(--text-label-14); color: var(--tone-fg); font-variant-numeric: tabular-nums; }
+.auth-countdown > .icon { width: var(--icon-14); height: var(--icon-14); }
+.auth-countdown--warn { --tone-fg: var(--status-warn-fg); }
+.auth-countdown--fail { --tone-fg: var(--status-fail-fg); }
+/* 等待中：转圈 14 + 13 次要灰（role="status"） */
+.auth-status { display: inline-flex; align-items: center; gap: 6px; font: var(--text-copy-13); color: var(--foreground-muted); }
+.auth-status > .icon { width: var(--icon-14); height: var(--icon-14); }
+
+/* 授权链接（Claude Code，setup-token）：等浏览器把授权送回的一句（沙漏 14 + 14 次要灰，重点句正文色） */
+.auth-link { align-self: flex-start; font: var(--text-label-14); }
+.auth-wait { display: flex; align-items: flex-start; gap: 6px; font: var(--text-copy-14); color: var(--foreground-muted); }
+.auth-wait > .icon { flex: none; width: var(--icon-14); height: var(--icon-14); margin-top: 3px; }
+.auth-wait strong { font-weight: var(--weight-medium); color: var(--foreground); }
+/* 粘贴框 + [展开查看]：一行 */
+.auth-input-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.auth-input-row > .input { flex: 1 1 0%; min-width: 0; }
+
+/* 字段级的红字（授权码被拒、API Key 前缀不像）：13/18 红 + 14 圆形感叹号，长句折行时图标对齐第一行 */
+.auth-field-msg { display: flex; align-items: flex-start; gap: 6px; font: var(--text-copy-13); color: var(--status-fail-fg); }
+.auth-field-msg > .icon { flex: none; width: var(--icon-14); height: var(--icon-14); margin-top: 2px; }
+
+/* 服务端拒绝（.note.note--fail 里的原因清单）：圆点列表紧跟标题 */
+.auth-reasons { margin-top: 2px; }
+
+/* 已连上（DR-21：停留到看得见再收起；role="status"）：圆勾 16 成功色 + 14/500 */
+.auth-done { display: flex; align-items: center; gap: 8px; min-height: 36px; font: var(--text-label-14-strong); color: var(--foreground); }
+.auth-done > .icon { color: var(--status-ok-fg); }
+.auth-done__meta { font: var(--text-copy-13); font-weight: var(--weight-regular); color: var(--foreground-muted); }
+
+/* 表单（授权码 / API Key）：字段之间 12 */
+.auth-form { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; }
+.auth-form > .btn { align-self: flex-start; }
+
+/* ==========================================================================
+   §3 凭证页卡内的面板位：设置卡（P3）里最后一行——上 1px 线（与选项行同一条分隔线）、左右 24 与选项行对齐、下 24
+   面板在卡里仍是嵌入区底、不加环（卡片已有环）
+   ========================================================================== */
+.auth-slot { display: flex; flex-direction: column; gap: 8px; padding: 16px 24px 24px; border-top: 1px solid var(--border); }
+.auth-slot > .auth-collapse { align-self: flex-start; }
+/* 卡里的面板比对话框里宽（688 vs 432）：分支内容封顶 480（与 P5 出网代理输入框同档），整宽的主按钮与输入框不再横贯整张卡；说明句与标签页不封顶 */
+.auth-slot .auth-panel__slot { max-width: 480px; }
+
+/* ==========================================================================
+   §4 访问口令门 .gate（全屏、不透明的中性底；口令门之下不挂工作台——DR-28）
+   版式：画框正中一列——品牌行（与侧栏实例菜单同一个 Logo 与名称）→ 口令卡（表面 + raised 阴影、r12、宽 400）
+   口令卡本身是模态对话框（role="dialog" aria-modal="true" aria-label="访问口令"，照 v1 / 现状）
+   ========================================================================== */
+/* 竖直居中用首尾子元素的 auto 外边距，不用 justify-content: center：内容比视口高时（窄宽 / 矮视口、三态拼版折行）
+   center 会把顶部推到滚动区外、滚不回来（品牌行与第一张卡被切掉）；auto 外边距在溢出时归零，内容从顶部开始、可滚动 */
+.gate { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 24px; padding: 48px 24px 96px; overflow: auto; background: var(--canvas); }
+.gate > :first-child { margin-top: auto; }
+.gate > :last-child { margin-bottom: auto; }
+.gate__brand { display: inline-flex; align-items: center; gap: 8px; color: var(--foreground); }
+.gate__card { --focus-gap: var(--surface); display: flex; flex-direction: column; gap: 24px; width: 400px; max-width: 100%; padding: 32px; border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-raised); }
+.gate__head { display: flex; flex-direction: column; gap: 8px; }
+.gate__title { font: var(--text-heading-24); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.gate__desc { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.gate__form { display: flex; flex-direction: column; gap: 16px; margin: 0; }
+.gate__form .form-note .code { white-space: nowrap; }
+/* 门上的结论句（口令不对 = 圆叉 / 锁定 = 锁）：14 正文色 + 16 图标带错误色（P6：图标带色调、句子正文色），role="alert"；紧跟在输入框下面 */
+.gate__msg { --tone-fg: var(--status-fail-fg); display: flex; align-items: flex-start; gap: 8px; font: var(--text-copy-14); color: var(--foreground); }
+.gate__msg > .icon { flex: none; margin-top: 2px; color: var(--tone-fg); }
+/* 三态拼版（f-acc-unlock-03）：同一张卡的三个状态并排，各带一枚稿注；产品里同一时刻只有一张卡 */
+.gate__variants { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 32px 24px; width: 100%; max-width: 1296px; }
+.gate__variant { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 400px; max-width: 100%; }
+.gate__variant > .gate__card { width: 100%; }
+
+/* ==========================================================================
+   §5 宿主机终端示意 .host-shot（f-acc-unlock-01；不是产品界面）
+   一句说明（14 次要灰 + ⓘ）→ 一扇「终端窗口」：标题栏随主题（表面 + 下 1px 线），画布恒黑（.term 原样：Geist Mono 14/18）
+   ========================================================================== */
+.host-shot { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 32px 48px; overflow: auto; background: var(--canvas); }
+.host-shot__caption { display: flex; align-items: flex-start; gap: 8px; max-width: 960px; font: var(--text-copy-14); color: var(--foreground-muted); }
+.host-shot__caption > .icon { flex: none; margin-top: 2px; }
+.host-term { display: flex; flex-direction: column; flex: 1; min-height: 480px; min-width: 0; border-radius: var(--radius-xl); background: var(--term-bg); box-shadow: var(--shadow-raised); overflow: hidden; }
+.host-term__bar { display: flex; align-items: center; gap: 8px; flex: none; height: var(--shell-termbar-h); padding: 0 16px; background: var(--surface); border-bottom: 1px solid var(--border); font: var(--text-label-14); color: var(--foreground-muted); }
+.host-term__bar > .icon { width: var(--icon-14); height: var(--icon-14); }
+.host-term > .term { overflow: auto; }
+
+/* ==========================================================================
+   §6 视口定位（与 crd-b §1 同一写法：CSS scroll-initial-target，Chromium 133+；不支持时照常停在顶部，内容不变）
+   新建任务弹层的正文是滚动容器（max-height 90vh）；登录面板展开后整组比可视区高。稿件让正文初始停在「Agent · 必选」那一组，
+   模拟实现里「面板展开时滚进视野」（REQ-AUTH-001 AC .4）。对话框头与页脚条固定，不随正文滚动
+   ========================================================================== */
+.nt-scroll-here { scroll-initial-target: nearest; }
+.dialog__body:has(.nt-scroll-here) { scroll-padding-top: 16px; }
+
+/* ==========================================================================
+   §7 窄屏（< 640；Q-DS-18 A：390 只保证不溢出、不重叠）与高对比
+   ========================================================================== */
+@media (max-width: 639px) {
+  .auth-panel { padding: 12px; }
+  .auth-slot { padding: 12px 16px 16px; }
+  .auth-input-row { flex-wrap: wrap; }
+  .auth-input-row > .input { flex-basis: 100%; }
+  .auth-code { font-size: var(--fs-20); line-height: var(--lh-20); }
+  .gate { padding: 24px 16px 48px; }
+  .gate__card { padding: 24px 16px; }
+  .host-shot { padding: 16px; }
+  .host-term { min-height: 360px; }
+}
+@media (forced-colors: active) {
+  .auth-panel, .gate__card, .host-term { outline: 1px solid CanvasText; outline-offset: -1px; }
+  .auth-code { outline: 1px solid CanvasText; }
+  .auth-panel__foot { border-top-color: CanvasText; }
+}

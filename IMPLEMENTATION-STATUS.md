@@ -1,10 +1,12 @@
 # 当前实现与验收入口
 
-当前产品规格包含 247 个 REQ、1016 个 AC，覆盖工作台、项目、任务、Agent/Git 凭证、访问口令、镜像、系统诊断/审计、自动化和初始化。稳定编号与 Given/When/Then 保存在 [领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见 [产品裁决](./docs/product/requirements/decisions.md)。
+当前产品规格包含 250 个 REQ、1036 个 AC，覆盖工作台、项目、任务、Agent/Git 凭证、访问口令、镜像、系统诊断/审计、自动化和初始化。稳定编号与 Given/When/Then 保存在 [领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见 [产品裁决](./docs/product/requirements/decisions.md)。
 
 ## 当前实现
 
 前端以共享 AppFrame 承载工作台与设置页，任务、项目与管理流程采用同一组实际查询和操作。后端提供 REST/MCP、终端 WebSocket、诊断 SSE、SQLite 事务和 BoxLite 生命周期。接口与前端类型从同源契约生成，读取失败不伪装为空或健康，取消与失败保留可恢复状态。
+
+任务发起的项目、分支与镜像采用统一搜索单选控件；镜像支持注册别名、独立编辑和按别名查找，任务继续提交真实镜像坐标。代码、迁移与本地验收见[任务选择与镜像别名记录](./docs/product/changes/2026-10-09-任务选择与镜像别名.md#8-本轮交付检查)，该记录不代表已发布到远端。
 
 正式构建与发布由本地 Jenkins 管理，发布来源固定为主仓及 API/Web 三仓 `main` 的精确 SHA；PR 构建用于验收。生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。部署、运行与维护见 [运维入口](./docs/ops/README.md)。本页不保存容易过期的 PID、构建号或部署快照。
 

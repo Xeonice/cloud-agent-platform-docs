@@ -11,6 +11,8 @@
 
 当前产品行为见 [领域需求索引](./product/requirements/README.md)，REQ/AC 保持稳定编号；适用范围见 [产品裁决](./product/requirements/decisions.md)。当前实现和执行入口见 [主仓状态](../IMPLEMENTATION-STATUS.md)。
 
+本轮需求设计见 [任务选择搜索与镜像别名变更及实施验收](./product/changes/2026-10-09-任务选择与镜像别名.md)，配套 [交互设计稿](./design/task-search-image-alias.html)。业务实现状态与 PRD／原型分开记录。
+
 运维与发布见 [运维入口](./ops/README.md)；本地开发与贡献流程见 [CONTRIBUTING](../CONTRIBUTING.md)。
 
 ## 目录结构
@@ -25,6 +27,7 @@ docs/
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
 │   ├── requirements/        #   当前 11 域 REQ/AC 与产品裁决
+│   ├── changes/             #   需求变更说明与前后端/测试实施计划
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
 │   ├── 20-核心使用链路.md     #   主链路 + §8 页面跳转总图（跨页面导航唯一权威）
 │   ├── 21-页面信息架构与交互.md  # 页面层总览 + 逐页索引
@@ -38,6 +41,7 @@ docs/
 │       ├── 21-6-项目管理.md   # Project 容器：切换器/创建/删除/工作区隔离策略
 │       ├── 21-7-自动化.md     # 定时唤起无头 Task（v1.1）：调度/边界决策/运行历史
 │       └── 21-8-部署与初始化.md # 首启初始化与访问口令（产品页面，不是运维文档）
+├── design/                  #   可直接打开的离线交互设计稿
 ├── backend/                 # → 后端仓库 agent-platform-api
 │   ├── 17-后端总纲.md        #   后端统合入口，先读这篇
 │   ├── 01-后端目录结构与DDD分层.md

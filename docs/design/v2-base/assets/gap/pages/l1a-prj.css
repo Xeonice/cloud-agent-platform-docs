@@ -1,0 +1,51 @@
+/*
+ * 补全稿 · 项目组 prj-a 的局部样式（F-PRJ-CREATE 新建项目、F-PRJ-CLONE 克隆中 / 克隆失败的项目；稿件 f-prj-create-01…08、f-prj-clone-01…07）
+ * 样式链：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → assets/pages/l1a-prj.css（本文件）
+ * 约束：只用 tokens-v2 的变量（没有字面颜色），字阶 14 / 13 / 12，没有 11 / 10；不改 pilot/assets/*-v2.css 与 gap-shared.css。
+ * 下面六段都是 v2 组件库里还没有的「小件」，在 notes/prj-a.md「shared_css_requests」里逐条写了要不要上提、为什么：
+ *   §1 对话框里的表单：<form class="dialog__form"> 包住 .dialog__body + .dialog__footer（提交按钮在页脚条里，仍属于这张表单）
+ *   §2 单选组「来源」：fieldset.prj-source + label.prj-radio（与原型「新建任务」弹层的 .proto-fieldset / .proto-choice 同一写法，proto.css L96-100）
+ *   §3 对话框里换视图（克隆进度 / 结果）：.dialog__body 里的 .empty 去掉主区档的大内边距，结构与主区同一个结果卡
+ *   §4 树：没有内容可展开的组（克隆中 / 克隆失败且没有任务）折叠箭头 aria-disabled 的样子——W4 已上提 gap-shared §11（评审 R2-02），本文件不再重复
+ *   §5 原因提示（tooltip）：尖角水平位置可调——贴在顶栏右端的按钮下时，提示框得整体左移，尖角仍要对着按钮（原型 proto.css L44 用 --arrow-x 同法）
+ *   §6 树上打开的项目菜单：窄屏（< 640）不画（触发器所在的树不渲染）
+ *   §7 图标：项目菜单「改为空项目」的 folder-minus（W4 评审 R2-12：同一菜单里的项都带图标，文字列对齐；原型 projectMenuItems 同步）
+ */
+
+/* §1 对话框里的表单 ------------------------------------------------------------------
+   .dialog 是纵向 flex（components-v2 §13）；表单作为它的子元素也得是纵向 flex，正文才能在 90vh 里内部滚动、页脚条贴底 */
+.dialog__form { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+
+/* §2 单选组「来源」 --------------------------------------------------------------------
+   组名用 legend（读屏念「来源，单选组」），字重同 .field__label；两项竖排，单选 16 + 间距 10 + 14 正文（不加选项卡片：两个词的单选不值得一张带环的卡，
+   放进对话框还会变成两层描边，lint E5） */
+.prj-source { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.prj-source > legend { padding: 0; margin-bottom: 8px; font: var(--text-label-14-strong); color: var(--foreground); }
+.prj-radio { display: flex; align-items: center; gap: 10px; width: fit-content; font: var(--text-label-14); color: var(--foreground); cursor: pointer; }
+
+/* §3 对话框里换视图 ------------------------------------------------------------------
+   新建项目弹层提交后同一个弹层换成「正在克隆 / 克隆失败 / 项目可用了」（现状 CloneProgress.view.tsx 同时用于弹层与主区）：
+   弹层里与主区用同一个结果卡结构（图标框 → 标题 → 主语行 → 说明 → 进度 / 动作 → 附注），只把主区档的上下 48 内边距收掉 */
+.dialog__body > .empty { padding: 8px 0 4px; }
+.dialog__body > .empty > .empty__icon { margin-bottom: 12px; }
+
+/* §4 树：折叠箭头不可用 ----------------------------------------------------------------
+   W4（评审 R2-02）：规则已上提 gap-shared §11——工作台各组的稿都要这一画法，只挂在本文件时 wb / aut / lch / sbx / crd 组的稿画不出来 */
+
+/* §5 原因提示：尖角可调 ---------------------------------------------------------------
+   「新任务」在顶栏右端，提示框（最大宽 250）居中放会越出画框，只能整体左移贴右；--prj-tip-arrow-x 让尖角仍对着按钮中心。
+   .prj-tip--nt = 顶栏「新任务」下的那一个：按钮中心离画框右缘 107（顶栏 ≥ 560 宽，带文字）/ 68（< 560，只留图标；画框 < 608 时）。
+   W4（评审 R2-26）以原型为准：宽度跟内容（不再固定 232——短句右边多出 12 的空白），右缘离视口 8（原型 placeFloating「夹在视口内 8」），
+   尖角从右边量：离提示框右缘 107 − 8 = 99 / 68 − 8 = 60（1440 / 1024 / 390 实测，notes/prj-a.md §6） */
+.tooltip.prj-tip { white-space: normal; }
+.tooltip.prj-tip::after { left: var(--prj-tip-arrow-x, 50%); }
+.tooltip.prj-tip--nt { --prj-tip-arrow-r: 99px; }
+.tooltip.prj-tip--nt::after { left: auto; right: var(--prj-tip-arrow-r); transform: translateX(50%) rotate(45deg); }
+@media (max-width: 607px) { .tooltip.prj-tip--nt { --prj-tip-arrow-r: 60px; } }
+
+/* §6 树上打开的项目菜单：窄屏（< 640）侧栏收成图标轨、树不渲染（foundation §1.3），触发器不在了，菜单也不画
+   （那时项目菜单从顶栏「⋯ 更多操作」进，原型 buildMenu('more') 同一组菜单项） */
+@media (max-width: 639px) { .frame > .menu.prj-tree-menu { display: none; } }
+
+/* §7 图标（tools/icon.cjs 生成，同 pilot build-icons 口径）：项目菜单「改为空项目」。「取消克隆（保留项目）」用共享的 i-circle-stop、「重试克隆」用 i-refresh-cw */
+.i-folder-minus { --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 13h6' vector-effect='non-scaling-stroke'/%3E%3Cpath d='M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E"); } /* lucide folder-minus（tools/icon.cjs，同 pilot build-icons 口径） */

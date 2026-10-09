@@ -12,6 +12,16 @@
 
 ---
 
+## [0.3.8] - 2026-10-10
+
+业务改动：[api#49](https://github.com/Xeonice/agent-platform-api/pull/49)、[api#50](https://github.com/Xeonice/agent-platform-api/pull/50)、[web#46](https://github.com/Xeonice/agent-platform-web/pull/46)。
+
+- 新建任务的项目、分支、镜像统一支持输入搜索，保留默认项、禁用原因、输入法与弹层焦点规则；任务继续提交真实项目 ID、分支和镜像坐标。
+- 镜像支持注册别名、卡片独立编辑和清除，所有版本共享别名；管理页与任务选择可按别名、名称、坐标和 tag 查找。新增 nullable 数据库迁移，注册不能隐式覆盖已有别名，混合修改保持原子性，实际改名记录独立审计。
+- PRD、原 v2 设计稿增量、前后端设计与验收映射同步。API 376 条、Web 149 条、Storybook 557 条与真实跨仓 3 个场景通过。
+- 发布工具补齐受控数据库迁移审阅：只读复制 SQLite，在副本运行候选版本迁移并验证数据；放行许可绑定旧容器、镜像、API 与主仓来源及精确 CI 构建，部署保留空闲检查、维护屏障、完整备份和失败恢复。
+- 运维注意：含迁移版本先停用统一发布；主仓合并后升级 Jenkins agent，再按[发版手册](./docs/ops/发版手册.md) §8 完成指定构建的迁移审阅与部署，随后恢复统一发布。
+
 ## [0.3.7] - 2026-10-09
 
 主仓改动：[#65](https://github.com/Xeonice/cloud-agent-platform-docs/pull/65)。

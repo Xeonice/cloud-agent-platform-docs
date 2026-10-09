@@ -1,0 +1,382 @@
+/*
+ * 补全稿 · 共享件（W0）——gap/drafts 下全部 f-* 稿共用，样张见 ../f-shared-components.html，类名速查与 HTML 片段见 ../README.md §5
+ *
+ * 样式链（顺序固定）：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css（本文件）→ assets/pages/<子组>.css
+ * 约束：只用 tokens-v2 的变量（颜色一律 token，亮暗两套由 token 自动切换；尺寸用 token 或 4 的倍数像素）；字阶只用 14 / 13 / 12（标题 16），禁 11、10；
+ *       不改 pilot/assets/*-v2.css；静态稿默认不画焦点（:focus-visible 只在键盘操作时出现，焦点态专用稿才加 .is-focus）；
+ *       动效在截图工具的 reduced motion 下停在终态（components-v2.css §1 的全局规则）。
+ * 定稿后由 assets 维护者上提 components-v2.css（plan.json waves[0].detail.drafts[0].note）。
+ *
+ *   §0 局部变量 · 顶栏 chip 的「浮层已打开」态
+ *   §1 .toast          轻提示（成功 / 失败 / 中性；主区右上角；只确认用户刚做的一步，不报告异步结果——UX-DS-508 / T-31）
+ *   §2 .popover        浮层卡（锚在顶栏 chip / ⓘ 下方 4px；菜单材质 r12；无尖角——尖角只给 tooltip）
+ *   §3 .phases         阶段进度（启动四阶段：完成 / 进行中 + 已等待 / 未开始 / 沿用；卡住时卡内一行 .note--warn）
+ *   §4 .progress       线性进度（有百分比 / 进度未知；克隆与预置镜像下载共用；基于 .meter）
+ *   §5 .empty--outcome 结果卡（proto.css .proto-outcome* 上提：图标框 → 标题 → 主语行 → 说明 → 细节块 → 动作 → 诊断码行）
+ *   §6 .sheet          侧弹层（右侧整高、raised 材质 r12、无遮罩、不抢焦点）
+ *   §7 .banner-stack   横幅栈位（主列顶部、顶栏之下；最多 2 条 +「还有 N 条」）
+ *   §8 .inline-confirm 行内确认（就地换成「一句 + 确认 + 取消」，确认后换成进行中）
+ *   §9 .nt-*           新建任务弹层的字段排版（引导句、Agent 单选组、指令框下的说明与计数；W2 统一三组类名后上提）
+ *   §10 适配：Windows 高对比（forced-colors）与窄屏（< 640）
+ *   §11 W4 评审修正（review R2）上提 / 补的小件：树里不可展开的折叠箭头、中性提示条里的链接、禁用的纯图标次级按钮、长句折行
+ */
+
+/* ==========================================================================
+   §0 局部变量 · 触发器打开态
+   ========================================================================== */
+:root {
+  --gap-toast-z: calc(var(--z-menu) + 5); /* 轻提示：菜单 / 浮层卡 / 侧弹层（60）之上、tooltip（70）之下 */
+  --gap-popover-w: 360px;                  /* 浮层卡宽：仓库地址 https://github.com/acme/web.git 一行放得下 */
+  --gap-sheet-w: var(--w-dialog-sm);       /* 侧弹层宽 448（简报 §5.6；v1 max-w-md） */
+  --gap-sheet-inset: 8px;                  /* 侧弹层离画框上 / 右 / 下边缘 8：整高、浮起、四角 r12 */
+  --gap-phases-w: 400px;                   /* 阶段进度块宽（v1 max-w-sm 384 + 中文阶段说明多一点余量） */
+}
+
+/* 顶栏 chip（分支「main」）打开项目信息浮层时的打开态：与 32 tertiary 按钮的 .is-open 同色（components-v2.css 里 .header .chip 没有这一态） */
+.header .chip.is-open, .header .chip[aria-expanded="true"] { background: var(--fill-active); color: var(--foreground); }
+
+/* ==========================================================================
+   §1 轻提示 .toast（sonner 的 v2 外观：跟随主题、font 继承、菜单材质 r12、宽 356；T-31）
+   位置：.toast-region 放在 <main class="main"> 的最后一个子元素——主区右上角，顶栏与横幅栈之下；工作台主区有终端栏时再让过终端栏
+         （不盖住终端栏右端的「复制 / 清屏 / 字号」——刚点完「复制」的那颗按钮不能被「已复制」盖住）。
+   语义：只确认用户刚做的一步（已复制 / 已保存 / 已删除 / 已开始下载）。异步结果（克隆完成、启动失败、诊断结论）必须在原位用
+         role="status" / "alert" 播报（UX-DS-508），轻提示最多是补充，不能是唯一出口。
+   排序：最新的在最上面；同时最多 3 条（sonner visibleToasts 默认 3）；现状 4 秒后自动消失、悬停暂停、没有关闭按钮（providers.tsx <Toaster richColors position="top-right" />）。
+   ========================================================================== */
+.toast-region {
+  position: absolute; top: 12px; right: 16px; z-index: var(--gap-toast-z);
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(var(--w-toast), calc(100% - 32px));
+  pointer-events: none; /* 区域本身不挡下面的点击；每条轻提示自己接收指针 */
+}
+.main:has(> .termbar) > .toast-region { top: calc(var(--shell-termbar-h) + 12px); }
+.toast-region > .toast { pointer-events: auto; }
+/* 样张 / 文档里不定位时用 */
+.toast-region--static { position: relative; top: auto; right: auto; z-index: auto; width: var(--w-toast); max-width: 100%; }
+
+.toast {
+  --focus-gap: var(--surface);
+  --tone-fg: var(--foreground-muted);
+  display: flex; align-items: flex-start; gap: 10px;
+  min-height: 44px; padding: 12px 16px 12px 14px;
+  border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-menu);
+  color: var(--foreground); font: var(--text-copy-14);
+  animation: gap-toast-in var(--duration-toast) var(--ease-toast);
+}
+.toast > .icon { margin-top: 2px; color: var(--tone-fg); } /* 图标 16 带色调（形状也不同：圆勾 / 圆叉 / ⓘ，不只靠颜色）；文字一律正文色 */
+.toast--ok { --tone-fg: var(--status-ok-fg); }      /* 成功：i-circle-check · role="status" */
+.toast--fail { --tone-fg: var(--status-fail-fg); }  /* 失败：i-circle-x · role="alert" */
+                                                    /* 中性（不写修饰）：i-info 次要灰 · role="status" */
+.toast__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.toast__title { font: var(--text-label-14-strong); color: var(--foreground); overflow-wrap: anywhere; }
+.toast__text { font: var(--text-copy-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+.toast__text:first-child { color: var(--foreground); } /* 只有一句长说明、没有标题时（镜像「检查更新」的提示），说明就是正文 */
+/* 可选的一个动作（现状没有用到；要加先在组内写依据）：tertiary 28，行尾垂直居中 */
+.toast__action { align-self: center; margin: -4px -6px -4px 0; }
+.toast[data-state="closed"] { pointer-events: none; animation: v2-fade-out var(--duration-base) var(--ease-standard) forwards; }
+@keyframes gap-toast-in { from { opacity: 0; transform: translateY(-8px); } }
+
+/* ==========================================================================
+   §2 浮层卡 .popover（项目信息：仓库 / 分支 / 代码体积 / 最后拉取 + [拉取最新代码]；以后别处的 ⓘ 详情也用它）
+   位置：放在 .frame 里（与 .menu 同层），style="top / left 或 right" 贴在触发器下方 4px（顶栏 chip 底边 y 44 → top 48），右缘对齐触发器；
+         触发器写 aria-haspopup="dialog" aria-expanded="true" aria-controls 并加 .is-open。
+   语义：非模态对话框（role="dialog" + aria-labelledby，不写 aria-modal）；打开后焦点进第一个可操作控件，Esc / 点外面关闭并把焦点还给触发器。
+   材质：菜单材质（表面 + --shadow-menu、r12）；没有尖角；卡内不再套带描边的子框（细节用 .kv、分组用页脚条）。
+   ========================================================================== */
+.popover {
+  --focus-gap: var(--surface);
+  position: absolute; z-index: var(--z-menu);
+  display: flex; flex-direction: column;
+  width: var(--gap-popover-w); max-width: calc(100vw - 16px);
+  background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-menu);
+  color: var(--foreground); font: var(--text-copy-14); text-align: left;
+  overflow: hidden;
+  animation: v2-pop var(--duration-base) var(--ease-swift);
+}
+.popover--static { position: relative; z-index: auto; max-width: 100%; animation: none; }
+.popover__head { display: flex; flex-direction: column; gap: 2px; padding: 14px 16px 0; }
+.popover__title { font: var(--text-heading-14); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.popover__desc { font: var(--text-copy-13); color: var(--foreground-muted); }
+.popover__body { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px 16px; }
+.popover .kv { row-gap: 6px; }
+.popover .kv > dd { overflow-wrap: anywhere; }
+/* 结果句（拉取成功 / 失败）：图标 14 带色调 + 13 正文色；动作（[配置 Git 凭证]）跟在句子下面 */
+.popover__msg { --tone-fg: var(--foreground-muted); display: flex; align-items: flex-start; gap: 6px; font: var(--text-copy-13); color: var(--foreground); }
+.popover__msg > .icon { width: var(--icon-14); height: var(--icon-14); margin-top: 2px; color: var(--tone-fg); }
+.popover__msg--ok { --tone-fg: var(--status-ok-fg); }
+.popover__msg--fail { --tone-fg: var(--status-fail-fg); }
+.popover__msg-body { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; } /* 句子 + 一个文字链动作（[配置 Git 凭证]） */
+/* 页脚条：嵌入区底 + 上 1px 线（同对话框页脚）；动作在上、作用范围说明在下 */
+.popover__foot { --focus-gap: var(--surface-inset); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 12px 16px 14px; background: var(--surface-inset); border-top: 1px solid var(--border); }
+.popover__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.popover__note { font: var(--text-copy-13); color: var(--foreground-muted); }
+.popover[data-state="closed"] { pointer-events: none; animation: v2-fade-out var(--duration-base) var(--ease-swift) forwards; }
+
+/* ==========================================================================
+   §3 阶段进度 .phases（启动进度卡的主体：进度条 + 四阶段 + 卡住提示；SandboxStartupProgress.view.tsx 的 v2 外观）
+   用法：放在主区居中块里（.empty.empty--fill.empty--viewport：标题「正在启动：X」+ .empty__subject 副标题 + .phases）；
+         整块 role="status" aria-live="polite"（UX-DS-508 正例）。阶段顺序 = 展示序（初始化 → 拉取镜像 → 准备代码副本 → 启动运行环境），不要按状态机重排。
+   每格写 data-phase-state：done 完成（勾）· active 进行中（实心点脉冲 + 行尾「已等待 m:ss」；拿不到计时锚点就整段不写，不补 0:00）·
+         pending 未开始（空心圆，次要灰）· reused 沿用（从已停止重新启动时的前三格：次要灰的勾 + 行尾「沿用」）。
+   卡住（同一阶段超过 PARAM.STUCK_HINT_S，暂行 300 秒，Q-DS-16 A）：.phases 里最后放一条 .note.note--warn（[取消并删除…] + [继续等待]）；
+         进行中那格的点不变色（只升树点琥珀，v1 g2-03 / Q-DS-16 A 裁决图）。
+   ========================================================================== */
+.phases { display: flex; flex-direction: column; gap: 16px; width: min(var(--gap-phases-w), 100%); min-width: 0; text-align: left; }
+.empty > .phases { margin-top: 24px; }
+.phases > .meter { height: 6px; background: var(--fill-active); }
+.phases .meter__bar { background: var(--foreground); }
+.phases__list { display: flex; flex-direction: column; gap: 2px; }
+.phases__item { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 10px; align-items: center; min-height: 28px; font: var(--text-label-14); color: var(--foreground); }
+.phases__icon { grid-column: 1; justify-self: center; color: var(--foreground); }
+.phases__label { grid-column: 2; min-width: 0; }
+.phases__meta { grid-column: 3; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 进行中这一格下面的阶段说明（instance_progress / install_progress 子文案）：13 次要灰，与阶段名左对齐 */
+.phases__note { grid-column: 2 / 4; margin: 0 0 4px; font: var(--text-copy-13); color: var(--foreground-muted); }
+.phases__item[data-phase-state="active"] > .phases__label { font-weight: var(--weight-medium); }
+.phases__item[data-phase-state="active"] > .phases__icon { animation: v2-pulse 1.6s ease-in-out infinite; } /* 与树里「准备中」灰点同一节奏；reduced motion 停在实心 */
+.phases__item[data-phase-state="pending"] > :is(.phases__icon, .phases__label),
+.phases__item[data-phase-state="reused"] > :is(.phases__icon, .phases__label) { color: var(--foreground-muted); }
+.phases > .note { margin-top: 4px; }
+
+/* ==========================================================================
+   §4 线性进度 .progress（克隆进度、预置镜像下载到本机；进度条 = .meter，6 高、轨道 fill-active、条正文色）
+   结构：.progress__track（条 + 行尾百分比）→ .progress__meta（明细，逐段可缺；右侧「已用 m:ss」）→ 可选 .progress__note（慢提示 / 失败句）。
+   有百分比：.meter 写 role="progressbar" aria-valuenow / min / max，条宽写 style="width: N%"，行尾 .progress__pct 写「N%」。
+   进度未知（--indeterminate）：拿不到分母时不编百分比、不出百分比那一格；条是一段 30% 宽、在轨道里来回滑动的条（动效即「脉冲」），
+         reduced motion 与静态截图里停在正中——不贴左边，不会被读成「已完成 33%」（v1 左侧 1/3 闪烁条在截图里分不出来，需看稿）。
+   失败（--fail）：条停在失败时的位置、改红；下面一句 .progress__note--fail。
+   ========================================================================== */
+.progress { display: flex; flex-direction: column; gap: 6px; width: 100%; min-width: 0; text-align: left; }
+.progress__track { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.progress__track > .meter { flex: 1; min-width: 0; height: 6px; background: var(--fill-active); }
+.progress .meter__bar { background: var(--foreground); transition: width var(--duration-slow) var(--ease-out); }
+.progress__pct { flex: none; min-width: 32px; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; text-align: right; }
+.progress__meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; font: var(--text-label-12); color: var(--foreground-muted); }
+.progress__detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress__elapsed { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.progress__note { --tone-fg: var(--foreground-muted); display: flex; align-items: flex-start; gap: 6px; margin-top: 4px; font: var(--text-copy-13); color: var(--foreground-muted); }
+.progress__note > .icon { width: var(--icon-14); height: var(--icon-14); margin-top: 2px; color: var(--tone-fg); }
+.progress__note--warn { --tone-fg: var(--status-warn-fg); color: var(--foreground); } /* 图标带色调、句子正文色（P6：不整句上色） */
+.progress__note--fail { --tone-fg: var(--status-fail-fg); color: var(--foreground); }
+.progress--indeterminate .meter { position: relative; }
+.progress--indeterminate .meter__bar {
+  position: absolute; top: 0; left: 35%; width: 30%;
+  background: linear-gradient(90deg, transparent, var(--foreground) 25%, var(--foreground) 75%, transparent); /* 两端渐隐：一眼看出是「在走」的一段，不是从 0 起算的值 */
+  animation: gap-progress-slide 1.6s var(--ease-standard) infinite;
+}
+.progress--fail .meter__bar { background: var(--status-fail-solid); }
+@keyframes gap-progress-slide { from { left: -30%; } to { left: 100%; } }
+/* 放在主区居中块里（克隆中项目的主区）时与标题之间留 24 */
+.empty > .progress { width: min(440px, 100%); margin-top: 24px; }
+
+/* ==========================================================================
+   §5 结果卡 .empty--outcome（异常 / 超时 / 已停止 / 克隆失败 / 克隆中 的主区结论；在主区空态 .empty 上补几块）
+   顺序固定：图标框 .empty__icon（--fail / --timeout / --warn / --ok 定色调）→ 标题 .empty__title（失败加 .tone-fail、超时 .tone-timeout）
+         → 主语行 .empty__subject（「任务：X」/ 项目名，14 次要灰）→ 说明 .empty__desc → 细节块 .empty__detail（pre）
+         → 动作 .empty__actions（多个按钮包 .btn-row；附注 .empty__note 跟在按钮行下面）→ 诊断码行 .empty__code（12，码本身等宽；DR-34，码不进正文）。
+   标题与主语行可以包一层 .empty__head 来挂 role="alert" / "status"（直接写在 h2 上会把标题角色盖掉）；标题本身不说原因时（如「克隆失败」），
+   说明句 .empty__desc 也放进这一层，读屏一次念完「标题 · 主语 · 原因」（W4，评审 R2-01；版式不变：上距 4 + gap 4 = 原来的 8）。
+   放在对话框 / 卡片里时细节块自动改嵌入区底、去环（一个表面一层描边，lint E5）。
+   ========================================================================== */
+.empty--outcome .empty__desc { max-width: 440px; }
+.empty__icon--fail { color: var(--status-fail-fg); }
+.empty__icon--timeout { color: var(--status-timeout-fg); }
+.empty__icon--warn { color: var(--status-warn-fg); }
+.empty__icon--ok { color: var(--status-ok-fg); }
+.empty__head { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.empty__subject { margin-top: 4px; font: var(--text-copy-14); color: var(--foreground-muted); }
+.empty__head > .empty__subject { margin-top: 0; }
+.empty__head > .empty__desc { margin-top: 4px; }
+/* 失败细节（v1 pre 块）：画布上用表面底 + 环（.code-block 的嵌入区底在暗色画布上看不出来）；左对齐、自动换行，不出横向滚动 */
+.empty__detail {
+  width: min(448px, 100%); margin: 16px 0 0; padding: 10px 14px;
+  border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-ring);
+  color: var(--foreground); font: var(--text-mono-13); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+:is(.dialog, .card, .popover, .sheet) .empty__detail { background: var(--surface-inset); box-shadow: none; }
+.empty--outcome .empty__actions .btn-row { justify-content: center; }
+.empty__note { max-width: 360px; font: var(--text-label-12); color: var(--foreground-muted); text-wrap: balance; }
+.empty__code { margin-top: 16px; font: var(--text-label-12); color: var(--foreground-muted); }
+.empty__code > code { font: var(--text-mono-12); color: var(--foreground-muted); }
+
+/* ==========================================================================
+   §6 侧弹层 .sheet（镜像要求：常驻对照用的说明面板）
+   位置：放在 .frame 里（与 .overlay 同层），右侧整高、离画框边 8、宽 448（窄于 464 的视口铺满减 16）；
+         无遮罩、不抢焦点（打开时焦点留在触发它的按钮上）、页面其余部分照常可见可操作；不随对话框的 Esc 关，只有 [关闭] 能关。
+   层级：z 60（菜单层）——注册镜像对话框开着时也压在遮罩之上（现状 z-[60] > 对话框 z-50，ImageRequirementsPanel.view.tsx）。
+   语义：<aside role="complementary">（不是 dialog）+ 可访问名（现状 aria-label「平台对镜像的要求」）；材质 raised（表面 + --shadow-raised、r12，简报 §5.6）；条目之间 1px 行分隔，不套描边子框。
+   ========================================================================== */
+.sheet {
+  --focus-gap: var(--surface);
+  position: absolute; z-index: var(--z-menu);
+  top: var(--gap-sheet-inset); right: var(--gap-sheet-inset); bottom: var(--gap-sheet-inset);
+  display: flex; flex-direction: column;
+  width: min(var(--gap-sheet-w), calc(100% - 2 * var(--gap-sheet-inset)));
+  background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-raised);
+  color: var(--foreground); font: var(--text-copy-14);
+  overflow: hidden;
+  animation: gap-sheet-in var(--duration-overlay) var(--ease-out);
+}
+.sheet--static { position: relative; top: auto; right: auto; bottom: auto; z-index: auto; width: min(var(--gap-sheet-w), 100%); animation: none; }
+.sheet__header { display: flex; align-items: flex-start; gap: 12px; flex: none; padding: 20px 16px 16px 24px; border-bottom: 1px solid var(--border); }
+.sheet__heading { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
+.sheet__title { display: flex; align-items: center; gap: 8px; font: var(--text-heading-16); letter-spacing: var(--tracking-heading); color: var(--foreground); }
+.sheet__title > .icon { color: var(--foreground-muted); }
+.sheet__desc { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.sheet__desc strong { font-weight: var(--weight-medium); color: var(--foreground); }
+.sheet__close { flex: none; margin-top: -2px; }
+.sheet__body { flex: 1; min-height: 0; overflow: auto; padding: 4px 24px 16px; }
+.sheet__list { display: flex; flex-direction: column; }
+.sheet__item { display: flex; flex-direction: column; gap: 6px; padding: 16px 0; }
+.sheet__item + .sheet__item { border-top: 1px solid var(--border); }
+.sheet__item-head { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; font: var(--text-label-14-strong); color: var(--foreground); }
+.sheet__item-text { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.sheet__footer { --focus-gap: var(--surface-inset); display: flex; align-items: center; gap: 8px; flex: none; padding: 12px 16px 12px 24px; background: var(--surface-inset); border-top: 1px solid var(--border); }
+.sheet[data-state="closed"] { pointer-events: none; animation: gap-sheet-out var(--duration-base) var(--ease-standard) forwards; }
+/* 入场 / 出场：以右缘为原点缩放 .98 + 淡入淡出（不用 translateX 往外推：起始帧越出画框会被算进滚动区，1024 检查报「裁切」） */
+.sheet { transform-origin: right center; }
+@keyframes gap-sheet-in { from { opacity: 0; transform: scale(0.98); } }
+@keyframes gap-sheet-out { to { opacity: 0; transform: scale(0.98); } }
+
+/* ==========================================================================
+   §7 横幅栈位 .banner-stack（全局横幅：阻断 > 治理 > 提示；BannerStack.view.tsx 的 v2 位置）
+   位置：.shell__main 里、.header 之后、.main 之前——只盖主列，不压侧栏；工作台与设置页同一位置（F-WB-BANNER；
+         foundation §1.3 原写「.frame 里 .shell 之前」，本轮按 plan 改为主列顶部）。
+   规则：按级别排（阻断在上）；最多显示 2 条，其余收进最后一行「还有 N 条提示」（按钮，aria-expanded 展开全部）；
+         每条横幅照旧 role="alert" + 读屏前缀（<span class="u-sr-only">阻断</span> / 治理）；阻断类 × 关闭（本次会话内）、
+         治理类「今天不再提示」（不自动收起，Q-DS-32 B）；横幅动作指向当前页时隐藏（UX-DS-311）。横幅本身用 components-v2.css 的 .banner。
+   ========================================================================== */
+.banner-stack { display: flex; flex-direction: column; flex: none; min-width: 0; }
+.banner-stack > .banner { min-width: 0; }
+/* 横幅正文 .banner__body（本文件新增，可选；横幅栈里一律用）：标题 + 说明包一层，长说明接在标题后面整段折行（v1 BannerStack 的写法），
+   不再是「标题一列 + 说明挤成窄列」；图标与按钮对齐第一行文字（正文上下各让 6，第一行中心 = 32 按钮中心），多行时按钮留在第一行 */
+.banner__body { flex: 1; min-width: 0; padding: 6px 0; font: var(--text-copy-14); color: var(--foreground); }
+.banner__body > .banner__title { white-space: normal; margin-right: 8px; }
+.banner:has(> .banner__body) { align-items: flex-start; }
+.banner:has(> .banner__body) > .icon { margin-top: 8px; }
+.banner:has(> .banner__body) > .banner__end { min-height: var(--control-32); }
+.banner-stack__more {
+  --focus-gap: var(--canvas);
+  display: flex; align-items: center; gap: 8px; flex: none; width: 100%; height: var(--control-32); padding: 0 16px;
+  background: var(--canvas); border-bottom: 1px solid var(--border-subtle);
+  color: var(--foreground-muted); font: var(--text-copy-13); text-align: left; white-space: nowrap;
+}
+.banner-stack__more > .icon { width: var(--icon-14); height: var(--icon-14); transition: transform var(--duration-fast) var(--ease-standard); }
+.banner-stack__more:hover, .banner-stack__more.is-hover { background: var(--fill); color: var(--foreground); }
+.banner-stack__more:focus-visible, .banner-stack__more.is-focus { box-shadow: var(--focus-ring-inset); }
+.banner-stack__more[aria-expanded="true"] > .icon { transform: rotate(180deg); }
+.banner-stack__more-names { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--foreground-subtle); } /* 可选：被收起的横幅标题，次要灰截断 */
+
+/* ==========================================================================
+   §8 行内确认 .inline-confirm（无头任务 [终止任务]：同一处就地换成「一句 + [确认终止] + [取消]」；Esc = 取消；确认后换成「正在终止…」）
+   与破坏性确认的分工：删除数据（成果、规则、项目、凭证）走 Q-DS-17 A 统一确认（同一弹层就地切换的 .dconfirm 视图，v1 g2-17 / g7-18）；
+         行内确认只给不删数据、可以再来一次的动作（终止本轮运行，v1 g2-15 现状）。
+   外观：一句（图标带色调、句子正文色，P6）+ 两个按钮（确认 secondary，取消 tertiary，与 v1 outline / ghost 一一对应）；放不下时整组折到下一行。
+   焦点：按 v1 现状落在确认按钮上（原按钮已卸载）；静态稿不画焦点环。
+   ========================================================================== */
+.inline-confirm { --tone-fg: var(--status-warn-fg); display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 6px; min-width: 0; animation: v2-fade var(--duration-fast) var(--ease-standard); }
+.inline-confirm__text { display: inline-flex; align-items: flex-start; gap: 6px; min-width: 0; font: var(--text-copy-14); color: var(--foreground); }
+.inline-confirm__text > .icon { margin-top: 2px; color: var(--tone-fg); }
+.inline-confirm__actions { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.inline-confirm--fail { --tone-fg: var(--status-fail-fg); }
+.inline-confirm--pending { --tone-fg: var(--foreground-muted); }
+.inline-confirm--pending .inline-confirm__text { color: var(--foreground-muted); }
+
+/* ==========================================================================
+   §9 新建任务弹层的字段排版 .nt-*（F-LCH-FORM 的弹层；F-SBX-RELAUNCH 03「重新发起」与 F-AUTH-PANEL 的闸门复用同一个弹层）
+   来源：l2a-lch.css §1 §2 §4（几何同原型 pilot/proto/proto.css 的 .proto-dlg__lead / .proto-fieldset / .proto-choice / .proto-counter，稿件不能引原型文件，所以改名 .nt-*）。
+   W2 跨组一致性把三组弹层统一成这一套类名（drafts/notes/consistency.md 改动 16、17），三张 pages CSS 里逐条同值，这里整组上提；
+   l2a-lch.css / l2b-sbx.css / l3a-auth.css 里的同值副本暂留（与本节逐条相同，层叠结果不变），交 W4 清理。
+   只在一组里用的件不上提：骨架 .nt-skel / .nt-env 留 l2a-lch.css §5，闸门 .nt-gate / .nt-auth 留 l3a-auth.css §1。
+   结构：.nt-lead（正文第一行）→ 字段栈 .fields（项目 / Agent / 分支 / 任务指令）；Agent 一组 = fieldset.nt-agents + legend + 每个选项一个 label.nt-choice；
+         文本域下一行 .nt-meta：右 = 计数 .nt-counter（超限换 .nt-counter--error），左 = 可选的一句 .field__help（深链刷新、重新发起的说明）。
+   ========================================================================== */
+/* 引导句：copy-14-zh 次要灰；加粗处 500 + 正文色 */
+.nt-lead { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.nt-lead strong { font-weight: var(--weight-medium); color: var(--foreground); }
+/* Agent 单选组：fieldset 去掉默认描边与内边距（一个表面一层描边）；legend = 字段标签 14/500；每个选项一行 20 高：单选 16 + 间距 10 + 等宽 id + 次要灰名称 */
+.nt-agents { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.nt-agents > legend { padding: 0; margin-bottom: 8px; font: var(--text-label-14-strong); color: var(--foreground); }
+.nt-choice { display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; min-height: 20px; cursor: pointer; font: var(--text-label-14); color: var(--foreground); }
+.nt-choice__id { font: var(--text-mono-13); }
+.nt-choice__desc { color: var(--foreground-muted); }
+/* 创建中整组禁用（fieldset[disabled]）：选项文字降成禁用色 */
+.nt-agents:disabled .nt-choice { color: var(--foreground-disabled); cursor: not-allowed; }
+.nt-agents:disabled .nt-choice__desc { color: var(--foreground-disabled); }
+/* 文本域下一行：默认只有右侧计数；有说明句时贴顶对齐、gap 16，计数跟第一行 */
+.nt-meta { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; min-height: 18px; }
+.nt-meta:has(> .field__help) { align-items: flex-start; gap: 16px; }
+.nt-meta > .field__help { flex: 1; min-width: 0; }
+.nt-meta:has(> .field__help) > .nt-counter { margin-top: 1px; }
+/* 计数「N/8000」12 tabular 次要灰；超限改字段错误的写法（12 红 + 14 圆叹号），位置不动 */
+.nt-counter { flex: none; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nt-counter--error { display: inline-flex; align-items: center; gap: 4px; flex: 0 1 auto; min-width: 0; color: var(--status-fail-fg); white-space: normal; text-align: right; }
+.nt-counter--error > .icon { width: var(--icon-14); height: var(--icon-14); }
+
+/* ==========================================================================
+   §10 适配
+   ========================================================================== */
+/* Windows 高对比：box-shadow 会被去掉，浮起的表面补 outline（同 components-v2.css §17） */
+@media (forced-colors: active) {
+  .toast, .popover, .sheet, .empty__detail { outline: 1px solid CanvasText; outline-offset: -1px; }
+  .progress .meter__bar, .phases .meter__bar { forced-color-adjust: none; background: CanvasText; }
+  .banner-stack__more:focus-visible { outline: 2px solid Highlight; outline-offset: -2px; }
+}
+/* 窄屏（< 640；Q-DS-18 A：390 只保证不溢出、不重叠）：轻提示贴边 8；侧弹层铺满减 16（宽度规则已自适应） */
+@media (max-width: 639px) {
+  .toast-region { top: 8px; right: 8px; width: calc(100% - 16px); }
+  .main:has(> .termbar) > .toast-region { top: calc(var(--shell-termbar-h) + 8px); }
+  .banner-stack__more { padding: 0 12px; }
+  /* 横幅（.banner + .banner__body，§7）：行尾动作折到正文下面、与正文左齐（图标 16 + 间距 8），正文占满一行；否则两个动作按钮占掉大半宽度，
+     正文被挤成几个字宽的一列（W4 从 l6a-wb §7 上提：系统状态页的横幅栈也要折，评审 R2-10 / W3 syncDocs O4） */
+  .banner:has(> .banner__body) { flex-wrap: wrap; }
+  .banner:has(> .banner__body) > .banner__body { flex-basis: calc(100% - 24px); }
+  .banner:has(> .banner__body) > .banner__end { margin-left: 24px; }
+}
+
+/* ==========================================================================
+   §11 W4 评审修正（review R2，notes/consistency.md §8）上提 / 补的小件
+   ========================================================================== */
+/* 树：克隆中 / 克隆失败、又还没有任务的项目，展开了什么也没有——折叠箭头保持可聚焦（aria-disabled，按下时说原因 = title / 原型 hint()），
+   画成禁用色、悬停不再变亮（REQ-PRJ-011）。原在 l1a-prj §4，只有挂 l1a 的稿画对了；工作台各组的稿都要它，上提到这里（R2-02） */
+.tree-project__toggle[aria-disabled="true"],
+.tree-project__toggle[aria-disabled="true"]:hover { color: var(--foreground-disabled); cursor: not-allowed; }
+
+/* 中性提示条（.note / .note--neutral，没有色调修饰）里的链接：用正文色 + 下划线（Geist Note 的写法）。
+   中性条底是 gray-200（亮 #ebebeb），蓝色链接 #0068d6 在上面只有 4.46:1（< 4.5，axe color-contrast）；正文色 15:1，下划线沿用 .link 的 40% 规则。
+   带色调的提示条（info 4.82 / warn 4.85 / fail 4.64，暗色都 ≥ 6.3）不受影响（R2-06） */
+.note:not(.note--ok, .note--warn, .note--fail, .note--info, .note--timeout) .link { color: var(--foreground); }
+
+/* 禁用的纯图标次级按钮（tertiary + icon）：暗色里 gray-700 的禁用色和可用的 gray-900 只差约 1.3:1，看不出「已置灰」
+   （f-wb-shell-01 骨架期的「⋯ 更多操作」、删除中对话框的 ×）。暗色改成禁用色的 55%（叠在画布上约 #4f4f4f，与可用的 #a1a1a1 差约 3:1）；
+   亮色的 gray-700 与可用的 gray-900（#4d4d4d）已经差 2.5:1，不动。只动纯图标按钮——带文字的禁用按钮另有 fill 底与环（R2-25） */
+:root, [data-theme="dark"] { --gap-icon-btn-disabled: color-mix(in srgb, var(--foreground-disabled) 55%, transparent); }
+[data-theme="light"] { --gap-icon-btn-disabled: var(--foreground-disabled); }
+.btn--tertiary.btn--icon:is(:disabled, .is-disabled, [aria-disabled="true"]),
+.btn--tertiary.btn--icon:is(:disabled, .is-disabled, [aria-disabled="true"]):hover { color: var(--gap-icon-btn-disabled); }
+
+/* 长句折行：阶段说明、线性进度的附注、提示条说明句、删除确认的说明与条目——末行不只剩一两个字（text-wrap: pretty；不支持的浏览器照常折行）。
+   结果卡说明 .empty__desc 已经是 balance（components-v2），不改；l3b-crd 原来只给对话框里的 .dconfirm__note / .bullets 加了这一条，上提到这里（R2-35） */
+.phases__note, .progress__note, .note__text, .dconfirm__note, .dialog .bullets > li { text-wrap: pretty; }
+
+/* 菜单里的说明句（.menu__note，属于上一项）：那一项带前置图标时，说明句跟它的文字列对齐（项内距 8 + 图标 16 + 间距 8 = 32），
+   不再从图标列起头（f-prj-clone-03 / 04 的项目菜单；原型的任务菜单「启动」同理，评审 R2-12） */
+.menu__item:has(> .icon:first-child) + .menu__note { padding-left: 32px; }
+
+/* 可滚动的命令行（.check-row__code，向导第 3 步的修复命令、诊断展开里的命令）：一行放不下时横向滚动，稿件与原型都给它 tabindex="0"，
+   键盘能聚焦再用方向键滚（axe scrollable-region-focusable）；焦点环画在里面（外环会被行的边界切掉，评审 R2-19） */
+.check-row__code[tabindex]:focus-visible { box-shadow: var(--focus-ring-inset); }
+
+/* 页内提示 .page-notice（总览 / 主区内容顶部的一句：销毁中…、已销毁…、找不到…；PF-07：中性 .note，不是整宽色带，随内容滚动）。
+   原来三套写法（l2b-sbx 的 .sbx-notice、l6a-wb 的 .wb-notice、原型 proto.css 的 .proto-notice--inline）字色各不相同——统一成这一件：
+   标题 14/500 正文色、说明 14 次要灰、进行中的转圈次要灰、可选行尾 ×（.note__end，tertiary 24）（评审 R2-27） */
+.page-notice { margin-bottom: 16px; animation: v2-fade var(--duration-base) var(--ease-standard); }
+.page-notice .note__title { color: var(--foreground); }
+.page-notice .note__text { color: var(--foreground-muted); }
+.page-notice > .icon--spin { color: var(--foreground-muted); }
+/* 过程没成功（没能销毁…）时仍是这条中性提示，只有前置圆叉带失败色调（P6：色调只在图标；f-sbx-destroy-02 头注释第 4 条，原型 failDestroy） */
+.page-notice > .icon.tone-fail { color: var(--status-fail-fg); }
+
+/* 对话框正文滚动之后，头部底边出 1px 分隔：滚上去的正文（例：新建任务弹层展开登录面板后，「项目」标签滑到副标题下面）不会看起来像和头部文字叠在一起。
+   实现侧在 .dialog__body 的 scrollTop > 0 时给 .dialog 挂 .is-scrolled（原型在捕获阶段的 scroll 里统一挂）；AC-AUT-002.3 自动化弹层的 .aut-scrolled 是同一画法（评审 R1-13） */
+.dialog.is-scrolled > .dialog__header { z-index: 1; box-shadow: 0 1px 0 var(--border); }

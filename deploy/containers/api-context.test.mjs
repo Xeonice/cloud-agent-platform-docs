@@ -5,7 +5,7 @@ import * as syncFs from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createHash } from "node:crypto";
-import { DatabaseSync } from "node:sqlite";
+import { DatabaseSync, backup } from "node:sqlite";
 import { runInNewContext } from "node:vm";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -32,6 +32,8 @@ import {
   MIGRATION_DATA_PROBE,
   NATIVE_ADDON_PROBE,
   STOPPED_RESERVATIONS_PROBE,
+  MIGRATION_REVIEW_PROBE,
+  migrationReviewProbe,
 } from "./api-container.mjs";
 
 const SHA = "a".repeat(40),
@@ -1154,6 +1156,23 @@ async function harness(t, configuration = {}) {
         configuration.onStart?.(current);
         return id;
       }
+      if (a.includes(MIGRATION_REVIEW_PROBE)) {
+        assert.ok(
+          a.includes(
+            "type=volume,source=agent-platform-production-data,target=/data,readonly",
+          ),
+        );
+        assert.ok(!a.some((arg) => arg.includes("agent-platform-api-secrets")));
+        if (configuration.migrationReviewFail?.(calls))
+          throw Error("Migration copy validation failed");
+        return JSON.stringify({
+          state: "migration-probe-passed",
+          databaseSha256: "f".repeat(64),
+          preservedTables: 42,
+          appliedMigrations: 24,
+          appendedMigrations: 1,
+        });
+      }
       if (a.at(-1).includes("Unsafe runtime secret"))
         return (
           (configuration.secretMismatch
@@ -1426,7 +1445,13 @@ async function deployHarness(t, configuration = {}) {
       configuration.schemaChanged ? "e".repeat(64) : FINGERPRINT,
     ),
   );
-  h.adopt(release(NEXT, OLD_IMAGE));
+  h.adopt(
+    release(
+      NEXT,
+      OLD_IMAGE,
+      configuration.schemaChanged ? "e".repeat(64) : FINGERPRINT,
+    ),
+  );
   await h.service.build(SHA, 12, h.workspace, ROOT_SHA);
   return h;
 }
@@ -1549,6 +1574,333 @@ test("schema changes and real auth activity do not create maintenance or stop an
     assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
     await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
   }
+});
+test("reviewed migration copies committed WAL pages and preserves production data while validating the actual alias SQL", async (t) => {
+  const root = await temp(t),
+    sourcePath = join(root, "platform.db"),
+    copyPath = join(root, "copy.db"),
+    source = new DatabaseSync(sourcePath);
+  t.after(() => source.close());
+  source.exec(
+    "PRAGMA journal_mode=WAL; CREATE TABLE images(id TEXT PRIMARY KEY); INSERT INTO images VALUES('committed-in-wal')",
+  );
+  assert.ok(syncFs.existsSync(sourcePath + "-wal"));
+  const sql = await fs.readFile(
+    new URL("../../api/drizzle/0024_equal_rocket_raccoon.sql", import.meta.url),
+    "utf8",
+  );
+  const oldSql = "CREATE TABLE images(id TEXT PRIMARY KEY)",
+    oldHash = createHash("sha256").update(oldSql).digest("hex"),
+    journal = {
+      dialect: "sqlite",
+      entries: [
+        { idx: 0, tag: "0000_original", when: 1 },
+        { idx: 1, tag: "0024_equal_rocket_raccoon", when: 2 },
+      ],
+    };
+  source.exec(
+    "CREATE TABLE __drizzle_migrations(hash TEXT, created_at INTEGER)",
+  );
+  source.prepare("INSERT INTO __drizzle_migrations VALUES (?, 1)").run(oldHash);
+  const mapped = (path) =>
+    path === "/data/platform.db"
+      ? sourcePath
+      : path === "/tmp/migration-review.db"
+        ? copyPath
+        : path;
+  let migration = (db) => db.exec(sql),
+    observedRows;
+  const probe = () =>
+    runInNewContext(`(${migrationReviewProbe.toString()})()`, {
+      require(name) {
+        if (name === "node:fs")
+          return {
+            lstatSync: (p) => syncFs.lstatSync(mapped(p)),
+            realpathSync: (p) =>
+              p === "/data/platform.db" ? p : syncFs.realpathSync(mapped(p)),
+            readFileSync: (p) =>
+              p === "/app/drizzle/meta/_journal.json"
+                ? JSON.stringify(journal)
+                : p === "/app/drizzle/0000_original.sql"
+                  ? oldSql
+                  : p === "/app/drizzle/0024_equal_rocket_raccoon.sql"
+                    ? sql
+                    : syncFs.readFileSync(mapped(p)),
+          };
+        if (name === "node:crypto") return { createHash };
+        if (name === "better-sqlite3")
+          return class {
+            constructor(path, options) {
+              assert.equal(options.readonly, true);
+              assert.equal(options.fileMustExist, true);
+              this.database = new DatabaseSync(mapped(path), {
+                readOnly: true,
+              });
+            }
+            backup(path) {
+              return backup(this.database, mapped(path));
+            }
+            close() {
+              this.database.close();
+            }
+          };
+        assert.equal(
+          name,
+          "/app/apps/api/dist/platform/persistence/drizzle.connection.js",
+        );
+        return {
+          createConnection(path) {
+            const sqlite = new DatabaseSync(mapped(path));
+            sqlite.pragma = (query) => sqlite.prepare("PRAGMA " + query).all();
+            return { sqlite, db: sqlite };
+          },
+          runMigrations(db) {
+            observedRows = db
+              .prepare("SELECT id FROM images")
+              .all()
+              .map((row) => row.id);
+            migration(db);
+          },
+        };
+      },
+    });
+  const result = await probe();
+  assert.equal(result.state, "migration-probe-passed");
+  assert.equal(result.preservedTables, 1);
+  assert.equal(result.appliedMigrations, 1);
+  assert.equal(result.appendedMigrations, 1);
+  assert.match(result.databaseSha256, /^[a-f0-9]{64}$/);
+  assert.deepEqual(observedRows, ["committed-in-wal"]);
+  assert.deepEqual(
+    source
+      .prepare("PRAGMA table_info(images)")
+      .all()
+      .map((row) => row.name),
+    ["id"],
+  );
+  assert.equal(source.prepare("SELECT count(*) AS n FROM images").get().n, 1);
+  await fs.rm(copyPath);
+  migration = (db) => db.exec("DELETE FROM images");
+  await assert.rejects(probe(), /changed existing table row counts/);
+  assert.equal(source.prepare("SELECT count(*) AS n FROM images").get().n, 1);
+  await fs.rm(copyPath);
+  source.prepare("UPDATE __drizzle_migrations SET hash=?").run("0".repeat(64));
+  await assert.rejects(probe(), /Previously applied migration history changed/);
+  await fs.rm(copyPath);
+  source.prepare("UPDATE __drizzle_migrations SET hash=?").run(oldHash);
+  journal.entries[0].when = 0;
+  await assert.rejects(probe(), /Previously applied migration history changed/);
+});
+test("migration review requires explicit fingerprints and validated receipt before any permission or production stop", async (t) => {
+  const h = await deployHarness(t, { schemaChanged: true });
+  await assert.rejects(
+    h.service.reviewMigration(SHA, 12, FINGERPRINT, FINGERPRINT),
+    /Explicit different/,
+  );
+  await assert.rejects(
+    h.service.reviewMigration(SHA, 12, "0".repeat(64), FINGERPRINT),
+    /identities changed/,
+  );
+  await assert.rejects(
+    h.service.reviewMigration(SHA, 99, "e".repeat(64), FINGERPRINT),
+    { code: "ENOENT" },
+  );
+  assert.ok(
+    !h.calls.some(
+      (call) =>
+        call.args[2] === "stop" || call.args.includes(MIGRATION_REVIEW_PROBE),
+    ),
+  );
+  await assert.rejects(fs.stat(join(h.root, "migration-review.json")), {
+    code: "ENOENT",
+  });
+});
+test("migration review failure never creates approval or touches production admission", async (t) => {
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    migrationReviewFail: () => true,
+  });
+  await assert.rejects(
+    h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT),
+    /copy validation/,
+  );
+  await assert.rejects(fs.stat(join(h.root, "migration-review.json")), {
+    code: "ENOENT",
+  });
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+});
+test("approved heads changing during migration rehearsal leave no review permit or production mutation", async (t) => {
+  let changed = false;
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    heads: () => ({ sha: SHA, rootSha: changed ? NEXT : ROOT_SHA }),
+    migrationReviewFail: () => {
+      changed = true;
+      return false;
+    },
+  });
+  await assert.rejects(
+    h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT),
+    /heads changed/,
+  );
+  await assert.rejects(fs.stat(join(h.root, "migration-review.json")), {
+    code: "ENOENT",
+  });
+  assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+});
+test("an operator replacing migration approval during drain retains that file and releases only owned admission without stopping", async (t) => {
+  let h,
+    changed = false;
+  h = await deployHarness(t, {
+    schemaChanged: true,
+    onSleep: async (ms) => {
+      if (ms === 1000 && !changed) {
+        changed = true;
+        await write(
+          join(h.root, "migration-review.json"),
+          JSON.stringify({ state: "operator-revoked" }),
+        );
+      }
+    },
+  });
+  await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+  await assert.rejects(h.service.deploy(SHA, 12), /review changed before stop/);
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
+    "operator-revoked",
+  );
+  assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+});
+test("migration approval binds every old/new commit, image, schema, container and CI receipt; altered or consumed permits never stop production", async (t) => {
+  const mutations = {
+    state: "consumed",
+    sha: NEXT,
+    rootSha: NEXT,
+    runId: "13",
+    imageId: OLD_IMAGE,
+    schemaFingerprint: "0".repeat(64),
+    previousContainerId: "operator-container",
+    previousImageId: IMAGE,
+    previousSha: SHA,
+    previousRootSha: NEXT,
+    previousSchemaFingerprint: FINGERPRINT,
+    probe: { state: "failed" },
+    reviewedAt: "not-a-date",
+  };
+  for (const [field, value] of Object.entries(mutations)) {
+    const h = await deployHarness(t, { schemaChanged: true });
+    const permit = await h.service.reviewMigration(
+      SHA,
+      12,
+      "e".repeat(64),
+      FINGERPRINT,
+    );
+    await write(
+      join(h.root, "migration-review.json"),
+      JSON.stringify({ ...permit, [field]: value }),
+    );
+    assert.equal(
+      (await h.service.deploy(SHA, 12)).state,
+      "waiting-migration-review",
+      field,
+    );
+    assert.ok(!h.calls.some((call) => call.args[2] === "stop"), field);
+    await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  }
+});
+test("idle retries retain migration approval, while exact approved deployment backs up and revalidates the stopped database before replacement", async (t) => {
+  let busy = true;
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    status: () => ({ ...quietStatus, credentialAuth: busy ? 1 : 0 }),
+  });
+  const permit = await h.service.reviewMigration(
+    SHA,
+    12,
+    "e".repeat(64),
+    FINGERPRINT,
+  );
+  assert.equal(
+    (await fs.stat(join(h.root, "migration-review.json"))).mode & 0o777,
+    0o600,
+  );
+  assert.equal((await h.service.deploy(SHA, 12)).state, "waiting-idle");
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
+    "reviewed",
+  );
+  busy = false;
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(result.state, "deployed");
+  assert.deepEqual(result.migrationReview, permit);
+  assert.equal(result.migrationProbe.state, "migration-probe-passed");
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
+    "consumed",
+  );
+  const probeIndexes = h.calls.flatMap((call, index) =>
+    call.args.includes(MIGRATION_REVIEW_PROBE) ? [index] : [],
+  );
+  assert.equal(probeIndexes.length, 2);
+  const stopIndex = h.calls.findIndex((call) => call.args[2] === "stop"),
+    backupIndex = h.calls.findIndex((call) =>
+      call.args.at(-1).includes?.("tar --exclude=./deployment-drain"),
+    ),
+    removeIndex = h.calls.findIndex((call) => call.args[2] === "rm");
+  assert.ok(
+    stopIndex < backupIndex &&
+      backupIndex < probeIndexes[1] &&
+      probeIndexes[1] < removeIndex,
+  );
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  assert.equal((await h.service.deploy(SHA, 12)).state, "current");
+});
+test("failed final migration rehearsal restarts the unchanged old container and requires another review", async (t) => {
+  let probes = 0;
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    migrationReviewFail: () => ++probes === 2,
+  });
+  await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+  assert.equal((await h.service.deploy(SHA, 12)).state, "rolled-back");
+  assert.equal(h.current.Id, "container-original");
+  assert.equal(h.current.State.Running, true);
+  assert.ok(!h.calls.some((call) => call.args[2] === "rm"));
+  assert.equal(
+    (await h.service.deploy(SHA, 12)).state,
+    "waiting-migration-review",
+  );
+});
+test("migrated replacement readiness failure restores the full verified backup before restarting the old schema image and consumes review", async (t) => {
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    failNewReadiness: true,
+  });
+  await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(result.state, "rolled-back");
+  assert.equal(h.current.Image, OLD_IMAGE);
+  const restoreIndex = h.calls.findIndex((call) =>
+      call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT),
+    ),
+    restartIndex = h.calls.findIndex(
+      (call) =>
+        call.args[2] === "run" &&
+        call.args.includes("-d") &&
+        call.args.at(-1) === OLD_IMAGE,
+    );
+  assert.ok(restoreIndex >= 0 && restoreIndex < restartIndex);
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
+    "consumed",
+  );
+  assert.equal(
+    (await h.service.deploy(SHA, 12)).state,
+    "waiting-migration-review",
+  );
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
 });
 test("manual maintenance is preserved; no backup, stop or replacement occurs", async (t) => {
   const h = await deployHarness(t);

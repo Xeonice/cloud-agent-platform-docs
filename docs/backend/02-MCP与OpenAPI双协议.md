@@ -140,7 +140,7 @@ export class SandboxMcpTools {
 | **`POST /api/images/validate`** | **注册前预检**：body `{ ref }`，**不落库**、不产生 manifest 记录，只回三级 `ValidationOutcome`——前端「提交 URI → 分级反馈」用的就是它（P21-4 §5，审计 P1-3） |
 | **`POST /api/images/:id/validate`** | **已注册镜像的重新验证**：写回 `validation_status`/`validation_errors` |
 | **`DELETE /api/images/:id`** | 硬删除（审计 P1-6 补齐）：仅当无 sandbox 引用（`image_ref RESTRICT`）且非预置镜像（`is_builtin=false`）时成功，否则 409 |
-| **`PATCH /api/images/:id { isActive?, imageConfig? }`** | **一个部分更新端点覆盖两件事**（见下；字段名 camelCase，审计 P1-5） |
+| **`PATCH /api/images/:id { isActive?, imageConfig?, alias? }`** | 复用同一部分更新端点，禁用／参数属于 manifest，别名属于共享 Image（见下；字段名 camelCase） |
 | `GET/POST /api/projects/:id/automations` · `GET/PUT/DELETE /api/automations/:id` · `POST .../{enable,disable}` | 规则 CRUD（P21-7 §8） |
 | `GET /api/automations/:id/runs` · `GET /api/automations/runs/:runId` · `GET /api/automations/runs/:runId/logs` | 运行历史与原始日志（03 §8.6） |
 | `POST /api/automations/webhook-test { url }` | 规则表单 [测试连接]（03 §8.5） |
@@ -149,12 +149,15 @@ export class SandboxMcpTools {
 | **`GET /api/system/providers`** | 已注册 provider / runtime / imageSpec 及其 capabilities 与最近一次 testkit 结果（04 §10.1）。**统一用这个名字**（审计 P1-6：此前 04 写 `GET /providers`、11 与诊断各叫过别的） |
 | **`GET /api/health`** | 存活探针；**唯一豁免访问口令的端点**（11 §3.1） |
 
-**镜像运行参数**（P22 §4.17 缺口的定案）：`PATCH /api/images/:id` 是修改 manifest 可变字段的**唯一入口**，两个字段可单独或一起传（字段名 camelCase，审计 P1-5）：
+**镜像部分更新**（P22 §4.17 / REQ-IMG-060）：`PATCH /api/images/:id` 是部分更新入口，三个可选字段可单独或一起传；通过 manifest 定位共享 Image 后修改别名，其余两项仍是 manifest 可变字段（字段名 camelCase）：
 
 | body 字段 | 语义 | 校验与错误 |
 |---|---|---|
-| `isActive: boolean` | 启用/禁用（软删除）；禁用后自动从向导下拉消失（P21-4 §9）。**用 PATCH 而非 POST /disable**——它是资源字段的部分更新，不是动作 | 预置镜像禁用可、删除不可（I-IMG-4） |
+| `isActive: boolean` | 仅允许 false 禁用（软删除）；true 返回 400 并指向 `/activate`；禁用后自动从向导下拉消失（P21-4 §9）。**用 PATCH 而非 POST /disable**——它是资源字段的部分更新，不是动作 | 预置镜像禁用可、删除不可（I-IMG-4） |
 | `imageConfig: { env: [{ key, value?, secret }], cmdOverride? }` | 运行参数；存储形态见 13 §2，**env 校验规则的唯一权威是 05 §4.1** | 违规一律 **400** + `EnvValidationError`，body 带逐项 `path` 与具体码：`ENV_NAME_INVALID`（regex）/ `ENV_NAME_RESERVED`（黑名单，含 `CODEX_*`·`GIT_*` 前缀）/ `ENV_LIMIT_EXCEEDED`（>50 条 / 名 >64 / 值 >4096 字节）/ `ENV_DUPLICATE_KEY`。`secret: true` 的项**传空 `value` 表示"保持不变"**，不是清空（I-IMG-5 / P21-4 §10.2） |
+| `alias?: string \| null` | 整张 Image 的共享显示名；省略保持，`null` 或纯空白清除；不解析 registry、不重验证 | 先拒绝原始 Unicode `Cc` / `U+2028/U+2029` 后 trim，最多 64 个码点；400 `VALIDATION_FAILED`，`details[].path='alias'`；与非法 env 混合请求全部不写 |
+
+`GET` 及既有 manifest 响应增加必有的 `imageAlias: string|null`。`POST /api/images` 可带同形 `alias?`，仅新 Image 设置初始别名；已有 Image 明确传入不同值时 400 字段错误，指向卡头编辑且零写入，省略则保留。别名功能不新增 REST 路径、operation 或 MCP tool，真实契约由既有 Zod DTO 和 OpenAPI 生成链同步（10 §6.4）。
 
 > 合并 `PUT /api/images/:id/config` 到本端点：两者改的是同一个资源的不同字段，拆成两个端点只会让前端为「同时改启用状态与参数」发两次请求。
 >

@@ -1,0 +1,18 @@
+/* v2 原有 select/menu/field 材质；只补搜索行、主辅文本与卡内别名编辑。 */
+.search-select { position: fixed; position-anchor: auto; display: flex; flex-direction: column; overflow: hidden; z-index: var(--z-menu); }
+.search-select__search { flex: none; padding: 2px 2px 6px; border-bottom: 1px solid var(--border); }
+.search-select__results { min-height: 0; overflow-y: auto; padding-top: 4px; }
+.search-select__option { min-height: 36px; height: auto; align-items: flex-start; white-space: normal; }
+.search-select__option::before { content: ""; flex: none; width: 16px; height: 16px; margin-top: 2px; background: currentColor; -webkit-mask: var(--icon-check) center / contain no-repeat; mask: var(--icon-check) center / contain no-repeat; opacity: 0; }
+.search-select__option[aria-selected="true"]::before { opacity: 1; }
+.search-select__copy { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; gap: 2px; }
+.search-select__description { color: var(--foreground-muted); font: var(--text-label-12); overflow-wrap: anywhere; }
+.search-select__option[aria-disabled="true"] .search-select__description { color: var(--foreground-disabled); }
+.search-select__default { border-bottom: 1px solid var(--border); border-radius: 0; padding-bottom: 8px; margin-bottom: 4px; }
+.search-select__empty { padding: 10px 8px; }
+.search-select__clear { margin: 0 8px 8px; }
+.image-alias-editor { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.image-alias-editor textarea.input { height: var(--control-36); min-height: var(--control-36); resize: none; padding-top: 8px; line-height: 20px; }
+.image-alias-editor .field__error { overflow-wrap: anywhere; }
+
+.image-alias-editor__label { display: flex; align-items: center; justify-content: space-between; gap: 8px; font: var(--text-label-12); }

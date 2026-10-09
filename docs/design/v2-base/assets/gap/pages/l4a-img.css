@@ -1,0 +1,118 @@
+/*
+ * 补全稿 · 镜像组 img-a 的局部样式（F-IMG-REGISTER 注册新镜像与镜像要求、F-IMG-ENV 运行参数〔环境变量〕、F-IMG-PAGE 镜像页的空与加载；
+ * 稿件 f-img-register-01…06、f-img-env-01…03、f-img-page-01…03；W4 补 f-img-register-06、f-img-page-03）
+ * 样式链：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → assets/pages/l4a-img.css（本文件）
+ * 约束：只用 tokens-v2 的变量（没有字面颜色）；字阶 14 / 13 / 12（标题 16 / 20），没有 11 / 10；不改 pilot/assets/*-v2.css 与 gap-shared.css。
+ *
+ *   §0 镜像卡的卡内排列：从 pilot/assets/pages/p7.css 原样复制（样式链只允许挂一张本组 CSS，P7 的 .p7-* 只能抄过来；
+ *      交互原型 pilot/proto/index.html 挂的就是 p7.css，规则逐字相同，两边同时生效也不冲突）
+ *   §1 注册新镜像对话框：标题带图标、来源约束提示条、「钉定」一行、结论作废一句
+ *   §2 运行参数（环境变量）卡内编辑器：行 = 变量名 | 变量值 | Secret | 删除 | 字节计数；行内错误；50 条上限的原因句（DR-39）
+ *   §3 镜像页空态（一张都没有）：虚线框 + 卡内档空状态 + 来源约束一句
+ *   §4 首次加载骨架：按 v2 镜像卡的几何排（卡头两行 → 结论 → 键值 → 运行参数块 → 动作行）
+ *   §5 静态稿专用：模拟滚动位置的锚点（只给截图用，接线时删掉）
+ *   §6 窄屏（< 640）
+ *   §7 读取失败与请求失败（W4 补稿，评审 R2-34）：列表读不到 .l4a-load-fail（REQ-IMG-052，同 l3b-crd .crd-load-fail）、注册弹层里预检 / 保存请求失败（REQ-IMG-008）
+ * 要不要上提 components-v2 / gap-shared：见 notes/img-a.md「shared_css_requests」。
+ */
+
+/* §0 镜像卡的卡内排列（逐字复制自 pilot/assets/pages/p7.css，只读来源；改动请先改 p7.css 再同步） ------------------------------ */
+/* 卡头左侧：第一行「镜像名 + 预置 / 自定义」，第二行完整坐标（次要灰）；右侧是启用状态徽标 */
+.p7-name { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; min-width: 0; }
+.p7-name > .card__title { min-width: 0; overflow-wrap: anywhere; }
+.p7-ref { min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+
+/* 验证结论：徽标（卡内行 20）+ 一句次要灰；有原因时下面接圆点清单与动作 */
+.p7-verdict { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.p7-verdict__line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: var(--text-copy-14); color: var(--foreground-muted); }
+
+/* 「运行的版本」一格：版本号 + 两个文字按钮 + 解析时间，窄时折行 */
+.p7-identity { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 2px; }
+.p7-identity__time { display: inline-flex; align-items: center; gap: 6px; color: var(--foreground-muted); }
+
+/* 运行参数（嵌入块，不加环）：第一行 标题 + 右侧「编辑环境变量」，第二行环境变量摘要 */
+.p7-params { gap: 6px; }
+.p7-params__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
+.p7-params__summary { min-width: 0; font: var(--text-copy-14); color: var(--foreground-muted); overflow-wrap: anywhere; }
+
+/* 历史版本（卡片页脚条）：左边一行版本信息，右边动作 */
+.p7-history { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 4px; min-width: 0; font: var(--text-label-14); color: var(--foreground-muted); }
+.p7-history__label { display: inline-flex; align-items: center; gap: 6px; }
+.p7-history__label > .icon { width: var(--icon-14); height: var(--icon-14); }
+.p7-history__list { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.p7-history__row { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; color: var(--foreground); }
+
+/* 窄屏（< 640）：卡头徽标折到名称下面，工具行的分段控件整行 */
+@media (max-width: 639px) {
+  .p7-card-head { flex-wrap: wrap; }
+  .p7-toolbar > .segmented { flex: 1 1 100%; justify-content: space-between; }
+}
+
+/* §1 注册新镜像对话框 -----------------------------------------------------------------------------------------------
+   对话框本身是 components-v2 §13 的 .dialog.dialog--576（v1 max-w-xl = 576）；这里只补四个小件 */
+/* 标题：v1 的 package 图标保留（20、次要灰，与侧弹层标题的图标同一写法），文字 heading-20 */
+.l4a-reg__title { display: flex; align-items: center; gap: 8px; }
+.l4a-reg__title > .icon { width: var(--icon-20); height: var(--icon-20); color: var(--foreground-muted); }
+/* 正文各块之间 16（.dialog__body 默认）；来源约束提示条里的强调句只加粗不变色（提示条正文已是正文色，P6） */
+.l4a-reg__constraint strong, .l4a-reg__note strong { font-weight: var(--weight-medium); color: var(--foreground); }
+.l4a-reg__note strong { white-space: nowrap; } /* 「锁定」两个字不拆到两行 */
+/* 「钉定 sha256:…」一行：版本号等宽 13（P10 标识符），后面跟稿注「待契约 · DR-11」 */
+.l4a-pin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: var(--text-copy-14); color: var(--foreground-muted); }
+/* 结论作废：一句 14 次要灰（v1 12 → 14），占在结论区原来的位置 */
+.l4a-reg__stale { font: var(--text-copy-14); color: var(--foreground-muted); }
+/* 结论区与上面的说明拉开一点（v1 gap-3 + 结论块自带 gap-2；v2 正文 gap 16 已够，这里只让结论块的清单与徽标行 8 对齐） */
+.l4a-reg__verdict { gap: 8px; }
+
+/* §2 运行参数（环境变量）卡内编辑器 ---------------------------------------------------------------------------------
+   位置：镜像卡「运行参数」嵌入块（.card__inset.p7-params）里，环境变量摘要的下面；与摘要之间一条 1px 分隔（摘要 = 已保存的值，下面 = 草稿）。
+   一行：变量名 192（等宽 13，P10）| 变量值 256（等宽 13）| Secret 复选 | 删除 | 字节计数（12 次要灰，超限变红）；宽度沿用现状 w-48 / w-64 */
+.l4a-env { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border); }
+.l4a-env__rows { display: flex; flex-direction: column; gap: 8px; }
+.l4a-env__row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.l4a-env__line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.l4a-env__key { width: 192px; max-width: 100%; flex: none; }
+.l4a-env__value { width: 256px; max-width: 100%; flex: none; }
+.l4a-env__secret { display: inline-flex; align-items: center; gap: 6px; padding: 0 4px; font: var(--text-label-14); color: var(--foreground-muted); cursor: pointer; }
+.l4a-env__bytes { font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.l4a-env__bytes.is-over { color: var(--status-fail-fg); }
+/* 行内错误句与输入框左缘对齐（.field__error：12 红 + circle-alert 14，与表单字段同一写法） */
+.l4a-env__row > .field__error { padding-left: 2px; }
+/* 添加变量一行：按钮 + 满 50 条时的原因句（DR-39「变量上限的按钮旁写原因」） */
+.l4a-env__add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.l4a-env__limit { font: var(--text-copy-13); color: var(--foreground-muted); }
+/* 摘要超长（库里已有 51 条）时整段折行，不撑破卡片 */
+.l4a-env-summary--long { line-height: var(--lh-14-zh); }
+
+/* §3 镜像页空态（一张镜像都没有） ------------------------------------------------------------------------------------
+   v1 的虚线框保留（它表示「这里本该有卡片」），里面换成卡内档空状态（.empty--card：图标框 → 标题 → 说明 → 动作），来源约束一句放在说明下面 */
+.l4a-empty { border: 1px dashed var(--border-strong); border-radius: var(--radius-lg); }
+.l4a-empty > .empty { padding: 40px 24px; }
+.l4a-empty__constraint { display: flex; align-items: flex-start; gap: 8px; max-width: 540px; margin-top: 12px; font: var(--text-copy-14-zh); color: var(--foreground-muted); text-align: left; }
+.l4a-empty__constraint > .icon { flex: none; width: var(--icon-16); height: var(--icon-16); margin-top: 3px; }
+.l4a-empty .empty__actions { margin-top: 20px; }
+
+/* §4 首次加载骨架：v2 镜像卡几何（卡头：名称条 + 「预置 / 自定义」胶囊、坐标条、右侧启用徽标 → 结论徽标 + 一句 → 三行键值 → 运行参数块 → 动作行） */
+.l4a-sk__line { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.l4a-sk__head { gap: 4px; }
+.l4a-sk__kv { display: grid; grid-template-columns: 102px minmax(0, 1fr); grid-auto-rows: 20px; align-items: center; gap: 8px 0; } /* 行距 = 真实键值行 20 + 8 */
+.l4a-sk__kv > .skeleton { height: 12px; }
+.l4a-sk__btns { display: flex; gap: 8px; }
+.l4a-sk__btns > .skeleton { height: 32px; border-radius: var(--radius-md); }
+
+/* §5 静态稿专用：模拟「已经滚到某处」——带 autofocus 的锚点（tabindex="-1"，不在 Tab 序列里）打开时被浏览器滚到内容区正中（Chromium 实测）。
+   绝对定位在所属卡片 / 编辑器里（top 写在 style 里，只写尺寸），不占位、不改布局；只为截图服务：交互原型接线时删掉（notes/img-a.md「接线」第 0 条） */
+.l4a-scroll-anchor { position: absolute; left: 0; width: 1px; height: 1px; pointer-events: none; }
+.l4a-scroll-anchor:focus, .l4a-scroll-anchor:focus-visible { outline: none; box-shadow: none; }
+.l4a-env { position: relative; }
+
+/* §6 窄屏（< 640；Q-DS-18 A：390 只保证不溢出、不重叠） */
+@media (max-width: 639px) {
+  .l4a-env__key, .l4a-env__value { width: 100%; flex: 1 1 100%; }
+  .l4a-empty > .empty { padding: 32px 16px; }
+  .l4a-sk__kv { grid-template-columns: 72px minmax(0, 1fr); }
+}
+
+/* §7 读取失败与请求失败（W4 补稿，评审 R2-34②③） ------------------------------------------------------------------
+   列表读不到（REQ-IMG-052，f-img-page-03）：放在列表的位置、与卡片同宽的 .note--warn.note--center，内边距 14 16——与凭证页读取失败条 .crd-load-fail 同值；
+   不渲染空态、列表位置不给注册 CTA（「读不到」≠「没有」） */
+.l4a-load-fail { padding: 14px 16px; }
