@@ -1157,16 +1157,32 @@ async function harness(t, configuration = {}) {
         return id;
       }
       if (a.includes(MIGRATION_REVIEW_PROBE)) {
+        const sealed = a.at(-1) === "sealed";
+        assert.equal(
+          a[a.indexOf(MIGRATION_REVIEW_PROBE) + 1],
+          sealed ? "sealed" : undefined,
+        );
         assert.ok(
           a.includes(
             "type=volume,source=agent-platform-production-data,target=/data,readonly",
           ),
         );
         assert.ok(!a.some((arg) => arg.includes("agent-platform-api-secrets")));
-        if (configuration.migrationReviewFail?.(calls))
+        if (sealed) assert.equal(current.State.Running, false);
+        await configuration.onMigrationReviewProbe?.({
+          sealed,
+          current,
+          calls,
+        });
+        if (configuration.migrationReviewFail?.(calls, { sealed }))
           throw Error("Migration copy validation failed");
         return JSON.stringify({
           state: "migration-probe-passed",
+          snapshot: configuration.migrationSnapshot
+            ? configuration.migrationSnapshot({ sealed })
+            : sealed
+              ? "sealed-copy"
+              : "sqlite-backup",
           databaseSha256: "f".repeat(64),
           preservedTables: 42,
           appliedMigrations: 24,
@@ -1187,8 +1203,10 @@ async function harness(t, configuration = {}) {
         return "migration-data-probe-passed\n";
       }
       if (a.includes("/bin/sh")) {
-        if (configuration.backupFailure && a.at(-1).includes("tar -czf"))
-          throw Error("backup failed");
+        if (a.at(-1).includes("tar --exclude=./deployment-drain")) {
+          if (configuration.backupFailure) throw Error("backup failed");
+          await configuration.onBackup?.(current, calls);
+        }
         return "";
       }
     }
@@ -1666,6 +1684,7 @@ test("reviewed migration copies committed WAL pages and preserves production dat
     });
   const result = await probe();
   assert.equal(result.state, "migration-probe-passed");
+  assert.equal(result.snapshot, "sqlite-backup");
   assert.equal(result.preservedTables, 1);
   assert.equal(result.appliedMigrations, 1);
   assert.equal(result.appendedMigrations, 1);
@@ -1690,6 +1709,303 @@ test("reviewed migration copies committed WAL pages and preserves production dat
   source.prepare("UPDATE __drizzle_migrations SET hash=?").run(oldHash);
   journal.entries[0].when = 0;
   await assert.rejects(probe(), /Previously applied migration history changed/);
+});
+
+async function sealedMigrationFixture(t) {
+  const root = await temp(t),
+    sourcePath = join(root, "platform.db"),
+    copyPath = join(root, "copy.db"),
+    source = new DatabaseSync(sourcePath),
+    oldSql = "CREATE TABLE images(id TEXT PRIMARY KEY)",
+    oldHash = createHash("sha256").update(oldSql).digest("hex"),
+    sql = await fs.readFile(
+      new URL(
+        "../../api/drizzle/0024_equal_rocket_raccoon.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    journal = {
+      dialect: "sqlite",
+      entries: [
+        { idx: 0, tag: "0000_original", when: 1 },
+        { idx: 1, tag: "0024_equal_rocket_raccoon", when: 2 },
+      ],
+    };
+  source.exec(
+    "PRAGMA journal_mode=WAL; " +
+      oldSql +
+      "; INSERT INTO images VALUES('checkpointed-row'); CREATE TABLE __drizzle_migrations(hash TEXT, created_at INTEGER)",
+  );
+  source.prepare("INSERT INTO __drizzle_migrations VALUES (?, 1)").run(oldHash);
+  assert.ok(syncFs.existsSync(sourcePath + "-wal"));
+  source.close();
+  assert.equal(syncFs.existsSync(sourcePath + "-wal"), false);
+  assert.equal(syncFs.existsSync(sourcePath + "-shm"), false);
+  const mapped = (path) =>
+    path === "/data/platform.db" || path.startsWith("/data/platform.db-")
+      ? sourcePath + path.slice("/data/platform.db".length)
+      : path === "/tmp/migration-review.db"
+        ? copyPath
+        : path;
+  const copies = [],
+    opens = [],
+    sourceOpens = [],
+    backupCalls = [],
+    output = [];
+  let afterCopy,
+    statDrift,
+    copied = false,
+    allowSourceOpen = false,
+    backupFailure;
+  const context = {
+    require(name) {
+      if (name === "node:fs")
+        return {
+          constants: syncFs.constants,
+          lstatSync(path) {
+            const stat = syncFs.lstatSync(mapped(path));
+            if (path === "/data/platform.db" && copied && statDrift)
+              Object.defineProperty(stat, statDrift, {
+                value: stat[statDrift] + 1,
+              });
+            return stat;
+          },
+          realpathSync: (path) =>
+            path === "/data/platform.db"
+              ? path
+              : syncFs.realpathSync(mapped(path)),
+          existsSync: (path) => syncFs.existsSync(mapped(path)),
+          copyFileSync(from, to, mode) {
+            copies.push({ from, to, mode });
+            assert.equal(from, "/data/platform.db");
+            assert.equal(to, "/tmp/migration-review.db");
+            assert.equal(mode, syncFs.constants.COPYFILE_EXCL);
+            syncFs.copyFileSync(mapped(from), mapped(to), mode);
+            copied = true;
+            afterCopy?.();
+          },
+          readFileSync: (path) =>
+            path === "/app/drizzle/meta/_journal.json"
+              ? JSON.stringify(journal)
+              : path === "/app/drizzle/0000_original.sql"
+                ? oldSql
+                : path === "/app/drizzle/0024_equal_rocket_raccoon.sql"
+                  ? sql
+                  : syncFs.readFileSync(mapped(path)),
+        };
+      if (name === "node:crypto") return { createHash };
+      if (name === "better-sqlite3")
+        return class {
+          constructor(path, options) {
+            sourceOpens.push({ path, options });
+            assert.deepEqual(
+              { ...options },
+              { readonly: true, fileMustExist: true },
+            );
+            if (!allowSourceOpen)
+              throw Error(
+                "SQLITE_CANTOPEN: readonly source cannot create WAL sidecars",
+              );
+            this.database = new DatabaseSync(mapped(path), { readOnly: true });
+          }
+          backup(path) {
+            backupCalls.push(path);
+            if (backupFailure) throw backupFailure;
+            return backup(this.database, mapped(path));
+          }
+          close() {
+            this.database.close();
+          }
+        };
+      assert.equal(
+        name,
+        "/app/apps/api/dist/platform/persistence/drizzle.connection.js",
+      );
+      return {
+        createConnection(path) {
+          opens.push(path);
+          assert.equal(path, "/tmp/migration-review.db");
+          const sqlite = new DatabaseSync(mapped(path));
+          sqlite.pragma = (query) => sqlite.prepare("PRAGMA " + query).all();
+          return { sqlite, db: sqlite };
+        },
+        runMigrations(db) {
+          db.exec(sql);
+        },
+      };
+    },
+    process: { argv: ["node"], exitCode: 0 },
+    console: {
+      log: (text) => output.push({ kind: "log", text }),
+      error: (text) => output.push({ kind: "error", text }),
+    },
+  };
+  return {
+    sourcePath,
+    copyPath,
+    copies,
+    opens,
+    sourceOpens,
+    backupCalls,
+    output,
+    probe: (sealed = true) =>
+      runInNewContext(
+        `(${migrationReviewProbe.toString()})(${JSON.stringify(sealed)})`,
+        context,
+      ),
+    wrapper: (args = []) => {
+      context.process.argv = ["node", ...args];
+      return runInNewContext(MIGRATION_REVIEW_PROBE, context);
+    },
+    get exitCode() {
+      return context.process.exitCode;
+    },
+    set afterCopy(value) {
+      afterCopy = value;
+    },
+    set statDrift(value) {
+      statDrift = value;
+    },
+    set allowSourceOpen(value) {
+      allowSourceOpen = value;
+    },
+    set backupFailure(value) {
+      backupFailure = value;
+    },
+  };
+}
+
+test("sealed WAL-mode source is copied exclusively and actual alias migration opens only the disposable database", async (t) => {
+  const f = await sealedMigrationFixture(t),
+    original = await fs.readFile(f.sourcePath),
+    identity = await fs.stat(f.sourcePath);
+  const result = await f.probe();
+  assert.equal(result.state, "migration-probe-passed");
+  assert.equal(result.snapshot, "sealed-copy");
+  assert.equal(
+    result.databaseSha256,
+    createHash("sha256").update(original).digest("hex"),
+  );
+  assert.equal(result.preservedTables, 1);
+  assert.equal(result.appliedMigrations, 1);
+  assert.equal(result.appendedMigrations, 1);
+  assert.equal(f.copies.length, 1);
+  assert.deepEqual(f.sourceOpens, []);
+  assert.deepEqual(f.opens, ["/tmp/migration-review.db"]);
+  assert.deepEqual(await fs.readFile(f.sourcePath), original);
+  const after = await fs.stat(f.sourcePath);
+  for (const key of ["dev", "ino", "size", "mtimeMs", "ctimeMs"])
+    assert.equal(after[key], identity[key], key);
+  assert.equal(syncFs.existsSync(f.sourcePath + "-wal"), false);
+  assert.equal(syncFs.existsSync(f.sourcePath + "-shm"), false);
+  const copy = new DatabaseSync(f.copyPath);
+  try {
+    assert.deepEqual(
+      copy
+        .prepare("PRAGMA table_info(images)")
+        .all()
+        .map((row) => row.name),
+      ["id", "alias"],
+    );
+    assert.equal(
+      copy.prepare("SELECT id FROM images").get().id,
+      "checkpointed-row",
+    );
+  } finally {
+    copy.close();
+  }
+});
+
+test("sealed snapshot rejects either WAL sidecar before copy or one appearing during copy without opening any database", async (t) => {
+  for (const suffix of ["-wal", "-shm"]) {
+    for (const phase of ["before", "after"]) {
+      const f = await sealedMigrationFixture(t);
+      const addSidecar = () =>
+        syncFs.writeFileSync(f.sourcePath + suffix, "unsealed");
+      if (phase === "before") addSidecar();
+      else f.afterCopy = addSidecar;
+      await assert.rejects(f.probe(), /not sealed/, suffix + " " + phase);
+      assert.equal(f.copies.length, phase === "before" ? 0 : 1);
+      assert.deepEqual(f.sourceOpens, []);
+      assert.deepEqual(f.opens, []);
+    }
+  }
+  for (const suffix of ["-wal", "-shm"]) {
+    const f = await sealedMigrationFixture(t);
+    await fs.symlink(join(f.sourcePath, "missing"), f.sourcePath + suffix);
+    assert.equal(syncFs.existsSync(f.sourcePath + suffix), false);
+    await assert.rejects(f.probe(), /not sealed/, "dangling " + suffix);
+    assert.deepEqual(f.copies, []);
+    assert.deepEqual(f.opens, []);
+  }
+});
+
+test("sealed snapshot rejects source identity, size and independent modification metadata drift after copying", async (t) => {
+  for (const key of ["dev", "ino", "size", "mtimeMs", "ctimeMs"]) {
+    const f = await sealedMigrationFixture(t);
+    f.statDrift = key;
+    await assert.rejects(f.probe(), /source changed/, key);
+    assert.equal(f.copies.length, 1);
+    assert.deepEqual(f.opens, []);
+  }
+  const f = await sealedMigrationFixture(t);
+  f.afterCopy = () => {
+    const replaced = f.sourcePath + ".replacement";
+    syncFs.copyFileSync(f.sourcePath, replaced);
+    syncFs.renameSync(replaced, f.sourcePath);
+  };
+  await assert.rejects(f.probe(), /source changed/);
+  assert.deepEqual(f.opens, []);
+});
+
+test("sealed snapshot never overwrites an existing disposable database or accepts nonboolean mode", async (t) => {
+  const f = await sealedMigrationFixture(t);
+  await fs.writeFile(f.copyPath, "another probe owns this file");
+  await assert.rejects(f.probe(), { code: "EEXIST" });
+  assert.equal(
+    await fs.readFile(f.copyPath, "utf8"),
+    "another probe owns this file",
+  );
+  assert.deepEqual(f.opens, []);
+  for (const mode of ["sealed", 1, null])
+    await assert.rejects(f.probe(mode), /Invalid migration snapshot mode/);
+  assert.equal(f.copies.length, 1);
+});
+
+test("live readonly open and backup failures never fall back to the sealed main-file copy", async (t) => {
+  const unableToOpen = await sealedMigrationFixture(t);
+  await assert.rejects(unableToOpen.probe(false), /SQLITE_CANTOPEN/);
+  assert.equal(unableToOpen.sourceOpens.length, 1);
+  assert.deepEqual(unableToOpen.copies, []);
+  assert.deepEqual(unableToOpen.opens, []);
+  const unableToBackup = await sealedMigrationFixture(t);
+  unableToBackup.allowSourceOpen = true;
+  unableToBackup.backupFailure = Object.assign(
+    Error("readonly SQLite backup failed"),
+    { code: "SQLITE_CANTOPEN" },
+  );
+  await assert.rejects(unableToBackup.probe(false), {
+    code: "SQLITE_CANTOPEN",
+  });
+  assert.deepEqual(unableToBackup.backupCalls, ["/tmp/migration-review.db"]);
+  assert.deepEqual(unableToBackup.copies, []);
+  assert.deepEqual(unableToBackup.opens, []);
+});
+
+test("the candidate node wrapper selects sealed mode only from its first explicit argument", async (t) => {
+  const sealed = await sealedMigrationFixture(t);
+  await sealed.wrapper(["sealed"]);
+  assert.equal(JSON.parse(sealed.output[0].text).snapshot, "sealed-copy");
+  assert.equal(sealed.exitCode, 0);
+  for (const args of [[], ["other"], ["other", "sealed"]]) {
+    const live = await sealedMigrationFixture(t);
+    await live.wrapper(args);
+    assert.equal(live.exitCode, 1);
+    assert.deepEqual(live.copies, []);
+    assert.equal(live.sourceOpens.length, 1);
+    assert.equal(live.output[0].kind, "error");
+  }
 });
 test("migration review requires explicit fingerprints and validated receipt before any permission or production stop", async (t) => {
   const h = await deployHarness(t, { schemaChanged: true });
@@ -1729,6 +2045,45 @@ test("migration review failure never creates approval or touches production admi
   });
   await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
   assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+});
+test("live review refuses candidate reports without the exact SQLite snapshot mode and never grants permission", async (t) => {
+  for (const snapshot of [undefined, "sealed-copy", "unknown"]) {
+    const h = await deployHarness(t, {
+      schemaChanged: true,
+      migrationSnapshot: () => snapshot,
+    });
+    await assert.rejects(
+      h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT),
+      /Migration copy validation failed/,
+    );
+    await assert.rejects(fs.stat(join(h.root, "migration-review.json")), {
+      code: "ENOENT",
+    });
+    await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+    assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+  }
+});
+test("stopped rehearsal refuses candidate reports with live, unknown or missing snapshot mode before replacement", async (t) => {
+  for (const snapshot of [undefined, "sqlite-backup", "unknown"]) {
+    const h = await deployHarness(t, {
+      schemaChanged: true,
+      migrationSnapshot: ({ sealed }) => (sealed ? snapshot : "sqlite-backup"),
+    });
+    await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+    const result = await h.service.deploy(SHA, 12);
+    assert.equal(result.state, "rolled-back");
+    assert.equal(
+      result.reason,
+      "Post-stop preparation failed; unchanged original release restarted",
+    );
+    assert.equal(h.current.Id, "container-original");
+    assert.equal(h.current.State.Running, true);
+    assert.ok(!h.calls.some((call) => call.args[2] === "rm"));
+    assert.ok(
+      !h.calls.some((call) => call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT)),
+    );
+    await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  }
 });
 test("approved heads changing during migration rehearsal leave no review permit or production mutation", async (t) => {
   let changed = false;
@@ -1809,6 +2164,27 @@ test("migration approval binds every old/new commit, image, schema, container an
     assert.ok(!h.calls.some((call) => call.args[2] === "stop"), field);
     await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
   }
+  for (const snapshot of [undefined, "sealed-copy", "unknown"]) {
+    const h = await deployHarness(t, { schemaChanged: true });
+    const permit = await h.service.reviewMigration(
+      SHA,
+      12,
+      "e".repeat(64),
+      FINGERPRINT,
+    );
+    await write(
+      join(h.root, "migration-review.json"),
+      JSON.stringify({
+        ...permit,
+        probe: { ...permit.probe, snapshot },
+      }),
+    );
+    assert.equal(
+      (await h.service.deploy(SHA, 12)).state,
+      "waiting-migration-review",
+    );
+    assert.ok(!h.calls.some((call) => call.args[2] === "stop"));
+  }
 });
 test("idle retries retain migration approval, while exact approved deployment backs up and revalidates the stopped database before replacement", async (t) => {
   let busy = true;
@@ -1836,6 +2212,8 @@ test("idle retries retain migration approval, while exact approved deployment ba
   assert.equal(result.state, "deployed");
   assert.deepEqual(result.migrationReview, permit);
   assert.equal(result.migrationProbe.state, "migration-probe-passed");
+  assert.equal(permit.probe.snapshot, "sqlite-backup");
+  assert.equal(result.migrationProbe.snapshot, "sealed-copy");
   assert.equal(
     JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
     "consumed",
@@ -1844,6 +2222,8 @@ test("idle retries retain migration approval, while exact approved deployment ba
     call.args.includes(MIGRATION_REVIEW_PROBE) ? [index] : [],
   );
   assert.equal(probeIndexes.length, 2);
+  assert.equal(h.calls[probeIndexes[0]].args.at(-1), MIGRATION_REVIEW_PROBE);
+  assert.equal(h.calls[probeIndexes[1]].args.at(-1), "sealed");
   const stopIndex = h.calls.findIndex((call) => call.args[2] === "stop"),
     backupIndex = h.calls.findIndex((call) =>
       call.args.at(-1).includes?.("tar --exclude=./deployment-drain"),
@@ -1854,6 +2234,35 @@ test("idle retries retain migration approval, while exact approved deployment ba
       backupIndex < probeIndexes[1] &&
       probeIndexes[1] < removeIndex,
   );
+  assert.match(h.calls[backupIndex].args.at(-1), /tar -tzf .* >\/dev\/null/);
+  assert.ok(
+    h.calls
+      .slice(backupIndex + 1, probeIndexes[1])
+      .some(
+        (call) =>
+          call.args[2] === "inspect" &&
+          call.args.at(-1) === "agent-platform-api",
+      ),
+  );
+  assert.ok(
+    h.calls
+      .slice(probeIndexes[1] + 1, removeIndex)
+      .some(
+        (call) =>
+          call.args[2] === "inspect" &&
+          call.args.at(-1) === "agent-platform-api",
+      ),
+  );
+  for (const window of [
+    h.calls.slice(backupIndex + 1, probeIndexes[1]),
+    h.calls.slice(probeIndexes[1] + 1, removeIndex),
+  ])
+    assert.ok(
+      window.some(
+        (call) =>
+          call.args.includes(BARRIER_SCRIPT) && call.args.at(-2) === "check",
+      ),
+    );
   await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
   assert.equal((await h.service.deploy(SHA, 12)).state, "current");
 });
@@ -1864,14 +2273,145 @@ test("failed final migration rehearsal restarts the unchanged old container and 
     migrationReviewFail: () => ++probes === 2,
   });
   await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
-  assert.equal((await h.service.deploy(SHA, 12)).state, "rolled-back");
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(result.state, "rolled-back");
+  assert.equal(
+    result.reason,
+    "Post-stop preparation failed; unchanged original release restarted",
+  );
   assert.equal(h.current.Id, "container-original");
   assert.equal(h.current.State.Running, true);
   assert.ok(!h.calls.some((call) => call.args[2] === "rm"));
+  assert.ok(
+    !h.calls.some((call) => call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT)),
+  );
+  assert.equal(h.calls.filter((call) => call.args[2] === "start").length, 1);
   assert.equal(
     (await h.service.deploy(SHA, 12)).state,
     "waiting-migration-review",
   );
+});
+test("failed complete backup consumes review and restarts the unchanged original before any sealed rehearsal or replacement", async (t) => {
+  const h = await deployHarness(t, {
+    schemaChanged: true,
+    backupFailure: true,
+  });
+  await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+  const result = await h.service.deploy(SHA, 12);
+  assert.equal(result.state, "rolled-back");
+  assert.equal(
+    result.reason,
+    "Post-stop preparation failed; unchanged original release restarted",
+  );
+  assert.equal(h.current.Id, "container-original");
+  assert.equal(h.current.Image, OLD_IMAGE);
+  assert.equal(h.current.State.Running, true);
+  assert.equal(h.current.State.Health.Status, "healthy");
+  assert.equal(
+    JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
+    "consumed",
+  );
+  const probes = h.calls.filter((call) =>
+    call.args.includes(MIGRATION_REVIEW_PROBE),
+  );
+  assert.equal(probes.length, 1);
+  assert.equal(probes[0].args.at(-1), MIGRATION_REVIEW_PROBE);
+  assert.ok(!h.calls.some((call) => call.args[2] === "rm"));
+  assert.ok(
+    !h.calls.some((call) => call.args[2] === "run" && call.args.includes("-d")),
+  );
+  assert.ok(
+    !h.calls.some((call) => call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT)),
+  );
+  assert.equal(h.calls.filter((call) => call.args[2] === "stop").length, 1);
+  assert.equal(h.calls.filter((call) => call.args[2] === "start").length, 1);
+  await assert.rejects(fs.stat(h.drain), { code: "ENOENT" });
+  assert.equal(
+    (await h.service.deploy(SHA, 12)).state,
+    "waiting-migration-review",
+  );
+});
+test("restart during stopped backup or sealed rehearsal preserves admission and checkpoint without removing or restoring data", async (t) => {
+  for (const phase of ["backup", "probe"]) {
+    const configuration = { schemaChanged: true };
+    if (phase === "backup")
+      configuration.onBackup = (current) => {
+        current.State.Running = true;
+      };
+    else
+      configuration.onMigrationReviewProbe = ({ sealed, current }) => {
+        if (sealed) current.State.Running = true;
+      };
+    const h = await deployHarness(t, configuration);
+    await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+    await assert.rejects(h.service.deploy(SHA, 12), /checkpoint retained/);
+    assert.equal(h.current.Id, "container-original");
+    assert.equal(h.current.State.Running, true);
+    assert.ok(await fs.stat(h.drain));
+    const checkpoint = JSON.parse(
+      await privateFile(join(h.root, "deployment.lock/checkpoint.json")),
+    );
+    assert.equal(checkpoint.state, "operator-recovery-required");
+    assert.equal(checkpoint.previousContainerId, "container-original");
+    assert.ok(checkpoint.backup);
+    assert.equal(h.calls.filter((call) => call.args[2] === "stop").length, 1);
+    assert.ok(
+      !h.calls.some(
+        (call) => call.args[2] === "rm" || call.args[2] === "start",
+      ),
+    );
+    assert.ok(
+      !h.calls.some((call) => call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT)),
+    );
+    assert.equal(
+      h.calls.filter((call) => call.args.includes(MIGRATION_REVIEW_PROBE))
+        .length,
+      phase === "backup" ? 1 : 2,
+    );
+  }
+});
+test("maintenance replacement during backup or sealed rehearsal remains operator-owned and prevents removal or recovery writes", async (t) => {
+  for (const phase of ["backup", "probe"]) {
+    let h;
+    const replace = async () => {
+      await fs.rename(h.drain, h.drain + ".original");
+      await write(h.drain, "operator maintenance replacement");
+    };
+    const configuration = { schemaChanged: true };
+    if (phase === "backup") configuration.onBackup = replace;
+    else
+      configuration.onMigrationReviewProbe = async ({ sealed }) => {
+        if (sealed) await replace();
+      };
+    h = await deployHarness(t, configuration);
+    await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
+    await assert.rejects(h.service.deploy(SHA, 12), /checkpoint retained/);
+    assert.equal(
+      await fs.readFile(h.drain, "utf8"),
+      "operator maintenance replacement",
+    );
+    assert.equal(h.current.Id, "container-original");
+    assert.equal(h.current.State.Running, false);
+    assert.equal(
+      JSON.parse(
+        await privateFile(join(h.root, "deployment.lock/checkpoint.json")),
+      ).state,
+      "operator-recovery-required",
+    );
+    assert.ok(
+      !h.calls.some(
+        (call) => call.args[2] === "rm" || call.args[2] === "start",
+      ),
+    );
+    assert.ok(
+      !h.calls.some((call) => call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT)),
+    );
+    assert.equal(
+      h.calls.filter((call) => call.args.includes(MIGRATION_REVIEW_PROBE))
+        .length,
+      phase === "backup" ? 1 : 2,
+    );
+  }
 });
 test("migrated replacement readiness failure restores the full verified backup before restarting the old schema image and consumes review", async (t) => {
   const h = await deployHarness(t, {
@@ -1881,6 +2421,10 @@ test("migrated replacement readiness failure restores the full verified backup b
   await h.service.reviewMigration(SHA, 12, "e".repeat(64), FINGERPRINT);
   const result = await h.service.deploy(SHA, 12);
   assert.equal(result.state, "rolled-back");
+  assert.equal(
+    result.reason,
+    "Replacement publication failed; verified backup and original release restored",
+  );
   assert.equal(h.current.Image, OLD_IMAGE);
   const restoreIndex = h.calls.findIndex((call) =>
       call.args.at(-1).includes?.(CLEAR_DATA_SCRIPT),
@@ -1892,6 +2436,18 @@ test("migrated replacement readiness failure restores the full verified backup b
         call.args.at(-1) === OLD_IMAGE,
     );
   assert.ok(restoreIndex >= 0 && restoreIndex < restartIndex);
+  const restore = h.calls[restoreIndex];
+  assert.match(restore.args.at(-1), /tar -tzf .* >\/dev\/null; set -eu;/);
+  assert.ok(
+    restore.args.includes(
+      "type=volume,source=agent-platform-runtime-backups,target=/backups,readonly",
+    ),
+  );
+  assert.ok(
+    restore.args.includes(
+      "type=volume,source=agent-platform-production-data,target=/data",
+    ),
+  );
   assert.equal(
     JSON.parse(await privateFile(join(h.root, "migration-review.json"))).state,
     "consumed",
