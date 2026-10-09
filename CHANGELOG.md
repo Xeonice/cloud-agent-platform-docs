@@ -14,6 +14,8 @@
 
 ## [0.3.7] - 2026-10-09
 
+主仓改动：[#65](https://github.com/Xeonice/cloud-agent-platform-docs/pull/65)。
+
 - 部署文档整合：新增运维目录 `docs/ops/`（运维入口、生产架构、发版手册、运维手册、灾备与重建、参考表、运维记录）与根目录 `CONTRIBUTING.md`；`docs/macmini-deployment.md` 改为跳转页，`deploy/jenkins/web.md` 与 `github-status-app.md` 并入后删除，`docs/shared/11` 瘦身为自托管 compose 形态与扩展预留。
 - 工具：`manage.mjs` 新增 `quiet-down`、`cancel-quiet-down`、`queue`、`wait-idle`；三 agent 升级脚本收入 `deploy/ops/upgrade-agents.mjs`，`pnpm deploy:test` 覆盖它；新增 compose 与 `runtime.env` 的键模板和 Lima override 仓库副本；根 `package.json` 的 `engines` 收紧为 Node 22.x，与已有的 `.nvmrc` 一致。
 - 宿主值不再写死：新增 `deploy/containers/host-layout.mjs`，Mac 上的运维工具（升级脚本、`manage.mjs`、`bootstrap-host.mjs`、`controller.mjs`、`verify-controller.mjs`、`ci-smoke.mjs`、`setup-github-app.mjs`、`import-ghcr-token.mjs`）的账号、HOME、私有路径与 socket 都从系统账户库推导，不读环境变量；只有 docker CLI、Homebrew 前缀与 LaunchDaemon Label 前缀可在私有目录的 `host-layout.json` 覆盖。新增只读自检 `host-layout.mjs print|doctor --stage host|engines|launchd|images|full`。升级脚本的 `plan.json` 升到 schemaVersion 2，绑定宿主布局与 docker 可执行文件，apply 只认 `$SRC` 里的脚本，失败时输出原因码与脱敏摘要；bootstrap 审阅包升到 schema 2；`manage.mjs`、升级脚本与 `verify-controller.mjs` 发 Jenkins 凭据前核对回环监听进程属于运维账号；删除 `@KEY@` 替换表死代码；删除镜像内模块的原生 Mac 分支与 UID 501；新增守卫测试 `deploy/containers/host-literals.test.mjs`（[参考表](./docs/ops/参考表.md) §12）。
