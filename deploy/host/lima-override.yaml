@@ -1,0 +1,33 @@
+# Global Lima override for every Colima profile (managed by agent-platform ops, 2026-10-07).
+# Never forward the production API (3101) or the tunnel metrics port (20241) to the Mac:
+# any VM can reach Mac loopback through 192.168.5.2, and the API trusts CF-Connecting-IP
+# from loopback peers. These rules are prepended to each instance's own portForwards and
+# the first match wins. Do not add an ignore-all rule: Jenkins 8080 and docker.sock rely
+# on forwarding. A broken file stops every VM from starting, so validate on a spare
+# profile before restarting production VMs.
+portForwards:
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: false
+    guestPort: 3101
+    proto: any
+    ignore: true
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: false
+    guestPort: 20241
+    proto: any
+    ignore: true
+  # Never publish wildcard (0.0.0.0 / ::) guest listeners, e.g. BoxLite's random
+  # host port for guest 8080, on every Mac interface. Publish anything the Mac
+  # needs on 127.0.0.1 inside the VM (docker run -p 127.0.0.1:...).
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: true
+    proto: any
+    ignore: true
+  # Never forward guest port 53. Colima's in-VM dnsmasq also binds 127.0.0.1:53;
+  # a non-root hostagent can only forward that privileged port through a
+  # "pseudoloopback" listener on *:53, which is reachable from the LAN.
+  - guestIP: "0.0.0.0"
+    guestIPMustBeZero: false
+    guestPort: 53
+    proto: any
+    ignore: true

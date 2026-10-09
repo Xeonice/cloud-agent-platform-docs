@@ -155,52 +155,53 @@ async function webFetchFixture(t, caller = { ...identity, ...system }) {
   };
 }
 
-test("fetch-web selects the actual platform workspace and atomically writes verified archive streams without accepting symlink destinations", async (t) => {
-  const caller =
-    process.platform === "linux"
-      ? { ...identity, ...system }
-      : {
-          username: "douglasdong",
-          homedir: "/Users/douglasdong",
-          uid: 501,
-          platform: "darwin",
-          arch: "arm64",
-          nodeMajor: 22,
-        };
-  const f = await webFetchFixture(t, caller);
-  const anchor =
-    process.platform === "linux"
-      ? "/home/jenkins/agent/workspace"
-      : join(f.root, "jenkins-agent");
-  await fs.mkdir(anchor, { recursive: true, mode: 0o700 });
-  const work = await fs.realpath(
-    await fs.mkdtemp(join(anchor, "fetch-web-owned-fixture-")),
-  );
-  t.after(() => fs.rm(work, { recursive: true, force: true }));
-  const result = await f.runner("fetch-web", f.planPath, "37", work);
-  assert.equal(result.state, "web-fetched");
-  assert.equal(result.workspace, work);
-  assert.equal(f.downloads, 3);
-  for (const [name, bytes] of Object.entries(f.archives))
-    assert.deepEqual(await fs.readFile(join(result.artifacts, name)), bytes);
-  assert.deepEqual(
-    JSON.parse(await fs.readFile(join(result.artifacts, "manifest.json"))),
-    f.manifest,
-  );
-  assert.deepEqual((await fs.readdir(work)).sort(), ["web-artifacts"]);
-  await assert.rejects(f.runner("fetch-web", f.planPath, "37", work), /fresh/);
-  const external = join(f.root, "outside-workspace");
-  await fs.mkdir(join(external, "nested"), { recursive: true, mode: 0o700 });
-  const link = join(work, "linked-destination");
-  await fs.symlink(external, link);
-  for (const path of [link, join(link, "nested")])
-    await assert.rejects(
-      f.runner("fetch-web", f.planPath, "37", path),
-      /Unsafe release directory/,
+// Adoption writes only below the fixed agent workspace, which exists on the
+// Linux CI agents running this suite. The refusal cases below run everywhere.
+const agentOnly = {
+  skip:
+    process.platform !== "linux" &&
+    "fetch-web adopts only into the fixed Linux Jenkins agent workspace",
+};
+
+test(
+  "fetch-web selects the actual platform workspace and atomically writes verified archive streams without accepting symlink destinations",
+  agentOnly,
+  async (t) => {
+    const f = await webFetchFixture(t);
+    const anchor = "/home/jenkins/agent/workspace";
+    await fs.mkdir(anchor, { recursive: true, mode: 0o700 });
+    const work = await fs.realpath(
+      await fs.mkdtemp(join(anchor, "fetch-web-owned-fixture-")),
     );
-  assert.deepEqual(await fs.readdir(external), ["nested"]);
-  assert.equal(f.downloads, 3);
-});
+    t.after(() => fs.rm(work, { recursive: true, force: true }));
+    const result = await f.runner("fetch-web", f.planPath, "37", work);
+    assert.equal(result.state, "web-fetched");
+    assert.equal(result.workspace, work);
+    assert.equal(f.downloads, 3);
+    for (const [name, bytes] of Object.entries(f.archives))
+      assert.deepEqual(await fs.readFile(join(result.artifacts, name)), bytes);
+    assert.deepEqual(
+      JSON.parse(await fs.readFile(join(result.artifacts, "manifest.json"))),
+      f.manifest,
+    );
+    assert.deepEqual((await fs.readdir(work)).sort(), ["web-artifacts"]);
+    await assert.rejects(
+      f.runner("fetch-web", f.planPath, "37", work),
+      /fresh/,
+    );
+    const external = join(f.root, "outside-workspace");
+    await fs.mkdir(join(external, "nested"), { recursive: true, mode: 0o700 });
+    const link = join(work, "linked-destination");
+    await fs.symlink(external, link);
+    for (const path of [link, join(link, "nested")])
+      await assert.rejects(
+        f.runner("fetch-web", f.planPath, "37", path),
+        /Unsafe release directory/,
+      );
+    assert.deepEqual(await fs.readdir(external), ["nested"]);
+    assert.equal(f.downloads, 3);
+  },
+);
 
 test("Linux fetch-web admits only canonical descendants of the fixed Jenkins workspace, never a Mac root or another home", async (t) => {
   const f = await webFetchFixture(t);
@@ -236,10 +237,11 @@ test("trusted Linux deployment pins account, ARM64 Node and private volume paths
   );
   for (const replacement of [
     { uid: 0 },
-    { uid: 501 },
-    { gid: 501 },
+    { uid: 5101 },
+    { gid: 20 },
     { homedir: "/tmp" },
-    { username: "_agentplatformci" },
+    { homedir: "/Users/operator" },
+    { username: "operator" },
   ])
     assert.throws(
       () => deploymentContext({ ...identity, ...replacement }, system),
@@ -253,8 +255,27 @@ test("trusted Linux deployment pins account, ARM64 Node and private volume paths
     assert.throws(() =>
       deploymentContext(identity, { ...system, ...replacement }),
     );
-  const env = deploymentEnvironment(system.node, LINUX_DEPLOY.home, "linux");
-  assert.equal(env.PATH.includes("homebrew"), false);
+  // No macOS host, account or Node location remains a deployment layout.
+  for (const caller of [
+    identity,
+    { username: "operator", uid: 5101, gid: 20, homedir: "/Users/operator" },
+  ])
+    assert.throws(
+      () =>
+        deploymentContext(caller, {
+          ...system,
+          platform: "darwin",
+          node: "/opt/node-22/bin/node",
+        }),
+      /fixed Node 22 Linux/,
+    );
+  const env = deploymentEnvironment(system.node, LINUX_DEPLOY.home);
+  assert.equal(
+    env.PATH,
+    "/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  );
+  assert.equal(env.LANG, "C.UTF-8");
+  assert.equal(env.HOME, "/home/jenkins");
   for (const key of [
     "ACCESS_PASSCODE",
     "DATABASE_URL",
@@ -329,6 +350,22 @@ test("Jenkins transport reaches only the fixed host gateway while provenance sta
   );
   assert.throws(() =>
     jenkinsTransport(url, { jenkins: "https://evil.invalid" }),
+  );
+  // The retired native Mac transport (direct host loopback) is no endpoint now.
+  for (const context of [{ jenkins: "http://127.0.0.1:8080/" }, {}]) {
+    assert.throws(
+      () => jenkinsTransport(url, context),
+      /Unknown Jenkins transport endpoint/,
+    );
+    assert.throws(
+      () => canonicalJenkinsLocation(url, context),
+      /Unknown Jenkins transport endpoint/,
+    );
+  }
+  // Without an explicit context, the fixed Linux gateway is the default.
+  assert.equal(
+    jenkinsTransport(url),
+    "http://host.lima.internal:8080/job/agent-platform-web/7/",
   );
 });
 

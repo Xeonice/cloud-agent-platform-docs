@@ -14,7 +14,7 @@ import { pathToFileURL } from "node:url";
 import { userInfo } from "node:os";
 import { validateManifest as validateWebManifest } from "./jenkins-web.mjs";
 import {
-  DEPLOYMENT,
+  LINUX_DEPLOY,
   deploymentContext,
   assertDeploymentLayout,
   deploymentEnvironment,
@@ -22,8 +22,8 @@ import {
   sameJenkinsBuildUrl,
 } from "./deployment-platform.mjs";
 
-export const ROOT = DEPLOYMENT.root;
-export const TOOLS = DEPLOYMENT.tools;
+export const ROOT = LINUX_DEPLOY.root;
+export const TOOLS = LINUX_DEPLOY.tools;
 export const REPOSITORIES = Object.freeze({
   project: {
     name: "Xeonice/cloud-agent-platform-docs",
@@ -90,8 +90,8 @@ export function buildUrl(job, number) {
     throw new Error("Invalid fixed Jenkins job/build");
   return "http://127.0.0.1:8080/job/" + job + "/" + number + "/";
 }
-export function releaseEnvironment(node, home, platform = process.platform) {
-  return deploymentEnvironment(node, home, platform);
+export function releaseEnvironment(node, home) {
+  return deploymentEnvironment(node, home);
 }
 export function buildParameters(kind, plan) {
   if (kind === "api")
@@ -502,7 +502,7 @@ async function execute(command, args, cwd, capture = true) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
       cwd,
-      env: releaseEnvironment(process.execPath, DEPLOYMENT.home),
+      env: releaseEnvironment(process.execPath, LINUX_DEPLOY.home),
       stdio: capture
         ? ["ignore", "pipe", "pipe"]
         : ["ignore", "inherit", "inherit"],
@@ -598,6 +598,7 @@ export async function verifyPackage(folder, plan) {
     manifest.key !== plan.key ||
     projectKey(manifest.commits) !== plan.key ||
     manifest.tag !== plan.tag ||
+    // Packages built before the Linux agents (builtOn darwin) stay verifiable.
     !["darwin", "linux"].includes(manifest.builtOn?.platform) ||
     manifest.builtOn?.arch !== "arm64" ||
     manifest.builtOn?.nodeMajor !== 22 ||
@@ -1284,13 +1285,10 @@ export function createReleaseRunner(overrides = {}) {
     if (manifest.jenkins.buildNumber !== proof.number)
       throw new Error("Downloaded web manifest belongs to another build");
     const work = resolve(workspace);
-    const workspaceRoot =
-      context.platform === "linux"
-        ? join(context.home, "agent", "workspace")
-        : join(root, "jenkins-agent");
+    const workspaceRoot = join(context.home, "agent", "workspace");
     const rel = relative(workspaceRoot, work);
     if (
-      (context.platform === "linux" && workspace !== work) ||
+      workspace !== work ||
       !rel ||
       rel === ".." ||
       rel.startsWith("../") ||
@@ -1452,12 +1450,11 @@ export function createReleaseRunner(overrides = {}) {
     throw new Error("GitHub releases inventory exceeds the bounded scan");
   }
   return async function release(action, ...args) {
-    if (context.platform === "linux")
-      await (overrides.assertLayout ?? assertDeploymentLayout)({
-        ...context,
-        root,
-        tools,
-      });
+    await (overrides.assertLayout ?? assertDeploymentLayout)({
+      ...context,
+      root,
+      tools,
+    });
     if (action === "plan") {
       const commits = {};
       for (const [name, spec] of Object.entries(REPOSITORIES))

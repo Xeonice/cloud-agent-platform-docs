@@ -1,12 +1,13 @@
 # 云 Agent 管理平台
 
-管理项目、交互式 Agent 任务与无头自动化。产品规则见 [当前需求](./docs/product/requirements/README.md)，实现与验收入口见 [实现状态](./IMPLEMENTATION-STATUS.md)，技术文档见 [文档索引](./docs/README.md)。
+管理项目、交互式 Agent 任务与无头自动化。产品规则见 [当前需求](./docs/product/requirements/README.md)，实现与验收入口见 [实现状态](./IMPLEMENTATION-STATUS.md)，技术文档见 [文档索引](./docs/README.md)。参与开发先读 [CONTRIBUTING](./CONTRIBUTING.md)，部署与运维从 [运维入口](./docs/ops/README.md) 开始。
 
 ## 1. 仓库组成
 
-主仓固定 `api`、`web` 子模块版本，包含 `e2e-contract` 跨仓验收、文档及本地 Jenkins 构建发布工具。
+主仓固定 `api`、`web` 子模块版本，包含 `e2e-contract` 跨仓验收、文档及本地 Jenkins 构建发布工具（`deploy/`）。
 
 ```sh
+# 本地，任意目录
 git clone --recurse-submodules https://github.com/Xeonice/cloud-agent-platform-docs.git
 cd cloud-agent-platform-docs
 git submodule update --init --recursive
@@ -14,27 +15,37 @@ git submodule update --init --recursive
 
 ## 2. 开发环境
 
-使用 Node 22 和各仓 `packageManager` 指定的 pnpm。API 原生依赖须在目标系统及架构安装；生产 BoxLite 在专属 Linux ARM64 VM 中使用 KVM。开发环境与生产数据目录分开。
+使用 Node 22（建议 22.23.3，与 CI 一致；不支持 20 和 24），pnpm 由 corepack 按各仓 `packageManager` 选择，所以 pnpm 命令要在各仓目录内执行。原因与切换版本后的处理见 [CONTRIBUTING](./CONTRIBUTING.md)。
 
 ## 3. 本地开发
 
-在 `api`、`web` 分别安装依赖。API 配置参见其 `.env.example` 与 [部署规范](./docs/shared/11-部署与扩展预留.md)，前端接口配置见 [共享契约](./docs/shared/10-接口契约与类型共享.md)。
+最小步骤如下，端口约定为 API `3001`、Web `3000`；配置说明、端口被占用时的备选和常见问题见 [CONTRIBUTING](./CONTRIBUTING.md)。
 
 ```sh
-pnpm --dir api install --frozen-lockfile
-pnpm --dir web install --frozen-lockfile
-pnpm --dir api start:dev
+# 本地，仓库根目录，Node 22
+corepack enable                     # 不想写系统目录时：corepack enable --install-directory ~/.local/bin
+(cd api && pnpm install --frozen-lockfile)
+(cd web && pnpm install --frozen-lockfile)
+mkdir -p "$HOME/agent-platform/dev-data"
+test -e api/.env || cat > api/.env <<EOF
+HOST=127.0.0.1
+PORT=3001
+DATA_ROOT=$HOME/agent-platform/dev-data
+BOXLITE_HOME=$HOME/agent-platform/dev-data/boxlite
+EOF
+cp -n web/.env.example web/.env.local
+(cd api && pnpm start:dev)          # 首次启动会打印一次访问口令
 # 另一个终端
-pnpm --dir web dev
+(cd web && pnpm dev -H 127.0.0.1)   # 打开 http://127.0.0.1:3000
 ```
 
-根 `docker-compose.yml` 提供包含前后端的本地 Compose 入口；后端 Compose 的 Provider 与资源前提仍须满足。正式 Mac mini 部署采用下面的独立服务方案。
+根目录 `docker-compose.yml` 是产品的自托管部署形态（compose），与本项目生产无关，说明见 [部署形态与扩展预留](./docs/shared/11-部署与扩展预留.md)。
 
 ## 4. 生产部署与发布
 
-本地 Jenkins 负责构建、验收、打包、API 发布与 GitHub Release，前端发布 Vercel prebuilt 产物。生产 API、BoxLite 与 Cloudflare Tunnel 使用专属运行 VM；Jenkins controller 与通用 CI 使用独立 Docker 环境。服务启动、持久卷、日志、空闲切换与恢复命令见 [Mac mini 部署](./docs/macmini-deployment.md)。
+合并任一仓的 `main` 即自动发布生产：Mac mini 上的 Jenkins 约 2 分钟内发现变化，构建、验收、按需替换 API、上传 Vercel 并发布 GitHub Release。主仓的任何合并（包括纯文档）都会替换一次生产 API，要等生产空闲。
 
-API、web 与主仓的 `main` SHA 是同一发布计划的组成部分；PR 分支用于验收。部署使用已验证的不可变产物，不能用本机未提交文件替代发布来源。
+发布单位是三仓 `main` 当时 head 的组合，主仓的子模块指针不参与发布；部署只使用已验证的不可变产物，不能用本机未提交文件替代。发版、运维与灾备流程见 [运维入口](./docs/ops/README.md)。
 
 ## 5. 访问与凭证
 
@@ -42,21 +53,21 @@ API、web 与主仓的 `main` SHA 是同一发布计划的组成部分；PR 分�
 
 ## 6. 运行时与数据
 
-生产任务由 BoxLite microVM 隔离。项目基线、数据库、凭据密钥与保留成果属于持久数据；删除容器不等于删除持久卷。任务停止保留名额与代码副本，销毁按确认选择保留成果。实际部署的数据路径和备份策略见部署说明。
+生产任务由 BoxLite microVM 隔离。项目基线、数据库、凭据密钥与保留成果属于持久数据；删除容器不等于删除持久卷。任务停止保留名额与代码副本，销毁按确认选择保留成果。生产数据卷与备份见 [灾备与重建](./docs/ops/灾备与重建.md)。
 
 ## 7. 当前验收
 
 ```sh
+# 本地，仓库根目录，Node 22
 pnpm docs:check
 pnpm deploy:test
-pnpm --dir api test:acceptance
-pnpm --dir web test:acceptance
-pnpm --dir web test:storybook
-pnpm --dir e2e-contract test
+(cd api && pnpm test:acceptance)
+(cd web && pnpm test:acceptance && pnpm test:storybook)
+(cd e2e-contract && pnpm test)
 ```
 
-类型、lint、构建、OpenAPI/WS/SSE 一致性与验收执行仍由对应仓入口和 Jenkins 记录。规格条数、Storybook 状态数与实际测试通过数分别报告。
+e2e-contract 首次运行前要装依赖和 Chromium；各仓 Jenkins 门禁的完整阶段与本地等价命令见 [CONTRIBUTING](./CONTRIBUTING.md)。规格条数、Storybook 状态数与实际测试通过数分别报告。
 
 ## 8. 文档入口
 
-[产品总纲](./docs/product/19-产品总纲.md) · [页面信息架构](./docs/product/21-页面信息架构与交互.md) · [产品裁决](./docs/product/requirements/decisions.md) · [测试协作](./docs/shared/29-测试策略与测试Agent.md) · [更新记录](./CHANGELOG.md)。
+[产品总纲](./docs/product/19-产品总纲.md) · [页面信息架构](./docs/product/21-页面信息架构与交互.md) · [产品裁决](./docs/product/requirements/decisions.md) · [测试协作](./docs/shared/29-测试策略与测试Agent.md) · [参与开发](./CONTRIBUTING.md) · [运维入口](./docs/ops/README.md) · [更新记录](./CHANGELOG.md)。

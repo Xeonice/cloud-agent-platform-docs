@@ -1,15 +1,56 @@
 # CHANGELOG
 
-本文件记录**平台整体**的版本。
+本文件记录**平台整体**（主仓 + `api` + `web`）的版本。发布机制如下，完整规则见 [发版手册](./docs/ops/发版手册.md)：
 
-三仓之中**只有主仓打 tag** —— 只有它能钉住一个完整、可复现的部署状态（两个 submodule 指针）。
-⛔ 不给 `api` / `web` 各自打产品版本号：它们 `package.json` 里的 version 是**包版本**，
-跟着产品号走会立刻与主仓 tag 漂移，而且改它们又会反过来动指针，绕成一个环。
+- **发布单位**：发布作业读取三仓 `main` 当时的 head，组成一个组合发布。实际部署的组合以 GitHub Release 正文里的三个 SHA 和 `release-manifest.json` 为准。
+- **子模块指针**：主仓的 `api`、`web` 指针不参与发布，也不被校验。tag 时刻指针与三仓 `main` 一致，靠合并纪律维持。
+- **版本号**：发布作业自动取 `v0.3.<当前最大 patch + 1>`，feat 与 fix 都只升 patch。升 minor 要手动传 `TAG`，而自动规则目前只认 `v0.3` 前缀。
+- **tag 位置**：只有主仓打版本 tag。`api`、`web` 的 `package.json` version 是包版本，根 `package.json` 的 `0.3.0` 也与发布版本号无关。
+- **谁来写**：合并主仓 PR 的人在同一个 PR 里补条目；不要为补 CHANGELOG 单独再合一个主仓 PR，那会多发一版。
 
-格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循
-[语义化版本](https://semver.org/lang/zh-CN/)。
+格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。0.2.x 及更早的条目保留当时的写法。
 
 ---
+
+## [0.3.7] - 2026-10-09
+
+- 部署文档整合：新增运维目录 `docs/ops/`（运维入口、生产架构、发版手册、运维手册、灾备与重建、参考表、运维记录）与根目录 `CONTRIBUTING.md`；`docs/macmini-deployment.md` 改为跳转页，`deploy/jenkins/web.md` 与 `github-status-app.md` 并入后删除，`docs/shared/11` 瘦身为自托管 compose 形态与扩展预留。
+- 工具：`manage.mjs` 新增 `quiet-down`、`cancel-quiet-down`、`queue`、`wait-idle`；三 agent 升级脚本收入 `deploy/ops/upgrade-agents.mjs`，`pnpm deploy:test` 覆盖它；新增 compose 与 `runtime.env` 的键模板和 Lima override 仓库副本；根 `package.json` 的 `engines` 收紧为 Node 22.x，与已有的 `.nvmrc` 一致。
+- 宿主值不再写死：新增 `deploy/containers/host-layout.mjs`，Mac 上的运维工具（升级脚本、`manage.mjs`、`bootstrap-host.mjs`、`controller.mjs`、`verify-controller.mjs`、`ci-smoke.mjs`、`setup-github-app.mjs`、`import-ghcr-token.mjs`）的账号、HOME、私有路径与 socket 都从系统账户库推导，不读环境变量；只有 docker CLI、Homebrew 前缀与 LaunchDaemon Label 前缀可在私有目录的 `host-layout.json` 覆盖。新增只读自检 `host-layout.mjs print|doctor --stage host|engines|launchd|images|full`。升级脚本的 `plan.json` 升到 schemaVersion 2，绑定宿主布局与 docker 可执行文件，apply 只认 `$SRC` 里的脚本，失败时输出原因码与脱敏摘要；bootstrap 审阅包升到 schema 2；`manage.mjs`、升级脚本与 `verify-controller.mjs` 发 Jenkins 凭据前核对回环监听进程属于运维账号；删除 `@KEY@` 替换表死代码；删除镜像内模块的原生 Mac 分支与 UID 501；新增守卫测试 `deploy/containers/host-literals.test.mjs`（[参考表](./docs/ops/参考表.md) §12）。
+- 运维注意：纯文档合并也会替换一次 API，合并前停用 release、生产空闲时放行。本版改了镜像内的模块，合并后要按[发版手册](./docs/ops/发版手册.md) §4 用新脚本升级三个 agent，build 前核对三份 agent 密钥属主为 `1000:1000`（发版手册 §2）；旧版升级脚本副本是回退工件，验证通过前不要删除。下次执行 `bootstrap-host.mjs apply-system` 之前要重新 `prepare`；plist 字节不变，不需要重装 LaunchDaemon。
+
+## [0.3.6] - 2026-10-08
+
+- auth helper 自愈：复用前复核实例是否存活，执行失败时作废并重建一次；对账不再把 helper 当孤儿删除；BoxLite 只为镜像声明的端口建映射，helper 与任务不再发布通配端口（[api#48](https://github.com/Xeonice/agent-platform-api/pull/48)）。
+- API 入口在加载前做 cgroup v2 委派，每个 box 获得 `pids.max=1024` 与 `cgroup.kill` 回收；隔离 smoke 新增 listeners、helper、cgroup 与 helper chaos 阶段（[#64](https://github.com/Xeonice/cloud-agent-platform-docs/pull/64)）。
+- 运维注意：`api-cgroup.mjs` 加入了 `CONTAINER_INPUTS`，本版先升级 Jenkins agent 再发 API，委派与 helper 改动在同一次发布上线。需要关闭委派时在两份 `runtime.env` 里设 `API_CGROUP_DELEGATION=off`，不要 revert 代码（见 [运维手册](./docs/ops/运维手册.md)）。
+
+## [0.3.5] - 2026-10-08
+
+- web 仓的 CI 说明改为固定分支的发现规则（[web#45](https://github.com/Xeonice/agent-platform-web/pull/45)），主仓钉住它的合并提交（[#63](https://github.com/Xeonice/cloud-agent-platform-docs/pull/63)）。
+- 运维注意：纯文档改动也触发了一次完整发布并替换了一次 API。合并期间临时停用 release，两仓的变化合成一次发版。
+
+## [0.3.4] - 2026-10-07
+
+- 发现作业只看三仓 `main` 与同仓指向 `main` 的 PR（含 draft）：fork PR、栈式 PR 和其他分支不再构建，任何分支名都不会再让整轮失败；`agent-platform-api` 的产物只保留最近 10 次（[#62](https://github.com/Xeonice/cloud-agent-platform-docs/pull/62)）。
+- 运维注意：API 改动要开指向 `main` 的 PR 才有 CI，fork 贡献要先推到同仓分支。
+
+## [0.3.3] - 2026-10-07
+
+- 发布来源固定为三仓 `main`。已确认停止的沙箱（保留磁盘、工作区与名额）经只读 SQLite 与进程核验后可安全切换，核验适配 BoxLite 0.9.7 的两行 `shim.pid` 与僵尸 bwrap（[#60](https://github.com/Xeonice/cloud-agent-platform-docs/pull/60)、[#61](https://github.com/Xeonice/cloud-agent-platform-docs/pull/61)）。
+- API 对账保留已停止的 BoxLite 实例（[api#47](https://github.com/Xeonice/agent-platform-api/pull/47)），API 行为与容器交付按产品需求对齐（[api#46](https://github.com/Xeonice/agent-platform-api/pull/46)）；Web 迁移到共享设计系统（[web#44](https://github.com/Xeonice/agent-platform-web/pull/44)）。
+- Jenkins 界面固定为简体中文；退役迁移归档与临时部署脚手架。
+
+## [0.3.2] - 2026-10-06
+
+- 公网 Jenkins 入口 `jenkins.douglasdong.com` 经 Cloudflare Access 保护，三个 Linux agent 仍走本机私有通道（迁移分支上的直接提交 `e54bf87`，无 PR，从该分支发布，后随 [#60](https://github.com/Xeonice/cloud-agent-platform-docs/pull/60) 合入 `main`）。
+- 运维注意：controller 的 `AGENT_PLATFORM_JENKINS_URL` 改为公网地址，页面与新的 GitHub 状态链接都指向它；历史构建收据里的本机地址仍可校验。
+
+## [0.3.1] - 2026-10-06
+
+- 构建、验收、打包与发布迁到 Mac mini 本地 Jenkins 与 Docker：三仓发现与 GitHub App 状态回写、Linux ARM64 API 镜像、Vercel prebuilt、GitHub Release 先草稿校验再发布（主要提交 `8a14683`、`cfc2049`、`0b2bb9b`、`f6d5841`）。
+- 生产 API/BoxLite 与 Cloudflare Tunnel 运行在独立的 runtime VM；api、web 的 CI 改由 Jenkins 执行（api `5a94ea9`、web `0a7794b`）。设计 v2 迁移收尾，前后端验收按 v2 重建（`af6736b`；api `9740edc`、web `f9f29a6`）。
+- 来源说明：本版没有 PR，提交在迁移分支 `Xeonice/初始化一下项目开发` 上并从该分支发布，后随 [#60](https://github.com/Xeonice/cloud-agent-platform-docs/pull/60) 合入 `main`。Release 钉住的 API `1e628c9`、Web `0a7794b` 同样来自各自的迁移分支，后分别随 [api#46](https://github.com/Xeonice/agent-platform-api/pull/46)、[web#44](https://github.com/Xeonice/agent-platform-web/pull/44) 合入。GitHub 上两个 `v0.3.0` 草稿是本版之前未完成的发布尝试，不是正式版本。
 
 ## [0.2.4] - 2026-09-24
 

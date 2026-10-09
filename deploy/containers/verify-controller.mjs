@@ -4,15 +4,17 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { activationScript } from "../jenkins/manage.mjs";
-import { CONTROLLER_HOST, BUILD_HOST } from "./controller.mjs";
+import { activationScript, reviewedPipeline } from "../jenkins/manage.mjs";
+import { validateDockerHost } from "./controller.mjs";
+import {
+  JENKINS_PORTS,
+  assertJenkinsListener,
+  loadHostLayout,
+} from "./host-layout.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const docker = "/Users/douglasdong/.orbstack/bin/docker";
-const dockerConfig =
-  "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/container-docker-context";
 const name = "agent-platform-jenkins-lab-controller-1";
-const base = "http://127.0.0.1:18080/";
+const base = `http://127.0.0.1:${JENKINS_PORTS.lab}/`;
 const probeImage =
   "node:22.23.3-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c";
 const pipelines = [
@@ -32,56 +34,46 @@ export function assertPrivateEquality(actual, expected, label) {
   assert.ok(actual === expected, `${label} changed`);
 }
 
-export function renderPipeline(text) {
-  const tools = "/Users/douglasdong/.local/share/agent-platform-jenkins-tools";
-  const deploy = "/Users/douglasdong/.local/share/agent-platform-deploy";
-  const replacements = {
-    NODE22:
-      "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/bin/node",
-    DEPLOY_ROOT: deploy,
-    DEPLOY_CONFIG: join(deploy, "config.json"),
-    DEPLOY_TOOLS: join(deploy, "tools"),
-    JENKINS_TOOLS: tools,
-    JENKINS_SOURCE: join(tools, "source"),
-    COREPACK:
-      "/Users/douglasdong/.local/share/fnm/node-versions/v22.23.3/installation/lib/node_modules/corepack/dist/corepack.js",
+// Docker commands for the jenkins (controller) and build profiles of the host
+// layout only; the default context and the runtime daemon are never reachable.
+export function dockerProfiles(layout) {
+  const profile = (kind, socket) => {
+    const host = validateDockerHost(kind, socket, layout.profiles);
+    return (args, input) => {
+      const result = spawnSync(
+        layout.dockerCli,
+        ["--config", layout.dockerConfig, "--host", host, ...args],
+        {
+          encoding: "utf8",
+          env: {
+            PATH: "/usr/bin:/bin",
+            LANG: "C",
+            DOCKER_CONFIG: layout.dockerConfig,
+          },
+          cwd: "/",
+          timeout: 120_000,
+          maxBuffer: 16 * 1024 * 1024,
+          input,
+        },
+      );
+      if (result.error || result.signal || result.status !== 0)
+        throw new Error(
+          "Fixed lab Docker command failed; subprocess output is withheld",
+        );
+      return result.stdout;
+    };
   };
-  return text.replace(/@([A-Z_0-9]+)@/g, (_, key) => {
-    if (!replacements[key])
-      throw new Error("Unknown fixed pipeline template key");
-    return replacements[key].replace(/'/g, "\\'");
+  return Object.freeze({
+    controller: profile("controller", layout.profiles.jenkins.socket),
+    build: profile("build", layout.profiles.build.socket),
   });
 }
 
-function run(host, args, input) {
-  assert.ok(
-    host === CONTROLLER_HOST || host === BUILD_HOST,
-    "Unknown Docker profile",
-  );
-  const result = spawnSync(
-    docker,
-    ["--config", dockerConfig, "--host", host, ...args],
-    {
-      encoding: "utf8",
-      env: { PATH: "/usr/bin:/bin", LANG: "C", DOCKER_CONFIG: dockerConfig },
-      cwd: "/",
-      timeout: 120_000,
-      maxBuffer: 16 * 1024 * 1024,
-      input,
-    },
-  );
-  if (result.error || result.signal || result.status !== 0)
-    throw new Error(
-      "Fixed lab Docker command failed; subprocess output is withheld",
-    );
-  return result.stdout;
-}
-
-async function probeBuildProfile() {
+async function probeBuildProfile(docker) {
   // This image has no production mounts, daemon socket, Jenkins credential or job execution.
-  run(BUILD_HOST, ["pull", probeImage]);
+  docker.build(["pull", probeImage]);
   const network = JSON.parse(
-    run(BUILD_HOST, [
+    docker.build([
       "run",
       "--rm",
       "--read-only",
@@ -103,7 +95,7 @@ async function probeBuildProfile() {
   assert.equal(network.status, 200);
   const volume = `agent-platform-lab-credential-probe-${randomUUID()}`;
   const label = randomUUID();
-  run(BUILD_HOST, [
+  docker.build([
     "volume",
     "create",
     "--label",
@@ -114,8 +106,7 @@ async function probeBuildProfile() {
   ]);
   const dummy = randomBytes(48).toString("base64url");
   try {
-    run(
-      BUILD_HOST,
+    docker.build(
       [
         "run",
         "--rm",
@@ -136,7 +127,7 @@ async function probeBuildProfile() {
       dummy,
     );
     const file = JSON.parse(
-      run(BUILD_HOST, [
+      docker.build([
         "run",
         "--rm",
         "--network",
@@ -184,19 +175,22 @@ async function probeBuildProfile() {
     };
   } finally {
     const inspection = JSON.parse(
-      run(BUILD_HOST, ["volume", "inspect", volume]),
+      docker.build(["volume", "inspect", volume]),
     )[0];
     assert.equal(inspection.Labels["agent-platform-probe"], label);
     assert.equal(
       inspection.Labels["agent-platform-purpose"],
       "lab-credential-probe",
     );
-    run(BUILD_HOST, ["volume", "rm", volume]);
+    docker.build(["volume", "rm", volume]);
   }
 }
 
 export async function verifyController() {
-  const inspection = JSON.parse(run(CONTROLLER_HOST, ["inspect", name]))[0];
+  // Derived when verification starts, not at import: tests import this module on Linux.
+  const layout = await loadHostLayout({ requires: "verify-controller" });
+  const docker = dockerProfiles(layout);
+  const inspection = JSON.parse(docker.controller(["inspect", name]))[0];
   assert.equal(inspection.State.Status, "running");
   assert.equal(inspection.State.Health.Status, "healthy");
   assert.equal(inspection.Config.User, "1000:1000");
@@ -215,21 +209,21 @@ export async function verifyController() {
     "18080",
   );
   const ready = JSON.parse(
-    run(CONTROLLER_HOST, [
+    docker.controller([
       "exec",
       name,
       "cat",
       "/var/jenkins_home/container-state/ready.json",
     ]),
   );
-  const keyBefore = run(CONTROLLER_HOST, [
+  const keyBefore = docker.controller([
     "exec",
     name,
     "cat",
     "/var/jenkins_home/secrets/master.key",
   ]);
   const credential = JSON.parse(
-    run(CONTROLLER_HOST, [
+    docker.controller([
       "exec",
       name,
       "cat",
@@ -249,6 +243,8 @@ export async function verifyController() {
   const authorization = `Basic ${Buffer.from(`${credential.username}:${credential.password}`).toString("base64")}`;
   let cookie;
   async function request(path, options = {}) {
+    // The lab credential goes only to a loopback listener held by the operator.
+    await assertJenkinsListener(JENKINS_PORTS.lab, layout.operator);
     const response = await fetch(`${base}${path}`, {
       ...options,
       redirect: "error",
@@ -306,7 +302,8 @@ export async function verifyController() {
   const lint = [];
   for (const file of pipelines) {
     const raw = await fs.readFile(join(root, "deploy/jenkins", file), "utf8");
-    const rendered = renderPipeline(raw);
+    // Validated exactly as manage.mjs sync-pipelines sends it.
+    const rendered = reviewedPipeline(raw);
     const response = await request("pipeline-model-converter/validate", {
       method: "POST",
       headers: {
@@ -347,7 +344,7 @@ export async function verifyController() {
     await request("api/json?tree=numExecutors,useSecurity,jobs[name]")
   ).json();
   assert.deepEqual(after, controller);
-  const credentialAfter = run(CONTROLLER_HOST, [
+  const credentialAfter = docker.controller([
     "exec",
     name,
     "cat",
@@ -359,7 +356,7 @@ export async function verifyController() {
     "Lab credential",
   );
   assertPrivateEquality(
-    run(CONTROLLER_HOST, [
+    docker.controller([
       "exec",
       name,
       "cat",
@@ -368,7 +365,7 @@ export async function verifyController() {
     keyBefore,
     "Lab master key",
   );
-  const connectivity = await probeBuildProfile();
+  const connectivity = await probeBuildProfile(docker);
   return {
     schemaVersion: 1,
     recordedAt: new Date().toISOString(),

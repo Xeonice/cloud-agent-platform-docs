@@ -56,7 +56,7 @@ export async function validateSecretFile(path = AGENT_SECRET_FILE) {
       !stat.isFile() ||
       stat.nlink !== 1 ||
       stat.mode & 0o022 ||
-      ![0, 501, 1000].includes(stat.uid) ||
+      ![0, 1000].includes(stat.uid) ||
       stat.size > 256
     )
       throw new Error("Agent secret must be a read-only regular file");

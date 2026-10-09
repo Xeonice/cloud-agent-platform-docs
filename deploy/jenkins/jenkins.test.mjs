@@ -45,14 +45,46 @@ const commits = {
   api: "b".repeat(40),
   web: "c".repeat(40),
 };
-const identity = {
-  username: "douglasdong",
-  homedir: "/Users/douglasdong",
-  uid: 501,
-  platform: "darwin",
+// Release and discovery run only as the fixed Linux deployment account. Their
+// private volumes are redirected into temporary directories, so the volume
+// check is recorded here; project-release-container.test.mjs runs it for real.
+const deployIdentity = {
+  username: "jenkins",
+  uid: 1000,
+  gid: 1000,
+  homedir: "/home/jenkins",
+};
+const deploySystem = {
+  platform: "linux",
   arch: "arm64",
   nodeMajor: 22,
+  node: "/usr/local/bin/node",
 };
+const assertLayout = async (context) => {
+  assert.equal(context.platform, "linux");
+  assert.equal(context.home, "/home/jenkins");
+};
+// createReleaseRunner reads the system fields from its identity override.
+const deployAgent = {
+  identity: { ...deployIdentity, ...deploySystem },
+  assertLayout,
+};
+// Trusted adoption writes only below the fixed agent workspace, which exists
+// on the Linux CI agents running this suite; elsewhere those steps are skipped.
+const AGENT_WORKSPACE = "/home/jenkins/agent/workspace";
+const agentOnly = {
+  skip:
+    process.platform !== "linux" &&
+    "fetch-web adopts only into the fixed Linux Jenkins agent workspace",
+};
+async function fetchWorkspace() {
+  await fs.mkdir(AGENT_WORKSPACE, { recursive: true, mode: 0o700 });
+  const path = await fs.realpath(
+    await fs.mkdtemp(join(AGENT_WORKSPACE, "fetch-web-fixture-")),
+  );
+  directories.push(path);
+  return path;
+}
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 afterEach(async () => {
   await Promise.all(
@@ -209,7 +241,7 @@ async function fixture(options = {}) {
   const runner = createReleaseRunner({
     root,
     tools,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       source[
         Object.keys(REPOSITORIES).find(
@@ -220,7 +252,7 @@ async function fixture(options = {}) {
   });
   return { root, tools, folder, plan, planPath, runner };
 }
-async function packageFixture(f) {
+async function packageFixture(f, platform = "linux") {
   const assets = join(f.folder, "assets");
   await fs.mkdir(assets, { mode: 0o700 });
   const hashes = {};
@@ -234,7 +266,7 @@ async function packageFixture(f) {
     tag: f.plan.tag,
     commits: f.plan.commits,
     createdAt: new Date().toISOString(),
-    builtOn: { platform: "darwin", arch: "arm64", nodeMajor: 22 },
+    builtOn: { platform, arch: "arm64", nodeMajor: 22 },
     frontendOrigin: WEB.api.replace("-api", ""),
     apiOrigin: WEB.api,
     jenkins: Object.fromEntries(
@@ -569,7 +601,7 @@ test("complete package uses three actual pinned Git archives and immutable web b
   };
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     buildNumber: 10,
     buildUrl: "https://jenkins.douglasdong.com/job/agent-platform-release/10/",
     head: async (spec) =>
@@ -698,6 +730,14 @@ test("release provenance rejects an unsupported build architecture", async () =>
   await json(path, m);
   await assert.rejects(verifyPackage(p.assets, f.plan), /provenance/);
 });
+test("packages built by the retired Mac agents stay verifiable while other build platforms are refused", async () => {
+  const historical = await packageFixture(await fixture(), "darwin");
+  assert.equal(historical.manifest.builtOn.platform, "darwin");
+  await assert.rejects(
+    packageFixture(await fixture(), "win32"),
+    /provenance or asset inventory/,
+  );
+});
 test("an existing immutable combination cannot be remapped to another user-specified tag", async () => {
   const f = await fixture({ github: async () => [] });
   assert.equal((await f.runner("plan", "v0.3.2")).key, f.plan.key);
@@ -711,7 +751,7 @@ test("published GitHub bytes recover local state without new uploads or current-
   const run = createReleaseRunner({
     root: f.root,
     tools: f.tools,
-    identity,
+    ...deployAgent,
     head: async () => "d".repeat(40),
     github: async (path, options = {}) => {
       if (options.method) writes++;
@@ -739,7 +779,7 @@ test("published source or remote asset digest mismatch refuses recovery", async 
   remote.assets[0].digest = "sha256:" + "0".repeat(64);
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     github: async (path) =>
       path.startsWith("git/")
         ? { object: { type: "commit", sha: commits.project } }
@@ -757,7 +797,7 @@ test("a fresh GitHub draft describes the packaged Docker Linux API before publis
     requested;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -897,7 +937,7 @@ test("draft partial-upload retry skips exact immutable bytes and publishes only 
     patches = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -948,7 +988,7 @@ test("a private draft receipt selects its exact release even when tag lookup hid
   let patches = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -990,7 +1030,7 @@ test("tag lookup 404 discovers the unique actual draft and skips its uploaded fi
     creates = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1045,7 +1085,7 @@ test("a lost draft creation response is recovered from the release inventory wit
     uploaded = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1120,7 +1160,7 @@ test("ambiguous draft tags, foreign source and a truncated release inventory can
       lists = 0;
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       github: async (path, options = {}) => {
         if (options.method) writes++;
         if (path.startsWith("releases/tags/")) return null;
@@ -1161,7 +1201,7 @@ test("invalid or unavailable private release receipts never fall back to creatin
     await json(join(f.folder, "upload.json"), invalid);
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       github: async () => {
         throw new Error("Invalid receipt cannot query or mutate remote state");
       },
@@ -1176,7 +1216,7 @@ test("invalid or unavailable private release receipts never fall back to creatin
   ]) {
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       github: async (path, options) => {
         assert.equal(path, "releases/" + receipt.releaseId);
         assert.equal(options.optional, true);
@@ -1191,7 +1231,7 @@ test("invalid or unavailable private release receipts never fall back to creatin
   await fs.chmod(join(f.folder, "upload.json"), 0o644);
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     github: async () => {
       throw new Error("Unsafe receipt must fail locally");
     },
@@ -1218,7 +1258,7 @@ test("draft confirmation cannot switch release IDs or observed namespaces before
     let writes = 0;
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       head: async (spec) =>
         commits[
           Object.keys(REPOSITORIES).find(
@@ -1247,7 +1287,7 @@ test("failed local published-state write can retry after remote publication with
   let uploaded = false;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     github: async (path) =>
       path.startsWith("git/")
         ? { object: { type: "commit", sha: commits.project } }
@@ -1282,7 +1322,7 @@ test("failed zero-byte draft upload is removed only with the exact private pendi
   });
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1338,7 +1378,7 @@ test("unknown starter or nonempty failed upload refuses destructive recovery", a
   let writes = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1363,7 +1403,7 @@ test("recovering an older published release never downgrades the current project
   });
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     github: async (path) =>
       path.startsWith("git/")
         ? { object: { type: "commit", sha: commits.project } }
@@ -1380,7 +1420,7 @@ test("record-build saves numeric build IDs only after real gate and three-SHA pr
     manifest = webManifest(f.plan),
     run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       jenkins: async (kind, number, plan) => ({
         result: build(kind, number, plan),
         get: webArtifacts(manifest),
@@ -1393,7 +1433,7 @@ test("record-build saves numeric build IDs only after real gate and three-SHA pr
   assert.equal(result.savedBuilds.contract, undefined);
   const bad = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => ({
       result: build(kind, number, plan, "FAILURE"),
     }),
@@ -1410,7 +1450,7 @@ test("Web parent retains an independently verified exact-three-SHA contract chil
     queries = [];
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => {
       queries.push({ kind, number });
       return {
@@ -1450,7 +1490,7 @@ test("a pruned contract child cannot be restored from Web self-report, while ori
   let childQueries = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => {
       if (kind === "contract") {
         childQueries++;
@@ -1531,7 +1571,7 @@ test("cross report must match its parent, canonical child, all three commits and
       downloads = 0;
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       jenkins: async (kind, number, plan) => {
         if (kind === "contract") childQueries++;
         return {
@@ -1564,7 +1604,7 @@ test("Web artifact SUCCESS cannot hide actual failed, incomplete or wrong-commit
     let downloads = 0;
     const run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       jenkins: async (kind, number, plan) => {
         const result = build(kind, number, plan);
         if (kind === "contract") {
@@ -1597,7 +1637,7 @@ test("retained Web retry excludes a subsequently pruned child from savedBuilds w
     manifest = webManifest(f.plan),
     run = createReleaseRunner({
       root: f.root,
-      identity,
+      ...deployAgent,
       jenkins: async (kind, number, plan) => ({
         result: build(kind, number, plan),
         get: webArtifacts(manifest, crossReport(plan)),
@@ -1610,7 +1650,7 @@ test("retained Web retry excludes a subsequently pruned child from savedBuilds w
   );
   const pruned = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async () => {
       throw Object.assign(new Error("Pruned Jenkins history"), { status: 404 });
     },
@@ -1681,7 +1721,7 @@ test("API child accepts real ci-passed receipt path and refuses stale draft-stat
     receipts = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     apiReceipt: async (_, __, value) => {
       assert.equal(value.artifactPath, ci.artifactPath);
       receipts++;
@@ -1723,7 +1763,7 @@ test("retained immutable web proof survives Jenkins build pruning and keeps orig
     await fs.writeFile(join(root, name), bytes, { mode: 0o600 });
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => ({
       result: build(kind, number, plan),
       get: webArtifacts(manifest),
@@ -1733,7 +1773,7 @@ test("retained immutable web proof survives Jenkins build pruning and keeps orig
   await run("record-build", f.planPath, "web", "7");
   const retained = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1766,7 +1806,7 @@ test("pre-adoption original archives survive pruned Jenkins history and fetch wi
   let downloads = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => ({
       result: build(kind, number, plan),
       get: webArtifacts(manifest),
@@ -1789,7 +1829,7 @@ test("pre-adoption original archives survive pruned Jenkins history and fetch wi
   });
   const retained = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     head: async (spec) =>
       commits[
         Object.keys(REPOSITORIES).find(
@@ -1805,17 +1845,19 @@ test("pre-adoption original archives survive pruned Jenkins history and fetch wi
     (await retained("record-build", f.planPath, "web", "7")).number,
     7,
   );
-  const work = join(f.root, "jenkins-agent", "workspace", "fresh");
-  await fs.mkdir(work, { recursive: true, mode: 0o700 });
-  const result = await retained("fetch-web", f.planPath, "7", work);
-  assert.equal(
-    (await fileDigest(join(result.artifacts, "prebuilt.tar.gz"))).sha256,
-    sha256(bytes),
-  );
-  assert.equal(
-    (await read(join(result.artifacts, "manifest.json"))).jenkins.buildNumber,
-    7,
-  );
+  // Adoption itself needs the fixed agent workspace (see agentOnly).
+  if (!agentOnly.skip) {
+    const work = await fetchWorkspace();
+    const result = await retained("fetch-web", f.planPath, "7", work);
+    assert.equal(
+      (await fileDigest(join(result.artifacts, "prebuilt.tar.gz"))).sha256,
+      sha256(bytes),
+    );
+    assert.equal(
+      (await read(join(result.artifacts, "manifest.json"))).jenkins.buildNumber,
+      7,
+    );
+  }
   assert.equal(downloads, 3);
   await assert.rejects(
     run("record-build", f.planPath, "web", "8"),
@@ -1827,7 +1869,7 @@ test("failed stream cannot leave a green saved build or a half-retained archive 
     manifest = webManifest(f.plan);
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => ({
       result: build(kind, number, plan),
       get: webArtifacts(manifest),
@@ -1849,7 +1891,7 @@ test("CI cache is created only after a real matching SUCCESS, never from manifes
   let downloads = 0;
   const run = createReleaseRunner({
     root: f.root,
-    identity,
+    ...deployAgent,
     jenkins: async (kind, number, plan) => ({
       result: build(kind, number, plan, "UNSTABLE"),
       get: webArtifacts(manifest),
@@ -1863,63 +1905,69 @@ test("CI cache is created only after a real matching SUCCESS, never from manifes
   assert.equal(downloads, 0);
   assert.deepEqual(await fs.readdir(f.folder), ["plan.json"]);
 });
-test("fetch-web verifies actual manifest and byte streams before atomic trusted workspace adoption", async () => {
-  const f = await fixture(),
-    bytes = Buffer.from("real archive bytes"),
-    manifest = webManifest(f.plan),
-    work = join(f.root, "jenkins-agent", "workspace", "fresh");
-  await fs.mkdir(work, { recursive: true, mode: 0o700 });
-  const run = createReleaseRunner({
-    root: f.root,
-    identity,
-    head: async (spec) =>
-      commits[
-        Object.keys(REPOSITORIES).find(
-          (name) => REPOSITORIES[name].name === spec.name,
-        )
-      ],
-    jenkins: async (kind, number, plan) => ({
-      result: build(kind, number, plan),
-      get: webArtifacts(manifest),
-      response: async () => ({
-        body: [bytes.subarray(0, 4), bytes.subarray(4)],
+test(
+  "fetch-web verifies actual manifest and byte streams before atomic trusted workspace adoption",
+  agentOnly,
+  async () => {
+    const f = await fixture(),
+      bytes = Buffer.from("real archive bytes"),
+      manifest = webManifest(f.plan),
+      work = await fetchWorkspace();
+    const run = createReleaseRunner({
+      root: f.root,
+      ...deployAgent,
+      head: async (spec) =>
+        commits[
+          Object.keys(REPOSITORIES).find(
+            (name) => REPOSITORIES[name].name === spec.name,
+          )
+        ],
+      jenkins: async (kind, number, plan) => ({
+        result: build(kind, number, plan),
+        get: webArtifacts(manifest),
+        response: async () => ({
+          body: [bytes.subarray(0, 4), bytes.subarray(4)],
+        }),
       }),
-    }),
-  });
-  const result = await run("fetch-web", f.planPath, "7", work);
-  assert.equal(
-    (await fileDigest(join(result.artifacts, "prebuilt.tar.gz"))).sha256,
-    sha256(bytes),
-  );
-  await assert.rejects(
-    run("fetch-web", f.planPath, "7", f.root),
-    /isolated trusted/,
-  );
-  await assert.rejects(run("fetch-web", f.planPath, "7", work), /fresh/);
-});
-test("fetch-web tampered stream leaves no adopted folder", async () => {
-  const f = await fixture(),
-    manifest = webManifest(f.plan),
-    work = join(f.root, "jenkins-agent", "fresh");
-  await fs.mkdir(work, { recursive: true, mode: 0o700 });
-  const run = createReleaseRunner({
-    root: f.root,
-    identity,
-    head: async (spec) =>
-      commits[
-        Object.keys(REPOSITORIES).find(
-          (name) => REPOSITORIES[name].name === spec.name,
-        )
-      ],
-    jenkins: async (kind, number, plan) => ({
-      result: build(kind, number, plan),
-      get: webArtifacts(manifest),
-      response: async () => ({ body: [Buffer.from("wrong")] }),
-    }),
-  });
-  await assert.rejects(run("fetch-web", f.planPath, "7", work), /digest/);
-  assert.deepEqual(await fs.readdir(work), []);
-});
+    });
+    const result = await run("fetch-web", f.planPath, "7", work);
+    assert.equal(
+      (await fileDigest(join(result.artifacts, "prebuilt.tar.gz"))).sha256,
+      sha256(bytes),
+    );
+    await assert.rejects(
+      run("fetch-web", f.planPath, "7", f.root),
+      /isolated trusted/,
+    );
+    await assert.rejects(run("fetch-web", f.planPath, "7", work), /fresh/);
+  },
+);
+test(
+  "fetch-web tampered stream leaves no adopted folder",
+  agentOnly,
+  async () => {
+    const f = await fixture(),
+      manifest = webManifest(f.plan),
+      work = await fetchWorkspace();
+    const run = createReleaseRunner({
+      root: f.root,
+      ...deployAgent,
+      head: async (spec) =>
+        commits[
+          Object.keys(REPOSITORIES).find(
+            (name) => REPOSITORIES[name].name === spec.name,
+          )
+        ],
+      jenkins: async (kind, number, plan) => ({
+        result: build(kind, number, plan),
+        get: webArtifacts(manifest),
+        response: async () => ({ body: [Buffer.from("wrong")] }),
+      }),
+    });
+    await assert.rejects(run("fetch-web", f.planPath, "7", work), /digest/);
+    assert.deepEqual(await fs.readdir(work), []);
+  },
+);
 function sourceRefs(extra = {}) {
   return Object.fromEntries(
     Object.entries(REPOSITORIES).map(([name, spec]) => [
@@ -1986,6 +2034,13 @@ async function discoveryFixture(extra = {}, open = {}) {
   const options = {
     tools,
     deployRoot,
+    identity: deployIdentity,
+    system: deploySystem,
+    assertLayout: async (context) => {
+      await assertLayout(context);
+      assert.equal(context.root, deployRoot);
+      assert.equal(context.tools, tools);
+    },
     refs: async (_, name) => refs[name],
     pulls: async (name) => pulls[name],
     jenkins,

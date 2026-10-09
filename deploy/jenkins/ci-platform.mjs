@@ -12,7 +12,6 @@ export const LINUX_CI = Object.freeze({
   browsers: "/opt/agent-platform/playwright",
   corepack: "/opt/agent-platform/corepack",
 });
-export const MAC_CI_HOME = "/Users/Shared/agent-platform-ci";
 
 export function buildSystem() {
   return {
@@ -23,60 +22,48 @@ export function buildSystem() {
   };
 }
 
+// Pipelines run only in the fixed Linux agent images; the native Mac agents
+// they replaced are retired, so no Mac account, home or path is accepted here.
 export function assertBuildSystem(system = buildSystem()) {
   if (
     system.nodeMajor !== 22 ||
-    !(
-      (system.platform === "darwin" && system.arch === "arm64") ||
-      (system.platform === "linux" && ["arm64", "x64"].includes(system.arch))
-    ) ||
-    (system.platform === "linux" && system.node !== LINUX_CI.node)
+    system.platform !== "linux" ||
+    !["arm64", "x64"].includes(system.arch) ||
+    system.node !== LINUX_CI.node
   )
-    throw new Error(
-      "CI requires the fixed Node 22 Mac or Linux build environment",
-    );
+    throw new Error("CI requires the fixed Node 22 Linux build environment");
   return system;
 }
 
 export function ciContext(identity = userInfo(), system = buildSystem()) {
   assertBuildSystem(system);
-  const linux = system.platform === "linux";
   if (
-    linux
-      ? identity.username !== LINUX_CI.username ||
-        identity.uid !== LINUX_CI.uid ||
-        identity.gid !== LINUX_CI.gid ||
-        identity.homedir !== LINUX_CI.home
-      : identity.username !== "_agentplatformci" ||
-        identity.homedir !== MAC_CI_HOME
+    identity.username !== LINUX_CI.username ||
+    identity.uid !== LINUX_CI.uid ||
+    identity.gid !== LINUX_CI.gid ||
+    identity.homedir !== LINUX_CI.home
   )
     throw new Error("Isolated CI account and fixed home required");
-  const home = linux ? LINUX_CI.home : MAC_CI_HOME;
+  const home = LINUX_CI.home;
   return {
     ...system,
     home,
     temporary: join(home, "tmp"),
     store: join(home, "pnpm-store"),
-    cli: linux
-      ? LINUX_CI.cli
-      : "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
-    browsers: linux ? LINUX_CI.browsers : null,
-    corepack: linux ? LINUX_CI.corepack : null,
+    cli: LINUX_CI.cli,
+    browsers: LINUX_CI.browsers,
+    corepack: LINUX_CI.corepack,
   };
 }
 
 export function ciChildEnvironment(node, context) {
   return {
-    PATH:
-      dirname(node) +
-      ":" +
-      (context.platform === "linux" ? "/usr/local/bin" : "/opt/homebrew/bin") +
-      ":/usr/bin:/bin:/usr/sbin:/sbin",
+    PATH: dirname(node) + ":/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
     HOME: context.home,
     TMPDIR: context.temporary,
     CI: "true",
     HUSKY: "0",
-    LANG: context.platform === "linux" ? "C.UTF-8" : "en_US.UTF-8",
+    LANG: "C.UTF-8",
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",

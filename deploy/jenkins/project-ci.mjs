@@ -199,18 +199,15 @@ export async function projectCI(phase, rootSha, apiSha, webSha, options = {}) {
         "--store-dir",
         join(home, "pnpm-store"),
       ]);
-    if (context.platform === "linux")
-      await run(
-        context.node,
-        [
-          "--input-type=module",
-          "-e",
-          browserVerificationScript(context.browsers),
-        ],
-        join(source, "e2e-contract"),
-      );
-    else
-      await pnpm("e2e-contract", ["exec", "playwright", "install", "chromium"]);
+    await run(
+      context.node,
+      [
+        "--input-type=module",
+        "-e",
+        browserVerificationScript(context.browsers),
+      ],
+      join(source, "e2e-contract"),
+    );
     return;
   }
   if (phase === "contract") {

@@ -4,6 +4,7 @@
 > 之后暴露出的缺陷存档。与其它 ADR 的分工：`*-DECISIONS.md` 记的是**开工前的裁决**，
 > 本文记的是**做完之后、跑起来才知道错了**的部分。
 > 细节一律落在各自主文档里，本文只写「现象 → 根因 → 落点」，不做第二份权威副本。
+> 文末 [附录 D](#附录-d部署形态的实测经过从-11-迁入) 收纳从 11 迁出的部署形态实测经过：现行规则写在 11 和 CONTRIBUTING，这里只留解释这些规则从哪来的经过。
 
 ## 0. 一页总览
 
@@ -331,3 +332,133 @@ git fetch --unshallow                        # 此时才会把所有分支都取
 ### 这条本身给共性 2 添了一笔
 「修 bug 时顺手写下的**下一步建议**」和「顺手写下的**解释**」（见 L-2 里的 objectsTotal 订正）
 一样，从来没有被任何东西检验过，却会被下一个人当成结论照做。
+
+---
+
+## 附录 D：部署形态的实测经过（从 11 迁入）
+
+这些条目原写在 11 §1–§1.4 和本地开发清单里。现行规则已收敛到 [11](./shared/11-部署与扩展预留.md)（自托管 compose）与 [CONTRIBUTING](../CONTRIBUTING.md)（本地开发），这里只保留仍在解释现行约束的经过，格式同正文「现象 → 根因 → 落点」。
+
+| # | 现象 | 根因 | 现行规则在哪 |
+|---|---|---|---|
+| **D-1** | 照着 11 的 compose 骨架理解部署，第一个 Task 就失败 | 骨架与真 compose 对不上，而那时没有任何检查看 compose | 11 §1 · 09 §2.4（C1） |
+| **D-2** | helper 写成 compose 服务后平台连不进去 | 平台不走 `docker exec`，agent token 在 provider `create()` 时才注入 | 11 §1.1 |
+| **D-3** | 宿主机形态下 claude 登录一直 500，codex 却能用 | 登录 CLI 检测 TTY，管道下一个字节都不输出 | 11 §1.1 |
+| **D-4** | 日志轮转后 `runtime.log` 消失，日志照写却找不到 | 旧 write stream 跟着 inode 写进了改名后的文件 | 11 §1.2.1 |
+| **D-5** | 数据库文件实际是 `0644` | better-sqlite3 按 umask 建文件，文档里的 `0600` 没人执行 | 11 §1.2 |
+| **D-6** | 本地照清单起服务，界面停在「启动实例」，不报错 | 三个配置装载问题叠在一起 | CONTRIBUTING · `api/.env.example` |
+| **D-7** | 本地前端连不上后端、WS 无限重连 | 当时后端没有 CORS，WS 基址是构建期常量 | CONTRIBUTING · `web/next.config.mjs` |
+| **D-8** | compose 起得来，建 Task 必定失败 | DooD 下 api 拼出的 loopback 地址只有宿主解得开 | 11 §1.4 |
+
+### D-1 compose 骨架与真 compose 对不上（v0.1.0 前后）
+
+**现象**：骨架与 `api/docker-compose.yml` 有三处不一致，恰好都是"照抄就跑不起来"：卷两边不同名（违反 11 §1.2 的同名挂载）、缺 `DOCKER_HOST`（socket proxy 白挂）、缺 `SANDBOX_DEFAULT_IMAGE`（当时默认落到 `alpine:3.20`，Task 死在 `agent port 8080 is not published`）。骨架里还写着已被推翻的兜底 `${SANDBOX_DEFAULT_IMAGE:-ghcr.io/agent-infra/sandbox:latest}`（没装 claude-code，现装要 753 秒），一路活到 v0.1.0 的 tag 上。
+
+**根因**：「文档 ↔ 部署产物」这一层没有门守着，`docs:check` 当时 12 项全绿，因为它不看 compose。
+
+**落点**：骨架按实现订正；新增 C1 compose 骨架对账（服务集合与插值默认值，解析不到即判失败），见 09 §2.4。
+
+### D-2 auth helper 容器形态的两处设计错误（2026-09-22）
+
+**现象**：按原设计在 compose 里加一个 `auth-helper` 服务、用 `command: sleep infinity` 常驻，平台连不进去。
+
+**根因**：两条都是照着 `docker exec` 的模型写的设计，而实现从一开始就不是那个模型：平台在容器里跑进程走镜像内的 HTTP agent，它的 token 在 `aio-sandbox.provider.ts` 的 `create()` 那一刻生成并注入，compose 建的容器没经过这一步；AIO 镜像的 entrypoint 正是启动 agent 的东西，覆盖它会得到「running 但永远连不上」的容器。
+
+**落点**：helper 由平台经 provider 创建、不覆盖任何命令，见 11 §1.1。
+
+### D-3 宿主机 helper 必须是真伪终端（2026-09-07）
+
+**现象**：`AUTH_HELPER_MODE=host` 下 claude 登录对用户只表现为一个不解释任何事的 HTTP 500，codex 却正常。
+
+**根因**：当时用 `child_process` 管道，而登录 CLI 会检测 TTY：
+
+| | 输出 |
+|---|---|
+| `claude setup-token` 走管道 | **0 字节**（实测 25s） |
+| `claude setup-token` 走真 PTY | 3654 字节 / 5 个 OSC-8 超链接 / 授权 URL（秒级） |
+
+解析器认的正是 OSC-8 ⇒ `readUntil` 空等满 120s。codex 能用纯属输出格式的运气：`codex login --device-auth` 在管道下照样打印纯文本设备码。同一条链路一个通一个不通，最容易被当成配置问题查很久。
+
+另外两处同类问题：`node-pty` 的 darwin 预编译 `spawn-helper` 以 644 发布（上游 #850），pnpm 保留原权限 ⇒ 对任何命令都报 `posix_spawnp failed.`，第一眼像「PATH 里没有那个 CLI」；隔离 HOME 曾是相对路径 `./data`，子进程换 cwd 后指向别处，codex 校验目录后立刻退出、claude 不校验照跑，同一个 bug 只打挂一半 runtime。
+
+**落点**：改用 `@lydell/node-pty` 起真 PTY，隔离 HOME 用绝对路径，见 11 §1.1。
+
+### D-4 运行日志轮转的 inode 坑（2026-08-27 预研）
+
+**现象**：自写的按大小轮转在 rename 之后，所有日志继续写进已改名的旧文件，`runtime.log` 这个路径直接消失，外部 `tail -f` 一并断掉（`tail -F` 才能恢复）。
+
+```
+写 BEFORE-1 / BEFORE-2 → renameSync(runtime.log → runtime.log.1) → 写 AFTER-RENAME
+结果：runtime.log.1 = "BEFORE-1\nBEFORE-2\nAFTER-RENAME"
+      runtime.log   = 不存在
+```
+
+**根因**：rename 之后旧的 write stream 跟随 inode。而且把上面这段照抄成回归测试会得到假绿：`createWriteStream` 的 fd 是异步打开的，同步 burst 时 rename 那一刻还没有 inode 可跟随，坑不复现，把轮转改成「直接 rename 不 end()」的变异照样绿。要先等字节真正落盘再 rename，断言才有效。
+
+**落点**：`end()` 旧流 → 回调里 rename 链式移位 → 重开流，窗口内的日志缓冲后重放。实测 800 行连续写、触发 4 次轮转，保留窗口内空洞 0 处、末行完整，依赖 0 个。见 11 §1.2.1。
+
+### D-5 数据库文件权限曾只是一句愿望（2026-08-30）
+
+**现象**：文档要求 `.master.key` 与 `platform.db` 为 `0600`，而全新 `DATA_ROOT` 实测 `pnpm db:migrate` 建出的 `platform.db` / `-wal` / `-shm` 都是 `0644`（`logs/runtime.log` 倒是 `0600`）。
+
+**根因**：better-sqlite3 按 umask 建文件，没有 mode 参数可给，也没人 chmod。这个库装着任务历史、prompt、仓库地址与加密后的凭证密文，和 `.master.key` 放在同一个 `DATA_ROOT` 里：把钥匙锁好、把锁着的箱子摊在桌上是一种自欺。
+
+**落点**：`drizzle.connection.ts` 的 `hardenDatabaseFiles`，顺序是「建库 → 先 chmod 主库 → 再开 WAL」，因为 SQLite 建边车时照抄主库的权限位。见 11 §1.2。
+
+### D-6 本地照清单起服务的三个坑（2026-08）
+
+**现象**：本地演示环境「看起来在转、实际什么都没发生」：界面停在「启动实例」，日志里事件照发，但库里没有行、容器没有起，全程不报错。三个都不是业务缺陷，是配置装载。
+
+**根因**：
+
+- **坑一：`DATABASE_URL=`（空串）**。代码是 `process.env.DATABASE_URL ?? <默认>`，`??` 只对 null/undefined 回落，空串让 better-sqlite3 开了一个匿名临时库：列表永远回 `[]`，`platform.db` 根本不存在。这颗雷曾随 `.env.example` 一起发出。
+- **坑二：默认镜像落到 `alpine:3.20`**。alpine 里没有沙箱内 API、没有常驻进程，容器一启动就退出，`NetworkSettings.Ports` 为空，报 `agent port 8080 is not published`。
+- **坑三：`api/.env` 没人加载**。清单让人写 `api/.env`，而当时入口是裸 `node`，照抄的人拿到的全是默认值，直接掉进坑二。清单还漏了装 pnpm 和 `cd api`：在根目录执行时 corepack 读的是根 `package.json` 的 pnpm 版本。
+
+教训是：一份「能照抄的清单」如果没被真照抄跑过一遍，它写的是作者记忆里的流程，不是仓库当下的行为。
+
+**落点**：`.env.example` 里 `DATABASE_URL` 改为注释掉；`start`、`start:dev`、`db:migrate` 都带 `--env-file-if-exists=.env`，且 shell 变量优先于文件；`SANDBOX_DEFAULT_IMAGE` 留空时按宿主档位选平台发布的镜像。本地步骤收敛到 CONTRIBUTING。
+
+### D-7 前后端之间那一层（2026-08-30）
+
+**现象**：本地前端直连后端在真浏览器里跑不通，单测却全绿；WS 基址写成绝对地址后，同事从局域网打开时连到他自己机器的端口，界面一直「正在重连…」。
+
+**根因**：
+
+- 当时后端没有 CORS，而 `ap_session` 是 HttpOnly cookie，跨源还需要 `credentials: 'include'` 加精确 Origin 白名单；MSW 替身让前端与它自己的替身完全自洽，所以单测发现不了。
+- `NEXT_PUBLIC_*` 是构建期烤进 bundle 的，而 WS 基址取决于运行时访问者用的 host。`ws://localhost:3001` 曾被烤进生产 bundle，1001 条测试一条都没红。
+- 「WS 不能走 rewrites」的说法在 Next 15.5.23 上不成立。加上三条 `/socket.io` 规则后 polling 与 websocket 都能经 Next 转发；但必须开 `skipTrailingSlashRedirect`（否则握手被 308，客户端不会跟着重定向再发 upgrade），空 path 的两条规则要把尾斜杠写死在 destination 里（否则 Next 吃掉 `/`，后端 404）。
+- `next start` 默认绑 `0.0.0.0`。`HOSTNAME=127.0.0.1 pnpm start` 静默无效，`pnpm start -- -H 127.0.0.1` 会把 `--` 透传给 next 而启动失败，只有 `pnpm start -H 127.0.0.1` 是对的。
+- 一套 demo 是两个进程，半死的一套最难认：后端被挤掉时前端照常渲染、每个 `/api/*` 都失败；远程用 `nohup` 起的 Next 会被 ssh 断开的 SIGHUP 带走，要用 `setsid`。
+
+**落点**：本地与 compose 形态用 Next rewrites 同源转发、两个 `NEXT_PUBLIC_*_BASE_URL` 留空；后端后来为生产的 Vercel 前端开启了按 `API_ALLOWED_ORIGINS` 精确放行的 credentialed CORS。现行做法见 CONTRIBUTING 与 `web/next.config.mjs` 的注释。
+
+### D-8 loopback 发布与 DooD 互斥（2026-08-29 / 08-30）
+
+**现象**：`docker compose up` 一切正常（api `Up`、health 200、镜像播种成功），建 Task 却必定失败，而沙箱容器本身是健康的：
+
+```
+status: failed
+failureCode: PROVIDER_UNAVAILABLE
+failureMessage: in-sandbox agent at http://127.0.0.1:45171 did not become ready
+platform-aio-<id>  Up 11 seconds (healthy)  127.0.0.1:45995->8080/tcp
+```
+
+**根因**：两条各自正确的决定撞在一起：agent 端口只发布到宿主 loopback（安全加固），`agentOrigin` 又照着 `HostIp` 拼回调地址。DooD 下端口在宿主的 netns，api 的 `127.0.0.1` 却是容器自己的。实测同一个 `127.0.0.1:18080`：宿主 `curl` 回 401，api 容器内 `fetch` 回 `fetch failed`。
+
+修好之后又撞到另一半：api 裸跑在宿主却配了 `SANDBOX_DOCKER_NETWORK`，`agentOrigin` 是容器名而宿主解析不了，sandbox 卡在 starting 超过 6 分钟，无错误、无超时、无日志。`not attached` 守卫只查沙箱容器在不在网络上，从没查过调用方自己。
+
+开机自检的判据当时在真 Linux（Docker Engine 28.3.2 / API v1.51）上按生产形态逐条验过：
+
+| # | 实测 | 结果 |
+|---|---|---|
+| ① | `GET /containers/json?filters={"network":["<net>"]}` | 返回该网络上的容器与它的地址，filter 真的被支持 |
+| ② | 在那个容器里 `ip -o -4 addr` | 与 daemon 报的地址一字不差，交集判定的前提成立 |
+| ③ | 宿主自己的地址表里有没有那个地址 | 没有 ⇒ api 裸跑时判定 not-attached，与实情一致 |
+| ④ | 网络名写成 `proj_<net>`（模拟 compose 项目名前缀） | 名单返回 `[]` ⇒ 判定 not-attached，与实情一致 |
+
+同白名单（`CONTAINERS/EXEC/IMAGES/POST`）的 `docker-socket-proxy` 对照：容器列表请求穿得过去，`GET /networks/<net>` 回 403，这是自检不走 `/networks` 的实证理由。
+
+同一时期还修了同一病根的两处：`oci-registry.client.ts` 只认 loopback 字面量走明文（容器里指容器自己），播种失败的提示让人「把 `SANDBOX_DEFAULT_IMAGE` 指向预制镜像」而它其实已经指着了。
+
+**落点**：`SANDBOX_DOCKER_NETWORK` 形态、开机自检、`IMAGE_REGISTRY_INSECURE_HOSTS` 与按形态分岔的播种提示，见 11 §1.4。

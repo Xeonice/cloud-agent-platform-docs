@@ -454,6 +454,7 @@ test("publisher fixes Linux ARM64 identity, Docker socket/tools and workspace, r
     { ...system, arch: "x64" },
     { ...system, node: "/tmp/node" },
     { ...system, nodeMajor: 24 },
+    { ...system, platform: "darwin", node: "/opt/node-22/bin/node" },
   ]) {
     await assert.rejects(
       createImagePublisher({ identity, system: platform }).head(),

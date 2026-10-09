@@ -2,12 +2,7 @@ import * as fs from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-
-const DOCKER = "/Users/douglasdong/.orbstack/bin/docker";
-const CONFIG =
-  "/Users/douglasdong/.local/share/agent-platform-jenkins-tools/container-docker-context";
-const HOST =
-  "unix:///Users/douglasdong/.colima/agent-platform-build/docker.sock";
+import { HostLayoutError, loadHostLayout } from "./host-layout.mjs";
 
 // No host mounts, network, agent credential, repository or production access.
 // Run this after image assembly; do not use a green build as browser evidence.
@@ -98,12 +93,23 @@ try {
 `;
 }
 
-async function docker(args, input = undefined, timeout = 180000) {
+// Docker commands against the dedicated build profile of the host layout only.
+async function docker(layout, args, input = undefined, timeout = 180000) {
   return new Promise((accept, reject) => {
-    const child = spawn(DOCKER, ["--config", CONFIG, "--host", HOST, ...args], {
-      env: { PATH: "/usr/bin:/bin", HOME: "/tmp" },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    const child = spawn(
+      layout.dockerCli,
+      [
+        "--config",
+        layout.dockerConfig,
+        "--host",
+        layout.profiles.build.socket,
+        ...args,
+      ],
+      {
+        env: { PATH: "/usr/bin:/bin", HOME: "/tmp" },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
     let stdout = "",
       stderr = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), timeout);
@@ -125,15 +131,14 @@ async function docker(args, input = undefined, timeout = 180000) {
 
 export async function smokeImage(architecture, reportPath) {
   const program = smokeProgram(architecture);
+  const layout = await loadHostLayout({ requires: "ci-smoke" });
+  const { daemonName } = layout.profiles.build;
   const image =
     "agent-platform-ci:node22-" + (architecture === "x64" ? "amd64" : "arm64");
-  const daemon = await docker(["info", "--format", "{{.Name}}"]);
-  if (
-    daemon.code !== 0 ||
-    daemon.stdout.trim() !== "colima-agent-platform-build"
-  )
+  const daemon = await docker(layout, ["info", "--format", "{{.Name}}"]);
+  if (daemon.code !== 0 || daemon.stdout.trim() !== daemonName)
     throw new Error("Smoke requires the dedicated build daemon");
-  const metadata = await docker([
+  const metadata = await docker(layout, [
     "image",
     "inspect",
     image,
@@ -145,7 +150,7 @@ export async function smokeImage(architecture, reportPath) {
   const report = {
     schemaVersion: 1,
     startedAt: new Date().toISOString(),
-    daemon: "colima-agent-platform-build",
+    daemon: daemonName,
     image,
     imageMetadata: metadata.stdout.trim(),
     network: "none",
@@ -154,6 +159,7 @@ export async function smokeImage(architecture, reportPath) {
   };
   try {
     const result = await docker(
+      layout,
       [
         "run",
         "--rm",
@@ -178,7 +184,7 @@ export async function smokeImage(architecture, reportPath) {
     else report.failure = result.stderr;
   } finally {
     // Only the unique container created above can be removed by this harness.
-    await docker(["rm", "--force", name], undefined, 10000);
+    await docker(layout, ["rm", "--force", name], undefined, 10000);
     report.finishedAt = new Date().toISOString();
     await fs.writeFile(reportPath, JSON.stringify(report, null, 2) + "\n", {
       mode: 0o600,
@@ -195,9 +201,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
       );
       if (report.status !== "passed") process.exitCode = 1;
     },
-    () => {
+    (error) => {
+      // A host layout refusal names only a reason code and a path.
       console.error(
-        "CI image smoke refused or failed; inspect its local report",
+        error instanceof HostLayoutError
+          ? error.message
+          : "CI image smoke refused or failed; inspect its local report",
       );
       process.exitCode = 1;
     },

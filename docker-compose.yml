@@ -5,8 +5,8 @@
 # ── 为什么这份在主仓根目录，而不是把 web 加进 api/docker-compose.yml ──────────
 # `api/` 是一个独立仓库（本仓的 submodule）。它自己那份 compose 引用不到 `../web`
 # —— 单独 clone api 仓的人那里根本没有那个目录。⇒ 只有主仓能同时看见两侧，
-# 也只有它钉得住一份完整可复现的部署状态（两个 submodule 指针）。
-# 这与「只有主仓打 tag」是同一条理由（见 CHANGELOG 抬头）。
+# 也只有它钉得住一份完整可复现的自托管部署状态（两个 submodule 指针）。
+# 本项目 Mac mini 生产不用这份文件，发布也不读子模块指针（见 docs/ops/README.md）。
 #
 # ── 为什么用 include 而不是抄一份 ─────────────────────────────────────────────
 # api 那份里有十几项非抄不可的配置（DOCKER_HOST、SANDBOX_DOCKER_NETWORK、同名挂载、
@@ -68,7 +68,7 @@ services:
     # ⚠️⚠️ **把 DATA_ROOT 钉在【本文件】的插值上下文里 —— 这不是多余的重复。**
     #
     # `include` 会加载**被包含文件所在目录**的 `.env`,也就是 `api/.env`。而
-    # `docs/shared/11 §1.3`(裸跑开发流程)**明确教人建那份文件**,里面往往留着
+    # `CONTRIBUTING.md` 的本地开发步骤(11 §1.3 指向它)**明确教人建那份文件**,里面往往留着
     # 一个开发期的 `DATA_ROOT`。于是在只有 `api/.env`、没有根 `.env` 的机器上:
     #   · 那个值是相对路径(如历史模板的 `./data`)⇒ 容器侧挂载点变成相对路径,
     #     `docker compose up` 直接报 `invalid mount path: 'data'`;
@@ -78,8 +78,7 @@ services:
     # 才是 `/srv/agent-platform/data`。
     #
     # ⇒ 下面三行用**根目录**的插值上下文重新算一遍,把 `api/.env` 挤出决策链。
-    #   根 `.env` 仍然生效(实测能压过 `api/.env`),这正是 README §3 让 macOS 用户
-    #   建根 `.env` 的那条指令所依赖的。
+    #   根 `.env` 仍然生效(实测能压过 `api/.env`):自托管时要换数据目录,就写在根 `.env` 里。
     # ⛔ 三处必须用**同一个**兜底值 —— 它们被 api 侧的「同名挂载」硬约束绑在一起
     #   (宿主路径 = 容器路径),分裂任何一处都会让平台写下对另一边无意义的绝对路径。
     volumes: !override

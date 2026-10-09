@@ -14,14 +14,48 @@ import {
   validateDockerHost,
   resolveControllerMode,
   resolveControllerUrl,
-  CONTROLLER_HOST,
-  BUILD_HOST,
 } from "./controller.mjs";
 import { validatePluginLock, downloadPlugins } from "./plugins.mjs";
-import { assertPrivateEquality, renderPipeline } from "./verify-controller.mjs";
-import { activationScript, runManagement } from "../jenkins/manage.mjs";
+import { assertPrivateEquality, dockerProfiles } from "./verify-controller.mjs";
+import { resolveHostLayout } from "./host-layout.mjs";
+import {
+  activationScript,
+  reviewedPipeline,
+  runManagement,
+  idleReport,
+  parseWaitIdleArguments,
+  DEFAULT_IDLE_TIMEOUT_SECONDS,
+} from "../jenkins/manage.mjs";
 
 const source = dirname(fileURLToPath(import.meta.url));
+// Injected host layout; tests never use the real account.
+const LAYOUT = resolveHostLayout({
+  identity: {
+    username: "operator",
+    uid: 5101,
+    gid: 20,
+    homedir: "/Users/operator",
+  },
+  execPath: "/opt/node-22/bin/node",
+  overrides: {},
+});
+const SOCKETS = {
+  jenkins: LAYOUT.profiles.jenkins.socket,
+  build: LAYOUT.profiles.build.socket,
+  runtime: LAYOUT.profiles.runtime.socket,
+};
+// The nine templates manage.mjs sync-pipelines sends.
+const PIPELINES = [
+  "api.groovy",
+  "native-ci.groovy",
+  "monitor.groovy",
+  "discover.groovy",
+  "release.groovy",
+  "contract.groovy",
+  "web.groovy",
+  "mutation.groovy",
+  "sandbox-images.groovy",
+];
 const config = async (name) =>
   JSON.parse(await fs.readFile(join(source, name), "utf8"));
 const digest = (value) => createHash("sha256").update(value).digest("hex");
@@ -36,7 +70,10 @@ test("controller lab, migrated controller and CI configurations retain separate 
   assert.equal(result.jenkins, "2.580.1");
   assert.equal(result.javaMajor, 21);
   assert.equal(result.servicesStarted, false);
-  assert.notEqual(CONTROLLER_HOST, BUILD_HOST);
+  // Static check only: no host value appears (host-layout.mjs print shows them).
+  assert.equal(result.controllerDockerHost, undefined);
+  assert.equal(result.buildDockerHost, undefined);
+  assert.doesNotMatch(JSON.stringify(result), /unix:|\/Users\/|docker\.sock/);
   const lab = await config("compose.lab.json");
   const production = await config("compose.controller.json");
   const ci = await config("compose.ci.json");
@@ -56,7 +93,7 @@ test("controller policy rejects socket/data mounts, host execution and public HT
     (value) =>
       value.services.controller.volumes.push({
         type: "bind",
-        source: "/Users/douglasdong/agent-platform/production",
+        source: "/Users/operator/agent-platform/production",
         target: "/data",
       }),
     (value) => {
@@ -78,7 +115,7 @@ test("controller policy rejects socket/data mounts, host execution and public HT
       });
     },
     (value) => {
-      value.services.controller.environment.DOCKER_HOST = BUILD_HOST;
+      value.services.controller.environment.DOCKER_HOST = SOCKETS.build;
     },
     (value) => {
       value.services.controller.command = "bash";
@@ -515,7 +552,7 @@ test("runtime mounts refuse anonymous extras, missing child targets, shared node
     },
     (mounts) => {
       mounts[0].Type = "bind";
-      mounts[0].Source = "/Users/douglasdong";
+      mounts[0].Source = "/Users/operator";
     },
     (mounts) => {
       mounts[2].Destination = "/var/run/docker.sock";
@@ -563,11 +600,29 @@ test("managed activation checks active mode before state mutation and only clear
   for (const name of ["linux-deploy", "linux-ci", "linux-web-amd64"])
     assert.ok(script.includes(`name:'${name}'`));
   assert.doesNotMatch(script, /mac-ci|mac-deploy/);
-  assert.throws(
-    () => renderPipeline("@UNKNOWN_PRIVATE_TEMPLATE@"),
-    /Unknown fixed/,
+});
+
+test("pipeline templates are sent exactly as reviewed and no template carries a host placeholder", async () => {
+  for (const text of [
+    "@UNKNOWN_PRIVATE_TEMPLATE@",
+    "def node='@NODE22@'",
+    "x @JENKINS_TOOLS@ y",
+  ])
+    assert.throws(() => reviewedPipeline(text), /@KEY@ placeholders/);
+  for (const text of ["/usr/local/bin/node", "user@example.com", "@ @a@ @@"])
+    assert.equal(reviewedPipeline(text), text);
+  // Every Groovy file manage.mjs sends: the nine pipelines and bootstrap.groovy.
+  const jenkins = join(source, "../jenkins");
+  const groovy = (await fs.readdir(jenkins)).filter((name) =>
+    name.endsWith(".groovy"),
   );
-  assert.equal(renderPipeline("/usr/local/bin/node"), "/usr/local/bin/node");
+  for (const name of [...PIPELINES, "bootstrap.groovy"])
+    assert.ok(groovy.includes(name), name);
+  for (const name of groovy) {
+    const text = await fs.readFile(join(jenkins, name), "utf8");
+    assert.doesNotMatch(text, /@[A-Z_0-9]+@/, name);
+    assert.doesNotMatch(text, /\/Users\//, name);
+  }
 });
 
 test("bootstrap manages only the three current Linux agents and the retired native Home copy action is rejected before credential lookup", async () => {
@@ -590,16 +645,609 @@ test("bootstrap manages only the three current Linux agents and the retired nati
   );
 });
 
-test("default Docker context and cross-profile daemon use are refused", () => {
-  assert.equal(
-    validateDockerHost("controller", CONTROLLER_HOST),
-    CONTROLLER_HOST,
+// Fake Jenkins for the quietDown/queue/idle actions: no request leaves the process.
+const FAKE_TOKEN = "fake-jenkins-api-token-not-for-logs";
+const FAKE_BASIC = Buffer.from(`operator:${FAKE_TOKEN}`).toString("base64");
+const idleJobs = () => [
+  {
+    name: "agent-platform-release",
+    disabled: true,
+    builds: [{ number: 47, building: false }],
+  },
+  { name: "agent-platform-ci-discovery", disabled: true, builds: [] },
+  {
+    name: "agent-platform-service-monitor",
+    disabled: false,
+    builds: [{ number: 9, building: false }],
+  },
+];
+const idleComputers = () => ({
+  computer: [
+    { displayName: "Built-In Node", executors: [], oneOffExecutors: [] },
+    {
+      displayName: "linux-deploy",
+      executors: [{ idle: true, currentExecutable: null }],
+      oneOffExecutors: [],
+    },
+  ],
+});
+async function fakeJenkins(t, state = {}) {
+  const tools = await temporary(t);
+  await fs.writeFile(
+    join(tools, "admin-api.json"),
+    JSON.stringify({ username: "operator", token: FAKE_TOKEN }),
+    { mode: 0o600 },
   );
-  assert.equal(validateDockerHost("build", BUILD_HOST), BUILD_HOST);
-  for (const host of [undefined, "", "unix:///var/run/docker.sock", BUILD_HOST])
-    assert.throws(() => validateDockerHost("controller", host));
-  assert.throws(() => validateDockerHost("build", CONTROLLER_HOST));
-  assert.throws(() => validateDockerHost("unknown", null));
+  const jenkins = {
+    quietingDown: false,
+    jobs: idleJobs(),
+    computers: idleComputers(),
+    queue: { items: [] },
+    postStatus: 302,
+    applyPost: true,
+    ...state,
+  };
+  const calls = [];
+  // Requests already sent when each listener check ran.
+  const checks = [];
+  const scripts = [];
+  const reply = (status, body) =>
+    new Response(body === undefined ? null : JSON.stringify(body), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  const fetchImpl = async (url, init = {}) => {
+    const path = String(url).slice("http://jenkins.test/".length);
+    const method = init.method ?? "GET";
+    calls.push({
+      path,
+      method,
+      redirect: init.redirect,
+      authorization: init.headers?.authorization,
+    });
+    const route = path.split("?")[0];
+    if (method === "POST" && route === "scriptText") {
+      scripts.push(init.body.get("script"));
+      return new Response("Reviewed managed pipeline templates synchronized\n");
+    }
+    if (method === "POST" && ["quietDown", "cancelQuietDown"].includes(route)) {
+      if (jenkins.applyPost) jenkins.quietingDown = route === "quietDown";
+      return jenkins.postStatus === 302
+        ? new Response(null, {
+            status: 302,
+            headers: { location: "http://jenkins.test/" },
+          })
+        : reply(jenkins.postStatus, { error: "refused" });
+    }
+    if (method !== "GET") return reply(405, {});
+    if (route === "api/json")
+      return reply(200, {
+        quietingDown: jenkins.quietingDown,
+        jobs: jenkins.jobs,
+      });
+    if (route === "queue/api/json")
+      return reply(jenkins.queueStatus ?? 200, jenkins.queue);
+    if (route === "computer/api/json") return reply(200, jenkins.computers);
+    return reply(404, {});
+  };
+  const options = {
+    tools,
+    base: "http://jenkins.test/",
+    fetchImpl,
+    assertListener: async () => {
+      checks.push(calls.length);
+      if (jenkins.foreignListener)
+        throw new Error(
+          "127.0.0.1:8080 is held by UID 5102, not the operator; the Jenkins credential is not sent",
+        );
+    },
+    now: () => jenkins.clock ?? 0,
+    sleep: async (ms) => {
+      jenkins.clock = (jenkins.clock ?? 0) + ms;
+      jenkins.onSleep?.(jenkins);
+    },
+  };
+  return { jenkins, calls, checks, scripts, options };
+}
+const posts = (calls) => calls.filter((call) => call.method === "POST");
+function assertNoCredential(error) {
+  for (const value of [FAKE_TOKEN, FAKE_BASIC])
+    assert.ok(!String(error?.message ?? error).includes(value));
+  return true;
+}
+
+test("quiet-down only posts quietDown to an idle controller with release and discovery disabled, and a confirmed 302 counts as success", async (t) => {
+  const { calls, options } = await fakeJenkins(t);
+  const log = t.mock.method(console, "log", () => {});
+  await runManagement(["quiet-down"], options);
+  assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), {
+    state: "quieting-down",
+    quietingDown: true,
+    disabledJobs: ["agent-platform-ci-discovery", "agent-platform-release"],
+  });
+  assert.deepEqual(
+    posts(calls).map(({ path, redirect }) => ({ path, redirect })),
+    [{ path: "quietDown", redirect: "manual" }],
+  );
+  // The state is read back after the redirect instead of trusting it.
+  assert.equal(calls.at(-1).method, "GET");
+  for (const call of calls) {
+    assert.equal(call.authorization, `Basic ${FAKE_BASIC}`);
+    if (call.method === "GET") assert.equal(call.redirect, "error");
+  }
+});
+
+test("quiet-down sends nothing while release or discovery is enabled or any build, executor or queue item is busy", async (t) => {
+  const busy = {
+    enabled: {
+      jobs: idleJobs().map((job) =>
+        job.name === "agent-platform-release"
+          ? { ...job, disabled: false }
+          : job,
+      ),
+    },
+    running: {
+      jobs: [
+        ...idleJobs(),
+        {
+          name: "agent-platform-web",
+          disabled: false,
+          builds: [{ number: 12, building: true }],
+        },
+      ],
+    },
+    oneOff: {
+      computers: {
+        computer: [
+          {
+            displayName: "linux-deploy",
+            executors: [{ idle: true, currentExecutable: null }],
+            oneOffExecutors: [
+              {
+                idle: false,
+                currentExecutable: {
+                  fullDisplayName: "agent-platform-release #48",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    queued: {
+      queue: {
+        items: [
+          {
+            id: 7,
+            why: "In the quiet period",
+            task: { name: "agent-platform-api" },
+          },
+        ],
+      },
+    },
+  };
+  const expected = {
+    enabled: /quietDown was not sent: agent-platform-release is not disabled/,
+    running: /running builds: agent-platform-web #12/,
+    oneOff: /busy executors: linux-deploy: agent-platform-release #48/,
+    queued: /queued: agent-platform-api/,
+  };
+  for (const [name, state] of Object.entries(busy)) {
+    const { calls, options } = await fakeJenkins(t, state);
+    await assert.rejects(runManagement(["quiet-down"], options), (error) => {
+      assert.match(error.message, expected[name]);
+      assert.match(error.message, /run wait-idle, then retry/);
+      return assertNoCredential(error);
+    });
+    assert.deepEqual(posts(calls), [], name);
+  }
+});
+
+test("quiet-down is a no-op when Jenkins is already quieting down and fails when a 302 is not confirmed", async (t) => {
+  const already = await fakeJenkins(t, { quietingDown: true });
+  const log = t.mock.method(console, "log", () => {});
+  await runManagement(["quiet-down"], already.options);
+  assert.equal(
+    JSON.parse(log.mock.calls[0].arguments[0]).alreadyQuietingDown,
+    true,
+  );
+  assert.deepEqual(posts(already.calls), []);
+
+  const ignored = await fakeJenkins(t, { applyPost: false });
+  await assert.rejects(
+    runManagement(["quiet-down"], ignored.options),
+    /does not report quietingDown after quietDown/,
+  );
+  const refused = await fakeJenkins(t, { postStatus: 403 });
+  await assert.rejects(
+    runManagement(["quiet-down"], refused.options),
+    (error) => {
+      assert.equal(error.message, "Jenkins HTTP 403");
+      return assertNoCredential(error);
+    },
+  );
+});
+
+test("cancel-quiet-down treats a confirmed 302 as success and reports the jobs that are still disabled", async (t) => {
+  const { calls, options } = await fakeJenkins(t, { quietingDown: true });
+  const log = t.mock.method(console, "log", () => {});
+  await runManagement(["cancel-quiet-down"], options);
+  assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), {
+    state: "quiet-down-cancelled",
+    quietingDown: false,
+    disabledJobs: ["agent-platform-ci-discovery", "agent-platform-release"],
+  });
+  assert.deepEqual(
+    posts(calls).map(({ path, redirect }) => ({ path, redirect })),
+    [{ path: "cancelQuietDown", redirect: "manual" }],
+  );
+  const ignored = await fakeJenkins(t, {
+    quietingDown: true,
+    applyPost: false,
+  });
+  await assert.rejects(
+    runManagement(["cancel-quiet-down"], ignored.options),
+    /still reports quietingDown/,
+  );
+});
+
+test("queue is read-only and a redirect is only accepted from the two quietDown endpoints", async (t) => {
+  const { calls, options } = await fakeJenkins(t, {
+    queue: {
+      items: [
+        {
+          id: 31,
+          why: "Waiting for next available executor on linux-deploy",
+          blocked: false,
+          buildable: true,
+          stuck: false,
+          inQueueSince: Date.UTC(2026, 9, 8, 1, 2, 3),
+          task: { name: "agent-platform-service-monitor" },
+        },
+      ],
+    },
+  });
+  const log = t.mock.method(console, "log", () => {});
+  await runManagement(["queue"], options);
+  assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), {
+    count: 1,
+    items: [
+      {
+        id: 31,
+        job: "agent-platform-service-monitor",
+        why: "Waiting for next available executor on linux-deploy",
+        blocked: false,
+        buildable: true,
+        stuck: false,
+        inQueueSince: "2026-10-08T01:02:03.000Z",
+      },
+    ],
+  });
+  assert.ok(
+    calls.every((call) => call.method === "GET" && call.redirect === "error"),
+  );
+  const redirected = await fakeJenkins(t, { queueStatus: 302 });
+  await assert.rejects(
+    runManagement(["queue"], redirected.options),
+    /^Error: Jenkins HTTP 302$/,
+  );
+});
+
+test("wait-idle polls until no build, executor or queue item is busy and reports progress on stderr", async (t) => {
+  const { jenkins, calls, options } = await fakeJenkins(t, {
+    jobs: [
+      ...idleJobs(),
+      {
+        name: "agent-platform-web",
+        disabled: false,
+        builds: [{ number: 12, building: true }],
+      },
+    ],
+    onSleep: (state) => {
+      if (state.clock === 10_000) {
+        state.jobs = idleJobs();
+        state.queue = {
+          items: [{ id: 8, task: { name: "agent-platform-service-monitor" } }],
+        };
+      } else state.queue = { items: [] };
+    },
+  });
+  const log = t.mock.method(console, "log", () => {});
+  const progress = t.mock.method(console, "error", () => {});
+  await runManagement(["wait-idle", "--timeout", "60"], options);
+  assert.deepEqual(JSON.parse(log.mock.calls[0].arguments[0]), {
+    state: "idle",
+    waitedSeconds: 20,
+    quietingDown: false,
+    disabledJobs: ["agent-platform-ci-discovery", "agent-platform-release"],
+  });
+  assert.deepEqual(
+    progress.mock.calls.map((call) => JSON.parse(call.arguments[0])),
+    [
+      {
+        state: "waiting",
+        elapsedSeconds: 0,
+        quietingDown: false,
+        runningBuilds: ["agent-platform-web #12"],
+        busyExecutors: [],
+        queued: [],
+      },
+      {
+        state: "waiting",
+        elapsedSeconds: 10,
+        quietingDown: false,
+        runningBuilds: [],
+        busyExecutors: [],
+        queued: ["agent-platform-service-monitor"],
+      },
+    ],
+  );
+  assert.equal(jenkins.clock, 20_000);
+  assert.deepEqual(posts(calls), []);
+});
+
+test("wait-idle stops at its timeout and names only what is still busy", async (t) => {
+  const { jenkins, calls, options } = await fakeJenkins(t, {
+    jobs: idleJobs().map((job) =>
+      job.name === "agent-platform-release"
+        ? { ...job, builds: [{ number: 48, building: true }, ...job.builds] }
+        : job,
+    ),
+  });
+  t.mock.method(console, "error", () => {});
+  await assert.rejects(
+    runManagement(["wait-idle", "--timeout=25"], options),
+    (error) => {
+      assert.equal(
+        error.message,
+        "Jenkins did not become idle within 25 seconds (running builds: agent-platform-release #48)",
+      );
+      return assertNoCredential(error);
+    },
+  );
+  // Polls at 0, 10, 20 and exactly at the 25 second deadline.
+  assert.equal(jenkins.clock, 25_000);
+  assert.equal(
+    calls.filter((call) => call.path.startsWith("queue/")).length,
+    4,
+  );
+  assert.deepEqual(posts(calls), []);
+});
+
+test("new Jenkins actions reject bad arguments and unsafe credentials before any request", async (t) => {
+  const missing = join(await temporary(t), "missing");
+  for (const args of [
+    ["wait-idle", "--timeout", "0"],
+    ["wait-idle", "--timeout", "14401"],
+    ["wait-idle", "--timeout=soon"],
+    ["wait-idle", "60"],
+    ["queue", "agent-platform-api"],
+    ["quiet-down", "agent-platform-release"],
+    ["cancel-quiet-down", "now"],
+  ])
+    await assert.rejects(
+      runManagement(args, { tools: missing }),
+      /^Error: Use /,
+    );
+  assert.deepEqual(parseWaitIdleArguments([]), {
+    timeoutSeconds: DEFAULT_IDLE_TIMEOUT_SECONDS,
+  });
+  assert.deepEqual(parseWaitIdleArguments(["--timeout", "14400"]), {
+    timeoutSeconds: 14400,
+  });
+  const { calls, options } = await fakeJenkins(t);
+  await fs.chmod(join(options.tools, "admin-api.json"), 0o644);
+  await assert.rejects(
+    runManagement(["queue"], options),
+    /Unsafe private API credential/,
+  );
+  assert.deepEqual(calls, []);
+});
+
+test("idle detection treats unnamed node-block executors as busy, ignores offline idle nodes and fails closed on odd responses", () => {
+  const report = idleReport({
+    controller: { quietingDown: true, jobs: idleJobs() },
+    queue: {
+      items: [{ id: 3, task: { name: "agent-platform-service-monitor" } }],
+    },
+    computers: {
+      computer: [
+        {
+          displayName: "linux-ci",
+          executors: [
+            {
+              idle: false,
+              currentExecutable: {
+                _class:
+                  "org.jenkinsci.plugins.workflow.support.steps.ExecutorStepExecution$PlaceholderTask$PlaceholderExecutable",
+              },
+            },
+          ],
+        },
+        {
+          displayName: "mac-ci",
+          executors: [{ idle: true, currentExecutable: null }],
+        },
+      ],
+    },
+  });
+  assert.equal(report.idle, false);
+  assert.deepEqual(report.busyExecutors, ["linux-ci: busy"]);
+  assert.deepEqual(report.queued, ["agent-platform-service-monitor"]);
+  assert.equal(report.quietingDown, true);
+  for (const broken of [
+    { controller: {}, queue: { items: [] }, computers: idleComputers() },
+    { controller: { jobs: [] }, queue: {}, computers: idleComputers() },
+    { controller: { jobs: [] }, queue: { items: [] }, computers: {} },
+  ])
+    assert.throws(() => idleReport(broken), /Unexpected Jenkins/);
+});
+
+test("default Docker context and cross-profile daemon use are refused", () => {
+  const { profiles } = LAYOUT;
+  assert.equal(
+    validateDockerHost("controller", SOCKETS.jenkins, profiles),
+    SOCKETS.jenkins,
+  );
+  assert.equal(
+    validateDockerHost("build", SOCKETS.build, profiles),
+    SOCKETS.build,
+  );
+  for (const host of [
+    undefined,
+    "",
+    "unix:///var/run/docker.sock",
+    SOCKETS.build,
+    SOCKETS.runtime,
+  ])
+    assert.throws(
+      () => validateDockerHost("controller", host, profiles),
+      /fixed dedicated Docker profile/,
+    );
+  for (const host of [SOCKETS.jenkins, SOCKETS.runtime])
+    assert.throws(() => validateDockerHost("build", host, profiles));
+  assert.throws(() => validateDockerHost("runtime", SOCKETS.runtime, profiles));
+  assert.throws(() => validateDockerHost("unknown", null, profiles));
+  // Without the host layout nothing is accepted, not even an empty host.
+  for (const [kind, host, layoutProfiles] of [
+    ["controller", SOCKETS.jenkins, undefined],
+    ["build", undefined, undefined],
+    ["build", undefined, {}],
+    ["controller", "", { jenkins: { socket: "" } }],
+  ])
+    assert.throws(
+      () => validateDockerHost(kind, host, layoutProfiles),
+      /fixed dedicated Docker profile/,
+    );
+  // A layout whose build profile points at the runtime daemon is refused.
+  const crossed = {
+    ...profiles,
+    build: { ...profiles.build, socket: SOCKETS.runtime },
+  };
+  assert.throws(() => validateDockerHost("build", SOCKETS.runtime, crossed));
+});
+
+test("lab verification reaches the jenkins and build profiles of the host layout only", () => {
+  const docker = dockerProfiles(LAYOUT);
+  assert.deepEqual(Object.keys(docker), ["controller", "build"]);
+  assert.ok(Object.isFrozen(docker));
+  const crossed = {
+    ...LAYOUT,
+    profiles: {
+      ...LAYOUT.profiles,
+      jenkins: { ...LAYOUT.profiles.jenkins, socket: SOCKETS.runtime },
+    },
+  };
+  assert.throws(() => dockerProfiles(crossed), /fixed dedicated/);
+});
+
+test("manage confirms the loopback listener before every credentialed request and sends nothing to a foreign one", async (t) => {
+  t.mock.method(console, "log", () => {});
+  const status = await fakeJenkins(t);
+  await runManagement(["status"], status.options);
+  // Two sequential requests, each preceded by its own check.
+  assert.deepEqual(status.checks, [0, 1]);
+  assert.equal(status.calls.length, 2);
+
+  // Three concurrent reads share one check per poll.
+  const idle = await fakeJenkins(t);
+  await runManagement(["wait-idle"], idle.options);
+  assert.deepEqual(idle.checks, [0]);
+  assert.equal(idle.calls.length, 3);
+
+  const quiet = await fakeJenkins(t);
+  await runManagement(["quiet-down"], quiet.options);
+  assert.deepEqual(quiet.checks, [0, 3, 4]);
+  assert.deepEqual(
+    quiet.calls.map((call) => call.method),
+    ["GET", "GET", "GET", "POST", "GET"],
+  );
+
+  for (const args of [
+    ["status"],
+    ["queue"],
+    ["wait-idle"],
+    ["disable", "agent-platform-release"],
+    ["sync-pipelines"],
+  ]) {
+    const foreign = await fakeJenkins(t, { foreignListener: true });
+    await assert.rejects(runManagement(args, foreign.options), (error) => {
+      assert.match(error.message, /not the operator/);
+      return assertNoCredential(error);
+    });
+    assert.deepEqual(foreign.calls, [], args[0]);
+    assert.deepEqual(foreign.checks, [0], args[0]);
+  }
+});
+
+test("manage takes every host value from its caller and refuses to run without them", async (t) => {
+  const { calls, checks, options } = await fakeJenkins(t);
+  for (const missing of ["tools", "base", "assertListener"]) {
+    const partial = { ...options };
+    delete partial[missing];
+    await assert.rejects(
+      runManagement(["queue"], partial),
+      /requires the private tools directory, the Jenkins URL and a listener check/,
+    );
+  }
+  assert.deepEqual(calls, []);
+  assert.deepEqual(checks, []);
+  const text = await fs.readFile(join(source, "../jenkins/manage.mjs"), "utf8");
+  // The host layout is imported only by the Mac CLI branch, never at the top.
+  assert.doesNotMatch(text, /^import[^;]*host-layout/m);
+  assert.match(text, /await import\("\.\.\/containers\/host-layout\.mjs"\)/);
+  assert.doesNotMatch(text, /\/Users\/|\b501\b|fnm\/node-versions/);
+});
+
+test("sync-pipelines sends each reviewed template byte for byte after the listener check", async (t) => {
+  const { calls, checks, scripts, options } = await fakeJenkins(t);
+  const log = t.mock.method(console, "log", () => {});
+  await runManagement(["sync-pipelines"], options);
+  assert.equal(
+    log.mock.calls[0].arguments[0],
+    "Reviewed managed pipeline templates synchronized",
+  );
+  assert.deepEqual(checks, [0]);
+  assert.deepEqual(
+    calls.map(({ path, method }) => ({ path, method })),
+    [{ path: "scriptText", method: "POST" }],
+  );
+  const encoded = /new String\('([A-Za-z0-9+/=]+)'\.decodeBase64\(\)/.exec(
+    scripts[0],
+  )[1];
+  const files = JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
+  assert.deepEqual(Object.keys(files), PIPELINES);
+  for (const name of PIPELINES)
+    assert.deepEqual(
+      Buffer.from(files[name], "base64"),
+      await fs.readFile(join(source, "../jenkins", name)),
+      name,
+    );
+});
+
+test("the API credential is read without following links and only as the account's single-link private file", async (t) => {
+  for (const alter of [
+    async (path) => {
+      const target = `${path}.target`;
+      await fs.rename(path, target);
+      await fs.symlink(target, path);
+    },
+    async (path) => fs.link(path, `${path}.second-link`),
+    async (path) => fs.chmod(path, 0o640),
+    async (path) => {
+      await fs.rm(path);
+      await fs.mkdir(path);
+    },
+  ]) {
+    const { calls, checks, options } = await fakeJenkins(t);
+    await alter(join(options.tools, "admin-api.json"));
+    await assert.rejects(
+      runManagement(["queue"], options),
+      /^Error: Unsafe private API credential$/,
+    );
+    assert.deepEqual(calls, []);
+    assert.deepEqual(checks, []);
+  }
 });
 
 test("plugin install writes exactly verified bytes without dependency/version resolution", async (t) => {

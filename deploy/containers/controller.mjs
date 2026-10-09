@@ -4,10 +4,6 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { validatePluginLock } from "./plugins.mjs";
 
 const source = dirname(fileURLToPath(import.meta.url));
-export const CONTROLLER_HOST =
-  "unix:///Users/douglasdong/.colima/agent-platform-jenkins/docker.sock";
-export const BUILD_HOST =
-  "unix:///Users/douglasdong/.colima/agent-platform-build/docker.sock";
 export const PUBLIC_CONTROLLER_URL = "https://jenkins.douglasdong.com/";
 const LOCAL_CONTROLLER_URL = "http://127.0.0.1:8080/";
 const LAB_CONTROLLER_URL = "http://127.0.0.1:18080/";
@@ -364,18 +360,21 @@ export function validateCiCompose(config) {
   return config;
 }
 
-export function validateDockerHost(kind, host) {
+// profiles: the Colima profiles of the host layout (host-layout.mjs). Only the
+// jenkins socket serves the controller and only the build socket the build
+// profile; the default context and the production runtime daemon are refused.
+export function validateDockerHost(kind, host, profiles) {
   requirePolicy(
     kind === "controller" || kind === "build",
     "Unknown Docker profile kind",
   );
+  const expected = (kind === "controller" ? profiles?.jenkins : profiles?.build)
+    ?.socket;
   requirePolicy(
-    host ===
-      (kind === "controller"
-        ? CONTROLLER_HOST
-        : kind === "build"
-          ? BUILD_HOST
-          : null),
+    typeof expected === "string" &&
+      expected.startsWith("unix:///") &&
+      host === expected &&
+      host !== profiles.runtime?.socket,
     "Use the fixed dedicated Docker profile; the default context and production daemon are refused",
   );
   return host;
@@ -400,13 +399,13 @@ export async function checkConfiguration() {
     ),
   );
   const controllerMode = resolveControllerMode();
+  // Static only: no host value is derived here (host-layout.mjs print shows
+  // the Docker sockets).
   return {
     status: "configuration-verified",
     jenkins: lock.jenkins,
     javaMajor: lock.javaMajor,
     plugins: lock.plugins.length,
-    controllerDockerHost: CONTROLLER_HOST,
-    buildDockerHost: BUILD_HOST,
     servicesStarted: false,
     defaultControllerMode: "migration",
     controllerMode,
