@@ -644,6 +644,156 @@ export const MIGRATION_DATA_PROBE = `const fs=require('fs'),{DatabaseSync}=requi
 export const NATIVE_ADDON_PROBE =
   "const D=require('better-sqlite3');const d=new D(':memory:');if(d.prepare('SELECT 7 AS value').get().value!==7)throw Error('SQLite failed');d.close();const B=require('node:module').createRequire('/app/packages/modules/sandbox/package.json')('@boxlite-ai/boxlite');if(typeof B.JsBoxlite!=='function'||typeof B.getNativeModule().JsBoxlite!=='function')throw Error('BoxLite native binding failed');console.log('native-probe-passed')";
 
+// Run only in a disposable candidate container with /data mounted read-only.
+// SQLite's backup API includes committed WAL pages; copying platform.db alone
+// would silently validate an older database. Migration code touches only /tmp.
+export async function migrationReviewProbe() {
+  const fs = require("node:fs"),
+    crypto = require("node:crypto"),
+    D = require("better-sqlite3"),
+    {
+      createConnection,
+      runMigrations,
+    } = require("/app/apps/api/dist/platform/persistence/drizzle.connection.js"),
+    path = "/data/platform.db",
+    copy = "/tmp/migration-review.db";
+  const stat = fs.lstatSync(path);
+  if (
+    !stat.isFile() ||
+    stat.isSymbolicLink() ||
+    stat.nlink !== 1 ||
+    fs.realpathSync(path) !== path
+  )
+    throw Error("Unsafe migration source database");
+  const source = new D(path, { readonly: true, fileMustExist: true });
+  try {
+    await source.backup(copy);
+  } finally {
+    source.close();
+  }
+  const databaseSha256 = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(copy))
+      .digest("hex"),
+    connection = createConnection(copy),
+    db = connection.sqlite;
+  const check = () => {
+    if (
+      db.pragma("quick_check").some((row) => row.quick_check !== "ok") ||
+      db.pragma("foreign_key_check").length
+    )
+      throw Error("Migration database integrity failed");
+  };
+  try {
+    check();
+    // Drizzle stores the SHA-256 of each complete SQL file and its journal
+    // timestamp. Every applied migration must be an unchanged ordered prefix;
+    // changing old SQL/timestamps must not be hidden by a newer fingerprint.
+    const journal = JSON.parse(
+        fs.readFileSync("/app/drizzle/meta/_journal.json", "utf8"),
+      ),
+      applied = db
+        .prepare(
+          "SELECT hash, created_at FROM __drizzle_migrations ORDER BY created_at",
+        )
+        .all();
+    if (
+      journal.dialect !== "sqlite" ||
+      !Array.isArray(journal.entries) ||
+      applied.length < 1 ||
+      journal.entries.length <= applied.length
+    )
+      throw Error("Append-only migration history required");
+    const migrations = journal.entries.map((entry, index) => {
+      if (
+        entry.idx !== index ||
+        !/^[0-9]{4}_[a-z0-9_]+$/.test(entry.tag) ||
+        !Number.isSafeInteger(entry.when) ||
+        (index && entry.when <= journal.entries[index - 1].when)
+      )
+        throw Error("Invalid ordered migration journal");
+      return {
+        hash: crypto
+          .createHash("sha256")
+          .update(fs.readFileSync("/app/drizzle/" + entry.tag + ".sql"))
+          .digest("hex"),
+        when: entry.when,
+      };
+    });
+    for (let index = 0; index < applied.length; index++)
+      if (
+        applied[index].hash !== migrations[index].hash ||
+        Number(applied[index].created_at) !== migrations[index].when
+      )
+        throw Error("Previously applied migration history changed");
+    const counts = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name!='__drizzle_migrations'",
+      )
+      .all()
+      .map(({ name }) => ({
+        name,
+        count: db
+          .prepare(
+            'SELECT count(*) AS n FROM "' + name.replaceAll('"', '""') + '"',
+          )
+          .get().n,
+      }));
+    runMigrations(connection.db, db);
+    check();
+    for (const { name, count } of counts)
+      if (
+        db
+          .prepare(
+            'SELECT count(*) AS n FROM "' + name.replaceAll('"', '""') + '"',
+          )
+          .get().n !== count
+      )
+        throw Error("Migration changed existing table row counts");
+    return {
+      state: "migration-probe-passed",
+      databaseSha256,
+      preservedTables: counts.length,
+      appliedMigrations: applied.length,
+      appendedMigrations: migrations.length - applied.length,
+    };
+  } finally {
+    db.close();
+  }
+}
+export const MIGRATION_REVIEW_PROBE = `(${migrationReviewProbe.toString()})().then(r=>console.log(JSON.stringify(r)),()=>{console.error('Migration copy validation failed');process.exitCode=1;})`;
+
+export function migrationReviewMatches(
+  permit,
+  request,
+  release,
+  old,
+  previous,
+) {
+  return (
+    permit?.state === "reviewed" &&
+    permit.sha === request.sha &&
+    permit.rootSha === request.rootSha &&
+    permit.runId === request.runId &&
+    permit.imageId === release.imageId &&
+    permit.schemaFingerprint === release.schemaFingerprint &&
+    permit.previousContainerId === old.Id &&
+    permit.previousImageId === old.Image &&
+    permit.previousSha === previous.sha &&
+    permit.previousRootSha === previous.rootSha &&
+    permit.previousSchemaFingerprint === previous.schemaFingerprint &&
+    permit.probe?.state === "migration-probe-passed" &&
+    /^[a-f0-9]{64}$/.test(permit.probe.databaseSha256 ?? "") &&
+    Number.isSafeInteger(permit.probe.preservedTables) &&
+    permit.probe.preservedTables > 0 &&
+    Number.isSafeInteger(permit.probe.appliedMigrations) &&
+    permit.probe.appliedMigrations > 0 &&
+    Number.isSafeInteger(permit.probe.appendedMigrations) &&
+    permit.probe.appendedMigrations > 0 &&
+    Number.isFinite(Date.parse(permit.reviewedAt))
+  );
+}
+
 export function createDeployer(options = {}) {
   const root = options.root ?? ROOT,
     tools = options.tools ?? TOOLS;
@@ -654,7 +804,8 @@ export function createDeployer(options = {}) {
     options.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   const d = (args, opts) => exec(docker, [...spec, ...args], opts);
   const receipts = join(root, "jenkins-receipts"),
-    releases = join(root, "releases");
+    releases = join(root, "releases"),
+    migrationReviewPath = join(root, "migration-review.json");
   const runtimeEnv = async () =>
     runtimePolicy(await privateFile(join(root, "runtime.env")));
   async function heads() {
@@ -1220,6 +1371,97 @@ export function createDeployer(options = {}) {
       );
     return { request, release };
   }
+  async function probeMigration(release) {
+    const result = JSON.parse(
+      await d(
+        [
+          "run",
+          "--rm",
+          "--network",
+          "none",
+          "--entrypoint",
+          "node",
+          "--mount",
+          "type=volume,source=agent-platform-production-data,target=/data,readonly",
+          release.imageId,
+          "-e",
+          MIGRATION_REVIEW_PROBE,
+        ],
+        { quiet: true },
+      ),
+    );
+    if (
+      result.state !== "migration-probe-passed" ||
+      !/^[a-f0-9]{64}$/.test(result.databaseSha256 ?? "") ||
+      !Number.isSafeInteger(result.preservedTables) ||
+      result.preservedTables < 1 ||
+      !Number.isSafeInteger(result.appliedMigrations) ||
+      result.appliedMigrations < 1 ||
+      !Number.isSafeInteger(result.appendedMigrations) ||
+      result.appendedMigrations < 1
+    )
+      throw Error("Migration copy validation failed");
+    return result;
+  }
+  async function reviewMigration(sha, runId, oldFingerprint, newFingerprint) {
+    if (
+      !/^[a-f0-9]{64}$/.test(oldFingerprint ?? "") ||
+      !/^[a-f0-9]{64}$/.test(newFingerprint ?? "") ||
+      oldFingerprint === newFingerprint
+    )
+      throw Error(
+        "Explicit different reviewed old/new schema fingerprints required",
+      );
+    const { request, release } = await verifiedReceipt(sha, runId);
+    return withLock(async () => {
+      if (!(await approved(request)))
+        throw Error("Migration review requires current approved heads");
+      const old = await inspectApi();
+      if (!ownedContainer(old))
+        throw Error("Migration review requires an owned production API");
+      const previous = (
+        await cached(
+          join(
+            releases,
+            releaseKey(
+              old.Config.Labels[SHA_LABEL],
+              old.Config.Labels[ROOT_LABEL],
+            ),
+          ),
+          {
+            sha: old.Config.Labels[SHA_LABEL],
+            rootSha: old.Config.Labels[ROOT_LABEL],
+          },
+        )
+      ).release;
+      if (
+        previous.imageId !== old.Image ||
+        old.Config.Labels[SCHEMA_LABEL] !== previous.schemaFingerprint ||
+        previous.schemaFingerprint !== oldFingerprint ||
+        release.schemaFingerprint !== newFingerprint
+      )
+        throw Error("Reviewed old/new release identities changed");
+      const probe = await probeMigration(release);
+      await exactContainer({ id: old.Id, imageId: old.Image });
+      if (!(await approved(request)))
+        throw Error("Approved heads changed during migration review");
+      const permit = {
+        state: "reviewed",
+        ...request,
+        imageId: release.imageId,
+        schemaFingerprint: release.schemaFingerprint,
+        previousContainerId: old.Id,
+        previousImageId: old.Image,
+        previousSha: previous.sha,
+        previousRootSha: previous.rootSha,
+        previousSchemaFingerprint: previous.schemaFingerprint,
+        probe,
+        reviewedAt: now(),
+      };
+      await atomic(migrationReviewPath, permit);
+      return permit;
+    });
+  }
   async function deploy(sha, runId) {
     const { request, release } = await verifiedReceipt(sha, runId);
     if (!(await approved(request))) return { state: "superseded", ...request };
@@ -1237,18 +1479,37 @@ export function createDeployer(options = {}) {
         join(releases, releaseKey(oldRequest.sha, oldRequest.rootSha)),
         oldRequest,
       );
-      if (oldValue.release.imageId !== old.Image)
+      if (
+        oldValue.release.imageId !== old.Image ||
+        oldLabels[SCHEMA_LABEL] !== oldValue.release.schemaFingerprint
+      )
         throw Error("Current release image metadata conflict");
       if (old.Image === release.imageId) {
         await ready(release, { id: old.Id, imageId: release.imageId });
         return { state: "current", ...request, imageId: old.Image };
       }
-      if (oldValue.release.schemaFingerprint !== release.schemaFingerprint)
-        return {
-          state: "waiting-migration-review",
-          ...request,
-          imageId: release.imageId,
-        };
+      let migrationReview;
+      if (oldValue.release.schemaFingerprint !== release.schemaFingerprint) {
+        try {
+          migrationReview = JSON.parse(await privateFile(migrationReviewPath));
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        if (
+          !migrationReviewMatches(
+            migrationReview,
+            request,
+            release,
+            old,
+            oldValue.release,
+          )
+        )
+          return {
+            state: "waiting-migration-review",
+            ...request,
+            imageId: release.imageId,
+          };
+      }
       const original = { id: old.Id, imageId: old.Image };
       if (!(await deploymentIdle(await status(), original)))
         return { state: "waiting-idle", ...request };
@@ -1305,6 +1566,29 @@ export function createDeployer(options = {}) {
         await barrier("check", held, old.Image, old.Id);
         if (!(await deploymentIdle(await status(), original)))
           throw Error("Production became active before stop");
+        if (migrationReview) {
+          const currentReview = JSON.parse(
+            await privateFile(migrationReviewPath),
+          );
+          if (
+            JSON.stringify(currentReview) !== JSON.stringify(migrationReview) ||
+            !migrationReviewMatches(
+              currentReview,
+              request,
+              release,
+              old,
+              oldValue.release,
+            )
+          )
+            throw Error("Migration review changed before stop");
+          // A real stop attempt consumes approval. Idle/superseded retries above
+          // retain it; a failed migration or rollback requires a new review.
+          await atomic(migrationReviewPath, {
+            ...migrationReview,
+            state: "consumed",
+            consumedAt: now(),
+          });
+        }
         stopped = true;
         await checkpoint({
           state: "stopping",
@@ -1335,6 +1619,11 @@ export function createDeployer(options = {}) {
           barrier: held,
           backup,
         });
+        // Rehearse against the final stopped database only after its complete
+        // backup is verified. The production volume is still read-only here.
+        const migrationProbe = migrationReview
+          ? await probeMigration(release)
+          : undefined;
         await exactContainer({ id: old.Id, imageId: old.Image });
         await d(["rm", old.Id]);
         const id = (await d(runtimeArguments(release.imageId, release))).trim();
@@ -1352,6 +1641,7 @@ export function createDeployer(options = {}) {
           previousImageId: old.Image,
           backup,
           deployedAt: now(),
+          ...(migrationReview ? { migrationReview, migrationProbe } : {}),
         };
         await atomic(join(root, "runtime-state.json"), result);
         return result;
@@ -1693,7 +1983,7 @@ export function createDeployer(options = {}) {
     );
     return report;
   }
-  return { heads, build, deploy, adopt, monitor };
+  return { heads, build, deploy, reviewMigration, adopt, monitor };
 }
 export async function main(action, ...args) {
   await trusted();
@@ -1706,6 +1996,7 @@ export async function main(action, ...args) {
     return result;
   }
   if (action === "adopt") return service.adopt(...args);
+  if (action === "review-migration") return service.reviewMigration(...args);
   if (action === "monitor") {
     const folder = resolve(args[0]);
     const result = await service.monitor(folder);
@@ -1713,7 +2004,7 @@ export async function main(action, ...args) {
     return result;
   }
   throw Error(
-    "Use head, build API_SHA BUILD_NUMBER WORKSPACE ROOT_SHA, deploy/adopt API_SHA BUILD_NUMBER or monitor DIRECTORY",
+    "Use head, build API_SHA BUILD_NUMBER WORKSPACE ROOT_SHA, deploy/adopt API_SHA BUILD_NUMBER, review-migration API_SHA BUILD_NUMBER OLD_SCHEMA NEW_SCHEMA or monitor DIRECTORY",
   );
 }
 if (

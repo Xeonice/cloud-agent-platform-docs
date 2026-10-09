@@ -1,0 +1,231 @@
+{
+  "schemaVersion": 1,
+  "copiedAt": "2026-10-09T10:29:40.190Z",
+  "sourceRoot": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto",
+  "sourceDesignRoot": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts",
+  "sourceDescription": "Existing v2 full-flow prototype, including 2026-10-04 product decisions. This local baseline preserves its original shell, templates, data and flows.",
+  "artifacts": {
+    "prototype": "https://claude.ai/artifact/GcJix6dfo6C3p8U7U5Q75i",
+    "designGallery": "https://claude.ai/artifact/4CdckRsN8cTz72MAKPsWP7"
+  },
+  "preparation": {
+    "module": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/tools/lib/gap-proto.mjs",
+    "functions": [
+      "copyProtoAssets",
+      "rewriteProtoIndex"
+    ],
+    "galleryHref": "https://claude.ai/artifact/AH5ctp5L6swGEhNWPTfyfu",
+    "changes": [
+      "Local relative asset references",
+      "Gallery link points to the existing v2 pilot artifact",
+      "Existing publication helper removes relative-link target attributes and prototype download attributes; no business behavior was changed",
+      "Trailing whitespace stripped from copied HTML; historical source remains unchanged"
+    ]
+  },
+  "files": [
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/index.html",
+      "destination": "index.html",
+      "sourceSha256": "9b303eefe1f614984849e5ab8f6aee7cd0e5aa11c25c76330155e51e99d19edc",
+      "baselineSha256": "34dc409f75e058085b0a72808784bc591bd078328e669ec2180572ebc42b4c5c"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/proto.css",
+      "destination": "assets/proto.css",
+      "sourceSha256": "87d6d11b0eb7644ac542913833acbcfb673f4f2e879a6737f48c99348cfb14bb",
+      "baselineSha256": "87d6d11b0eb7644ac542913833acbcfb673f4f2e879a6737f48c99348cfb14bb"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/core.js",
+      "destination": "assets/js/core.js",
+      "sourceSha256": "fd8311098d61e09ee3f47137c1e5d4bd22edcb0ac67ef700526f29ff8ee50443",
+      "baselineSha256": "fd8311098d61e09ee3f47137c1e5d4bd22edcb0ac67ef700526f29ff8ee50443"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/ui.js",
+      "destination": "assets/js/ui.js",
+      "sourceSha256": "672e7eeb517091550b08b13efd372b5a0a93afe50f1b5fde82fe1ca3d3038a53",
+      "baselineSha256": "8b0b61824b0271915c1259c550e7eedbec05ae85214795d36c1cbb01efeb8ca8"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-prj.js",
+      "destination": "assets/js/flows-prj.js",
+      "sourceSha256": "2e8e00f710c497608999513e51f9afffd24a916a75bbaa1fc4cfb7360f0aaca4",
+      "baselineSha256": "04a2d0e52fbdde929a5f02a25ddbaeb3f74ea3ab604fcbc1276d677137bf3245"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-lch.js",
+      "destination": "assets/js/flows-lch.js",
+      "sourceSha256": "1ae241db5c1dbda501b876b587cff49fe118898540ce0ea1f832e7318b41ce29",
+      "baselineSha256": "1ae241db5c1dbda501b876b587cff49fe118898540ce0ea1f832e7318b41ce29"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-crd.js",
+      "destination": "assets/js/flows-crd.js",
+      "sourceSha256": "f5d96d0e082bb157d63b8b48bb211edd2ebba19fad850475c4707446a760c6fe",
+      "baselineSha256": "0626677f4522758219fcaa0936b5368483876e5f21591424cbaed77b4c0bef5d"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-img.js",
+      "destination": "assets/js/flows-img.js",
+      "sourceSha256": "89037e8556c1f1e1b051ca7e2a5107567df174242052c63abdf156bc1b8bd479",
+      "baselineSha256": "89037e8556c1f1e1b051ca7e2a5107567df174242052c63abdf156bc1b8bd479"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-sys.js",
+      "destination": "assets/js/flows-sys.js",
+      "sourceSha256": "b21d201ce3920149b13df5b6be118e26f4ae8ebb9c2f30d7c6adcaeddee0a628",
+      "baselineSha256": "b21d201ce3920149b13df5b6be118e26f4ae8ebb9c2f30d7c6adcaeddee0a628"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-dep.js",
+      "destination": "assets/js/flows-dep.js",
+      "sourceSha256": "0b1f5fe64db517a4e4d08a9c917619b8acbf345357b1e9eb5530aa7731aea957",
+      "baselineSha256": "0b1f5fe64db517a4e4d08a9c917619b8acbf345357b1e9eb5530aa7731aea957"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-wb.js",
+      "destination": "assets/js/flows-wb.js",
+      "sourceSha256": "ce226d825645f5e4115f29490577a54d070676b65d350af4436e1037f363f810",
+      "baselineSha256": "ce226d825645f5e4115f29490577a54d070676b65d350af4436e1037f363f810"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/proto/js/flows-aut.js",
+      "destination": "assets/js/flows-aut.js",
+      "sourceSha256": "3525772a116371ccddb5274ff951d4050928f4d16f6b5cd0a9e76ab50f1f64b8",
+      "baselineSha256": "3525772a116371ccddb5274ff951d4050928f4d16f6b5cd0a9e76ab50f1f64b8"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/tokens-v2.css",
+      "destination": "assets/tokens-v2.css",
+      "sourceSha256": "ddd45cd0db28bfbf977e58f4ab54ea5f366fe67f6eb03f906703d236a76f19b8",
+      "baselineSha256": "ddd45cd0db28bfbf977e58f4ab54ea5f366fe67f6eb03f906703d236a76f19b8"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/components-v2.css",
+      "destination": "assets/components-v2.css",
+      "sourceSha256": "a8ddb4730570f0cc009b0ed699d555a6ea969699a66c43cc9ae6e9d942cd8520",
+      "baselineSha256": "a8ddb4730570f0cc009b0ed699d555a6ea969699a66c43cc9ae6e9d942cd8520"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/pages/p2.css",
+      "destination": "assets/pages/p2.css",
+      "sourceSha256": "a377f3cc587dedf7bc78aa2736f13da7519c40fa9492840160eab684df930c55",
+      "baselineSha256": "a377f3cc587dedf7bc78aa2736f13da7519c40fa9492840160eab684df930c55"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/pages/p5.css",
+      "destination": "assets/pages/p5.css",
+      "sourceSha256": "531142e6080874ea24ff9b63b70cce9e125f4e71f565a944db714c5e76d61642",
+      "baselineSha256": "531142e6080874ea24ff9b63b70cce9e125f4e71f565a944db714c5e76d61642"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/pages/p7.css",
+      "destination": "assets/pages/p7.css",
+      "sourceSha256": "12392cf5396b0a3d253332c86b6e6fb235529f45dd72f2e694319089c8e12af6",
+      "baselineSha256": "12392cf5396b0a3d253332c86b6e6fb235529f45dd72f2e694319089c8e12af6"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/gap-shared.css",
+      "destination": "assets/gap/gap-shared.css",
+      "sourceSha256": "ff22e7a310f9096de6029c67e756af00dce37a5c4e4edecd6cd0b97645def778",
+      "baselineSha256": "ff22e7a310f9096de6029c67e756af00dce37a5c4e4edecd6cd0b97645def778"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l1a-prj.css",
+      "destination": "assets/gap/pages/l1a-prj.css",
+      "sourceSha256": "6f7c6ac363acb31523eb0a65e5647468209b22795ce788575fbb7a706e057b4d",
+      "baselineSha256": "6f7c6ac363acb31523eb0a65e5647468209b22795ce788575fbb7a706e057b4d"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l1b-prj.css",
+      "destination": "assets/gap/pages/l1b-prj.css",
+      "sourceSha256": "36b27a291185c5143620cee4b85a7b553a27195ffb4c2c311c92ad346dd111de",
+      "baselineSha256": "36b27a291185c5143620cee4b85a7b553a27195ffb4c2c311c92ad346dd111de"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l2a-lch.css",
+      "destination": "assets/gap/pages/l2a-lch.css",
+      "sourceSha256": "632907c4bad4a9171d79ff52c7dfa949908e5270a3a6881bd50eb95e193a00d0",
+      "baselineSha256": "632907c4bad4a9171d79ff52c7dfa949908e5270a3a6881bd50eb95e193a00d0"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l2b-sbx.css",
+      "destination": "assets/gap/pages/l2b-sbx.css",
+      "sourceSha256": "36d97d74776a7872d524a8f649d50eb2a60e6b57e06d1064177c5542402cbac0",
+      "baselineSha256": "36d97d74776a7872d524a8f649d50eb2a60e6b57e06d1064177c5542402cbac0"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l3a-auth.css",
+      "destination": "assets/gap/pages/l3a-auth.css",
+      "sourceSha256": "f779d07ef13c4201c1d5207556e2d38eb8be443b10f81a0bcd58c7f7b3fb5e67",
+      "baselineSha256": "f779d07ef13c4201c1d5207556e2d38eb8be443b10f81a0bcd58c7f7b3fb5e67"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l3b-crd.css",
+      "destination": "assets/gap/pages/l3b-crd.css",
+      "sourceSha256": "491691c4d2b036bca140023bd5a4d37c00a06e73b4aa11a9931ee5d2ecc85eae",
+      "baselineSha256": "491691c4d2b036bca140023bd5a4d37c00a06e73b4aa11a9931ee5d2ecc85eae"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l4a-img.css",
+      "destination": "assets/gap/pages/l4a-img.css",
+      "sourceSha256": "43a0e7482541030c2a8f6230151a4fdb53c03a0786688b6c9fa949368c484c06",
+      "baselineSha256": "43a0e7482541030c2a8f6230151a4fdb53c03a0786688b6c9fa949368c484c06"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l4b-img.css",
+      "destination": "assets/gap/pages/l4b-img.css",
+      "sourceSha256": "003277ac3d414ccf5ea982299d36388e4a3b92ae935879f64b4355149bd3326c",
+      "baselineSha256": "003277ac3d414ccf5ea982299d36388e4a3b92ae935879f64b4355149bd3326c"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l5a-sys.css",
+      "destination": "assets/gap/pages/l5a-sys.css",
+      "sourceSha256": "a11afc3085f8b3cedccdb4af028ae8d1fa2fdc4cb249438efcadaf7388126edc",
+      "baselineSha256": "a11afc3085f8b3cedccdb4af028ae8d1fa2fdc4cb249438efcadaf7388126edc"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l5b-sys.css",
+      "destination": "assets/gap/pages/l5b-sys.css",
+      "sourceSha256": "b9d214f489943cb13baafddd116090b1e20697ccbce3848386968b29bcff3056",
+      "baselineSha256": "b9d214f489943cb13baafddd116090b1e20697ccbce3848386968b29bcff3056"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l5c-dep.css",
+      "destination": "assets/gap/pages/l5c-dep.css",
+      "sourceSha256": "a5617e7ea884da01203b95cb6ae565cf65ebc340e7eccdda504daa87175e9435",
+      "baselineSha256": "a5617e7ea884da01203b95cb6ae565cf65ebc340e7eccdda504daa87175e9435"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l6a-wb.css",
+      "destination": "assets/gap/pages/l6a-wb.css",
+      "sourceSha256": "6f91ba62258fea8c92c3dfe74ffade092190e5765ef8c9eeed1d2dc72a0e599e",
+      "baselineSha256": "6f91ba62258fea8c92c3dfe74ffade092190e5765ef8c9eeed1d2dc72a0e599e"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/gap/drafts/assets/pages/l6b-aut.css",
+      "destination": "assets/gap/pages/l6b-aut.css",
+      "sourceSha256": "60ecf29c676bb2d18f151406f6da27f8267d5fa02d990dfa8304b590589367de",
+      "baselineSha256": "60ecf29c676bb2d18f151406f6da27f8267d5fa02d990dfa8304b590589367de"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/fonts/Geist-Variable.woff2",
+      "destination": "assets/fonts/Geist-Variable.woff2",
+      "sourceSha256": "a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8",
+      "baselineSha256": "a369fcf5628ea2aa4e1b9e2ec6a5b3624e365bda588e1f0f2f12b564f728fbb8"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/fonts/GeistMono-Variable.woff2",
+      "destination": "assets/fonts/GeistMono-Variable.woff2",
+      "sourceSha256": "fba8f577f38a2bbcbe818efa6348dd58f36303a10b8737c42fefad275be563ab",
+      "baselineSha256": "fba8f577f38a2bbcbe818efa6348dd58f36303a10b8737c42fefad275be563ab"
+    },
+    {
+      "source": "/Users/douglasdong/agent-platform/governance/2026-10-01/vercel-style/pilot/assets/fonts/LICENSE.txt",
+      "destination": "assets/fonts/LICENSE.txt",
+      "sourceSha256": "930853ee1daa68554d9e35c8a9175affb74f699fad9a5da6ee5ebe76379d9137",
+      "baselineSha256": "930853ee1daa68554d9e35c8a9175affb74f699fad9a5da6ee5ebe76379d9137"
+    }
+  ]
+}

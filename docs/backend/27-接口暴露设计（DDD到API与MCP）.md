@@ -203,16 +203,16 @@
 
 > 领域模型 23 §9 · 时序 24 §7 · 校验规则权威 05 §4.1。
 
-> **✅ 落地状态：本节八个能力全部已实现**（2026-08 镜像管理切片；本块此前写的是「一个都没实现」「按此接线会全部 404」，那句话现在是反的）
+> **✅ 落地状态：原八个能力与既有删除预览已实现**（当前九个 operation；2026-10-09 别名复用既有 POST/PATCH，不增加端点）
 >
 > | 核对项 | 结果 |
 > |---|---|
-> | `api/openapi.json` 里的 `/api/images*` 路径 | **6 条 path / 8 个 operation**：`/api/images`(get,post)、`/api/images/validate`(post)、`/api/images/{id}`(patch,delete)、`/api/images/{id}/validate`(post)、`/api/images/{id}/activate`(post)、`/api/images/{id}/check-update`(post) |
+> | `api/openapi.json` 里的 `/api/images*` 路径 | **7 条 path / 9 个 operation**：`/api/images`(get,post)、`/api/images/validate`(post)、`/api/images/{id}`(patch,delete)、`/api/images/{id}/validate`(post)、`/api/images/{id}/activate`(post)、`/api/images/{id}/check-update`(post)、`/api/images/{id}/deletion-preview`(get) |
 > | `packages/modules/` 下的 image 模块 | ✅ `packages/modules/image/`（credential / **image** / project / runtime / sandbox / terminal 六个） |
 > | `images` / `image_manifests` 表 | ✅ `drizzle/0010_cuddly_screwball.sql`（13 §2.4） |
 > | `ImageSpecProvider` / `IMAGE_SPEC_REGISTRY` | ✅ `OciImageSpecProvider`；registry 有实现、有 DI 绑定、有第三方注入点（04 §8） |
 > | 本表「可能错误码」列里的镜像码 | ✅ **全部有产出方**，且已搬进 10 §6.8 主表参与 A5 对账（现为 60 = 60） |
-> | **MCP 面** | 仍是 8 个 **REST-ONLY**（本表 MCP 列一律「—」），controller 顶部的注释把这一条写死了 |
+> | **MCP 面** | 九个 operation 均为 **REST-ONLY**（本表 MCP 列一律「—」），别名不增加 MCP tool |
 >
 > **两条强制不变量现在都成立**：**I-IMG-3**（禁用的不出现在可选列表）与 **I-IMG-2**（`invalid` 不可被新 sandbox 引用）
 > 由 `ImageFacadeAdapter.assertSelectable()` 在**建 Task 门口逐行判**——**不是只靠列表查询过滤**，
@@ -224,15 +224,17 @@
 
 | 能力 | REST | MCP | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|---|
-| `listImages` | `GET /api/images` | — | `?runtimeId=&provider=`。`runtimeId` 单独出现取**可选集**（`isActive ∧ 非 invalid`），仅作开关、不按 runtime 筛；都不传取历史版本。传 `provider` 时优先取完整历史（含禁用与 invalid），供任务镜像选择器解释不可选原因（10 §6.4） | `ImageManifestDto[]`——含 `digest` / `resolvedAt` / `imageId` / `imageName` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`；provider 查询另附可选 `providerCompatibility` / `isProviderDefault`，精确类型见 10 §7.3 | `ImageApplicationService.listImages(runtimeId?, provider?)` | I-IMG-3（禁用的不出现在可选集；历史查询保留禁用行）；创建时仍判 I-IMG-2/3 | — | — |
-| `registerImage` | `POST /api/images` | — | `{ ref, copyConfigFromId? }`。可从同镜像、同 tag 的 manifest 继承运行参数（秘密由服务端复制）；幂等命中已有 digest 仅补空配置、不覆盖已有配置。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `{ manifest: ImageManifestDto, validation: ValidationOutcome, created: boolean }` | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `NOT_FOUND`（继承来源不存在）、`REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，继承来源跨镜像/跨 tag，或**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
+| `listImages` | `GET /api/images` | — | `?runtimeId=&provider=`。`runtimeId` 单独出现取**可选集**（`isActive ∧ 非 invalid`），仅作开关、不按 runtime 筛；都不传取历史版本。传 `provider` 时优先取完整历史（含禁用与 invalid），供任务镜像选择器解释不可选原因（10 §6.4） | `ImageManifestDto[]`——含 `digest` / `resolvedAt` / `imageId` / `imageName` / `imageAlias: string\|null` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`；provider 查询另附可选 `providerCompatibility` / `isProviderDefault`，精确类型见 10 §7.3 | `ImageApplicationService.listImages(runtimeId?, provider?)` | I-IMG-3（禁用的不出现在可选集；历史查询保留禁用行）；创建时仍判 I-IMG-2/3 | — | — |
+| `registerImage` | `POST /api/images` | — | `{ ref, copyConfigFromId?, alias? }`。`alias?: string\|null` 仅新 Image 设置，已有 Image 省略保持、明确不同值时 400 字段错误且零写入，改名用卡头 PATCH。可从同镜像、同 tag 的 manifest 继承运行参数（秘密由服务端复制）；幂等命中已有 digest 仅补空配置、不覆盖已有配置。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `{ manifest: ImageManifestDto, validation: ValidationOutcome }`；200/201 表达幂等结果，`created` 不上 wire | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `VALIDATION_FAILED`(400，非法 alias 或已有 Image 别名冲突，`details[].path=alias`)、`NOT_FOUND`（继承来源不存在）、`REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，继承来源跨镜像/跨 tag，或**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
 | `validateImage`（**预检**） | `POST /api/images/validate` | — | `{ ref }`；**不落库、不产生 manifest** | `ValidationOutcome{ status:'valid'\|'warning'\|'invalid', errors[], warnings[] }` | `validate-image` command | — | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502) | — |
 | `revalidateImage` | `POST /api/images/:id/validate` | — | 已注册镜像重验证；**digest 没变才写回 `validationStatus`**，变了只报告不写回（新 digest 描述的是另一份 bits，替本行盖章会悄悄让一个好版本退役） | `ValidationOutcome` **+ `currentDigest` / `upstreamDigest` / `digestChanged`**（`RevalidateOutcomeSchema`；本格原写「同上」，实现比它宽） | `validate-image` command | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502) | — |
-| `patchImage` | `PATCH /api/images/:id` | — | `{ isActive?, imageConfig? }`——**改 manifest 可变字段的唯一入口**。⚠️ **`isActive` 只收 `false`**（禁用是单行操作）；`true` → **400**，`message` 指向 `POST /api/images/:id/activate`——启用必然要停掉同 tag 的现任，是「换」不是「加」（10 §6 ★）。⚠️ **这两个字段恰好就是 I-IMG-7 允许改的全部**（23 §9.2）：`digest` / `version` / `baseImage` 一旦落库永不 UPDATE，升级镜像是 INSERT 新行 + 旧行下线（13 §2.4.2 ★）。**所以这个入参形状不是省事，是不变量的落点**——往里加一个 `digest?` 就等于把 I-IMG-7 拆了 | `ImageManifestDto` | `patch-image` command | I-IMG-1（EnvVarSet 构造即校验）、I-IMG-4/5 | **顶层 `VALIDATION_FAILED` / 400**，四个 `ENV_*` 码在 `details[].code`（`ENV_NAME_INVALID` / `ENV_NAME_RESERVED` / `ENV_LIMIT_EXCEEDED` / `ENV_DUPLICATE_KEY`）+ 逐项 `path`。⚠️ 顶层码此前四份文档都没写过，而前端文案表是按顶层码查的——定案与理由见 10 §6.8 | — |
+| `patchImage` | `PATCH /api/images/:id` | — | `{ isActive?, imageConfig?, alias? }`——部分更新入口，`alias` 写所属共享 Image，省略保持、null/纯空白清除。⚠️ **`isActive` 只收 `false`**（禁用是单行操作）；`true` → **400**，`message` 指向 `POST /api/images/:id/activate`——启用必然要停掉同 tag 的现任，是「换」不是「加」（10 §6 ★）。⚠️ **isActive / imageConfig 是 I-IMG-7 允许改的 manifest 字段；alias 属于另一张 Image 表**（23 §9.2）：`digest` / `version` / `baseImage` 一旦落库永不 UPDATE，升级镜像是 INSERT 新行 + 旧行下线（13 §2.4.2 ★）。**所以这个入参形状不是省事，是不变量的落点**——往里加一个 `digest?` 就等于把 I-IMG-7 拆了 | `ImageManifestDto` | `patch-image` command | I-IMG-1（EnvVarSet 构造即校验）、I-IMG-4/5 | **顶层 `VALIDATION_FAILED` / 400**，env 的四个 `ENV_*` 码在 `details[].code`（`ENV_NAME_INVALID` / `ENV_NAME_RESERVED` / `ENV_LIMIT_EXCEEDED` / `ENV_DUPLICATE_KEY`）+ 逐项 `path`；别名错误 `path=alias`，混合请求全部先校验并同事务提交。定案与理由见 10 §6.8 | — |
 | `activateImage` | `POST /api/images/:id/activate` | — | 把这一行设为该 tag 的**当前版本**。**同时承担 [更新到新版本] 与 [回滚到旧版本]**——实现上是同一件事（换当前指针），只是方向不同 | `ImageManifestDto` | `activate-image` command | I-IMG-7（不改行，只换 `isActive`）；`unique(image_id, version) WHERE is_active` 由同一事务保证 | `NOT_FOUND`；**`INVALID_STATE`(409)** —— `validationStatus='invalid'` 的版本不许激活（I-IMG-2） | — |
 | `checkImageUpdate` | `POST /api/images/:id/check-update` | — | 重解该行的 `version`(tag) → 比对 digest，**不落库、不产生 manifest** | `{ current:{digest,resolvedAt}, upstream:{digest,validation}\|null, changed:boolean }` | `check-image-update` query | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502)；**`INVALID_STATE`(409)** —— ref 是 digest 形态时无 tag 可解，天然不漂移（P21-4 §5 ★） | — |
 | `deleteImage` | `DELETE /api/images/:id` | — | 硬删除 | 204 | `delete-image` command | I-IMG-4（预置镜像不可删） | `409`（有 sandbox 引用或预置镜像） | — |
 | `deletionPreview` | `GET /api/images/:id/deletion-preview` | — | 只读 | 版本、任务引用、canDelete | query | stopped/failed 仍属引用 | `NOT_FOUND` | — |
+
+**共享别名契约（REQ-IMG-060/061）**：`imageAlias` 在所有 manifest 响应中必有，未设置为 `null`。统一规则先拒绝原始 Unicode `Cc` 与 `U+2028/U+2029`，再 trim，最多 64 个码点，重复别名允许。PATCH 不解析 registry、不重验证；事务内重读 Image，用专用 `updateAliasSync` 写别名，普通注册 upsert 不更新 alias，注册提交前复查显式别名以防并发覆盖。实际改名发布 `ImageAliasUpdated`，同值或失败不记；响应从本次事务后的 Image 映射。
 
 **digest 在这两个端点上冻结，别处不再解析**（04 §7「`resolve` 到底在哪一步被调用」的定案，本节只引不重述）：
 
@@ -398,7 +400,7 @@ Step2 确认：
 ### 10.5 镜像管理（P21-4）
 
 > **✅ 下面这段现在是可调用的接口**（本块此前写的是「前端按本段接线会全部 404」，那句话现在是反的）：
-> 八个 operation 都在 `api/openapi.json` 里，后端有 image 模块与两张表（§6 落地状态逐条列了核对结果）。
+> 既有九个 operation 都在 `api/openapi.json` 里（本轮别名未增加端点），后端有 image 模块与两张表（§6 落地状态逐条列了核对结果）。
 >
 > ✅ 那处错位也已收口：`MANIFEST_INVALID` 从「前端 `COPY_TABLE` 里有、后端没有产出方」
 > 变成两侧都有，并已进 10 §6.8 主表参与 A5 对账。
@@ -406,8 +408,8 @@ Step2 确认：
 ```
 列表：GET /api/images
 注册：POST /api/images/validate { ref }   ← **预检，不落库**，拿三级反馈
-     → 用户确认后 POST /api/images { ref }
-启用/禁用 + 运行参数：PATCH /api/images/:id { isActive?, imageConfig? }
+     → 用户确认后 POST /api/images { ref, alias? }（仅新 Image 设置初始别名）
+禁用 + 运行参数 + 别名：PATCH /api/images/:id { isActive?, imageConfig?, alias? }
      → 400 时顶层 code 是 VALIDATION_FAILED，四个 ENV_* 码在 details[].code，
        按 details[].path 逐项标红（定案见 10 §6.8）
 删除：DELETE /api/images/:id（409 = 有引用或预置镜像，前端应提前置灰）

@@ -1,0 +1,103 @@
+/*
+ * sys-b 组（F-SYS-DIAG 一键诊断 · F-SYS-AUDIT 审计流）· 页面局部样式
+ * 样式链：../../pilot/assets/tokens-v2.css → ../../pilot/assets/components-v2.css → assets/gap-shared.css → 本文件。
+ * 只用 tokens-v2 的变量，不写字面颜色；字号只用 14 / 13 / 12。
+ * 共分四节：
+ *   §1 看板栅格 —— 与 pilot/assets/pages/p5.css 逐条同源（本组样式链里没有 p5.css；原型 index.html 照旧挂 p5.css，接线时不要拷这一节）
+ *   §2 稿件专用 —— 视口图直接停在本稿要看的分区（不进实现、接线不拷）
+ *   §3 诊断卡 —— 检查项定宽列、中断状态句、窄卡折行（建议上提，见 notes/sys-b.md「shared_css_requests」）
+ *   §4 审计流 —— 行内详情块、实时中断条、断层行、到底文字、时间范围就地提示、按任务筛选 chip、日期框有值（建议上提）
+ */
+
+/* ==========================================================================
+   §1 看板栅格（= pilot/assets/pages/p5.css，逐条照抄）
+   ========================================================================== */
+.p5-board { display: grid; grid-template-columns: clamp(340px, 32%, 404px) minmax(0, 1fr); column-gap: var(--card-gap); row-gap: var(--section-gap); align-items: start; }
+.p5-board__col { display: flex; flex-direction: column; gap: var(--section-gap); min-width: 0; container: p5-col / inline-size; }
+.p5-board__full { grid-column: 1 / -1; }
+.p5-board .section-head__title { flex: none; white-space: nowrap; }
+@container p5-col (max-width: 479px) {
+  .p5-board .section-head:has(.section-head__meta) { flex-wrap: wrap; row-gap: 4px; }
+  .p5-board .section-head__meta { flex-basis: 100%; text-align: left; }
+}
+.p5-proxy .input { max-width: 480px; }
+.p5-select { width: 112px; }
+.p5-date { width: 208px; }
+@media (max-width: 639px) {
+  .p5-board { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==========================================================================
+   §2 稿件专用：打开稿件 / 截 1440 视口图时，内容区直接停在本稿要看的分区（诊断卡或审计流），
+   其余四张卡与 P5 完全相同，往上滚就能看到；整页图（data-shoot="full"）不受影响。
+   CSS scroll-initial-target（Chromium 133+）；不支持的浏览器停在页首，稿面不变。不进实现、接线不拷。
+   ========================================================================== */
+.sysb-scroll-target { position: relative; }
+/* 定位点放在分区上方 24（= 内容区内边距）：scroll-initial-target 不认 scroll-margin（Chromium 151 实测），只好让一个 1px 的空锚点去对齐视口顶 */
+.sysb-scroll-anchor { position: absolute; top: calc(-1 * var(--shell-content-pad)); left: 0; width: 1px; height: 1px; pointer-events: none; scroll-initial-target: nearest; }
+
+/* ==========================================================================
+   §3 诊断卡（.check-list / .check-row 来自 components-v2 §16；这里只补三件）
+   ========================================================================== */
+/* 3.1 状态列与展开列定宽：徽标成一列、耗时右对齐成一列（p5-diag-rows 里「展开详情 / 收起」宽度不同，徽标左右错开 30px）。
+   没有展开内容的行（检查中… / 未返回）放一个同宽的空位，不让徽标往右挪 */
+.sysb-checks { --sysb-status-w: 96px; --sysb-toggle-w: 88px; container: sysb-checks / inline-size; }
+.check-row__status { flex: none; display: flex; align-items: center; width: var(--sysb-status-w); }
+.sysb-checks .check-row__toggle { display: flex; justify-content: flex-end; min-width: var(--sysb-toggle-w); }
+.check-row__toggle-slot { flex: none; width: var(--sysb-toggle-w); }
+/* 卡宽 < 560（390 宽、1024 宽的窄栏）：标题独占第一行，耗时 / 徽标 / 展开按钮折到第二行、与标题左对齐 */
+@container sysb-checks (max-width: 559px) {
+  .sysb-checks .check-row__head { flex-wrap: wrap; row-gap: 4px; }
+  .sysb-checks .check-row__title { flex-basis: calc(100% - 24px); }
+  .sysb-checks .check-row__title + * { margin-left: 24px; }
+  .sysb-checks .check-row__status { width: auto; }
+  .sysb-checks .check-row__toggle, .check-row__toggle-slot { min-width: 0; width: auto; margin-left: auto; }
+}
+
+/* 3.2 卡内首行的状态句（与 P5「尚未运行。…」同一位置，role="status" / "alert" 原位播报）：
+   中断那一句 = 图标带 fail 色调 + 句子正文色（P6：状态色不给整句上色）；其余状态句沿用 .card__desc 次要灰 */
+.sysb-diag-alert { display: flex; align-items: flex-start; gap: 8px; min-width: 0; color: var(--foreground); }
+.sysb-diag-alert > .icon { margin-top: 2px; color: var(--status-fail-fg); }
+
+/* ==========================================================================
+   §4 审计流（.log / .card__toolbar / .list__more 来自 components-v2；这里只补本轮新增的形态）
+   ========================================================================== */
+/* 4.1 行内详情（已脱敏的 detail，v1 pre 11px → mono-12）：嵌入区底、不加环，跨整行、与时间列左对齐（与 .check-row__detail 同一缩进 24） */
+.log__detail {
+  grid-column: 1 / -1; margin: 2px 0 6px 24px; padding: 8px 12px; max-height: 256px; overflow: auto;
+  border-radius: var(--radius-md); background: var(--surface-inset);
+  font: var(--text-mono-12); color: var(--foreground-muted); white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+/* 4.2 实时更新中断：筛选条与列表之间的一行提示条（不盖住列表，[重试] 在行尾） */
+.sysb-live { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+
+/* 4.3 断层：列表里的一行，内放虚线变体的提示条（保留 v1「这里缺一段」的虚线语义；不是卡内的描边子框）。
+   断层行的上下都要 1px 线（.log__row + .log__row 只管相邻的两条记录） */
+.log__gap { padding: 6px 16px; border-top: 1px solid var(--border); }
+.log__gap:first-child { border-top: 0; }
+.log__gap + .log__row { border-top: 1px solid var(--border); }
+.note--dashed { box-shadow: none; outline: 1px dashed color-mix(in srgb, var(--tone-fg) 55%, transparent); outline-offset: -1px; }
+
+/* 4.3b 审计卡里的空态：说明句放宽到 480（「平台目前不会为该类别写入审计事件；这不代表相关操作没有发生。」340 宽时在「审计事 / 件」中间折行） */
+.log > .empty--card .empty__desc { max-width: 480px; }
+
+/* 4.4 列表到底：「已到最早记录」与「加载更早的记录」按钮同位同高（列表底部不跳） */
+.list__end-text { display: inline-flex; align-items: center; min-height: var(--control-32); font: var(--text-copy-14); color: var(--foreground-muted); }
+
+/* 4.5 时间范围就地提示（起晚于止）：筛选条里折到下一行、整行宽；字段级错误 12 红（components-v2 .field__error） */
+.card__toolbar > .field__error { flex-basis: 100%; }
+
+/* 4.6 按任务筛选的 chip（[查看该任务完整时间线] 之后）：跟在筛选条末尾；名字长时截断，完整名在 title。
+   筛选条里的控件都是 32 / 14，共享 .chip 是 24 / 12（元信息档），放进来像一枚标签而不像一个筛选条件 → 加 32 档（.chip--32，建议上提） */
+.chip--32 { height: var(--control-32); padding: 0 6px 0 12px; gap: 6px; font: var(--text-label-14); color: var(--foreground); }
+.chip--32 .chip__remove { width: 20px; height: 20px; }
+.chip--32 .chip__remove > .icon { width: var(--icon-14); height: var(--icon-14); }
+.card__toolbar > .chip { max-width: 280px; }
+.chip__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 已按某个任务筛选时，行尾不再重复「查看该任务完整时间线」：行尾列收起，摘要多出 180px */
+.log--subject { --log-end-w: 0px; }
+
+/* 4.7 日期框有值时用正文色：components-v2 把整个 datetime-edit 画成第三级灰（为空值占位写的），有值也像占位。
+   静态稿用 .is-filled 表达；实现侧按输入值切同一个类（datetime-local 没有 :placeholder-shown） */
+.input--date.is-filled::-webkit-datetime-edit { color: var(--foreground); }

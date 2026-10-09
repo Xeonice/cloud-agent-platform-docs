@@ -1,0 +1,235 @@
+/*
+ * 交互原型专用样式（只给 gap/proto/index.html 用；静态稿不引用它，截图不受影响）。来源：pilot/proto/proto.css，末尾「本轮接线」一节是 gap 工作副本新增的。
+ * 只补原型才有的东西：浮层定位、命令面板、tooltip 与「原型：未接入」、角落浮标、终端多标签、结果卡、侧栏收起的过渡。
+ * 颜色、字阶、圆角、阴影、时长与曲线一律用 tokens-v2.css 的 token；下面三个 --proto-* 是 tokens 里还没有的值（建议补进 tokens-v2.css：
+ * --text-copy-18、--duration-tooltip、--ease-in）。动效在 prefers-reduced-motion 下由 components-v2.css §1 的全局规则压到 0.01ms。
+ * 修正轮（原型评审 F / PF 编号）的改动在对应规则旁标出。
+ */
+:root {
+  --proto-text-copy-18: 400 18px/28px var(--font-sans); /* 命令面板输入框（Geist cmdk-input 18/28） */
+  --proto-duration-tooltip: 100ms;                      /* tooltip 淡入（Geist fadeInTooltip .1s） */
+  --proto-ease-in: cubic-bezier(0.4, 0, 1, 1);          /* tooltip 淡入曲线（Geist ease-in） */
+}
+
+/* ---- 切主题的那一帧关掉全部过渡（PF-09，next-themes disableTransitionOnChange 的做法） ---- */
+.proto-theme-switching, .proto-theme-switching *, .proto-theme-switching *::before, .proto-theme-switching *::after { transition: none !important; }
+
+/* ---- 终端面板容器：不生成盒子，面板直接是 .main 的 flex 子项（几何与 P1 静态稿一致） ---- */
+.proto-panels { display: contents; }
+.term[tabindex]:focus-visible { box-shadow: var(--focus-ring-inset); outline: none; }
+
+/* ---- 主区可聚焦（跳到主区、视图切换后的焦点落点）：它是地标容器、不是控件，不画环 ---- */
+.main:focus, .main:focus-visible { outline: none; box-shadow: none; }
+
+/* ---- 由 proto.js 填内容的槽：不生成盒子，填进去的元素直接参与外层布局（几何与静态稿一致） ---- */
+[data-slot="notice"], [data-slot="todo-count"] { display: contents; }
+
+/* ---- 只换环的控件也过渡环（PF-08；components-v2.css 里暂不放的原因见那里的注释） ---- */
+.find, .input-group, .card--interactive { transition: box-shadow var(--duration-fast) var(--ease-standard); }
+.find:focus-visible, .input-group:focus-within, .card--interactive:has(.entity__name a:focus-visible) { transition: none; }
+
+/* ---- 浮层：遮罩按视口铺（F15⑤：640–1023 宽时画框还是 1024，遮罩跟着画框居中会让 640 的面板右侧出视口） ---- */
+.frame > .overlay { position: fixed; }
+
+/* ---- 菜单：定位在视口上（触发器旁 4px），太长时内部滚动 ---- */
+.menu.proto-menu { position: fixed; max-height: calc(100vh - 16px); overflow: auto; }
+.menu.proto-menu .menu__item > .status-dot { margin: 0 4px; }
+/* 菜单项尾部的「原型：未接入」（就地出现 2 秒） */
+.menu__end.proto-nohook-end { color: var(--foreground-muted); }
+
+/* ---- tooltip（PF-05）与「原型：未接入」（PF-14）：同一个 v2 tooltip 材质（反相、圆角 6、13/18、带尖），挂在 body 上、按视口定位 ---- */
+.tooltip.proto-tip, .tooltip.proto-hint { position: fixed; pointer-events: none; animation: v2-fade var(--proto-duration-tooltip) var(--proto-ease-in); }
+.tooltip.proto-tip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.tooltip.proto-hint { max-width: min(320px, calc(100vw - 16px)); white-space: normal; }
+.tooltip.proto-tip::after, .tooltip.proto-hint::after { left: var(--arrow-x, 50%); }
+/* 图标轨里的提示放在图标右侧，尖朝左 */
+.tooltip.proto-tip--right::after { left: -4px; top: 50%; bottom: auto; transform: translateY(-50%) rotate(45deg); }
+.tooltip.proto-tip .kbd { flex: none; }
+/* 「原型：未接入」前的原型标记点：说明这句是原型的标注，不是产品界面 */
+.proto-hint__dot { display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--status-info-solid); vertical-align: middle; }
+.tooltip.proto-hint[data-state="closed"], .tooltip.proto-tip[data-state="closed"] { animation: v2-fade-out var(--duration-fast) var(--ease-standard) forwards; }
+
+/* ---- 角落浮标：「交互原型 · 返回画廊」+「原型说明」；键盘焦点落到被它盖住的控件上时先藏起来（F7） ---- */
+.proto-float {
+  position: fixed; right: 12px; bottom: 12px; z-index: var(--z-sticky);
+  display: inline-flex; align-items: center; gap: 2px; max-width: calc(100vw - 24px); height: 28px; padding: 0 4px;
+  border-radius: var(--radius-full); background: var(--surface); box-shadow: var(--shadow-menu);
+  font: var(--text-label-12); color: var(--foreground-muted);
+  transition: opacity var(--duration-fast) var(--ease-standard);
+}
+.proto-float.proto-float--tucked:not(:focus-within) { opacity: 0; pointer-events: none; }
+.proto-float__item { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-full); color: inherit; white-space: nowrap; }
+.proto-float__item:hover { background: var(--fill-hover); color: var(--foreground); }
+.proto-float__item:focus-visible { box-shadow: var(--focus-ring-inset); }
+.proto-float__sep { flex: none; width: 1px; height: 12px; background: var(--border); }
+@media (max-width: 639px) { .proto-float { right: 8px; bottom: 8px; } }
+
+/* ---- 命令面板（⌘K，PF-03）：640 宽、r12、modal 材质；密度照 Geist Command Menu——上距 15%、搜索行 52（输入 18/28）、
+        列表内边距 8、分组标题 36 高 13 次要灰、行 36（左右 8、图标与文字 12）；没有放大镜、底部按键条与「↵」 ---- */
+.overlay.proto-cmd-overlay { place-items: start center; padding-top: 15vh; }
+.proto-cmd {
+  --focus-gap: var(--surface);
+  position: relative; z-index: var(--z-dialog);
+  display: flex; flex-direction: column; width: var(--w-palette); max-width: 100%; max-height: min(560px, calc(85vh - 24px));
+  background: var(--surface); border-radius: var(--radius-xl); box-shadow: var(--shadow-modal); overflow: hidden;
+  animation: v2-pop var(--duration-overlay) var(--ease-swift);
+}
+.proto-cmd__search { display: flex; align-items: center; gap: 12px; flex: none; height: 52px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+.proto-cmd__input { flex: 1; min-width: 0; height: 28px; padding: 0; border: 0; outline: none; background: transparent; color: var(--foreground); font: var(--proto-text-copy-18); }
+.proto-cmd__input::placeholder { color: var(--foreground-subtle); opacity: 1; }
+.proto-cmd__list { flex: 1; min-height: 0; overflow: auto; padding: 8px; scroll-padding: 8px; }
+.proto-cmd__group-label { display: flex; align-items: center; height: 36px; padding: 0 8px; font: var(--text-copy-13); color: var(--foreground-muted); }
+.proto-cmd__item { display: flex; align-items: center; gap: 12px; height: 36px; padding: 0 8px; border-radius: var(--radius-md); color: var(--foreground); font: var(--text-label-14); cursor: pointer; user-select: none; }
+.proto-cmd__item[aria-selected="true"] { background: var(--fill-hover); }
+.proto-cmd__item[aria-disabled="true"] { color: var(--foreground-disabled); cursor: not-allowed; }
+.proto-cmd__icon { display: inline-grid; place-items: center; flex: none; width: 16px; height: 16px; color: var(--foreground-muted); }
+/* 名称优先：窄的时候先截右侧的说明（flex-shrink 100 : 1），名称尽量完整 */
+.proto-cmd__label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proto-cmd__meta { flex: 0 100 auto; min-width: 0; margin-left: auto; padding-left: 16px; font: var(--text-label-12); color: var(--foreground-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proto-cmd__meta + .kbd { margin-left: 8px; }
+.proto-cmd__label + .kbd { margin-left: auto; }
+.proto-cmd__empty { padding: 32px 16px; text-align: center; font: var(--text-copy-14); color: var(--foreground-muted); }
+
+/* ---- 对话框里的几处排版（新建任务、快捷键一览、原型说明） ---- */
+.proto-dlg__lead { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.proto-dlg__lead strong { font-weight: var(--weight-medium); color: var(--foreground); }
+.proto-fieldset { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.proto-fieldset > legend { padding: 0; margin-bottom: 8px; font: var(--text-label-14-strong); color: var(--foreground); }
+.proto-choice { display: flex; align-items: center; gap: 10px; width: fit-content; cursor: pointer; font: var(--text-label-14); color: var(--foreground); }
+.proto-choice__id { font: var(--text-mono-13); }
+.proto-choice__desc { color: var(--foreground-muted); }
+.proto-gate { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.proto-counter { align-self: flex-end; font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+.proto-keys { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 24px; row-gap: 10px; margin: 0; }
+.proto-keys > dt { font: var(--text-label-14); color: var(--foreground); }
+.proto-keys > dd { margin: 0; display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; color: var(--foreground-muted); font: var(--text-label-12); }
+.proto-keys__alt { margin-right: 6px; }
+.proto-keys__alt:last-child { margin-right: 0; }
+.proto-about { display: flex; flex-direction: column; gap: 16px; }
+.proto-about h3 { font: var(--text-label-14-strong); color: var(--foreground); }
+.proto-about p { color: var(--foreground-muted); }
+
+/* ---- 结果卡（异常 / 已停止 / 克隆失败 / 克隆中，PF-12 统一结构）：图标框 → 结论标题（失败用 tone-fail）→ 主语行（14 次要灰，固定在标题下面）
+        → 说明 → 细节代码块 → 动作 → 附注。在主区空态组件（.empty）上补几行 ---- */
+.proto-outcome__icon--fail { color: var(--status-fail-fg); }
+.proto-outcome__subject { margin: 4px 0 0; font: var(--text-copy-14); color: var(--foreground-muted); }
+.proto-outcome__desc { max-width: 440px; }
+/* 失败细节：v1 的 pre 块；放在画布上，所以用表面底 + 环（.code-block 默认的嵌入区底在暗色画布上看不出来） */
+.proto-outcome__detail { width: min(448px, 100%); margin-top: 16px; background: var(--surface); box-shadow: var(--shadow-ring); text-align: left; white-space: pre-wrap; overflow-wrap: anywhere; }
+.proto-outcome__note { max-width: 360px; font: var(--text-label-12); color: var(--foreground-muted); text-wrap: balance; }
+.proto-outcome .empty__actions .btn-row { justify-content: center; }
+.proto-clone { display: flex; flex-direction: column; gap: 6px; width: min(440px, 100%); margin-top: 24px; }
+.proto-clone__bar { display: flex; align-items: center; gap: 8px; }
+.proto-clone__bar > .meter { flex: 1; background: var(--fill-active); }
+.proto-clone__pct { font: var(--text-label-12); color: var(--foreground-muted); font-variant-numeric: tabular-nums; }
+.proto-clone__meta { display: flex; justify-content: space-between; gap: 12px; min-width: 0; font: var(--text-label-12); color: var(--foreground-muted); }
+
+/* ---- 销毁之后的提示（PF-07）：不再是挤压布局的整宽色带。总览里 = 内容顶部的页内提示（.note 中性色调，随内容滚动）；
+        终端视图与结果卡视图里 = 叠在主区右上角的小卡（菜单材质），不占布局，终端画布尺寸不变。淡入 200ms，关闭时淡出 ---- */
+/* 第五段（W4，评审 R2-27）：总览里的页内提示改用共享件 .page-notice（gap-shared §11：下距 16、淡入、标题正文色、说明次要灰、转圈次要灰），
+   这里不再给 .proto-notice--inline 单写一套（原来说明是正文色，与稿件 f-sbx-destroy-01 的次要灰不一致） */
+.proto-notice--float {
+  position: absolute; z-index: var(--z-sticky); top: 12px; right: 16px;
+  display: flex; align-items: flex-start; gap: 8px; width: max-content; max-width: min(440px, calc(100% - 32px)); padding: 10px 10px 10px 12px;
+  border-radius: var(--radius-xl); background: var(--surface); box-shadow: var(--shadow-menu); color: var(--foreground); font: var(--text-copy-14);
+  animation: v2-fade var(--duration-base) var(--ease-standard);
+}
+.main:has(> .termbar) .proto-notice--float { top: calc(var(--shell-termbar-h) + 12px); }
+.proto-notice--float > .icon { margin-top: 2px; color: var(--tone-fg); }
+.proto-notice--float > .icon.tone-fail { color: var(--status-fail-fg); } /* 第五段（R2-34④）：「没能销毁…」——中性小卡，只有圆叉带失败色调（同 gap-shared .page-notice） */
+.proto-notice--float .note__body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.proto-notice--float .note__title { font: var(--text-label-14-strong); color: var(--foreground); }
+.proto-notice--float .note__text { font: var(--text-copy-14-zh); color: var(--foreground-muted); }
+.proto-notice--float .note__end { flex: none; margin: -2px 0 0 4px; }
+.proto-notice[data-state="closed"] { pointer-events: none; animation: v2-fade-out var(--duration-fast) var(--ease-standard) forwards; }
+
+/* ---- ⌘B 收起 / 展开的过渡（PF-06；T-32 默认有动画，时长待拍板）：文字先淡出 100ms → 宽度 256 ↔ 48 用 200ms standard →
+        收完才换成图标轨的排布（display 规则），展开时宽度到位再淡入文字。reduce 时 proto.js 整段跳过、直接换类 ---- */
+.shell { transition: grid-template-columns var(--duration-base) var(--ease-standard); }
+.proto-booting .shell { transition: none; }
+.shell.proto-rail-anim .sidebar { overflow: hidden; }
+.shell.proto-rail-narrow { grid-template-columns: var(--shell-rail-w) minmax(0, 1fr); }
+.shell.proto-rail-anim :is(.scope__name, .scope__home .badge, .scope__menu, .find__text, .find .kbd, .nav-item__label, .nav-item .badge, .sidebar__sep, .sidebar__section) { transition: opacity 100ms var(--ease-standard); }
+.shell.proto-rail-fade :is(.scope__name, .scope__home .badge, .scope__menu, .find__text, .find .kbd, .nav-item__label, .nav-item .badge, .sidebar__sep, .sidebar__section) { opacity: 0; }
+
+/* ---- 终端标签多 / 窄屏时（F10）：tablist 横向滚动（滚动条隐藏），两端有内容时渐隐，提示还能滚 ---- */
+.termbar__tabs[data-fade="r"] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
+.termbar__tabs[data-fade="l"] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 24px), transparent); }
+.termbar__tabs[data-fade="lr"] { -webkit-mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent); mask-image: linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent); }
+
+/* ---- 树：筛选后一条都不剩时的那一句 ---- */
+.proto-tree-empty { padding: 8px 12px 8px 20px; font: var(--text-label-12); color: var(--foreground-muted); }
+
+/* ---- 首屏加载期间禁用的主区按钮（与 P6b 一致：新任务禁用） ---- */
+.proto-loading .header .btn--primary { pointer-events: none; }
+
+/* ---- Windows 高对比（F12）：box-shadow 会被去掉，原型自己的浮层补 outline；命令面板选中行（aria-activedescendant，不是真焦点）补 Highlight 轮廓 ---- */
+@media (forced-colors: active) {
+  .proto-cmd, .proto-float, .proto-notice--float { outline: 1px solid CanvasText; outline-offset: -1px; }
+  .proto-cmd__item[aria-selected="true"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .proto-hint__dot { forced-color-adjust: none; }
+}
+
+
+/* ==========================================================================
+   本轮接线（gap/proto）新增：只补原型才有的东西；共享件的外观一律来自 gap-shared.css / 各组 pages CSS
+   样式链：tokens-v2 → components-v2 → gap-shared → pilot p2 / p5 / p7 → l1a-prj / l1b-prj / l2a-lch / l2b-sbx → 本文件
+   收口记录（各组 CSS 之间、与试点视图之间的冲突）见 notes/wiring.md §2：
+   - l1a-prj §4 给 aria-disabled 的折叠箭头画禁用色：pilot P2 / P1 静态稿没有这一画法（F13③ 只有属性），视觉同源测试把这两个箭头作为「状态差」掩掉，不在这里改回；
+   - l2b-sbx §1 .ov / §2 .p7-* 与 pilot p2.css / p7.css 逐条同值（照抄副本），后挂不改变结果；
+   - l2a-lch / l2b-sbx 的 .nt-* 逐条同值（W2 已统一）。
+   ========================================================================== */
+
+/* 浮层卡、侧弹层：贴视口定位（同 .menu.proto-menu；640–1023 宽时画框仍是 1024，F15⑤ 同理） */
+.popover.proto-popover, .sheet.proto-sheet { position: fixed; }
+.sheet.proto-sheet { top: var(--gap-sheet-inset); right: var(--gap-sheet-inset); bottom: var(--gap-sheet-inset); }
+
+/* 页内提示：进行中（删除中…）的转圈用次要灰；结果句里的「保留下来的成果」是文字链接 */
+.proto-notice--progress > .icon { color: var(--foreground-muted); }
+.proto-notice__link { font: inherit; }
+
+/* 项目详情：克隆失败时五行下面一句指路（实现 ProjectDetailPanel 是 11px，按 v2 字阶 13） */
+.proto-detail-hint { align-items: flex-start; }
+.proto-detail-hint > .icon { margin-top: 3px; }
+
+/* 「原型说明」弹层：说明 / 场景两页（标签页在标题下面）；场景页按组两列 */
+.proto-about__tabs { margin-top: 12px; }
+.proto-scn__group { display: flex; flex-direction: column; gap: 10px; }
+.proto-scn__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.proto-scn__field .field__label { font: var(--text-label-13, var(--text-label-14)); }
+.proto-scn code { font: var(--text-mono-12); }
+@media (max-width: 639px) { .proto-scn__grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* 无头任务的发起表单（[接着聊] / [发起全新任务]）：第五段起改用稿件 f-sbx-headless-06 的同源标记（l2b-sbx §10 .hl-launch），原来最小版的 .proto-hl-fields 不再用 */
+
+/* 无头任务：超过硬超时上限时剩余时间位置的句子用琥珀色（REQ-SBX-032） */
+.hl-bar__deadline.tone-warn { color: var(--status-warn-fg); }
+
+/* ==========================================================================
+   第三段（L5 系统状态 / 初始化向导）收口：见 notes/wiring.md §2
+   - l5b-sys §3.1 与 l5c-dep §4 的 .check-row__status 声明不同（真冲突：两张都是不带前缀的全局规则，后挂的 l5c 让诊断卡的状态列也右齐了）。
+     按容器收口：诊断卡（.sysb-checks）定宽左齐、窄卡时宽度随内容；向导（.dep-checks）定宽右齐（宽度变量 --dep-status-w 在窄屏里本来就是 auto）。
+   ========================================================================== */
+.sysb-checks .check-row__status { width: var(--sysb-status-w); justify-content: flex-start; }
+@container sysb-checks (max-width: 559px) { .sysb-checks .check-row__status { width: auto; } }
+.dep-checks .check-row__status { width: var(--dep-status-w); justify-content: flex-end; }
+/* 向导换步时焦点交给卡头步骤名（tabindex=-1，读屏从这里接着念）：它不是控件，不画焦点环（同 #main） */
+.wiz__step-title[tabindex="-1"]:focus { outline: none; box-shadow: none; }
+/* 启动检查中（第三段）：稿件的 .boot 外面包了一层主区地标（#proto-boot，role=main + 读屏 h1），这一层接过 .boot 原来在画框里的 flex 位置 */
+.proto-boot { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* ==========================================================================
+   第四段（L6 外壳 / 自动化规则）收口：见 notes/wiring.md §2
+   - l1a-prj §3 的 .dialog__body > .empty（padding 8 0 4、图标框下 12）是不带前缀的全局规则，选择器比 l6b-aut 的 .aut-empty 更具体，
+     后挂的 l6b-aut 压不过它：自动化规则弹层的空态被挤矮 48px（f-aut-rules-03 视觉同源抓到的）。按容器收口回 l6b-aut 的原意
+     （.aut-empty 的 32 16 24 + components-v2 .empty__icon 的下距 16）。
+   ========================================================================== */
+.dialog--aut .dialog__body > .aut-empty { padding: 32px 16px 24px; }
+.dialog--aut .dialog__body > .aut-empty > .empty__icon { margin-bottom: 16px; }
+
+/* ==========================================================================
+   2026-10-04 用户拍板落地（notes/wiring.md §15）
+   任务菜单最上面只读的「镜像：…」（AC-LCH-017.5）：同菜单说明句的画法（components-v2 .menu__note：12/16 次要灰，最宽 260），紧跟在任务名那一行下面；
+   不借 .menu__note 这个类（它专指属于某一项的说明句）。自定义镜像的坐标可能很长、中间没有断点，允许在任意处折行，不撑出菜单
+   ========================================================================== */
+.proto-menu .proto-menu-image { max-width: 260px; padding: 0 8px 6px; font: var(--text-label-12); color: var(--foreground-muted); white-space: normal; overflow-wrap: anywhere; }

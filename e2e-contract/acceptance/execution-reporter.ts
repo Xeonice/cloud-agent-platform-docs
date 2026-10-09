@@ -121,6 +121,7 @@ export default class ExecutionReporter implements Reporter {
       controlledExternalBoundaries: [
         "External sandbox provider transport and OCI manifest metadata; terminal output uses a real native Node subprocess byte stream",
         "A synthetic API key and local TCP model-connectivity destination; production connectivity probe still runs",
+        "Test-created anonymous Git repository served as real HTTP bytes on a non-loopback IPv4 interface; production Git clone and local branch queries run unchanged",
       ],
       unverifiedExternalCapabilities: [
         "Real Docker/BoxLite resources",
