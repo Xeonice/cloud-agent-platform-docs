@@ -25,18 +25,12 @@ export function validRef(ref) {
   );
 }
 
-export function ciEnvironment(
-  node,
-  home,
-  temporary,
-  platform = process.platform,
-) {
+export function ciEnvironment(node, home, temporary) {
   return ciChildEnvironment(node, {
-    platform,
     home,
     temporary,
     store: join(home, "pnpm-store"),
-    corepack: platform === "linux" ? LINUX_CI.corepack : null,
+    corepack: LINUX_CI.corepack,
   });
 }
 
@@ -105,7 +99,7 @@ export async function runPhase(
   const source = join(resolve(workspace), "source");
   const temporary = join(home, "tmp");
   await fs.mkdir(temporary, { recursive: true, mode: 0o700 });
-  const env = ciEnvironment(context.node, home, temporary, context.platform);
+  const env = ciEnvironment(context.node, home, temporary);
   const run = (command, args, cwd = source, capture = false) =>
     (options.execute ?? execute)(command, args, cwd, env, capture);
   const git = (args, cwd = source, capture = false) =>

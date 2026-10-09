@@ -19,7 +19,7 @@ const linuxIdentity = {
   homedir: "/home/jenkins",
 };
 
-async function fixture(t, platform = "linux") {
+async function fixture(t) {
   const work = await fs.realpath(
     await fs.mkdtemp(join(tmpdir(), "project-ci-boundary-")),
   );
@@ -36,17 +36,8 @@ async function fixture(t, platform = "linux") {
   const options = {
     workspace: work,
     home: join(work, "home"),
-    identity:
-      platform === "linux"
-        ? linuxIdentity
-        : {
-            username: "_agentplatformci",
-            homedir: "/Users/Shared/agent-platform-ci",
-          },
-    system:
-      platform === "linux"
-        ? linuxSystem
-        : { ...linuxSystem, platform: "darwin", node: process.execPath },
+    identity: linuxIdentity,
+    system: linuxSystem,
     execute: async (command, args, cwd, env) => {
       calls.push({ command, args, cwd, env });
       if (command === "/usr/bin/git" && args[0] === "rev-parse") {
@@ -91,20 +82,41 @@ test("Linux deployment regression executes every deployment source directory", a
   );
 });
 
-test("Mac development executes the same current deployment tests and refuses an empty suite", async (t) => {
-  const f = await fixture(t, "darwin");
-  await f.invoke("deployment-tests");
-  const command = f.calls.find((x) => x.args[0] === "--test");
-  assert.deepEqual(command.args, [
-    "--test",
-    "deploy/containers/docker.test.mjs",
-    "deploy/jenkins/public.test.mjs",
-  ]);
-  assert.equal(command.command, process.execPath);
-  assert.equal(command.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
+test("Linux deployment regression refuses an empty suite", async (t) => {
+  const f = await fixture(t);
   for (const directory of ["jenkins", "containers"])
     await fs.rm(join(f.source, "deploy", directory), { recursive: true });
   await assert.rejects(f.invoke("deployment-tests"), /sources are missing/);
+  assert.equal(
+    f.calls.some((x) => x.args[0] === "--test"),
+    false,
+  );
+});
+
+test("a macOS host or account cannot run project CI, before any repository command", async (t) => {
+  const f = await fixture(t);
+  f.options.system = {
+    ...linuxSystem,
+    platform: "darwin",
+    node: "/opt/node-22/bin/node",
+  };
+  for (const identity of [
+    linuxIdentity,
+    { username: "_ci", uid: 401, gid: 401, homedir: "/Users/Shared/ci" },
+  ]) {
+    f.options.identity = identity;
+    for (const phase of ["checkout", "deployment-tests", "install"])
+      await assert.rejects(f.invoke(phase), /fixed Node 22 Linux/);
+  }
+  assert.throws(
+    () =>
+      projectCiContext("install", linuxIdentity, {
+        ...linuxSystem,
+        platform: "darwin",
+      }),
+    /fixed Node 22 Linux/,
+  );
+  assert.equal(f.calls.length, 0);
 });
 
 test("Linux installation preserves locked installs for each repository and fixed Chromium", async (t) => {
@@ -128,21 +140,6 @@ test("Linux installation preserves locked installs for each repository and fixed
   assert.match(verification.args[2], /chromium\.executablePath\(\)/);
   assert.equal(
     f.calls.some((x) => x.args.includes("chromium")),
-    false,
-  );
-});
-
-test("Mac retains its writable per-account browser installation", async (t) => {
-  const f = await fixture(t, "darwin");
-  await f.invoke("install");
-  assert.equal(
-    f.calls.some(
-      (x) => x.args.slice(-4).join(" ") === "exec playwright install chromium",
-    ),
-    true,
-  );
-  assert.equal(
-    f.calls.some((x) => x.args[0] === "--input-type=module"),
     false,
   );
 });

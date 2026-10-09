@@ -50,13 +50,22 @@ const actualStagedDeployment = Object.freeze({
     jenkinsBuildNumber: "7",
   },
 });
-// Pipeline fixtures simulate the legacy Mac dispatcher with real filesystem
-// and tar boundaries. They also run on Linux; no native VM or Mac service is used.
-const legacySystem = {
-  platform: "darwin",
+// Pipeline fixtures drive the fixed Linux agents with real filesystem and tar
+// boundaries. Their directories are redirected into a temporary tree and the
+// private-volume check is injected, so no agent container or Mac service is used.
+const agentSystem = {
+  platform: "linux",
   arch: "arm64",
   nodeMajor: 22,
-  node: process.execPath,
+  node: LINUX_CI.node,
+};
+// CI and deployment agents share this account; the deployment role is proven
+// only by its private volumes (see the layout guard below).
+const agentIdentity = {
+  username: "jenkins",
+  uid: 1000,
+  gid: 1000,
+  homedir: LINUX_CI.home,
 };
 const native = {
   concurrency: false,
@@ -135,6 +144,18 @@ async function fixture(t) {
     promotes: 0,
     readiness: true,
     apiSha: API_SHA,
+    layoutChecks: 0,
+  };
+  // Trusted phases resolve the fixed deployment volumes; paths.* redirects them
+  // into this fixture, and tests may swap in the real volume check.
+  state.layoutGuard = async (layout) => {
+    state.layoutChecks++;
+    assert.equal(layout.root, "/srv/agent-platform/deploy");
+    assert.equal(layout.tools, "/run/agent-platform/jenkins-tools");
+    assert.equal(
+      layout.auth,
+      "/run/agent-platform/jenkins-tools/vercel/auth.json",
+    );
   };
   const old = {
     JOB_NAME: process.env.JOB_NAME,
@@ -196,7 +217,7 @@ async function fixture(t) {
       }
       return "";
     }
-    if ([WEB.cli, LINUX_CI.cli].includes(args[0])) {
+    if (args[0] === LINUX_CI.cli) {
       const action = args[1];
       if (action === "pull") {
         const cache = join(args[2], ".vercel");
@@ -309,7 +330,7 @@ async function fixture(t) {
     throw new Error("Unexpected command");
   };
   const overrides = {
-    system: legacySystem,
+    system: agentSystem,
     cliVersion: "62.2.0",
     paths,
     execute: fakeExecute,
@@ -333,35 +354,8 @@ async function fixture(t) {
     runWebPhase(phase, sha, ref, workspace, root, api, {
       ...overrides,
       ...(state.system ? { system: state.system } : {}),
-      ...(["prepare-env", "adopt", "upload", "promote"].includes(phase) &&
-      state.trustedLinux
-        ? {
-            system: {
-              platform: "linux",
-              arch: "arm64",
-              nodeMajor: 22,
-              node: LINUX_CI.node,
-            },
-            ...(state.layoutGuard ? { assertLayout: state.layoutGuard } : {}),
-          }
-        : {}),
-      identity: ["prepare-env", "adopt", "upload", "promote"].includes(phase)
-        ? state.trustedLinux
-          ? {
-              username: "jenkins",
-              uid: 1000,
-              gid: 1000,
-              homedir: LINUX_CI.home,
-            }
-          : { username: "douglasdong", uid: 501, homedir: WEB.ownerHome }
-        : state.system?.platform === "linux"
-          ? {
-              username: "jenkins",
-              uid: 1000,
-              gid: 1000,
-              homedir: LINUX_CI.home,
-            }
-          : { username: "_agentplatformci", homedir: WEB.ciHome },
+      identity: agentIdentity,
+      assertLayout: state.layoutGuard,
     });
   const release = join(
     paths.root,
@@ -383,34 +377,35 @@ test(
   async (t) => {
     const f = await fixture(t);
     await build(f);
-    f.state.trustedLinux = true;
-    let checks = 0;
-    f.state.layoutGuard = async (layout) => {
-      checks++;
-      assert.equal(layout.root, "/srv/agent-platform/deploy");
-      assert.equal(layout.tools, "/run/agent-platform/jenkins-tools");
-      assert.equal(
-        layout.auth,
-        "/run/agent-platform/jenkins-tools/vercel/auth.json",
-      );
-    };
+    // prepare-env is the only trusted phase of the CI build.
+    assert.equal(f.state.layoutChecks, 1);
     await f.invoke("adopt");
     await f.invoke("upload");
     await f.invoke("promote");
-    assert.equal(checks, 3);
+    assert.equal(f.state.layoutChecks, 4);
     assert.equal(f.state.uploads, 1);
     assert.equal(f.state.promotes, 1);
-    const authenticated = f.state.calls.filter(
-      (call) =>
-        call.command === LINUX_CI.node &&
-        call.args[0] === LINUX_CI.cli &&
-        call.args.includes("--global-config"),
+    const cli = f.state.calls.filter(
+      (call) => call.command === LINUX_CI.node && call.args[0] === LINUX_CI.cli,
     );
+    // CI and deployment images install the same CLI path. The CI build runs
+    // offline against an empty global config; every other call is trusted.
+    const offline = cli.filter((call) => call.args[1] === "build");
+    assert.deepEqual(
+      offline.map((call) => call.args.slice(-2)),
+      [["--global-config", join(f.workspace, "empty-vercel-global")]],
+    );
+    assert.equal(offline[0].args.includes("--scope"), false);
+    const authenticated = cli.filter((call) => call.args[1] !== "build");
     assert.equal(authenticated.length > 0, true);
     for (const call of authenticated) {
       assert.equal(call.args.at(-1), f.path);
       assert.equal(call.args[call.args.indexOf("--scope") + 1], WEB.scope);
-      assert.equal(call.env.PATH.includes("homebrew"), false);
+      assert.equal(
+        call.env.PATH,
+        "/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      );
+      assert.equal(call.env.LANG, "C.UTF-8");
       for (const name of [
         "ACCESS_PASSCODE",
         "VERCEL_TOKEN",
@@ -435,7 +430,6 @@ test(
   { concurrency: false },
   async (t) => {
     const f = await fixture(t);
-    f.state.trustedLinux = true;
     f.state.layoutGuard = (layout) =>
       assertDeploymentLayout({
         ...layout,
@@ -587,27 +581,45 @@ test("only valid fixed-repository ref syntax and isolated/trusted OS identities 
     "https://evil/repo",
   ])
     assert.equal(validRef(ref), false);
+  assert.equal(roleFor("install", agentIdentity, agentSystem), "ci");
   assert.equal(
-    roleFor(
-      "install",
-      { username: "_agentplatformci", homedir: WEB.ciHome },
-      legacySystem,
-    ),
+    roleFor("install", agentIdentity, { ...agentSystem, arch: "x64" }),
     "ci",
   );
-  assert.throws(() =>
-    roleFor("install", { username: "douglasdong", homedir: WEB.ownerHome }),
+  // The shared account reaches the trusted role only on the ARM64 deployment
+  // image; its private volumes are checked separately before any credential.
+  assert.equal(roleFor("promote", agentIdentity, agentSystem), "trusted");
+  assert.throws(
+    () => roleFor("promote", agentIdentity, { ...agentSystem, arch: "x64" }),
+    /Trusted deployment account/,
   );
-  assert.throws(() =>
-    roleFor("promote", { username: "_agentplatformci", homedir: WEB.ciHome }),
-  );
-  assert.throws(() =>
-    roleFor("promote", { username: "douglasdong", homedir: "/tmp/ci-home" }),
-  );
+  for (const phase of ["install", "promote"]) {
+    for (const identity of [
+      { ...agentIdentity, uid: 5101 },
+      { ...agentIdentity, homedir: "/tmp/ci-home" },
+      { username: "operator", uid: 5101, gid: 20, homedir: "/Users/operator" },
+    ])
+      assert.throws(() => roleFor(phase, identity, agentSystem));
+    // No macOS host remains a CI or deployment dispatcher.
+    assert.throws(
+      () =>
+        roleFor(phase, agentIdentity, {
+          ...agentSystem,
+          platform: "darwin",
+          node: "/opt/node-22/bin/node",
+        }),
+      /fixed Node 22 Linux/,
+    );
+  }
 });
 
 test("child environment is constructed without ambient deployment/runtime secrets", () => {
   const env = childEnvironment("/node/bin/node", "/ci/home", "/ci/tmp");
+  assert.equal(
+    env.PATH,
+    "/node/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  );
+  assert.equal(env.LANG, "C.UTF-8");
   assert.equal(env.HOME, "/ci/home");
   assert.equal(env.GIT_CONFIG_GLOBAL, "/dev/null");
   for (const name of [
@@ -888,7 +900,7 @@ test(
     );
     assert.equal(
       f.state.calls
-        .find((c) => c.args?.[1] === "build" && c.args?.[0] === WEB.cli)
+        .find((c) => c.args?.[1] === "build" && c.args?.[0] === LINUX_CI.cli)
         .args.includes("--standalone"),
       true,
     );
@@ -941,7 +953,7 @@ test(
     assert.equal(manifest.production, false);
     assert.equal(manifest.archives["prebuilt.tar.gz"], undefined);
     assert.equal(
-      f.state.calls.some((c) => c.args?.[0] === WEB.cli),
+      f.state.calls.some((c) => c.args?.[0] === LINUX_CI.cli),
       false,
     );
     await assert.rejects(f.invoke("upload"), /Only main/);
@@ -956,7 +968,7 @@ test(
     f.state.sha = "d".repeat(40);
     await assert.rejects(f.invoke("prepare-env"), /branch moved/);
     assert.equal(
-      f.state.calls.some((c) => c.args?.[0] === WEB.cli),
+      f.state.calls.some((c) => c.args?.[0] === LINUX_CI.cli),
       false,
     );
     await assert.rejects(f.invoke("checkout"), /Ref moved/);
@@ -1381,7 +1393,9 @@ test(
       basename(call.env.HOME),
       /^agent-platform-vercel-[A-Za-z0-9]+$/,
     );
-    assert.equal(call.env.HOME === WEB.ownerHome, false);
+    // The CLI never sees the trusted account home, redirected or fixed.
+    assert.notEqual(call.env.HOME, f.paths.ownerHome);
+    assert.notEqual(call.env.HOME, LINUX_CI.home);
     await assert.rejects(f.invoke("adopt"), /ENOENT/);
   },
 );

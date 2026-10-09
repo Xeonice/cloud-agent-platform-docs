@@ -36,10 +36,6 @@ export const WEB = Object.freeze({
   scope: "xeonices-projects",
   domain: "agent.douglasdong.com",
   api: "https://agent-api.douglasdong.com",
-  ciHome: "/Users/Shared/agent-platform-ci",
-  ownerHome: "/Users/douglasdong",
-  root: "/Users/douglasdong/.local/share/agent-platform-deploy",
-  cli: "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
 });
 const HISTORICAL_PRODUCTION_REF = "refs/heads/feat/design-v2-migration";
 export const SHA = /^[a-f0-9]{40}$/;
@@ -105,14 +101,9 @@ function inside(root, path) {
     (part !== ".." && !part.startsWith("../") && !isAbsolute(part))
   );
 }
-export function childEnvironment(
-  node,
-  home,
-  temporary,
-  platform = process.platform,
-) {
+export function childEnvironment(node, home, temporary) {
   return {
-    ...deploymentEnvironment(node, home, platform),
+    ...deploymentEnvironment(node, home),
     TMPDIR: temporary,
     COPYFILE_DISABLE: "1",
     npm_config_store_dir: join(home, "pnpm-store"),
@@ -474,22 +465,14 @@ async function authenticated(work, operations, action) {
   try {
     const global = dirname(auth);
     await directory(global);
-    if (
-      layout.platform === "linux" &&
-      ((await fs.lstat(global)).mode & 0o777) !== 0o700
-    )
+    if (((await fs.lstat(global)).mode & 0o777) !== 0o700)
       throw new Error("Vercel global configuration directory must be private");
     if (((await fs.lstat(auth)).mode & 0o777) !== 0o600)
       throw new Error("Vercel authentication file must be private");
     await regular(auth, true, 65_536);
     // Keep OAuth refresh persistence in its original owner-only global config.
     // Only fixed CLI commands run here, with no repository scripts or token env.
-    const env = childEnvironment(
-      layout.node,
-      scratch,
-      scratch,
-      layout.platform,
-    );
+    const env = childEnvironment(layout.node, scratch, scratch);
     const cli = (args) =>
       operations.execute(
         layout.node,
@@ -503,13 +486,13 @@ async function authenticated(work, operations, action) {
     await fs.rm(scratch, { force: true, recursive: true });
   }
 }
-async function installedCLI(operations, cliPath = WEB.cli) {
+async function installedCLI(operations, cliPath) {
   const version =
     operations.cliVersion ??
     (await json(resolve(dirname(cliPath), "../package.json"))).version;
   if (version !== "62.2.0") throw new Error("Use the pinned Vercel CLI 62.2.0");
 }
-async function approvedPin(sha, rootSha, root = WEB.root, apiSha) {
+async function approvedPin(sha, rootSha, root, apiSha) {
   await directory(root);
   const value = await json(join(root, "jenkins-web-pin.json"), true);
   if (
@@ -630,7 +613,7 @@ export function testReport(value) {
     skipped: 0,
   };
 }
-async function apiReady(pin, fetcher, root = WEB.root) {
+async function apiReady(pin, fetcher, root) {
   const env = parseEnv(
     (await regular(join(root, "runtime.env"), true, 65_536)).toString(),
   );
@@ -712,8 +695,7 @@ export async function runWebPhase(
       ? ciContext(identity, system)
       : deploymentContext(identity, system);
   if (role === "trusted") {
-    if (layout.platform === "linux")
-      await (operations.assertLayout ?? assertDeploymentLayout)(layout);
+    await (operations.assertLayout ?? assertDeploymentLayout)(layout);
     operations.deployment = layout;
   }
   const node = system.node;
@@ -721,7 +703,7 @@ export async function runWebPhase(
     dirname(node),
     "../lib/node_modules/corepack/dist/corepack.js",
   );
-  const cliPath = layout?.cli ?? WEB.cli;
+  const cliPath = layout.cli;
   const work = resolve(workspace);
   await directory(work);
   const source = join(work, "web-source"),
@@ -730,8 +712,8 @@ export async function runWebPhase(
     role === "ci"
       ? (operations.paths?.ciHome ?? layout.home)
       : (operations.paths?.ownerHome ?? layout.home);
-  const deployRoot =
-    operations.paths?.root ?? (role === "trusted" ? layout.root : WEB.root);
+  // Only the trusted deployment layout has a production root; CI never reads it.
+  const deployRoot = operations.paths?.root ?? layout.root;
   const temporary = join(home, "tmp");
   await fs.mkdir(temporary, { recursive: true, mode: 0o700 });
   const env =
@@ -742,7 +724,7 @@ export async function runWebPhase(
           temporary,
           store: join(home, "pnpm-store"),
         })
-      : childEnvironment(node, home, temporary, system.platform);
+      : childEnvironment(node, home, temporary);
   const run = (cmd, args, cwd = source, capture = false) =>
     operations.execute(cmd, args, cwd, env, capture);
   const git = (args, cwd = source, capture = true) =>
@@ -1155,15 +1137,12 @@ export async function runWebPhase(
     let details = {};
     if (commands[phase]) {
       await pnpm(commands[phase]);
-      if (phase === "install") {
-        if (layout.platform === "linux")
-          await run(node, [
-            "--input-type=module",
-            "-e",
-            browserVerificationScript(layout.browsers),
-          ]);
-        else await pnpm(["exec", "playwright", "install", "chromium"]);
-      }
+      if (phase === "install")
+        await run(node, [
+          "--input-type=module",
+          "-e",
+          browserVerificationScript(layout.browsers),
+        ]);
     } else if (["acceptance", "storybook"].includes(phase)) {
       const output = join(artifacts, `${phase}.json`),
         junit = join(artifacts, `${phase}.xml`);

@@ -6,10 +6,10 @@
   "type": "module",
   "packageManager": "pnpm@9.15.0",
   "engines": {
-    "node": ">=20.11.0"
+    "node": "22.x"
   },
   "scripts": {
-    "deploy:test": "node --test deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs",
+    "deploy:test": "node --test deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs deploy/ops/*.test.mjs",
     "docs:check": "node scripts/docs-check.mjs"
   }
 }

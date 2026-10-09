@@ -13,6 +13,7 @@ import {
   createStatusApp,
   validatePermissions,
   readAppPrivate,
+  appDirectory,
 } from "./github-status-app.mjs";
 import {
   createSetupServer,
@@ -21,6 +22,7 @@ import {
 } from "./setup-github-app.mjs";
 import { createDiscoverer } from "./jenkins-discover.mjs";
 import { projectKey, REPOSITORIES } from "./project-release.mjs";
+import { LINUX_DEPLOY } from "./deployment-platform.mjs";
 
 const { privateKey, publicKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -210,7 +212,25 @@ test("real private-file guards refuse wrong owner, public mode, symlinks and ove
     path = join(tools, "key");
   await fs.writeFile(path, pem, { mode: 0o600 });
   assert.equal(await readAppPrivate(path, process.getuid()), pem);
-  await assert.rejects(readAppPrivate(path, process.getuid() + 1), /UID501/);
+  await assert.rejects(
+    readAppPrivate(path, process.getuid() + 1),
+    /expected account/,
+  );
+  // No account is assumed: an omitted owner UID can never match a real file.
+  await assert.rejects(readAppPrivate(path), /expected account/);
+  await assert.rejects(appDirectory(tools), /owner-only/);
+  await appDirectory(tools, process.getuid());
+  for (const options of [
+    {},
+    { uid: process.getuid() },
+    { tools },
+    { tools, uid: -1 },
+    { tools, uid: String(process.getuid()) },
+  ])
+    assert.throws(
+      () => createStatusApp(options),
+      /explicit tools directory and owner UID/,
+    );
   await fs.chmod(path, 0o640);
   await assert.rejects(readAppPrivate(path, process.getuid()), /mode0600/);
   await fs.chmod(path, 0o600);
@@ -621,6 +641,24 @@ async function discoveryOptions(tools) {
   return {
     tools,
     deployRoot: root,
+    // Discovery runs only as the fixed Linux deployment account; its private
+    // volumes are these temporary directories, so the volume check is recorded.
+    identity: {
+      username: "jenkins",
+      uid: LINUX_DEPLOY.uid,
+      gid: 1000,
+      homedir: LINUX_DEPLOY.home,
+    },
+    system: {
+      platform: "linux",
+      arch: "arm64",
+      nodeMajor: 22,
+      node: "/usr/local/bin/node",
+    },
+    assertLayout: async (context) => {
+      assert.equal(context.root, root);
+      assert.equal(context.tools, tools);
+    },
     commits,
     refs: async (spec, repo) => [
       { ref: "refs/heads/" + spec.branch, sha: commits[repo] },
@@ -638,53 +676,66 @@ async function discoveryOptions(tools) {
     queued,
   };
 }
-test("default discovery factory reads deployment-owned App credentials and keeps App JWT/token away from OAuth branch queries", async () => {
-  const f = await fixture(),
-    opts = await discoveryOptions(f.tools),
-    appCalls = f.remote.calls;
-  await fs.writeFile(
-    join(f.tools, "github-token"),
-    "synthetic_oauth_branch_token",
-    { mode: 0o600 },
-  );
-  let branchReads = 0;
-  const result = await createDiscoverer({
-    ...opts,
-    pulls: undefined,
-    fetch: async (url, options) => {
-      if (!new URL(url).pathname.endsWith("/pulls"))
-        return f.remote.fetcher(url, options);
-      assert.equal(
-        options.headers.Authorization,
-        "Bearer synthetic_oauth_branch_token",
-      );
-      branchReads++;
-      return new Response("[]", { status: 200 });
-    },
-  })();
-  assert.equal(result.githubStatusSource.kind, "github-app");
-  assert.equal(result.githubStatusSource.verified, true);
-  assert.equal(result.pendingStatuses, 0);
-  assert.equal(
-    appCalls.filter((call) => call.path.includes("/statuses/")).length,
-    3,
-  );
-  assert.equal(opts.queued.length, 3);
-  assert.equal(result.errors.length, 0);
-  assert.deepEqual(
-    new Set(
-      appCalls
-        .filter((call) => call.path.includes("/statuses/"))
-        .map((call) => call.path),
-    ),
-    new Set(
-      Object.entries(REPOSITORIES).map(
-        ([repo, spec]) => `/repos/${spec.name}/statuses/${opts.commits[repo]}`,
+// The default factory hands the deployment UID to the App credential checks,
+// so fixture credentials are readable only when this process is that account
+// (the Linux CI agents running this suite).
+const deploymentAccount = {
+  skip:
+    process.getuid() !== LINUX_DEPLOY.uid &&
+    "App credentials must be owned by the fixed deployment UID",
+};
+test(
+  "default discovery factory reads deployment-owned App credentials and keeps App JWT/token away from OAuth branch queries",
+  deploymentAccount,
+  async () => {
+    const f = await fixture(),
+      opts = await discoveryOptions(f.tools),
+      appCalls = f.remote.calls;
+    await fs.writeFile(
+      join(f.tools, "github-token"),
+      "synthetic_oauth_branch_token",
+      { mode: 0o600 },
+    );
+    let branchReads = 0;
+    const result = await createDiscoverer({
+      ...opts,
+      pulls: undefined,
+      fetch: async (url, options) => {
+        if (!new URL(url).pathname.endsWith("/pulls"))
+          return f.remote.fetcher(url, options);
+        assert.equal(
+          options.headers.Authorization,
+          "Bearer synthetic_oauth_branch_token",
+        );
+        branchReads++;
+        return new Response("[]", { status: 200 });
+      },
+    })();
+    assert.equal(result.githubStatusSource.kind, "github-app");
+    assert.equal(result.githubStatusSource.verified, true);
+    assert.equal(result.pendingStatuses, 0);
+    assert.equal(
+      appCalls.filter((call) => call.path.includes("/statuses/")).length,
+      3,
+    );
+    assert.equal(opts.queued.length, 3);
+    assert.equal(result.errors.length, 0);
+    assert.deepEqual(
+      new Set(
+        appCalls
+          .filter((call) => call.path.includes("/statuses/"))
+          .map((call) => call.path),
       ),
-    ),
-  );
-  assert.equal(branchReads, 3);
-});
+      new Set(
+        Object.entries(REPOSITORIES).map(
+          ([repo, spec]) =>
+            `/repos/${spec.name}/statuses/${opts.commits[repo]}`,
+        ),
+      ),
+    );
+    assert.equal(branchReads, 3);
+  },
+);
 test("real discovery without App retains OAuth statuses and explicitly reports unsatisfied Actions source", async () => {
   const tools = await directory(),
     opts = await discoveryOptions(tools);

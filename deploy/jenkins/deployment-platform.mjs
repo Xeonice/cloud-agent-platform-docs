@@ -13,18 +13,6 @@ export const LINUX_DEPLOY = Object.freeze({
   auth: "/run/agent-platform/jenkins-tools/vercel/auth.json",
   jenkins: "http://host.lima.internal:8080/",
 });
-export const MAC_DEPLOY = Object.freeze({
-  home: "/Users/douglasdong",
-  uid: 501,
-  root: "/Users/douglasdong/.local/share/agent-platform-deploy",
-  tools: "/Users/douglasdong/.local/share/agent-platform-jenkins-tools",
-  publicTools: "/Library/Application Support/AgentPlatform/jenkins-tools",
-  cli: "/Library/Application Support/AgentPlatform/vercel/node_modules/vercel/dist/index.js",
-  auth: "/Users/douglasdong/Library/Application Support/com.vercel.cli/auth.json",
-  jenkins: "http://127.0.0.1:8080/",
-});
-export const DEPLOYMENT =
-  process.platform === "linux" ? LINUX_DEPLOY : MAC_DEPLOY;
 export const CANONICAL_JENKINS = "http://127.0.0.1:8080/";
 export const PUBLIC_JENKINS = "https://jenkins.douglasdong.com/";
 const JENKINS_JOBS = new Set([
@@ -67,20 +55,15 @@ export function deploymentContext(
   system = buildSystem(),
 ) {
   assertBuildSystem(system);
-  const linux = system.platform === "linux";
   if (
     system.arch !== "arm64" ||
-    (linux
-      ? identity.username !== "jenkins" ||
-        identity.uid !== 1000 ||
-        identity.gid !== 1000 ||
-        identity.homedir !== LINUX_DEPLOY.home
-      : identity.username !== "douglasdong" ||
-        identity.uid !== 501 ||
-        identity.homedir !== MAC_DEPLOY.home)
+    identity.username !== "jenkins" ||
+    identity.uid !== 1000 ||
+    identity.gid !== 1000 ||
+    identity.homedir !== LINUX_DEPLOY.home
   )
     throw new Error("Trusted deployment account and fixed Node 22 required");
-  return { ...system, ...(linux ? LINUX_DEPLOY : MAC_DEPLOY) };
+  return { ...system, ...LINUX_DEPLOY };
 }
 
 async function checkedDirectory(path, uid, privateOnly) {
@@ -104,21 +87,16 @@ async function checkedDirectory(path, uid, privateOnly) {
 export async function assertDeploymentLayout(context) {
   await checkedDirectory(context.root, context.uid, true);
   await checkedDirectory(context.tools, context.uid, true);
-  if (context.platform === "linux")
-    await checkedDirectory(context.publicTools, 0, false);
+  await checkedDirectory(context.publicTools, 0, false);
 }
 
-export function deploymentEnvironment(node, home, platform = process.platform) {
+export function deploymentEnvironment(node, home) {
   return {
-    PATH:
-      dirname(node) +
-      ":" +
-      (platform === "linux" ? "/usr/local/bin" : "/opt/homebrew/bin") +
-      ":/usr/bin:/bin:/usr/sbin:/sbin",
+    PATH: dirname(node) + ":/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
     HOME: home,
     CI: "true",
     HUSKY: "0",
-    LANG: platform === "linux" ? "C.UTF-8" : "en_US.UTF-8",
+    LANG: "C.UTF-8",
     GIT_TERMINAL_PROMPT: "0",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
@@ -129,9 +107,9 @@ export function deploymentEnvironment(node, home, platform = process.platform) {
 
 // Metadata may advertise the protected public root URL. Credentials and
 // artifact requests always stay on the fixed local controller transport.
-export function jenkinsTransport(url, context = DEPLOYMENT) {
+export function jenkinsTransport(url, context = LINUX_DEPLOY) {
   const parsed = checkedJenkinsUrl(url, METADATA_ORIGINS, true);
-  if (![LINUX_DEPLOY.jenkins, MAC_DEPLOY.jenkins].includes(context.jenkins))
+  if (context.jenkins !== LINUX_DEPLOY.jenkins)
     throw new Error("Unknown Jenkins transport endpoint");
   if (parsed.pathname.startsWith("//"))
     throw new Error("Untrusted Jenkins transport path");
@@ -143,7 +121,7 @@ export function jenkinsTransport(url, context = DEPLOYMENT) {
   return target.href;
 }
 
-export function canonicalJenkinsLocation(url, context = DEPLOYMENT) {
+export function canonicalJenkinsLocation(url, context = LINUX_DEPLOY) {
   jenkinsTransport(CANONICAL_JENKINS, context);
   const parsed = checkedJenkinsUrl(url, [
     ...METADATA_ORIGINS,

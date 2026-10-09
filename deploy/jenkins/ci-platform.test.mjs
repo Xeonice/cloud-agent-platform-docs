@@ -44,7 +44,8 @@ test("fixed Linux ARM64 and AMD64 agents retain one isolated identity and separa
     { gid: 0 },
     { username: "root" },
     { homedir: "/var/jenkins_home" },
-    { homedir: "/Users/douglasdong" },
+    { homedir: "/Users/operator" },
+    { uid: 5101 },
   ])
     assert.throws(
       () => ciContext({ ...account(), ...patch }, linux()),
@@ -59,34 +60,39 @@ test("fixed Linux ARM64 and AMD64 agents retain one isolated identity and separa
     assert.throws(() => assertBuildSystem({ ...linux(), ...patch }));
 });
 
-test("legacy isolated Mac CI remains accepted while the production owner cannot become CI", () => {
-  const system = {
+test("a macOS host is never a CI build system, whatever account or Node it offers", () => {
+  // The native Mac agents are retired: neither the fixed Linux account nor any
+  // host account qualifies when the system is not the fixed Linux image.
+  const mac = {
     platform: "darwin",
     arch: "arm64",
     nodeMajor: 22,
-    node: "/native/node",
+    node: "/opt/node-22/bin/node",
   };
-  assert.equal(
-    ciContext(
-      {
-        username: "_agentplatformci",
-        homedir: "/Users/Shared/agent-platform-ci",
-      },
-      system,
-    ).browsers,
-    null,
-  );
-  assert.throws(() =>
-    ciContext(
-      { username: "douglasdong", homedir: "/Users/douglasdong" },
-      system,
-    ),
-  );
+  for (const system of [mac, { ...mac, node: LINUX_CI.node }]) {
+    assert.throws(() => assertBuildSystem(system), /fixed Node 22 Linux/);
+    for (const identity of [
+      account(),
+      { username: "_ci", uid: 401, gid: 401, homedir: "/Users/Shared/ci" },
+      { username: "operator", uid: 5101, gid: 20, homedir: "/Users/operator" },
+    ])
+      assert.throws(() => ciContext(identity, system), /fixed Node 22 Linux/);
+  }
 });
 
 test("Linux children receive fixed Chromium/cache paths without secret or loader environment inheritance", () => {
   const context = ciContext(account(), linux());
   const env = ciChildEnvironment(LINUX_CI.node, context);
+  assert.equal(
+    env.PATH,
+    "/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  );
+  assert.equal(env.LANG, "C.UTF-8");
+  // A stale platform field can no longer select another tool search path.
+  assert.deepEqual(
+    ciChildEnvironment(LINUX_CI.node, { ...context, platform: "darwin" }),
+    env,
+  );
   assert.equal(env.PLAYWRIGHT_BROWSERS_PATH, LINUX_CI.browsers);
   assert.equal(env.HOME, "/home/jenkins");
   assert.equal(env.GIT_CONFIG_GLOBAL, "/dev/null");

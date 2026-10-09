@@ -44,10 +44,13 @@ const WEB_RESERVED_ENV = path.join(WEB_ROOT, 'src', 'lib', 'image', 'validateEnv
 const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
 const WEB_SSE_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'sse-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
-/** 部署形态的两份 compose：主仓根那份是部署入口，api 那份被它 include */
+/**
+ * 自托管 compose 形态的两份 compose：主仓根那份是入口，api 那份被它 include。
+ * 本项目 Mac mini 生产不用这两份起服务（见 docs/ops/README.md），C1 只对账自托管形态。
+ */
 const ROOT_COMPOSE = path.join(ROOT, 'docker-compose.yml');
 const API_COMPOSE = path.join(API_ROOT, 'docker-compose.yml');
-/** 文档里那份 compose 骨架所在的篇目（§1.1） */
+/** 文档里那份 compose 骨架所在的篇目（§1） */
 const DEPLOY_DOC = path.join(DOCS, 'shared', '11-部署与扩展预留.md');
 
 const VERBOSE = process.argv.includes('--verbose');
@@ -110,14 +113,15 @@ const MD_FILES = walkMd(DOCS);
  * A1（链接可达）**额外**要扫的根目录文档。
  *
  * ⚠️⚠️ **它是独立的一份，不能并进 `MD_FILES`。** `MD_FILES` 同时是 A3「README 清单完整」
- * 的清点面 —— 把根目录那两份混进去，A3 会立刻要求把 `README.md` / `CHANGELOG.md`
- * 收进 `docs/README.md` 的索引里，而它们**不是设计文档**，不归那份索引管。
+ * 的清点面 —— 把根目录这几份混进去，A3 会立刻要求把 `README.md` / `CHANGELOG.md` /
+ * `CONTRIBUTING.md` 收进 `docs/README.md` 的索引里，而它们**不是设计文档**，不归那份索引管。
  * （这个连锁反应是实测撞出来的：并进去的那一版 A1 变绿、A3 当场红。）
  *
  * ⚠️ 为什么非扫不可：`README.md` 是新人打开仓库看的**第一份**东西，此前它的链接
  * 一条都没人校验 —— v0.1.0 之前根目录压根没有 README，这个盲区不显形。
+ * `CONTRIBUTING.md` 是本地开发的唯一权威，链接一断新人就卡在第一步，同样要扫。
  */
-const ROOT_MD_FILES = ['README.md', 'CHANGELOG.md']
+const ROOT_MD_FILES = ['README.md', 'CHANGELOG.md', 'CONTRIBUTING.md']
   .map((f) => path.join(ROOT, f))
   .filter((f) => fs.existsSync(f));
 const readCache = new Map();
@@ -723,7 +727,7 @@ function checkOpenapiCoverage() {
       'api submodule 未 checkout —— 本轮「没有人」在把关',
       '「后端加了端点却没同步 10 §6」这条漂移（09 §2.4 · 审计 P1-6）。',
       '  本地：git submodule update --init api',
-      '  CI  ：给仓库配 SUBMODULE_TOKEN secret（见 .github/workflows/docs-check.yml）',
+      '  CI  ：Jenkins agent-platform-contract 会按完整 SHA checkout 三仓，缺子模块直接失败，不会走到这里',
       '──────────────────────────────────────────────────────────────',
     ]);
     return;
@@ -1026,7 +1030,7 @@ function checkMcpToolParity() {
       '「代码注册了 tool 却没同步 02 §5.2」/「表里挂着从没注册过的 tool」这类',
       '双向漂移（09 §2.4 · B2）。',
       '  本地：git submodule update --init api',
-      '  CI  ：给仓库配 SUBMODULE_TOKEN secret（见 .github/workflows/docs-check.yml）',
+      '  CI  ：Jenkins agent-platform-contract 会按完整 SHA checkout 三仓，缺子模块直接失败，不会走到这里',
       '──────────────────────────────────────────────────────────────',
     ]);
     return;
@@ -1413,7 +1417,7 @@ function checkReservedEnvCrossRepo() {
 }
 
 // ---------------------------------------------------------------------------
-// C1 compose 骨架对账：docs/shared/11 §1.1 的骨架 ↔ 仓库里真的那两份 compose
+// C1 compose 骨架对账：docs/shared/11 §1 的骨架 ↔ 仓库里真的那两份 compose
 //
 // ── 它修的是什么 ────────────────────────────────────────────────────────────
 // v0.1.0 打出去之后做换机部署审查，发现三条阻塞里有两条的根因是同一件事：
@@ -1502,7 +1506,7 @@ function checkComposeSkeletonParity() {
     for (const [k, v] of defaults) if (!realDefaults.has(k)) realDefaults.set(k, v);
   }
 
-  // ── 文档骨架侧：§1.1 那个围栏块里以 `docker-compose:` 起头的一段 ──────────
+  // ── 文档骨架侧：§1 那个围栏块里以 `docker-compose:` 起头的一段 ──────────
   const doc = read(DEPLOY_DOC);
   const skeleton = /\n\s*docker-compose:\s*\n([\s\S]*?)\n\s*```/.exec(doc);
   if (skeleton === null) {

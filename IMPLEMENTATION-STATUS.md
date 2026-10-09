@@ -6,14 +6,13 @@
 
 前端以共享 AppFrame 承载工作台与设置页，任务、项目与管理流程采用同一组实际查询和操作。后端提供 REST/MCP、终端 WebSocket、诊断 SSE、SQLite 事务和 BoxLite 生命周期。接口与前端类型从同源契约生成，读取失败不伪装为空或健康，取消与失败保留可恢复状态。
 
-正式构建与发布由本地 Jenkins 管理，发布来源固定为主仓及 API/Web 三仓 `main` 的精确 SHA；PR 构建用于验收。生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。运行状态、日志、持久数据和维护操作见 [Mac mini 部署](./docs/macmini-deployment.md)。本页不保存容易过期的 PID、构建号或部署快照。
+正式构建与发布由本地 Jenkins 管理，发布来源固定为主仓及 API/Web 三仓 `main` 的精确 SHA；PR 构建用于验收。生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。部署、运行与维护见 [运维入口](./docs/ops/README.md)。本页不保存容易过期的 PID、构建号或部署快照。
 
 ## 持续验收
 
-- 主仓：`pnpm docs:check`、`pnpm deploy:test`。
-- API：`pnpm check:acceptance`、`pnpm test:acceptance`、`pnpm typecheck`、`pnpm lint`、`pnpm build`，以及 OpenAPI 与 wire 一致性检查。
-- web：`pnpm test:acceptance`、`pnpm test:storybook`、`pnpm typecheck`、`pnpm lint`、`pnpm build`。
-- `e2e-contract`：`pnpm test`，使用独立真实 API、临时数据和浏览器验证跨仓链路。
+各仓的 Jenkins 门禁、阶段与本地等价命令以 [CONTRIBUTING](./CONTRIBUTING.md) 为准；`e2e-contract` 使用独立真实 API、临时数据和浏览器验证跨仓链路。
+
+api 的 `pnpm check:acceptance` 核对验收清单与 `docs/product/requirements` 的对应关系，它读取主仓的 `docs/`，只能在主仓检出的 `api/` 里本地运行，不在 Jenkins 门禁内。
 
 组件验收保留真实 container、hook、service 与 store，只替换外部边界；API 验收使用生产服务、SQLite 和完整 HTTP/MCP/WS 装配。Storybook 承载视图状态与交互样本；真实跨仓和外部 Provider 验证单独记录执行条件。
 

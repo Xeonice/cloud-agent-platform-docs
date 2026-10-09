@@ -5,8 +5,6 @@ import { join, resolve } from "node:path";
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-export const APP_TOOLS =
-  "/Users/douglasdong/.local/share/agent-platform-jenkins-tools";
 export const APP_OWNER = "Xeonice";
 export const APP_REPOSITORIES = Object.freeze([
   "Xeonice/agent-platform-api",
@@ -104,7 +102,9 @@ export function validateInstallation(
   validatePermissions(value.permissions);
   return value;
 }
-export async function readAppPrivate(path, uid = 501) {
+// Callers name the owning account: the deployment container passes its fixed
+// UID and the Mac setup CLI the operator UID. No account is assumed here.
+export async function readAppPrivate(path, uid) {
   const handle = await fs.open(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
@@ -119,14 +119,14 @@ export async function readAppPrivate(path, uid = 501) {
       stat.size > 65_536
     )
       throw new Error(
-        "GitHub App credentials must be UID501-owned mode0600 regular files",
+        "GitHub App credentials must be mode0600 regular files owned by the expected account",
       );
     return await handle.readFile("utf8");
   } finally {
     await handle.close();
   }
 }
-export async function appDirectory(path, uid = 501) {
+export async function appDirectory(path, uid) {
   const stat = await fs.lstat(path);
   if (
     !stat.isDirectory() ||
@@ -264,8 +264,16 @@ export async function verifyAppGrant(config, pem, options = {}) {
   return { token: value.token, expires };
 }
 export function createStatusApp(options = {}) {
-  const tools = resolve(options.tools ?? APP_TOOLS),
-    uid = options.uid ?? 501,
+  if (
+    typeof options.tools !== "string" ||
+    !Number.isSafeInteger(options.uid) ||
+    options.uid < 0
+  )
+    throw new Error(
+      "GitHub status App requires an explicit tools directory and owner UID",
+    );
+  const tools = resolve(options.tools),
+    uid = options.uid,
     clock = options.clock ?? Date.now;
   const fetcher = options.fetch ?? globalThis.fetch;
   const request = (path, token, settings) =>

@@ -61,10 +61,10 @@ test("backend validation accepts the isolated ARM64 Linux account and rejects ot
   );
   for (const changed of [
     { username: "root", uid: 0 },
-    { uid: 501 },
-    { gid: 501 },
+    { uid: 5101 },
+    { gid: 20 },
     { homedir: "/root" },
-    { username: "douglasdong" },
+    { username: "operator" },
   ])
     assert.throws(
       () => apiCiContext({ ...identity, ...changed }, system),
@@ -74,18 +74,28 @@ test("backend validation accepts the isolated ARM64 Linux account and rejects ot
     { arch: "x64" },
     { nodeMajor: 26 },
     { node: "/tmp/node" },
+    { platform: "darwin" },
+    { platform: "darwin", node: "/opt/node-22/bin/node" },
   ])
     assert.throws(() => apiCiContext(identity, { ...system, ...changed }));
-  assert.equal(
-    apiCiContext(
-      {
-        username: "_agentplatformci",
-        homedir: "/Users/Shared/agent-platform-ci",
-      },
-      { ...system, platform: "darwin", node: process.execPath },
-    ).platform,
-    "darwin",
-  );
+});
+
+test("backend validation refuses a macOS host before any repository command", async (t) => {
+  const f = await fixture(t);
+  f.options.system = {
+    ...system,
+    platform: "darwin",
+    node: "/opt/node-22/bin/node",
+  };
+  for (const identity of [
+    f.options.identity,
+    { username: "_ci", uid: 401, gid: 401, homedir: "/Users/Shared/ci" },
+  ]) {
+    f.options.identity = identity;
+    for (const phase of ["checkout", "install", "native"])
+      await assert.rejects(f.invoke(phase), /fixed Node 22 Linux/);
+  }
+  assert.equal(f.calls.length, 0);
 });
 
 test("checkout fetches only the fixed API repository and records exact PR provenance on Linux", async (t) => {
@@ -209,7 +219,11 @@ test("Linux runs every existing API gate through pinned Corepack without inherit
     assert.equal(child.cwd, f.source);
     assert.equal(child.env.COREPACK_HOME, "/opt/agent-platform/corepack");
     assert.equal(child.env.COREPACK_DEFAULT_TO_LATEST, "0");
-    assert.equal(child.env.PATH.includes("homebrew"), false);
+    assert.equal(
+      child.env.PATH,
+      "/usr/local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    );
+    assert.equal(child.env.LANG, "C.UTF-8");
     assert.equal(child.env.HOME, f.options.home);
     for (const name of [
       "ACCESS_PASSCODE",

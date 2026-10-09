@@ -1,17 +1,17 @@
 # 云 Agent 管理平台 — 实现方案文档索引
 
-> 全部 **30 篇**编号文档已完成，可逐篇评审（00 + 01–18 + P19–P22 + 23–27 + 28 前后端各一份）；
+> 全部 **31 篇**编号文档已完成，可逐篇评审（00 + 01–18 + P19–P22 + 23–27 + 28 前后端各一份 + 29）；
 > 另有 **16 篇**逐页规格（`product/pages/` 与 `frontend/pages/` 各 8 篇）与 **3 份**决策存档。
 > 历史架构裁决见 [AUDIT-DECISIONS.md](./AUDIT-DECISIONS.md)——产品与视觉冲突以2026-10领域规格为准；
 > 沙箱运行时的架构决策见 [SANDBOX-RUNTIME-DECISIONS.md](./SANDBOX-RUNTIME-DECISIONS.md)（S1 定基线的 ADR）；
 > Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5历史ADR；产品行为以2026-10规格为准）。
-> 本轮**跑起来才发现**的 9 件事见 [LIVE-RUN-FINDINGS.md](./LIVE-RUN-FINDINGS.md)（与上面三份的分工：那三份记开工前的裁决，这份记做完之后跑起来才知道错了的部分）。
+> 本轮**跑起来才发现**的 9 件事见 [LIVE-RUN-FINDINGS.md](./LIVE-RUN-FINDINGS.md)，附录另收从 11 迁出的部署形态实测经过（与上面三份的分工：那三份记开工前的裁决，这份记做完之后跑起来才知道错了的部分）。
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
-> 目录已按归属切分，对应未来拆仓去向：`backend/` 整体归后端仓库，`frontend/` 整体归前端仓库，`shared/` 与 `00` 双仓各持一份（或放独立契约仓）。
+> 目录按归属切分：`api/`、`web/` 已是主仓的子模块（各自独立仓库），`backend/`、`frontend/` 分别记录这两个仓库的设计，`shared/` 与 `00` 是跨仓约定，`ops/` 是本项目生产的运维文档。
 
 当前产品行为见 [领域需求索引](./product/requirements/README.md)，REQ/AC 保持稳定编号；适用范围见 [产品裁决](./product/requirements/decisions.md)。当前实现和执行入口见 [主仓状态](../IMPLEMENTATION-STATUS.md)。
 
-Mac mini 后端的构建、发布和服务管理见 [Mac mini 部署](./macmini-deployment.md)。
+运维与发布见 [运维入口](./ops/README.md)；本地开发与贡献流程见 [CONTRIBUTING](../CONTRIBUTING.md)。
 
 ## 目录结构
 
@@ -21,7 +21,7 @@ docs/
 ├── AUDIT-DECISIONS.md       # 架构审计裁决存档（P0/P1/P2 处置，权威）
 ├── SANDBOX-RUNTIME-DECISIONS.md  # 沙箱运行时架构决策（S1 定基线 ADR：控制面/数据面分离 + provider 选型）
 ├── TASK-LAUNCH-DECISIONS.md # Task 发起链路裁决存档（S5 开工前 6 条：initialPrompt 落库 / 启动即执行 / install 编排 / 无头范围 / 占位 auth.json / $HOME 展开）
-├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）
+├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）+ 部署形态实测附录
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
 │   ├── requirements/        #   当前 11 域 REQ/AC 与产品裁决
@@ -37,7 +37,7 @@ docs/
 │       ├── 21-5-系统状态.md
 │       ├── 21-6-项目管理.md   # Project 容器：切换器/创建/删除/工作区隔离策略
 │       ├── 21-7-自动化.md     # 定时唤起无头 Task（v1.1）：调度/边界决策/运行历史
-│       └── 21-8-部署与初始化.md # 私有化部署：环境画像/初始化向导/访问口令/升级备份
+│       └── 21-8-部署与初始化.md # 首启初始化与访问口令（产品页面，不是运维文档）
 ├── backend/                 # → 后端仓库 agent-platform-api
 │   ├── 17-后端总纲.md        #   后端统合入口，先读这篇
 │   ├── 01-后端目录结构与DDD分层.md
@@ -64,12 +64,20 @@ docs/
 │   └── pages/               #   逐页面前端设计（与 product/pages 同号同名，F21-x）
 │       ├── README.md        #     前端页面设计总纲（本层入口 + 统一八节模板）
 │       └── 21-1-工作台.md … 21-8-部署与初始化.md   # 与 product/pages 一一对应
-└── shared/                  # 横切面（双仓共同遵守）
-    ├── 09-工程化规范.md
-    ├── 10-接口契约与类型共享.md
-    ├── 11-部署与扩展预留.md
-    ├── 14-跨仓类型安全.md
-    └── 29-测试策略与测试Agent.md  # 跨仓测试职责 + 测试 Agent 边界 + 真链路 e2e
+├── shared/                  # 横切面（双仓共同遵守）
+│   ├── 09-工程化规范.md
+│   ├── 10-接口契约与类型共享.md
+│   ├── 11-部署与扩展预留.md   # 产品的自托管 compose 形态与扩展预留（不是本项目生产）
+│   ├── 14-跨仓类型安全.md
+│   └── 29-测试策略与测试Agent.md  # 跨仓测试职责 + 测试 Agent 边界 + 真链路 e2e
+└── ops/                     # 本项目生产（Mac mini）的运维与发布，不编号
+    ├── README.md            #   运维入口：红线、按任务路由、文档地图、术语表
+    ├── 生产架构.md
+    ├── 发版手册.md
+    ├── 运维手册.md
+    ├── 灾备与重建.md
+    ├── 参考表.md
+    └── 运维记录.md
 ```
 
 ## 文档清单
@@ -87,7 +95,7 @@ docs/
 | 08 | [前端 xterm.js 终端集成](./frontend/08-前端xterm集成.md) | 需求 5 的前端半段（多终端实例管理、断线重连） | ✅ 可评审 |
 | 09 | [工程化规范：lint / prettier / precommit / CI](./shared/09-工程化规范.md) | 需求 2（强制手段，前后端两套） | ✅ 可评审 |
 | 10 | [前后端接口契约与类型共享](./shared/10-接口契约与类型共享.md) | 分仓前提下的 OpenAPI codegen / WS 类型同步 | ✅ 可评审 |
-| 11 | [部署形态与扩展预留](./shared/11-部署与扩展预留.md) | 需求 10（单机部署、无帐号体系、预留 auth/多节点扩展点） | ✅ 可评审 |
+| 11 | [部署形态（自托管 compose）与扩展预留](./shared/11-部署与扩展预留.md) | 需求 10（单机自托管部署、无帐号体系、预留 auth/多节点扩展点）；本项目生产见 [运维入口](./ops/README.md) | ✅ 可评审 |
 | 12 | [前端测试体系：新版组件验收 + Storybook + 生产浏览器](./frontend/12-前端测试体系.md) | 补充需求（Storybook 逐层验证、新版 Vitest 验收、集成测试、测试金字塔分工） | ✅ 可评审 |
 | 13 | [后端数据库设计](./backend/13-后端数据库设计.md) | 补充需求 1（表结构、索引、状态机持久化、对账、双方言、迁移、ER 图） | ✅ 可评审 |
 | 14 | [跨仓类型安全：实时感知与防绕过](./shared/14-跨仓类型安全.md) | 补充需求 2、3（后端变更前端实时类型感知；禁止 as unknown as 等逃逸写法） | ✅ 可评审 |
@@ -112,7 +120,13 @@ docs/
 
 **前端 `pages/` 逐页设计**（与产品页同号同名，F21-x，共 8 篇）：入口见 [前端页面设计总纲](./frontend/pages/README.md)。
 
-**产品 `pages/` 逐页规格**（P21 的下钻，共 8 篇）：[21-1 工作台](./product/pages/21-1-工作台.md) · [21-2 发起任务向导](./product/pages/21-2-发起任务向导.md) · [21-3 凭证管理](./product/pages/21-3-凭证管理.md) · [21-4 镜像管理](./product/pages/21-4-镜像管理.md) · [21-5 系统状态](./product/pages/21-5-系统状态.md) · [21-6 项目管理](./product/pages/21-6-项目管理.md) · [21-7 自动化](./product/pages/21-7-自动化.md) · [21-8 部署与初始化](./product/pages/21-8-部署与初始化.md)
+**产品 `pages/` 逐页规格**（P21 的下钻，共 8 篇）：[21-1 工作台](./product/pages/21-1-工作台.md) · [21-2 发起任务向导](./product/pages/21-2-发起任务向导.md) · [21-3 凭证管理](./product/pages/21-3-凭证管理.md) · [21-4 镜像管理](./product/pages/21-4-镜像管理.md) · [21-5 系统状态](./product/pages/21-5-系统状态.md) · [21-6 项目管理](./product/pages/21-6-项目管理.md) · [21-7 自动化](./product/pages/21-7-自动化.md) · [21-8 部署与初始化](./product/pages/21-8-部署与初始化.md)（首启初始化与访问口令的页面，不是运维文档）
+
+## 运维文档（不编号）
+
+本项目生产（Mac mini）的架构、发版、日常运维、灾备、参考表与运维记录放在 `docs/ops/`，用中文文件名、不加编号，入口与文档地图见 [运维入口](./ops/README.md)。与编号文档的分工：11 只讲产品的自托管 compose 形态与扩展预留，09 只讲工程规范与 docs:check；本地开发见 [CONTRIBUTING](../CONTRIBUTING.md)。
+
+原运维主文档 [macmini-deployment.md](./macmini-deployment.md) 已拆分迁入 `docs/ops/`，只保留旧章节到新位置的跳转表。
 
 ## 评审顺序建议
 
@@ -120,6 +134,7 @@ docs/
 2. 产品：**P19（总纲）** → **P20（核心链路）** → P21、P22 →
 3. 后端：**17（总纲）** → 01-06、13 →
 4. 前端：**18（总纲）** → 07-08、12、15、16 →
-5. 横切面：09、10、14、11
+5. 横切面：09、10、14、11 →
+6. 运维：ops/README（运维入口）→ 生产架构
 
 P19/17/18 是三个域各自的统合入口：先读总纲拿到整体图，再按需下钻。P20 是产品主链路的唯一权威（首次进入 / 发起 Task / runtime 选择 / 鉴权存取）。

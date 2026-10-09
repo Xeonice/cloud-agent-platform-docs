@@ -4,7 +4,6 @@ import { createServer } from "node:http";
 import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import {
-  APP_TOOLS,
   APP_OWNER,
   APP_REPOSITORIES,
   APP_PERMISSIONS,
@@ -90,9 +89,22 @@ async function saveNew(tools, config, pem) {
     );
   }
 }
+// The CLI passes the operator's private directory and UID from the host
+// layout; no account or path is assumed here.
+function appLocation(options) {
+  if (
+    typeof options.tools !== "string" ||
+    !options.tools ||
+    !Number.isSafeInteger(options.uid) ||
+    options.uid < 0
+  )
+    throw new Error(
+      "GitHub App setup requires an explicit tools directory and owner UID",
+    );
+  return { tools: resolve(options.tools), uid: options.uid };
+}
 export async function createSetupServer(options = {}) {
-  const tools = resolve(options.tools ?? APP_TOOLS),
-    uid = options.uid ?? 501;
+  const { tools, uid } = appLocation(options);
   const fetcher = options.fetch ?? globalThis.fetch,
     clock = options.clock ?? Date.now;
   await appDirectory(tools, uid);
@@ -225,8 +237,7 @@ export async function createSetupServer(options = {}) {
   };
 }
 export async function verifySetup(options = {}) {
-  const tools = resolve(options.tools ?? APP_TOOLS),
-    uid = options.uid ?? 501;
+  const { tools, uid } = appLocation(options);
   const fetcher = options.fetch ?? globalThis.fetch,
     clock = options.clock ?? Date.now;
   await appDirectory(tools, uid);
@@ -293,16 +304,15 @@ if (
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   try {
-    if (
-      process.getuid() !== 501 ||
-      process.geteuid() !== 501 ||
-      process.platform !== "darwin" ||
-      process.arch !== "arm64" ||
-      process.versions.node.split(".")[0] !== "22"
-    )
-      throw new Error("Use the trusted UID501 native Mac account and Node22");
+    // Mac only, so imported here: the deploy image copy of this file has no
+    // ../containers. The operator is the passwd account running the process
+    // (macOS on Apple Silicon, Node 22, not root) owning the private directory.
+    const { loadHostLayout } = await import("../containers/host-layout.mjs");
+    const layout = await loadHostLayout({ requires: "setup-github-app" });
+    const location = { tools: layout.privateDir, uid: layout.operator.uid };
     if (process.argv[2] === "serve" && process.argv.length === 3) {
       const setup = await createSetupServer({
+        ...location,
         onSaved: (result) =>
           console.log(JSON.stringify({ state: "app-saved", ...result })),
         onFailure: () =>
@@ -319,7 +329,7 @@ if (
         }),
       );
     } else if (process.argv[2] === "verify" && process.argv.length === 3)
-      console.log(JSON.stringify(await verifySetup(), null, 2));
+      console.log(JSON.stringify(await verifySetup(location), null, 2));
     else
       throw new Error(
         "Use serve|verify. Registration and installation require the user's GitHub approval.",
