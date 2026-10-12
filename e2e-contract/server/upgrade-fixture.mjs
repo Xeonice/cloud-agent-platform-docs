@@ -9,10 +9,12 @@ import { buildQualificationDistribution } from '../../deploy/upgrade/build-distr
 import { secureDirectory,readJson,atomicJson,fileDigest,treeManifest } from '../../deploy/upgrade/io.mjs';
 import { invariant,digest,canonical,runInputFingerprint } from '../../deploy/upgrade/trust.mjs';
 import { createInstallerFilesystem } from './installer-filesystem.mjs';
+import { cleanupQualificationSdkImages } from './qualification-sdk-cache.mjs';
 
 /** Dedicated test trust domain, actual TLS transport and immutable signed bytes. */
 export async function createUpgradeFixture(input) {
   invariant(input.isolated!==false&&/^upgrade-acceptance-[a-zA-Z0-9._-]+$/.test(input.instanceId)&&['root','initialRoot','archiveRoot'].every(k=>isAbsolute(input[k]||'')),'ISOLATED_FIXTURE_INPUT_REQUIRED');
+  invariant(input.cleanupSdkImagesOnSuccess===undefined||typeof input.cleanupSdkImagesOnSuccess==='boolean','EXPLICIT_SDK_CACHE_CLEANUP_OPTION_REQUIRED');
   const root=await secureDirectory(input.root),fixtureRoot=await secureDirectory(join(root,'qualification-distribution'));
   invariant(!(await fs.lstat(join(fixtureRoot,'fixture.json')).catch(()=>null)),'FIXTURE_ALREADY_CREATED');
   const installerFilesystem=input.installerFilesystem?await createInstallerFilesystem({...input,root}):null;
@@ -48,6 +50,6 @@ export async function createUpgradeFixture(input) {
   const config={...input,isolated:true,root,keys,initialRelease,initialTreeDigest:initialBundle.treeDigest,...(installerFilesystem?{installerFilesystemEvidence:installerFilesystem.evidence}:{}),trustRootPath:rootsPath,catalogFile:catalogPath,targetManifestPath:manifestPath,qualificationInstallationPath:proofPath,runtimeEnv:{...input.runtimeEnv,NODE_EXTRA_CA_CERTS:join(caRoot,'ca.crt')},authEnv:{ACCESS_PASSCODE:input.authEnv?.ACCESS_PASSCODE||randomBytes(16).toString('hex'),PASSCODE_COOKIE_SECRET:keys.cookie,PASSCODE_COOKIE_SECURE:'false',ACCESS_PASSCODE_AUTO_GENERATE:'false',ACCESS_PASSCODE_ALLOW_LOOPBACK:'false',...input.authEnv},qualification:{purpose:'qualification',inputFingerprint:originalFingerprint,distributionOrigin:origin,runtimeCredentialConfigured:Boolean(input.runtimeCredential)}};
   const configPath=join(fixtureRoot,'acceptance-config.json');await atomicJson(configPath,config);await atomicJson(join(fixtureRoot,'fixture.json'),{purpose:'qualification',instanceId:input.instanceId,inputFingerprint:originalFingerprint,manifestDigest:qualified.envelope.manifestDigest,configPath,distributionOrigin:origin,createdAt:new Date().toISOString()});
   invariant(typeof tls.setDefaultCACertificates==='function'&&typeof tls.getCACertificates==='function','NODE22_PRIVATE_CA_API_REQUIRED');tls.setDefaultCACertificates([...tls.getCACertificates('default'),await fs.readFile(join(caRoot,'ca.crt'),'utf8')]);
-  const helpers={requestLog:()=>structuredClone(requests),installerFilesystemEvidence:installerFilesystem?.evidence||null,async close({resourcesCleaned=false}={}){await atomicJson(join(fixtureRoot,'download-requests.json'),requests);server.closeAllConnections();await new Promise(ok=>server.close(ok));if(installerFilesystem)await installerFilesystem.close({resourcesCleaned});}};
+  const helpers={requestLog:()=>structuredClone(requests),installerFilesystemEvidence:installerFilesystem?.evidence||null,async close({resourcesCleaned=false}={}){await atomicJson(join(fixtureRoot,'download-requests.json'),requests);server.closeAllConnections();await new Promise(ok=>server.close(ok));const sdkCacheCleanup=await cleanupQualificationSdkImages(config,{resourcesCleaned});if(installerFilesystem)await installerFilesystem.close({resourcesCleaned});return {sdkCacheCleanup};}};
   return {config,configPath,envelope:qualified.envelope,manifestPath,trustRootPath:rootsPath,installationProofPath:proofPath,helpers,requestLog:helpers.requestLog,close:helpers.close};
 }
