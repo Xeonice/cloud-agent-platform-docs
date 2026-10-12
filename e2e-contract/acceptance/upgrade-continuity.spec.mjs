@@ -9,6 +9,7 @@ import { digest as upgradeDigest } from "../../deploy/upgrade/trust.mjs";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
 import { closeQualifiedInstallation } from "../native/close-qualified-installation.mjs";
+import { qualificationBusinessDatabasePath } from "../server/installer-filesystem.mjs";
 import {
   startQualificationModel,
   qualificationPrompt,
@@ -276,6 +277,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     database,
     nativePhase = "setup",
     bodyErrorSummary = null,
+    businessCleanup = null,
     upgradeObservation = null,
     lastKnownProgress = null,
     resourcesCleaned = false;
@@ -331,7 +333,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const Database = createRequire(
       join(fixture.config.initialRoot, "api/package.json"),
     )("better-sqlite3");
-    database = new Database(join(harness.root, "business/platform.sqlite"), {
+    database = new Database(qualificationBusinessDatabasePath(fixture.config), {
       readonly: true,
       fileMustExist: true,
     });
@@ -1106,39 +1108,191 @@ test("real user acceptance, durable installation and original VM/terminal contin
     );
     // Explicit cleanup is outside the continuity window and independently audited.
     nativePhase = "explicit-resource-cleanup";
-    await json(
-      request,
-      origin,
-      `/api/automations/${trafficRule.id}`,
-      "DELETE",
-      {},
-      204,
-    );
-    await json(
-      request,
-      origin,
-      `/api/automations/${automation.id}`,
-      "DELETE",
-      {},
-      204,
-    );
-    await json(
-      request,
-      origin,
-      `/api/sandboxes/${headless.id}/tasks/${run.id}/cancel`,
-      "POST",
-      {},
-      202,
-    );
-    for (const id of owned)
+    const cleanupScope = await json(
+        request,
+        origin,
+        "/api/system/upgrade/status",
+      ),
+      installationProof = JSON.parse(
+        await readFile(fixture.installationProofPath, "utf8"),
+      ),
+      ownedIds = new Set(owned),
+      projectRows = database.prepare("SELECT id FROM projects").all(),
+      sandboxRows = database
+        .prepare("SELECT id,project_id FROM sandboxes")
+        .all(),
+      ownRuleIds = new Set([trafficRule.id, automation.id]),
+      ruleRows = database
+        .prepare("SELECT id,project_id FROM automations")
+        .all();
+    expect(
+      fixture.config.isolated === true &&
+        fixture.config.docker?.dedicated === true &&
+        harness.isolation === "containers" &&
+        harness.instanceId === fixture.config.instanceId &&
+        cleanupScope.instanceId === fixture.config.instanceId &&
+        harness.root === fixture.config.root &&
+        installationProof.purpose === "qualification" &&
+        installationProof.instanceId === fixture.config.instanceId &&
+        installationProof.isolatedRoot === fixture.config.root &&
+        ownedIds.size === 3 &&
+        owned.length === 3 &&
+        projectRows.length === 1 &&
+        projectRows[0].id === project.id &&
+        sandboxRows.length === 3 &&
+        sandboxRows.every(
+          (row) => ownedIds.has(row.id) && row.project_id === project.id,
+        ) &&
+        ruleRows.length === ownRuleIds.size &&
+        ruleRows.every(
+          (row) => ownRuleIds.has(row.id) && row.project_id === project.id,
+        ),
+      "Cleanup is restricted to this fresh instance's exact project, three sandboxes and rules",
+    ).toBe(true);
+    const historySql =
+        "SELECT task_id,sandbox_id,provider,payload,state,created_at FROM agent_task_start_intents ORDER BY task_id",
+      historyBefore = database.prepare(historySql).all(),
+      historyBeforeDigest = digest(historyBefore);
+    expect(
+      historyBefore.every(
+        (row) => row.state === "complete" && ownedIds.has(row.sandbox_id),
+      ),
+      "All original task-start intents are complete and belong to the owned sandboxes",
+    ).toBe(true);
+    for (const ruleId of ownRuleIds) {
+      const disabled = await json(
+        request,
+        origin,
+        `/api/automations/${ruleId}/disable`,
+        "POST",
+        {},
+      );
+      expect(disabled.enabled).toBe(false);
+    }
+    for (const id of ownedIds) {
+      const runningTasks = database
+        .prepare(
+          "SELECT id FROM agent_tasks WHERE sandbox_id=? AND status='running'",
+        )
+        .all(id);
+      for (const active of runningTasks)
+        await json(
+          request,
+          origin,
+          `/api/sandboxes/${id}/tasks/${active.id}/cancel`,
+          "POST",
+          {},
+          202,
+        );
       await json(
         request,
         origin,
         `/api/sandboxes/${id}`,
         "DELETE",
-        { keepWorkspace: false },
+        { keepVolume: false },
         204,
       );
+    }
+    for (const ruleId of ownRuleIds)
+      await json(
+        request,
+        origin,
+        `/api/automations/${ruleId}`,
+        "DELETE",
+        {},
+        204,
+      );
+    const volumes = await json(
+      request,
+      origin,
+      `/api/retained-volumes?projectId=${project.id}`,
+    );
+    expect(
+      Array.isArray(volumes) &&
+        volumes.every(
+          (volume) =>
+            volume.projectId === project.id &&
+            /^[a-f0-9-]{36}$/.test(volume.id) &&
+            (volume.sandboxId == null || ownedIds.has(volume.sandboxId)),
+        ),
+      "Every retained volume is scoped to this exact owned project and sandbox set",
+    ).toBe(true);
+    for (const volume of volumes)
+      await json(
+        request,
+        origin,
+        `/api/retained-volumes/${encodeURIComponent(volume.id)}`,
+        "DELETE",
+        {},
+        204,
+      );
+    await json(
+      request,
+      origin,
+      `/api/projects/${project.id}`,
+      "DELETE",
+      { keepBaseline: false },
+      204,
+    );
+    const liveTables = [
+        "sandboxes",
+        "projects",
+        "agent_tasks",
+        "automation_runs",
+        "automation_launch_intents",
+        "automations",
+        "terminal_bookmarks",
+        "retained_volumes",
+        "sandbox_project_cleanup_jobs",
+      ],
+      cleanupDeadline = performance.now() + 120000;
+    let counts;
+    while (true) {
+      counts = Object.fromEntries(
+        liveTables.map((table) => [
+          table,
+          database.prepare("SELECT count(*) n FROM " + table).get().n,
+        ]),
+      );
+      if (Object.values(counts).every((n) => n === 0)) break;
+      if (performance.now() >= cleanupDeadline)
+        throw new Error(
+          `N01_OWNED_RESOURCE_CLEANUP_NOT_CONFIRMED: ${JSON.stringify(counts)}`,
+        );
+      await delay(250);
+    }
+    const historyAfter = database.prepare(historySql).all(),
+      historyAfterDigest = digest(historyAfter);
+    expect(
+      historyAfter.every((row) => row.state === "complete") &&
+        historyAfterDigest === historyBeforeDigest,
+      "Six-field original completed task-start history is preserved byte-for-byte; no history SQL deletion",
+    ).toBe(true);
+    businessCleanup = {
+      instanceId: fixture.config.instanceId,
+      projectId: project.id,
+      sandboxIds: [...ownedIds],
+      ruleIds: [...ownRuleIds],
+      retainedVolumesDeleted: volumes.length,
+      liveTableCounts: counts,
+      completedStartIntentHistory: {
+        fields: [
+          "task_id",
+          "sandbox_id",
+          "provider",
+          "payload",
+          "state",
+          "created_at",
+        ],
+        before: historyBefore.length,
+        after: historyAfter.length,
+        beforeDigest: historyBeforeDigest,
+        afterDigest: historyAfterDigest,
+        preserved: true,
+      },
+      cleanedThroughPublicApi: true,
+      observedAt: new Date().toISOString(),
+    };
     resourcesCleaned = true;
   } catch (error) {
     // APIRequestContext errors can include authentication headers in their raw
@@ -1266,6 +1420,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           probes: probeResult,
           requests: evidence.traffic,
           upgradeObservation,
+          businessCleanup,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",
