@@ -11,6 +11,8 @@ import {
 } from "../../deploy/upgrade/io.mjs";
 import { digest, invariant } from "../../deploy/upgrade/trust.mjs";
 
+import { verifyQualificationBusinessDatabaseFilesystem } from './installer-filesystem.mjs';
+
 const CACHE_FOLDERS = new Set([
   "configs",
   "disk-images",
@@ -218,7 +220,14 @@ export async function cleanupQualificationSdkImages(
   const D = createRequire(join(input.initialRoot, "api/package.json"))(
     "better-sqlite3",
   );
-  const business = new D(join(root, "business/platform.sqlite"), {
+  const businessDatabasePath = await verifyQualificationBusinessDatabaseFilesystem(input);
+  const coordinatorRoles = roles.filter(row => row.Config.Labels["agent-platform.role"] === "coordinator");
+  invariant(coordinatorRoles.length > 0 && coordinatorRoles.every(row => {
+    const database = (row.Config.Env || []).filter(value => value.startsWith("DATABASE_URL="));
+    return database.length === 1 && database[0].slice("DATABASE_URL=".length) === businessDatabasePath &&
+      row.Mounts.some(mount => mount.Source === join(root,"business") && mount.Destination === join(root,"business") && mount.RW === true);
+  }), "QA_CACHE_BUSINESS_DATABASE_SCOPE_CHANGED");
+  const business = new D(businessDatabasePath, {
     readonly: true,
     fileMustExist: true,
   });
@@ -377,7 +386,7 @@ export async function cleanupQualificationSdkImages(
     new Set(owners.map((owner) => owner.ownerHome)).size === owners.length,
     "QA_OWNER_HOMES_MUST_DIFFER",
   );
-  const historyBusiness = new D(join(root, "business/platform.sqlite"), {
+  const historyBusiness = new D(businessDatabasePath, {
     readonly: true,
     fileMustExist: true,
   });

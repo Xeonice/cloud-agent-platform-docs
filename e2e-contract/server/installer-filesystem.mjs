@@ -3,7 +3,7 @@ import { join, resolve, isAbsolute, relative } from 'node:path';
 import { createHash } from 'node:crypto';
 import { command } from '../../deploy/upgrade/artifacts.mjs';
 import { secureDirectory, atomicJson, readJson, inside } from '../../deploy/upgrade/io.mjs';
-import { invariant } from '../../deploy/upgrade/trust.mjs';
+import { invariant, digest } from '../../deploy/upgrade/trust.mjs';
 
 const IMAGE = /^sha256:[a-f0-9]{64}$/;
 const LOOP = /^\/dev\/loop[0-9]+$/;
@@ -13,8 +13,40 @@ const MAX_BYTES = 2 * MIN_BYTES;
 /** A test administrator's private filesystem, never an application permission.
  * Docker roles see the Host mount; the runner sees the same owned loop device
  * in its own namespace. A runner-only mount cannot qualify a disk fault. */
-export async function createInstallerFilesystem(input) {
-  const spec = input.installerFilesystem;
+export const createInstallerFilesystem = input => createDedicatedFilesystem(input, 'installer');
+export const createBusinessDatabaseFilesystem = input => createDedicatedFilesystem(input, 'business-db');
+
+/** The only optional database layout: an installation-owned DB leaf, not an arbitrary path. */
+export function qualificationBusinessDatabasePath(input) {
+  const ordinary = join(input.root, 'business/platform.sqlite');
+  if (!input.businessDatabaseFilesystemEvidence) {
+    invariant(input.businessDatabasePath === undefined || input.businessDatabasePath === ordinary, 'QUALIFICATION_DB_PATH_SCOPE_MISMATCH');
+    return ordinary;
+  }
+  const proof = input.businessDatabaseFilesystemEvidence, directory = join(input.root, 'business/db');
+  invariant(input.isolated === true && input.docker?.dedicated === true &&
+    proof.instanceId === input.instanceId && proof.kind === 'independent-business-db-filesystem' && proof.qualified === true &&
+    proof.mountpoint === directory && proof.filesystem?.type === 0xef53 &&
+    Number.isSafeInteger(proof.filesystem.dev) && proof.filesystem.dev !== proof.sharedParentDev &&
+    input.businessDatabasePath === join(directory, 'platform.sqlite'), 'QUALIFICATION_DB_PATH_SCOPE_MISMATCH');
+  return input.businessDatabasePath;
+}
+
+export async function verifyQualificationBusinessDatabaseFilesystem(input) {
+  const path = qualificationBusinessDatabasePath(input);
+  if (!input.businessDatabaseFilesystemEvidence) return path;
+  const directory = resolve(path, '..'), physical = await fs.lstat(directory), root = await fs.stat(input.root),
+    actual = await fs.statfs(directory), proof = input.businessDatabaseFilesystemEvidence;
+  invariant(physical.isDirectory() && !physical.isSymbolicLink() && await fs.realpath(directory) === directory &&
+    physical.dev === proof.filesystem.dev && root.dev === proof.sharedParentDev && actual.type === 0xef53 &&
+    actual.blocks * actual.bsize === proof.filesystem.totalBytes, 'QUALIFICATION_DB_FILESYSTEM_CHANGED');
+  return path;
+}
+
+async function createDedicatedFilesystem(input, purpose) {
+  const database = purpose === 'business-db';
+  const spec = database ? input.businessDatabaseFilesystem : input.installerFilesystem;
+  const label = database ? 'business-database' : 'installer';
   invariant(input.isolated === true && input.docker?.dedicated === true &&
     process.platform === 'linux' && process.arch === 'arm64' &&
     /^upgrade-acceptance-[a-zA-Z0-9._-]+$/.test(input.instanceId), 'ISOLATED_FILESYSTEM_ADMIN_REQUIRED');
@@ -24,9 +56,9 @@ export async function createInstallerFilesystem(input) {
   invariant(isAbsolute(input.root) && resolve(input.root) === input.root && /^\/tmp\/upg-qa-[a-z0-9-]+-work\//.test(input.root) &&
     !input.root.includes(',') && Array.isArray(input.docker.args) &&
     input.docker.args.every(v => typeof v === 'string' && !/[\r\n]/.test(v)), 'DEDICATED_QA_FILESYSTEM_ROOT_REQUIRED');
-  const root = await secureDirectory(input.root), mountpoint = await secureDirectory(join(root, 'installer'));
+  const root = await secureDirectory(input.root), mountpoint = await secureDirectory(join(root, database ? 'business/db' : 'installer'));
   invariant((await fs.readdir(mountpoint)).length === 0, 'FRESH_INSTALLER_FILESYSTEM_REQUIRED');
-  const backing = join(root, 'installer-filesystem.ext4'), journal = join(root, 'installer-filesystem.json');
+  const backing = join(root, label + '-filesystem.ext4'), journal = join(root, label + '-filesystem.json');
   invariant(!(await fs.lstat(backing).catch(() => null)) && !(await fs.lstat(journal).catch(() => null)), 'FILESYSTEM_ATTEMPT_ALREADY_CREATED');
   const before = await fs.statfs(root), parent = await fs.stat(root);
   invariant(before.bavail * before.bsize >= spec.bytes + MIN_BYTES, 'SHARED_HOST_DISK_RESERVE_REQUIRED');
@@ -76,25 +108,37 @@ export async function createInstallerFilesystem(input) {
     roleProof = { containerId, imageDigest: physical.Image, pidNamespace: physical.HostConfig.PidMode || 'private',
       hostPid: physical.State.Pid, startedAt: physical.State.StartedAt, observed };
   } finally { await docker(['stop', '--timeout', '2', containerId]); }
-  const evidence = { schemaVersion: 1, kind: 'independent-installer-filesystem', instanceId: input.instanceId,
+  const evidence = { schemaVersion: 1, kind: 'independent-' + purpose + '-filesystem', instanceId: input.instanceId,
     qualified: true, mountpoint, backing, loopDevice: loop.name, hostMount, runnerMounted,
     backingIdentity: { dev: backingIdentity.dev, ino: backingIdentity.ino }, sharedParentDev: parent.dev,
     filesystem: { dev: actual.dev, type: space.type, totalBytes: space.blocks * space.bsize, availableBytes: space.bavail * space.bsize },
     roleProof, observedAt: new Date().toISOString() };
   await atomicJson(journal, { ...evidence, state: 'mounted' });
-  async function close({ resourcesCleaned = false } = {}) {
+  async function close({ resourcesCleaned = false, businessCleanupReceipt } = {}) {
     if (!resourcesCleaned) return { preserved: true, mounted: true, journal };
     const record = await readJson(journal);
     invariant(record.instanceId === input.instanceId && record.loopDevice === loop.name && record.mountpoint === mountpoint, 'FILESYSTEM_CLEANUP_SCOPE_MISMATCH');
     if (record.state === 'cleaned') return { cleaned: true, journal };
+    if (database) {
+      const receipt = await readJson(join(root, 'sdk-cache-cleanup.json'), null);
+      invariant(receipt?.kind === 'dedicated-qualification-success-sdk-image-cache-cleanup' &&
+        receipt.instanceId === input.instanceId && receipt.state === 'cleaned' && receipt.resourcesCleaned === true &&
+        businessCleanupReceipt && digest(receipt) === digest(businessCleanupReceipt) &&
+        Object.entries(receipt.businessCounts).every(([table, count]) => table === 'agent_task_start_intents' || count === 0) &&
+        receipt.actualRoleStops.length > 0 && receipt.actualRoleStops.every(role => role.running === false && role.hostPid === 0),
+        'BUSINESS_DATABASE_CLEANUP_PROOF_REQUIRED');
+    }
     const identity = await fs.stat(backing);
     invariant(identity.dev === record.backingIdentity.dev && identity.ino === record.backingIdentity.ino &&
       (await fs.stat(mountpoint)).dev === evidence.filesystem.dev, 'FILESYSTEM_PHYSICAL_IDENTITY_CHANGED');
     const ids = (await docker(['ps', '-q'])).trim().split('\n').filter(Boolean);
     const running = ids.length ? JSON.parse(await docker(['inspect', ...ids])) : [];
-    invariant(!running.some(c => c.Mounts.some(m => m.Source === mountpoint || inside(mountpoint, m.Source))), 'FILESYSTEM_STILL_BOUND_TO_RUNNING_ROLE');
+    invariant(!running.some(c => c.Mounts.some(m => m.Source === mountpoint || inside(mountpoint, m.Source) || (c.Config.Labels?.['agent-platform.role'] && inside(m.Source, mountpoint)))), 'FILESYSTEM_STILL_BOUND_TO_RUNNING_ROLE');
     invariant(!running.some(c => c.Config.Labels?.['agent-platform.instance'] === input.instanceId), 'FILESYSTEM_INSTANCE_ROLE_STILL_RUNNING');
-    const evidenceRoot = await secureDirectory(join(root, 'installer-filesystem-evidence'));
+    // Administrator runner/manager parent mounts are not application roles;
+    // all application ancestor binds are still blocked. Normal umount must
+    // succeed (no lazy/force detach), preserving any unknown live reference.
+    const evidenceRoot = await secureDirectory(join(root, label + '-filesystem-evidence'));
     const sealed = [];
     async function preserve(directory) {
       for (const name of (await fs.readdir(directory)).sort()) {
@@ -103,8 +147,8 @@ export async function createInstallerFilesystem(input) {
           // Physical code remains in the externally verified input archive and
           // packageRoot. Keep its installed manifests/receipts, not another copy
           // of every module or temporary downloaded blob.
-          if (suffix === 'downloads') continue;
-          if (suffix === 'artifacts') {
+          if (!database && suffix === 'downloads') continue;
+          if (!database && suffix === 'artifacts') {
             for (const artifact of await fs.readdir(path)) {
               const candidate = join(path, artifact);
               if ((await fs.lstat(candidate)).isDirectory()) {
@@ -128,11 +172,18 @@ export async function createInstallerFilesystem(input) {
       const old = await fs.readFile(target).catch(e => { if (e.code === 'ENOENT') return null; throw e; });
       invariant(old === null || old.equals(bytes), 'SEALED_INSTALLER_EVIDENCE_CHANGED');
       if (old === null) await fs.writeFile(target, bytes, { mode: 0o600, flag: 'wx' });
+      const sealedFile = await fs.open(target, 'r');try { await sealedFile.sync(); } finally { await sealedFile.close(); }
       sealed.push({ path: suffix, bytes: bytes.length, digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex'), mode: 0o600 });
     }
+    const databaseFiles = database ? await Promise.all(['platform.sqlite', 'platform.sqlite-wal', 'platform.sqlite-shm'].map(async name => {
+      const file = join(mountpoint, name), stat = await fs.lstat(file).catch(error => {if(error.code === 'ENOENT')return null;throw error;});
+      invariant(!stat || stat.isFile() && !stat.isSymbolicLink(), 'BUSINESS_DATABASE_EVIDENCE_UNCONFIRMED');
+      return {path:name,present:stat !== null};
+    })) : null;
+    if(database)invariant(databaseFiles[0].present, 'BUSINESS_DATABASE_EVIDENCE_UNCONFIRMED');
     await preserve(mountpoint);
     await atomicJson(join(evidenceRoot, 'sealed-files.json'), { schemaVersion: 1, instanceId: input.instanceId, originalMountpoint: mountpoint,
-      files: sealed, filesystemProof: evidence, resourcesCleaned: true, observedStoppedContainers: true, recordedAt: new Date().toISOString() });
+      files: sealed, databaseFiles, ...(database?{businessCleanupReceiptDigest:digest(businessCleanupReceipt)}:{}), filesystemProof: evidence, resourcesCleaned: true, observedStoppedContainers: true, recordedAt: new Date().toISOString() });
     if (runnerMounted) await command('umount', [mountpoint]);
     const fresh = JSON.parse(await host(['/usr/bin/findmnt', '--json', '--target', mountpoint,
       '--output', 'SOURCE,TARGET,FSTYPE'])).filesystems[0];

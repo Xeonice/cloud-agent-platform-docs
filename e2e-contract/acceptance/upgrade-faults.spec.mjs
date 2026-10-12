@@ -23,7 +23,11 @@ import {
 } from "../server/qualification-model.mjs";
 import { createDockerRoleAdapter } from "../../deploy/upgrade/docker-role-adapter.mjs";
 import { inspectObservation } from "../../deploy/upgrade/circuit-breaker.mjs";
-import { command as actualCommand } from "../../deploy/upgrade/artifacts.mjs";
+import { qualificationBusinessDatabasePath } from "../server/installer-filesystem.mjs";
+import {
+  command as actualCommand,
+  unpackVerified,
+} from "../../deploy/upgrade/artifacts.mjs";
 import { readJson, atomicJson, fileDigest } from "../../deploy/upgrade/io.mjs";
 import {
   digest,
@@ -83,6 +87,10 @@ async function sourceFor(id) {
   );
   const variant = base.matrixInputs?.[id];
   const input = { ...base, ...variant };
+  if (id !== "X13") {
+    delete input.installerFilesystem;
+    delete input.businessDatabaseFilesystem;
+  }
   input.modelMode ??= "external-model";
   invariant(
     ["external-model", "local-protocol-test"].includes(input.modelMode),
@@ -364,7 +372,7 @@ async function installation(id, page, context) {
     expect(harness.isolation).toBe("containers");
     const require = createRequire(join(config.initialRoot, "api/package.json"));
     const Database = require("better-sqlite3");
-    database = new Database(join(config.root, "business/platform.sqlite"), {
+    database = new Database(qualificationBusinessDatabasePath(config), {
       fileMustExist: true,
     });
     database.pragma("busy_timeout=2000");
@@ -853,40 +861,232 @@ async function installation(id, page, context) {
     };
     const clean = async ({ preserveResources = false } = {}) => {
       let cleaned = false,
-        cleanup;
+        cleanup,
+        businessCleanup = null;
       try {
-        // This database belongs only to this freshly created instance. Include
-        // actual automation admissions even if a fault happened before their ACK.
-        const resources = preserveResources
-          ? []
-          : database
-              .prepare("SELECT id FROM sandboxes WHERE status<>'destroyed'")
+        if (!preserveResources) {
+          // Only this fresh qualification instance may be enumerated. Projects
+          // include real CRUD/maximum-load additions, not just the original one.
+          const scope = await state(),
+            proof = await readJson(fixture.installationProofPath),
+            started = await readJson(join(config.root, "startup-intent.json")),
+            instances = database
+              .prepare("SELECT instance_id FROM upgrade_instances")
+              .all(),
+            main = database
+              .pragma("database_list")
+              .find((row) => row.name === "main");
+          invariant(
+            config.isolated === true &&
+              config.docker?.dedicated === true &&
+              harness.isolation === "containers" &&
+              harness.instanceId === config.instanceId &&
+              scope.instanceId === config.instanceId &&
+              config.root === input.root &&
+              harness.root === resolve(config.root) &&
+              proof.purpose === "qualification" &&
+              proof.instanceId === config.instanceId &&
+              proof.isolatedRoot === config.root &&
+              started.instanceId === config.instanceId &&
+              started.initialRoot === config.initialRoot &&
+              instances.length === 1 &&
+              instances[0].instance_id === config.instanceId &&
+              main &&
+              (await fs.realpath(main.file)) ===
+                (await fs.realpath(qualificationBusinessDatabasePath(config))),
+            "OWNED_QUALIFICATION_CLEANUP_SCOPE_UNCONFIRMED",
+          );
+          const projects = await responseJson(request, origin, "/api/projects");
+          invariant(
+            Array.isArray(projects) &&
+              projects.every((row) => /^[a-f0-9-]{36}$/.test(row.id)),
+            "OWNED_QUALIFICATION_PROJECT_LIST_UNCONFIRMED",
+          );
+          const projectIds = new Set(projects.map((row) => row.id)),
+            persistedProjects = database
+              .prepare("SELECT id FROM projects ORDER BY id")
+              .all(),
+            completedHistoryBefore = database
+              .prepare(
+                "SELECT task_id,sandbox_id,provider,payload,state,created_at FROM agent_task_start_intents WHERE state='complete' ORDER BY task_id",
+              )
               .all();
-        for (const { id } of resources) {
-          const tasks = database
-            .prepare(
-              "SELECT id FROM agent_tasks WHERE sandbox_id=? AND status='running'",
-            )
-            .all(id);
-          for (const active of tasks)
+          invariant(
+            projectIds.size === projects.length &&
+              persistedProjects.length === projects.length &&
+              persistedProjects.every((row) => projectIds.has(row.id)),
+            "OWNED_QUALIFICATION_PROJECT_SCOPE_CHANGED",
+          );
+          const rules = [];
+          for (const projectId of projectIds) {
+            const listed = await responseJson(
+              request,
+              origin,
+              `/api/projects/${projectId}/automations`,
+            );
+            invariant(
+              Array.isArray(listed) &&
+                listed.every(
+                  (rule) =>
+                    rule.projectId === projectId &&
+                    /^[a-f0-9-]{36}$/.test(rule.id),
+                ),
+              "OWNED_QUALIFICATION_RULE_SCOPE_CHANGED",
+            );
+            for (const rule of listed) {
+              if (rule.enabled) {
+                const disabled = await responseJson(
+                  request,
+                  origin,
+                  `/api/automations/${rule.id}/disable`,
+                  "POST",
+                  {},
+                );
+                expect(disabled.enabled).toBe(false);
+              }
+              rules.push(rule.id);
+            }
+          }
+          // Include a due automation's committed sandbox even if its original
+          // admission acknowledgement was lost. Every ID stays in this scope.
+          const resources = database
+            .prepare("SELECT id,project_id,status FROM sandboxes")
+            .all();
+          invariant(
+            resources.every(
+              (row) =>
+                /^[a-f0-9-]{36}$/.test(row.id) &&
+                projectIds.has(row.project_id),
+            ),
+            "OWNED_QUALIFICATION_SANDBOX_SCOPE_CHANGED",
+          );
+          for (const resource of resources) {
+            const tasks = database
+              .prepare(
+                "SELECT id FROM agent_tasks WHERE sandbox_id=? AND status='running'",
+              )
+              .all(resource.id);
+            for (const active of tasks)
+              await responseJson(
+                request,
+                origin,
+                `/api/sandboxes/${resource.id}/tasks/${active.id}/cancel`,
+                "POST",
+                {},
+                202,
+              );
+            if (resource.status !== "destroyed")
+              await responseJson(
+                request,
+                origin,
+                `/api/sandboxes/${resource.id}`,
+                "DELETE",
+                { keepVolume: false },
+                204,
+              );
+          }
+          for (const ruleId of rules)
             await responseJson(
               request,
               origin,
-              `/api/sandboxes/${id}/tasks/${active.id}/cancel`,
-              "POST",
+              `/api/automations/${ruleId}`,
+              "DELETE",
               {},
-              202,
+              204,
             );
-          await responseJson(
-            request,
-            origin,
-            `/api/sandboxes/${id}`,
-            "DELETE",
-            { keepWorkspace: false },
-            204,
+          let deletedVolumes = 0;
+          for (const projectId of projectIds) {
+            const volumes = await responseJson(
+              request,
+              origin,
+              `/api/retained-volumes?projectId=${projectId}`,
+            );
+            invariant(
+              Array.isArray(volumes) &&
+                volumes.every(
+                  (volume) =>
+                    volume.projectId === projectId &&
+                    /^[a-f0-9-]{36}$/.test(volume.id),
+                ),
+              "OWNED_QUALIFICATION_VOLUME_SCOPE_CHANGED",
+            );
+            for (const volume of volumes) {
+              await responseJson(
+                request,
+                origin,
+                `/api/retained-volumes/${volume.id}`,
+                "DELETE",
+                {},
+                204,
+              );
+              deletedVolumes++;
+            }
+            await responseJson(
+              request,
+              origin,
+              `/api/projects/${projectId}`,
+              "DELETE",
+              { keepBaseline: false },
+              204,
+            );
+          }
+          const liveTables = [
+              "sandboxes",
+              "projects",
+              "agent_tasks",
+              "automation_runs",
+              "automation_launch_intents",
+              "automations",
+              "terminal_bookmarks",
+              "retained_volumes",
+              "sandbox_project_cleanup_jobs",
+            ],
+            cleanupDeadline = performance.now() + 120000;
+          let counts;
+          while (true) {
+            counts = Object.fromEntries(
+              liveTables.map((table) => [
+                table,
+                database.prepare("SELECT count(*) n FROM " + table).get().n,
+              ]),
+            );
+            if (Object.values(counts).every((n) => n === 0)) break;
+            invariant(
+              performance.now() < cleanupDeadline,
+              "OWNED_QUALIFICATION_CLEANUP_NOT_COMPLETE",
+            );
+            await delay(250);
+          }
+          const history = database
+            .prepare(
+              "SELECT task_id,sandbox_id,provider,payload,state,created_at FROM agent_task_start_intents ORDER BY task_id",
+            )
+            .all();
+          invariant(
+            history.every((row) => row.state === "complete") &&
+              completedHistoryBefore.every((prior) =>
+                history.some((row) => canonical(row) === canonical(prior)),
+              ),
+            "OWNED_QUALIFICATION_COMPLETED_HISTORY_CHANGED",
           );
+          businessCleanup = {
+            instanceId: config.instanceId,
+            projectIds: [...projectIds],
+            rulesDeleted: rules.length,
+            sandboxesObserved: resources.length,
+            retainedVolumesDeleted: deletedVolumes,
+            liveTableCounts: counts,
+            completedStartIntentHistory: {
+              before: completedHistoryBefore.length,
+              after: history.length,
+              preserved: true,
+              digest: digest(history),
+            },
+            cleanedThroughPublicApi: true,
+            observedAt: new Date().toISOString(),
+          };
+          cleaned = true;
         }
-        cleaned = !preserveResources;
       } finally {
         database.close();
         try {
@@ -899,7 +1099,7 @@ async function installation(id, page, context) {
           await model?.close();
         }
       }
-      return cleanup;
+      return { ...cleanup, businessCleanup };
     };
     return {
       input,
@@ -1928,15 +2128,26 @@ async function x04WebOnlyRecovery(browser) {
 
 async function x13RemainingBudgetsAndMaximum(browser) {
   const diskAndSql = await independentFailure(browser, "X13", async (env) => {
-    const diskRoot = join(env.config.root, "installer"),
+    const databaseFile = await fs.realpath(
+        env.database.pragma("database_list").find((row) => row.name === "main")
+          .file,
+      ),
+      diskRoot = dirname(databaseFile),
       diskStat = await fs.stat(diskRoot),
       parentStat = await fs.stat(env.config.root),
+      workspaceStat = await fs.stat(
+        join(env.config.root, "business/workspaces"),
+      ),
       mounts = await fs.readFile("/proc/self/mountinfo", "utf8");
-    // Exhaust only a dedicated installer filesystem. An isolated directory on
-    // the host's shared root volume is insufficient: it could exhaust space for
-    // other live Guests/profiles. Confirm the real mount/device before allocating.
+    // Allocate only on the new, exact DB leaf. Original Guest workspaces and
+    // every Owner home remain on the shared data filesystem with their reserve.
     invariant(
-      diskStat.dev !== parentStat.dev &&
+      databaseFile === qualificationBusinessDatabasePath(env.config) &&
+        env.config.businessDatabaseFilesystemEvidence?.qualified === true &&
+        diskStat.dev ===
+          env.config.businessDatabaseFilesystemEvidence.filesystem.dev &&
+        diskStat.dev !== parentStat.dev &&
+        workspaceStat.dev === parentStat.dev &&
         mounts.split("\n").some((line) => {
           const [mount, filesystem] = line.split(" - ");
           const mountpoint = mount
@@ -1947,12 +2158,90 @@ async function x13RemainingBudgetsAndMaximum(browser) {
             mountpoint === diskRoot && /^(ext4|xfs) /.test(filesystem ?? "")
           );
         }),
-      "DEDICATED_INSTALLER_FILESYSTEM_REQUIRED_FOR_DISK_PRESSURE",
+      "DEDICATED_BUSINESS_DB_FILESYSTEM_REQUIRED_FOR_DISK_PRESSURE",
     );
     const migration = await acquiredMigration(env),
-      policy = migration.snapshot.plan.policy,
-      checkpoint = JSON.parse(migration.row().checkpoint),
-      free = await fs.statfs(join(env.config.root, "installer")),
+      policy = migration.snapshot.plan.policy;
+    const coordinator = env.role("coordinator");
+    const observeDatabaseFilesystem = async () =>
+      JSON.parse(
+        await actualCommand(env.config.docker.cli || "docker", [
+          ...env.config.docker.args,
+          "exec",
+          coordinator.containerId,
+          "node",
+          "-e",
+          "const fs=require('fs'),path=require('path');const p=fs.realpathSync(process.env.DATABASE_URL),d=path.dirname(p),s=fs.statSync(d),f=fs.statfsSync(d);process.stdout.write(JSON.stringify({databasePath:p,directory:d,dev:s.dev,type:f.type,availableBytes:f.bavail*f.bsize,totalBytes:f.blocks*f.bsize}));",
+        ]),
+      );
+    const physicalDatabase = await observeDatabaseFilesystem();
+    expect(physicalDatabase.databasePath).toBe(databaseFile);
+    expect(physicalDatabase.dev).toBe(diskStat.dev);
+    expect(physicalDatabase.type).toBe(0xef53);
+    expect(physicalDatabase.availableBytes).toBeGreaterThan(
+      policy.minFreeBytes,
+    );
+    // The installer still independently rejects real unpack capacity pressure.
+    // Its low space is not the migration budget's filesystem.
+    const installerRoot = join(env.config.root, "installer"),
+      installerStat = await fs.stat(installerRoot),
+      installerProof = env.config.installerFilesystemEvidence,
+      pkg = env.fixture.envelope.manifest.packages.find(
+        (p) => p.platform === "linux" && p.arch === "arm64",
+      );
+    invariant(
+      installerProof?.qualified === true &&
+        installerProof.mountpoint === installerRoot &&
+        installerStat.dev === installerProof.filesystem.dev &&
+        installerStat.dev !== parentStat.dev &&
+        installerStat.dev !== diskStat.dev &&
+        Number.isSafeInteger(pkg?.unpackedBytes),
+      "DEDICATED_INSTALLER_UNPACK_FILESYSTEM_REQUIRED",
+    );
+    const installerFree = await fs.statfs(installerRoot),
+      installerFreeBefore = installerFree.bavail * installerFree.bsize,
+      installerRemaining = Math.floor(
+        Math.min(pkg.unpackedBytes, policy.minFreeBytes) / 2,
+      ),
+      installerAllocated = installerFreeBefore - installerRemaining,
+      installerPressure = join(
+        installerRoot,
+        "qualification-unpack-pressure-" + randomUUID(),
+      ),
+      unpackRoot = join(installerRoot, "qualification-unpack-" + randomUUID());
+    invariant(
+      installerRemaining >= 32 * 1024 * 1024 && installerAllocated > 0,
+      "SAFE_INSTALLER_UNPACK_PRESSURE_ROOM_REQUIRED",
+    );
+    await fs.writeFile(installerPressure, "", { mode: 0o600, flag: "wx" });
+    await fs.mkdir(unpackRoot, { mode: 0o700 });
+    let installerFreeDuring;
+    try {
+      await actualCommand("fallocate", [
+        "-l",
+        String(installerAllocated),
+        installerPressure,
+      ]);
+      const low = await fs.statfs(unpackRoot);
+      installerFreeDuring = low.bavail * low.bsize;
+      expect(installerFreeDuring).toBeLessThan(pkg.unpackedBytes);
+      expect(
+        (await observeDatabaseFilesystem()).availableBytes,
+      ).toBeGreaterThan(policy.minFreeBytes);
+      await expect(
+        unpackVerified(
+          join(env.input.archiveRoot, pkg.name),
+          pkg,
+          unpackRoot,
+          env.fixture.envelope.manifest.components,
+        ),
+      ).rejects.toThrow("INSUFFICIENT_UNPACK_CAPACITY");
+    } finally {
+      await fs.unlink(installerPressure);
+      await fs.rmdir(unpackRoot);
+    }
+    const checkpoint = JSON.parse(migration.row().checkpoint),
+      free = await fs.statfs(diskRoot),
       freeBefore = Number(free.bavail) * Number(free.bsize),
       remaining = Math.floor(policy.minFreeBytes / 2),
       allocatedBytes = freeBefore - remaining,
@@ -1963,13 +2252,15 @@ async function x13RemainingBudgetsAndMaximum(browser) {
     );
     const file = await fs.open(path, "wx", 0o600);
     await file.close();
-    let freeDuring;
+    let freeDuring, coordinatorFreeDuring;
     try {
-      // Allocate real blocks on the same dedicated filesystem. Sparse truncate
-      // would not exercise statfs and is deliberately not used.
       await actualCommand("fallocate", ["-l", String(allocatedBytes), path]);
-      const actual = await fs.statfs(join(env.config.root, "installer"));
+      const actual = await fs.statfs(diskRoot);
       freeDuring = Number(actual.bavail) * Number(actual.bsize);
+      const observed = await observeDatabaseFilesystem();
+      coordinatorFreeDuring = observed.availableBytes;
+      expect(observed.dev).toBe(diskStat.dev);
+      expect(coordinatorFreeDuring).toBeLessThan(policy.minFreeBytes);
       expect(freeDuring).toBeLessThan(policy.minFreeBytes);
       expect(freeDuring).toBeGreaterThanOrEqual(16 * 1024 * 1024);
       await expect(
@@ -1986,7 +2277,6 @@ async function x13RemainingBudgetsAndMaximum(browser) {
     await env.harness.coordinator.renew(migration.accepted.attemptId, {
       controllerId: "native-fault-controller",
       fence: migration.lease.fence,
-      leaseMs: 120000,
     });
     const before = migration.row(),
       began = performance.now();
@@ -2046,7 +2336,20 @@ async function x13RemainingBudgetsAndMaximum(browser) {
     ).toBeTruthy();
     return {
       attemptId: migration.accepted.attemptId,
+      installerUnpackBudget: {
+        filesystem: installerProof.filesystem,
+        unpackedBytes: pkg.unpackedBytes,
+        freeBefore: installerFreeBefore,
+        freeDuring: installerFreeDuring,
+        allocatedBytes: installerAllocated,
+        rejectedCode: "INSUFFICIENT_UNPACK_CAPACITY",
+        businessDatabaseBudgetUnaffected: true,
+      },
       diskBudget: {
+        filesystem: env.config.businessDatabaseFilesystemEvidence.filesystem,
+        physicalDatabase,
+        coordinatorFreeDuring,
+        originalWorkspaceDev: workspaceStat.dev,
         declaredMinFreeBytes: policy.minFreeBytes,
         freeBefore,
         freeDuring,
@@ -3934,7 +4237,6 @@ test("actual pinned WAL, allocated disk, transaction waits and maximum public da
         .renew(migration.accepted.attemptId, {
           controllerId: "native-fault-controller",
           fence: migration.lease.fence,
-          leaseMs: 120000,
         })
         .catch((error) => {
           leaseError = error;
