@@ -236,18 +236,21 @@ function sampling(request, origin, automationId) {
     pending.add(work);
   };
   launch();
-  const timer = setInterval(launch, 100);
+  const timer = setInterval(launch, 90);
   return {
     samples,
     async stop() {
       running = false;
       clearInterval(timer);
-      const seconds = (performance.now() - started) / 1000,
+      const schedulingSeconds = (performance.now() - started) / 1000,
         drainStart = performance.now();
       await Promise.all(pending);
+      const seconds = (performance.now() - started) / 1000;
       return {
         samples,
         seconds,
+        schedulingSeconds,
+        observedRateHz: ids.size / seconds,
         drainMs: performance.now() - drainStart,
         operations: ids.size,
       };
@@ -935,7 +938,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         expect(harness.isolation).toBe("containers");
         expect(
           probeResult.operations / probeResult.seconds,
-        ).toBeGreaterThanOrEqual(9.5);
+        ).toBeGreaterThanOrEqual(10);
         expect(
           probeResult.samples
             .filter((row) => row.kind !== "dedup")
@@ -971,6 +974,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
         probeSummary: {
           seconds: probeResult.seconds,
           operations: probeResult.operations,
+          observedRateHz: probeResult.observedRateHz,
+          schedulingSeconds: probeResult.schedulingSeconds,
+          drainMs: probeResult.drainMs,
           failures: probeResult.samples.filter(
             (row) => row.status < 200 || row.status >= 300,
           ).length,

@@ -317,7 +317,8 @@ function probe(env) {
       live = false;
       clearInterval(timer);
       await Promise.all(pending);
-      return { samples, ticks, seconds: (performance.now() - started) / 1000 };
+      const seconds = (performance.now() - started) / 1000;
+      return { samples, ticks, seconds, observedRateHz: ticks / seconds };
     },
   };
 }
@@ -4303,7 +4304,7 @@ test("continuous original Guest and normal 10Hz business traffic remain valid un
       await measured.stop();
       throw error;
     }
-    expect(result.ticks / result.seconds).toBeGreaterThanOrEqual(9.5);
+    expect(result.ticks / result.seconds).toBeGreaterThanOrEqual(10);
     expect(
       result.samples
         .filter((row) => row.kind !== "dedup")
