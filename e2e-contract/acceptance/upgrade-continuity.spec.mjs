@@ -337,16 +337,16 @@ test("real user acceptance, durable installation and original VM/terminal contin
     if (fixture.config.authEnv.ACCESS_PASSCODE) {
       const gate = page.getByRole("dialog", { name: "访问口令", exact: true });
       await expect(gate).toBeVisible({ timeout: 30000 });
-      await page
-        .getByLabel("访问口令", { exact: true })
-        .fill(fixture.config.authEnv.ACCESS_PASSCODE);
+      const passcode = gate.locator('input[name="passcode"]');
+      await expect(passcode).toHaveCount(1);
+      await passcode.fill(fixture.config.authEnv.ACCESS_PASSCODE);
       const unlocked = page.waitForResponse(
         (response) =>
           new URL(response.url()).origin === origin &&
           new URL(response.url()).pathname === "/api/access/unlock" &&
           response.request().method() === "POST",
       );
-      await page.getByRole("button", { name: "解锁", exact: true }).click();
+      await gate.getByRole("button", { name: "解锁", exact: true }).click();
       const response = await unlocked;
       expect(response.ok(), "Actual browser passcode unlock succeeds").toBe(
         true,
