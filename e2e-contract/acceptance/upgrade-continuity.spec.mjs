@@ -3,6 +3,7 @@ import { readFile, lstat, readdir, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { randomUUID, createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
 import {
@@ -260,6 +261,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     probeResult,
     model,
     modelImage,
+    database,
     resourcesCleaned = false;
   const owned = [];
   const check = async (id, description, verify, actual) => {
@@ -308,6 +310,17 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const runtimeId = source.runtimeId ?? "codex";
     fixture = await createUpgradeFixture(source);
     harness = await startUpgradeHarness(fixture.config);
+    // Load the native SQLite binding from the actual installed API closure. This
+    // observer connection cannot write or construct another runtime SDK.
+    const Database = createRequire(
+      join(fixture.config.initialRoot, "api/package.json"),
+    )("better-sqlite3");
+    database = new Database(join(harness.root, "business/platform.sqlite"), {
+      readonly: true,
+      fileMustExist: true,
+    });
+    database.pragma("query_only=ON");
+    database.pragma("busy_timeout=2000");
     void harness.runController();
     const origin = harness.entryOrigin,
       request = context.request;
@@ -486,6 +499,33 @@ test("real user acceptance, durable installation and original VM/terminal contin
       202,
     );
     expect(run.status).toBe("running");
+    const readOriginalIdentities = () => {
+      const task = database
+        .prepare("SELECT sandbox_id,job_handle FROM agent_tasks WHERE id=?")
+        .get(run.id);
+      const sandboxes = [original.id, headless.id].map((id) => {
+        const row = database
+          .prepare(
+            "SELECT provider,provider_handle,provider_state FROM sandboxes WHERE id=?",
+          )
+          .get(id);
+        expect(
+          Boolean(row?.provider_handle),
+          "Original durable sandbox handle exists",
+        ).toBe(true);
+        return { id, ...row };
+      });
+      expect(
+        task?.sandbox_id,
+        "Original task belongs to the original Guest",
+      ).toBe(headless.id);
+      expect(
+        Boolean(task?.job_handle),
+        "Original durable job handle exists",
+      ).toBe(true);
+      return { task, sandboxes };
+    };
+    const persistedBefore = readOriginalIdentities();
     let agentA;
     const agentMarker = model
       ? /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/.exec(source.headlessPrompt)[1]
@@ -687,6 +727,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       origin,
       `/api/sandboxes/${headless.id}/tasks/${run.id}`,
     );
+    const persistedAfter = readOriginalIdentities();
     await expect
       .poll(
         async () =>
@@ -711,6 +752,22 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(automationAfter.enabled).toBe(true);
     expect(automationRuns).toHaveLength(1);
     expect(automationRuns[0].sandboxId).toBeTruthy();
+    const persistedRelease = JSON.parse(
+        database
+          .prepare(
+            "SELECT confirmed_release FROM upgrade_instances WHERE instance_id=?",
+          )
+          .get(fixture.config.instanceId).confirmed_release,
+      ),
+      acceptedAtMs = Date.parse(accepted.acceptedAt),
+      activatedAtMs = Date.parse(installed.confirmedServiceRelease.activatedAt),
+      triggeredAtMs = Date.parse(automationRuns[0].triggeredAt);
+    expect(persistedRelease.activatedAt).toBe(
+      installed.confirmedServiceRelease.activatedAt,
+    );
+    expect(
+      [acceptedAtMs, activatedAtMs, triggeredAtMs].every(Number.isFinite),
+    ).toBe(true);
     owned.push(automationRuns[0].sandboxId);
     const agentB = model
       ? await agentCounter(request, origin, headless.id, agentMarker)
@@ -756,6 +813,32 @@ test("real user acceptance, durable installation and original VM/terminal contin
         expect(runAfter.id).toBe(run.id);
         expect(runAfter.status).toBe("running");
         expect(runAfter.lastSeq).toBeGreaterThanOrEqual(run.lastSeq ?? 0);
+        // Compare private values only as booleans. Failed assertions and exported
+        // attachments must never print raw job handles or provider state.
+        expect(
+          persistedAfter.task.job_handle === persistedBefore.task.job_handle,
+          "Original job handle is byte-for-byte unchanged",
+        ).toBe(true);
+        expect(
+          persistedAfter.sandboxes.every((row, i) => {
+            const prior = persistedBefore.sandboxes[i];
+            return (
+              row.id === prior.id &&
+              row.provider === prior.provider &&
+              row.provider_handle === prior.provider_handle &&
+              row.provider_state === prior.provider_state
+            );
+          }),
+          "Original sandbox handles and private routing state are unchanged",
+        ).toBe(true);
+        expect(
+          triggeredAtMs,
+          "Automation triggers after the actual accepted upgrade",
+        ).toBeGreaterThanOrEqual(acceptedAtMs);
+        expect(
+          triggeredAtMs,
+          "Automation triggers before the actual instance activation is confirmed",
+        ).toBeLessThanOrEqual(activatedAtMs);
         if (model) {
           expect(agentB.pid).toBe(agentA.pid);
           expect(agentB.birth).toBe(agentA.birth);
@@ -788,6 +871,20 @@ test("real user acceptance, durable installation and original VM/terminal contin
         attachMs,
         counter: snapshotB,
         headlessRunId: run.id,
+        headlessJobHandleDigest: digest(persistedBefore.task.job_handle),
+        originalSandboxIdentityDigests: persistedBefore.sandboxes.map(
+          (row) => ({
+            sandboxId: row.id,
+            provider: row.provider,
+            handleDigest: digest(row.provider_handle),
+            privateRoutingStateDigest: digest(row.provider_state),
+          }),
+        ),
+        serverUpgradeWindow: {
+          acceptedAt: accepted.acceptedAt,
+          activatedAt: installed.confirmedServiceRelease.activatedAt,
+          automationTriggeredAt: automationRuns[0].triggeredAt,
+        },
         headlessCounter: agentB,
         cliVersion: cli.stdout.trim(),
         modelMode: source.modelMode ?? "external-model",
@@ -890,6 +987,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     resourcesCleaned = true;
   } finally {
     if (probe) probeResult = await probe.stop();
+    database?.close();
     const output = info.outputPath("upg-assertions.json");
     await mkdir(resolve(output, ".."), { recursive: true, mode: 0o700 });
     await writeFile(
