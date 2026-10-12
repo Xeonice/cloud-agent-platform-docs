@@ -10,6 +10,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
+import { closeQualifiedInstallation } from "../native/close-qualified-installation.mjs";
 import {
   populateQualifiedMaximum,
   maximumMigrationReceipt,
@@ -850,14 +851,17 @@ async function installation(id, page, context) {
         .toBe(true);
       return performance.now() - start;
     };
-    const clean = async () => {
-      let cleaned = false;
+    const clean = async ({ preserveResources = false } = {}) => {
+      let cleaned = false,
+        cleanup;
       try {
         // This database belongs only to this freshly created instance. Include
         // actual automation admissions even if a fault happened before their ACK.
-        const resources = database
-          .prepare("SELECT id FROM sandboxes WHERE status<>'destroyed'")
-          .all();
+        const resources = preserveResources
+          ? []
+          : database
+              .prepare("SELECT id FROM sandboxes WHERE status<>'destroyed'")
+              .all();
         for (const { id } of resources) {
           const tasks = database
             .prepare(
@@ -882,20 +886,20 @@ async function installation(id, page, context) {
             204,
           );
         }
-        cleaned = true;
+        cleaned = !preserveResources;
       } finally {
         database.close();
         try {
-          await harness.close({ resourcesCleaned: cleaned });
+          cleanup = await closeQualifiedInstallation({
+            harness,
+            fixture,
+            resourcesCleaned: cleaned,
+          });
         } finally {
-          try {
-            await fixture.close();
-          } finally {
-            await model?.close();
-          }
+          await model?.close();
         }
       }
-      return cleaned;
+      return cleanup;
     };
     return {
       input,
@@ -938,52 +942,19 @@ async function installation(id, page, context) {
       clean,
     };
   } catch (error) {
-    let resourcesCleaned = owned.length === 0;
-    try {
-      const resources = database
-        ? database
-            .prepare("SELECT id FROM sandboxes WHERE status<>'destroyed'")
-            .all()
-        : [];
-      for (const { id: sandboxId } of resources) {
-        const tasks = database
-          .prepare(
-            "SELECT id FROM agent_tasks WHERE sandbox_id=? AND status='running'",
-          )
-          .all(sandboxId);
-        for (const task of tasks)
-          await responseJson(
-            request,
-            origin,
-            `/api/sandboxes/${sandboxId}/tasks/${task.id}/cancel`,
-            "POST",
-            {},
-            202,
-          );
-        await responseJson(
-          request,
-          origin,
-          `/api/sandboxes/${sandboxId}`,
-          "DELETE",
-          { keepWorkspace: false },
-          204,
-        );
-      }
-      resourcesCleaned = true;
-    } catch {
-      /* Preserve isolated resources when their actual cleanup is unconfirmed. */
-    }
+    // A failed setup preserves every created Guest and durable task for diagnosis.
+    // It never infers absence from a missing ACK or removes them in a catch path.
     database?.close();
     const modelEvidence = model?.evidence() ?? null;
     if (modelEvidence) error.qualificationModelEvidence = modelEvidence;
     try {
-      await harness.close({ resourcesCleaned });
+      await closeQualifiedInstallation({
+        harness,
+        fixture,
+        resourcesCleaned: false,
+      });
     } finally {
-      try {
-        await fixture.close();
-      } finally {
-        await model?.close();
-      }
+      await model?.close();
     }
     throw error;
   }
@@ -1021,7 +992,8 @@ async function recordCase(id, page, context, info, body) {
   let env,
     sampler,
     probeResult,
-    cleaned = false;
+    cleaned = false,
+    succeeded = false;
   const assertions = [],
     started = performance.now(),
     measurementWindow = { startedAt: new Date().toISOString() };
@@ -1057,7 +1029,7 @@ async function recordCase(id, page, context, info, body) {
       // configuration. Finish measuring/cleaning the first real installation
       // before launching the independent second fault installation.
       cleaned = true;
-      await env.clean();
+      actual.initialCleanup = await env.clean();
       subsequent = await afterContinuity();
     }
     const missing = additionalBoundaries[id] ?? [];
@@ -1095,6 +1067,7 @@ async function recordCase(id, page, context, info, body) {
       missing,
       "Every physical boundary required by this matrix row must execute",
     ).toEqual([]);
+    succeeded = true;
   } catch (error) {
     assertions.push({
       id,
@@ -1115,18 +1088,31 @@ async function recordCase(id, page, context, info, body) {
     if (sampler) probeResult = await sampler.stop();
     measurementWindow.measurementCompletedAt = new Date().toISOString();
     measurementWindow.elapsedMs = performance.now() - started;
+    let cleanup, cleanupError;
+    if (env && !cleaned) {
+      try {
+        cleanup = await env.clean({ preserveResources: !succeeded });
+      } catch (error) {
+        cleanupError = error;
+        cleanup = {
+          rolesStopped: false,
+          reason: error.code ?? "CLEANUP_UNCONFIRMED",
+        };
+      }
+    } else cleanup = actual.initialCleanup ?? { preserved: true };
     const path = info.outputPath("upg-assertions.json");
     await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await fs.writeFile(
       path,
-      JSON.stringify({ assertions, probes: probeResult }, null, 2) + "\n",
+      JSON.stringify({ assertions, probes: probeResult, cleanup }, null, 2) +
+        "\n",
       { mode: 0o600 },
     );
     await info.attach("UPG assertions", {
       path,
       contentType: "application/json",
     });
-    if (env && !cleaned) await env.clean();
+    if (cleanupError) throw cleanupError;
   }
 }
 
@@ -1305,7 +1291,9 @@ async function secondRecoveryFailure(browser) {
   let env,
     sampler,
     stoppedWeb = false,
-    stoppedReader = false;
+    stoppedReader = false,
+    succeeded = false,
+    result;
   try {
     env = await installation("X09", page, context);
     sampler = probe(env);
@@ -1505,7 +1493,8 @@ async function secondRecoveryFailure(browser) {
     const preserved = await env.continuity(),
       probes = await sampler.stop();
     sampler = null;
-    return {
+    succeeded = true;
+    result = {
       secondRecoveryFailure: {
         instanceId: env.config.instanceId,
         inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
@@ -1530,6 +1519,7 @@ async function secondRecoveryFailure(browser) {
         qualificationModel: env.model?.evidence() ?? null,
       },
     };
+    return result;
   } finally {
     if (sampler) await sampler.stop();
     if (env) {
@@ -1542,7 +1532,8 @@ async function secondRecoveryFailure(browser) {
             "SIGCONT",
           );
       } finally {
-        await env.clean();
+        const cleanup = await env.clean({ preserveResources: !succeeded });
+        if (result) result.secondRecoveryFailure.cleanup = cleanup;
       }
     }
     await context.close();
@@ -1554,7 +1545,10 @@ async function independentFailure(browser, id, body) {
     page = await context.newPage(),
     started = performance.now(),
     measurementWindow = { startedAt: new Date().toISOString() };
-  let env, sampler;
+  let env,
+    sampler,
+    succeeded = false,
+    result;
   try {
     env = await installation(id, page, context);
     measurementWindow.originalSetupCompletedAt = new Date().toISOString();
@@ -1566,7 +1560,7 @@ async function independentFailure(browser, id, body) {
     const preserved = await env.continuity();
     measurementWindow.originalContinuityConfirmedAt = new Date().toISOString();
     measurementWindow.elapsedMs = performance.now() - started;
-    return {
+    result = {
       ...actual,
       instanceId: env.config.instanceId,
       acceptedIntent: env.acceptedIntent,
@@ -1576,6 +1570,8 @@ async function independentFailure(browser, id, body) {
       probes,
       qualificationModel: env.model?.evidence() ?? null,
     };
+    succeeded = true;
+    return result;
   } catch (error) {
     error.qualificationWindow = {
       ...measurementWindow,
@@ -1587,7 +1583,10 @@ async function independentFailure(browser, id, body) {
   } finally {
     try {
       if (sampler) await sampler.stop();
-      if (env) await env.clean();
+      if (env) {
+        const cleanup = await env.clean({ preserveResources: !succeeded });
+        if (result) result.cleanup = cleanup;
+      }
     } finally {
       await context.close();
     }

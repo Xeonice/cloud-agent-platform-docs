@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { digest as upgradeDigest } from "../../deploy/upgrade/trust.mjs";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
+import { closeQualifiedInstallation } from "../native/close-qualified-installation.mjs";
 import {
   startQualificationModel,
   qualificationPrompt,
@@ -1068,6 +1069,21 @@ test("real user acceptance, durable installation and original VM/terminal contin
   } finally {
     if (probe) probeResult = await probe.stop();
     database?.close();
+    let cleanup, cleanupError;
+    try {
+      cleanup = await closeQualifiedInstallation({
+        harness,
+        fixture,
+        resourcesCleaned,
+      });
+    } catch (error) {
+      cleanupError = error;
+      cleanup = {
+        resourcesCleaned,
+        rolesStopped: false,
+        reason: error.code ?? "CLEANUP_UNCONFIRMED",
+      };
+    }
     const output = info.outputPath("upg-assertions.json");
     await mkdir(resolve(output, ".."), { recursive: true, mode: 0o700 });
     await writeFile(
@@ -1077,7 +1093,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           assertions,
           probes: probeResult,
           requests: evidence.traffic,
-          cleanup: { resourcesCleaned },
+          cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",
             modelQualityQualified: false,
@@ -1092,8 +1108,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       path: output,
       contentType: "application/json",
     });
-    if (harness) await harness.close({ resourcesCleaned });
-    if (fixture) await fixture.close();
     if (model) await model.close();
+    if (cleanupError) throw cleanupError;
   }
 });
