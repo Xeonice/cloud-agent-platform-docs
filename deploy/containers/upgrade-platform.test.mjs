@@ -64,6 +64,31 @@ test('B04 actual download resumes durable bytes, verifies SHA256, rejects corrup
   const r=await downloadVerified(pkg,root,{assertFence:async()=>fences++,onProgress:async n=>{assert.ok(n>=progressed);progressed=n;}});assert.equal(r.digest,pkg.digest);assert.equal(progressed,pkg.bytes);assert.equal(ranges[0],'bytes=10000-');assert.ok(fences>1);
   await downloadVerified(pkg,root,{assertFence:async()=>{}});assert.equal(calls,1);await fs.writeFile(r.path,'bad');await assert.rejects(downloadVerified(pkg,root,{assertFence:async()=>{}}),{code:'CACHED_PACKAGE_CORRUPT'});
 });
+// A real slow HTTP body crosses the production controller's periodic renewal.
+// The contract receiver is a boundary double; this is not native qualification.
+test('controller sends renewal authority without claim-only options during a download longer than one second',async t=>{
+  const root=await folder(t),f=fixture(),bytes=Buffer.alloc(4096,0x5a),id='11111111-1111-4111-8111-111111111112';let sequence=0,verifiedDownload=false;const renewals=[];
+  const upstream=await listen(t,async(req,res)=>{
+    if(req.url==='/package'){res.writeHead(200,{'content-length':bytes.length});res.write(bytes.subarray(0,2048));setTimeout(()=>res.end(bytes.subarray(2048)),1400);return;}
+    let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text);res.setHeader('content-type','application/json');
+    if(req.url==='/internal/upgrades/'+id+'/renew'&&req.method==='POST'){renewals.push(body);res.end(JSON.stringify({fence:3}));return;}
+    res.writeHead(400);res.end(JSON.stringify({error:{code:'INVALID_RENEW_REQUEST'}}));
+  });
+  f.manifest.packages[0].digest=digest(bytes);f.manifest.packages[0].bytes=bytes.length;
+  const envelope=signManifest(f.manifest,'test-key',f.privateKey),verified=verifyManifest(envelope,f.roots,f.current),plan=freezePlan(verified,f.current);
+  const artifact=artifactDigest=>({artifactDigest,inputFingerprint:H,sourceRevision:'a'.repeat(40),protocol:{min:1,max:1}});
+  const attempt={instanceId:'instance',attemptId:id,actorId:'operator',requestId:'22222222-2222-4222-8222-222222222223',acceptedAt:new Date().toISOString(),state:'accepted',sequence:0,generation:2,targetDigest:verified.manifestDigest,planDigest:plan.planDigest};
+  const record={attempt,actorId:'operator',signedManifest:envelope,plan,sourceActivation:{releaseId:f.current.releaseId,schema:1,channel:'stable',activationGeneration:1,components:{api:artifact(B),coordinator:artifact(B),web:{...artifact(W),webRevision:'c'.repeat(40)},installer:artifact(H)}}};
+  await atomicJson(join(root,'trust.json'),f.roots);
+  const actualClient=createCoordinatorClient({origin:upstream.origin,instanceId:'instance',key:'k'.repeat(32)});
+  const coordinator={pending:async()=>record,claim:async(_id,body)=>{assert.equal(body.leaseMs,15000);return {fence:3,generation:2,snapshot:record};},renew:actualClient.renew,assertFence:async()=>{},step:async()=>null,
+    commit:async(_id,event)=>{assert.equal(event.expectedSequence,sequence);sequence++;return {attempt:{...attempt,sequence}};}};
+  const executor={prepare:async()=>{verifiedDownload=true;throw Object.assign(Error('Intentional unit-test verification boundary'),{code:'VERIFICATION_BOUNDARY'});},actual:async()=>({weight:0}),fallbackEligibility:async()=>({qualified:false})};
+  const controller=createInstanceController({root,instanceId:'instance',controllerId:'controller',trustRootPath:join(root,'trust.json'),coordinator,executor,fetcher:(_url,options)=>fetch(upstream.origin+'/package',options)});
+  await assert.rejects(controller.runOnce(),{code:'VERIFICATION_BOUNDARY'});assert.ok(renewals.length>=1);assert.equal(verifiedDownload,true);
+  for(const renewal of renewals){assert.deepEqual(Object.keys(renewal).sort(),['controllerId','fence']);assert.equal(renewal.fence,3);assert.equal(typeof renewal.controllerId,'string');}
+  const download=await fileDigest(join(root,'downloads',digest(bytes).slice(7)+'.tgz'));assert.equal(download.digest,digest(bytes));assert.equal(download.bytes,bytes.length);
+});
 test('B01 actual archive bytes/tree validation and unsafe link rejection',async t=>{
   const root=await folder(t),source=join(root,'source');await fs.mkdir(source,{mode:0o700});await fs.mkdir(join(source,'api'));await fs.mkdir(join(source,'web'));await fs.mkdir(join(source,'installer'));await fs.writeFile(join(source,'installer/controller.mjs'),'export const version=1;');await fs.writeFile(join(source,'api/code.js'),'export const a=1;');await fs.writeFile(join(source,'web/index.html'),'old page');const files=await treeManifest(source),f=fixture();f.manifest.components.api.artifactDigest=digest(files.filter(x=>x.path.startsWith('api/')));f.manifest.components.coordinator.artifactDigest=f.manifest.components.api.artifactDigest;f.manifest.components.installer.artifactDigest=digest(files.filter(x=>x.path.startsWith('installer/')));f.manifest.components.web.artifactDigest=digest(files.filter(x=>x.path.startsWith('web/')));
   await atomicJson(join(source,'upgrade-artifact.json'),{schemaVersion:1,platform:process.platform,arch:process.arch,components:f.manifest.components,treeDigest:digest(files),files});const archive=join(root,'archive.tgz');await command('tar',['-czf',archive,'-C',source,'.']);const hash=await fileDigest(archive),pkg={...hash,platform:process.platform,arch:process.arch};const installed=await unpackVerified(archive,pkg,root,f.manifest.components);assert.equal(await fs.readFile(join(installed.root,'api/code.js'),'utf8'),'export const a=1;');

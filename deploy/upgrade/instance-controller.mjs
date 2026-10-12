@@ -32,7 +32,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const journalPath=join(root,'journals',accepted.attemptId+'.json');let journal=await readJson(journalPath,{attemptId:accepted.attemptId,planDigest:plan.planDigest,steps:{}});
       invariant(journal.planDigest===plan.planDigest,'JOURNAL_PLAN_CHANGED');
       const assertFence=async()=>{if(leaseLost)throw leaseLost;invariant(!signal?.aborted,'CONTROLLER_STOPPED');await coordinator.assertFence(attempt.attemptId,session.fence);};
-      timer=setInterval(()=>{coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence,leaseMs}).catch(e=>{leaseLost=e;});},Math.min(1000,Math.floor(leaseMs/3)));timer.unref();
+      timer=setInterval(()=>{coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence}).catch(e=>{leaseLost=e;});},Math.min(1000,Math.floor(leaseMs/3)));timer.unref();
       async function commit(kind,payload,eventId=randomUUID()) {
         await assertFence();const next=await coordinator.commit(attempt.attemptId,{fence:session.fence,generation:session.generation,expectedSequence:sequence,eventId,kind,payload});
         sequence=next.attempt?.sequence??next.snapshot?.attempt?.sequence??next.sequence;invariant(Number.isSafeInteger(sequence),'COMMIT_SNAPSHOT_REQUIRED');onEvent?.({kind,attemptId:attempt.attemptId,sequence});return next;
