@@ -29,6 +29,8 @@ function evidence() {
             sourceTable,
             rows: sourceTable === "projects" ? 50 : 1000,
             pendingChanges: 0,
+            missingRows: 0,
+            phantomRows: 0,
             differences: 0,
           })),
         },
@@ -83,6 +85,16 @@ test("stale inputs, inconsistent rows and failed native executions remain blocke
     },
     (records) => {
       records[2].actualEvidence.actual.maxData.phaseReceipts[0].projections[0].differences = 1;
+    },
+    (records) => {
+      records[2].actualEvidence.actual.maxData.phaseReceipts[0].projections[0].missingRows = 1;
+    },
+    (records) => {
+      records[2].actualEvidence.actual.maxData.phaseReceipts[0].projections[0].phantomRows = 1;
+    },
+    (records) => {
+      delete records[2].actualEvidence.actual.maxData.phaseReceipts[0]
+        .projections[0].missingRows;
     },
     (records) => {
       records[2].actualEvidence.actual.forwardOnly.zeroDdl = false;

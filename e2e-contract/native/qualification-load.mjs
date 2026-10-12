@@ -146,7 +146,9 @@ export function maximumMigrationReceipt(env, attemptId, load) {
       (item) => item.sourceTable === source,
     );
     invariant(
-      projection && /^upg_shadow_[a-z0-9_]+$/.test(projection.targetTable),
+      projection &&
+        projection.primaryKey === "id" &&
+        /^upg_shadow_[a-z0-9_]+$/.test(projection.targetTable),
       "MAXIMUM_PROJECTION_REQUIRED",
     );
     const count = env.database
@@ -157,6 +159,10 @@ export function maximumMigrationReceipt(env, attemptId, load) {
       )
       .get().n;
     invariant(count === expectedRows, "MAXIMUM_PROJECTION_COUNT_CHANGED");
+    const sourceCount = env.database
+      .prepare('SELECT count(*) n FROM "' + source + '"')
+      .get().n;
+    invariant(sourceCount === expectedRows, "MAXIMUM_SOURCE_COUNT_CHANGED");
     const pending = env.database
       .prepare(
         "SELECT count(*) n FROM upgrade_projection_changes WHERE plan_digest=? AND projection=? AND projected=0",
@@ -165,15 +171,35 @@ export function maximumMigrationReceipt(env, attemptId, load) {
     invariant(pending === 0, "MAXIMUM_PROJECTION_PENDING");
     const fields = projection.fields;
     invariant(
-      fields.every(
-        (field) =>
-          /^[a-z][a-z0-9_]*$/.test(field.name) &&
-          field.source &&
-          /^[a-z][a-z0-9_]*$/.test(field.source),
-      ),
+      Array.isArray(fields) &&
+        fields.length > 0 &&
+        fields.every(
+          (field) =>
+            /^[a-z][a-z0-9_]*$/.test(field.name) &&
+            field.source &&
+            /^[a-z][a-z0-9_]*$/.test(field.source),
+        ),
       "MAXIMUM_PROJECTION_MAPPING_REQUIRED",
     );
-    const different = env.database
+    const missingRows = env.database
+      .prepare(
+        'SELECT count(*) n FROM "' +
+          source +
+          '" original LEFT JOIN "' +
+          projection.targetTable +
+          '" shadow ON shadow.row_key=original.id AND shadow.tombstone=0 WHERE shadow.row_key IS NULL',
+      )
+      .get().n;
+    const phantomRows = env.database
+      .prepare(
+        'SELECT count(*) n FROM "' +
+          projection.targetTable +
+          '" shadow LEFT JOIN "' +
+          source +
+          '" original ON shadow.row_key=original.id WHERE shadow.tombstone=0 AND original.id IS NULL',
+      )
+      .get().n;
+    const valueDifferences = env.database
       .prepare(
         'SELECT count(*) n FROM "' +
           projection.targetTable +
@@ -193,13 +219,16 @@ export function maximumMigrationReceipt(env, attemptId, load) {
           ")",
       )
       .get().n;
-    invariant(different === 0, "MAXIMUM_PROJECTION_VALUE_DIFFERENCE");
+    const differences = missingRows + phantomRows + valueDifferences;
+    invariant(differences === 0, "MAXIMUM_PROJECTION_DIFFERENCE");
     projections.push({
       sourceTable: source,
       targetTable: projection.targetTable,
       rows: count,
       pendingChanges: pending,
-      differences: different,
+      missingRows,
+      phantomRows,
+      differences,
     });
   }
   return {

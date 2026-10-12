@@ -34,6 +34,8 @@ export function onlineMigrationGate(assertions, inputFingerprint) {
               projection.sourceTable === source &&
               projection.rows === maximum.measuredRows[source] &&
               projection.pendingChanges === 0 &&
+              projection.missingRows === 0 &&
+              projection.phantomRows === 0 &&
               projection.differences === 0,
           ),
         ),
