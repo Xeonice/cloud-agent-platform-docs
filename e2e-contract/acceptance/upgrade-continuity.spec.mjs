@@ -94,9 +94,15 @@ function transportEvidence(page) {
   return { ready, traffic, mutations, output };
 }
 async function shell(page, name) {
-  await page.getByTestId("terminal-tab-new").click();
-  const menu = page.getByTestId("terminal-launch-shell");
-  if (await menu.isVisible()) await menu.click();
+  const button = page.getByTestId("terminal-tab-new");
+  await expect(button).toBeVisible();
+  const hasMenu = (await button.getAttribute("aria-haspopup")) === "menu";
+  await button.click();
+  if (hasMenu) {
+    const menu = page.getByTestId("terminal-launch-shell");
+    await expect(menu).toBeVisible();
+    await menu.click();
+  }
   await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
   await page.getByRole("tab", { name, exact: true }).click();
 }
@@ -325,11 +331,37 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const origin = harness.entryOrigin,
       request = context.request;
     await page.goto(origin);
-    if (await page.getByLabel("访问口令", { exact: true }).isVisible()) {
+    // A fresh browser and the actual fixture's enabled passcode always require
+    // this user flow. An immediate isVisible() before hydration can skip it while
+    // AppBootGate is still checking init-status, leaving every later API at 401.
+    if (fixture.config.authEnv.ACCESS_PASSCODE) {
+      const gate = page.getByRole("dialog", { name: "访问口令", exact: true });
+      await expect(gate).toBeVisible({ timeout: 30000 });
       await page
         .getByLabel("访问口令", { exact: true })
         .fill(fixture.config.authEnv.ACCESS_PASSCODE);
+      const unlocked = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).origin === origin &&
+          new URL(response.url()).pathname === "/api/access/unlock" &&
+          response.request().method() === "POST",
+      );
       await page.getByRole("button", { name: "解锁", exact: true }).click();
+      const response = await unlocked;
+      expect(response.ok(), "Actual browser passcode unlock succeeds").toBe(
+        true,
+      );
+      await response.finished();
+      await expect
+        .poll(
+          async () =>
+            (await context.cookies(origin)).some(
+              (cookie) => cookie.name === "ap_session" && cookie.httpOnly,
+            ),
+          { timeout: 10000 },
+        )
+        .toBe(true);
+      await expect(gate).toHaveCount(0, { timeout: 30000 });
     }
     const initStatus = await json(request, origin, "/api/system/init-status");
     if (!initStatus.initialized) {

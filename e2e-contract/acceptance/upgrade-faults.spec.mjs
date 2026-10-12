@@ -427,11 +427,40 @@ async function installation(id, page, context) {
     };
     const login = async () => {
       await page.goto(origin);
-      if (await page.getByLabel("访问口令", { exact: true }).isVisible()) {
+      // The dedicated fresh fixture enables a passcode. Wait for the hydrated
+      // real gate and its successful browser response/cookie, never infer login
+      // from a pre-hydration isVisible() snapshot or grant it through an API call.
+      if (config.authEnv.ACCESS_PASSCODE) {
+        const gate = page.getByRole("dialog", {
+          name: "访问口令",
+          exact: true,
+        });
+        await expect(gate).toBeVisible({ timeout: 30000 });
         await page
           .getByLabel("访问口令", { exact: true })
           .fill(config.authEnv.ACCESS_PASSCODE);
+        const unlocked = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).origin === origin &&
+            new URL(response.url()).pathname === "/api/access/unlock" &&
+            response.request().method() === "POST",
+        );
         await page.getByRole("button", { name: "解锁", exact: true }).click();
+        const response = await unlocked;
+        expect(response.ok(), "Actual browser passcode unlock succeeds").toBe(
+          true,
+        );
+        await response.finished();
+        await expect
+          .poll(
+            async () =>
+              (await context.cookies(origin)).some(
+                (cookie) => cookie.name === "ap_session" && cookie.httpOnly,
+              ),
+            { timeout: 10000 },
+          )
+          .toBe(true);
+        await expect(gate).toHaveCount(0, { timeout: 30000 });
       }
       await expect
         .poll(async () => (await state()).instanceId)
@@ -503,9 +532,16 @@ async function installation(id, page, context) {
       )
       .toBe(true);
     const readyBeforeShell = evidence.ready.length;
-    await page.getByTestId("terminal-tab-new").click();
-    if (await page.getByTestId("terminal-launch-shell").isVisible())
-      await page.getByTestId("terminal-launch-shell").click();
+    const newTerminalButton = page.getByTestId("terminal-tab-new");
+    await expect(newTerminalButton).toBeVisible();
+    const hasTerminalMenu =
+      (await newTerminalButton.getAttribute("aria-haspopup")) === "menu";
+    await newTerminalButton.click();
+    if (hasTerminalMenu) {
+      const shellOption = page.getByTestId("terminal-launch-shell");
+      await expect(shellOption).toBeVisible();
+      await shellOption.click();
+    }
     await expect
       .poll(
         () =>
@@ -750,6 +786,12 @@ async function installation(id, page, context) {
         lastSeq: current.lastSeq,
         jobIdentityDigest: digest(originalJob),
         headlessCounter,
+        taskObservationWindow: observedTaskWindow({
+          model,
+          input,
+          database,
+          task,
+        }),
       };
     };
     const resumeTerminal = async () => {
@@ -907,15 +949,47 @@ async function installation(id, page, context) {
     throw error;
   }
 }
+function observedTaskWindow(env) {
+  const observedAt = new Date().toISOString(),
+    issued = env.model
+      ?.evidence()
+      .requests.find(
+        (row) =>
+          row.taskId === env.input.headlessProofId &&
+          row.phase === "tool-issued",
+      );
+  let timeoutMs = null;
+  try {
+    timeoutMs =
+      env.database
+        .prepare("SELECT timeout_ms FROM agent_tasks WHERE id=?")
+        .get(env.task.id)?.timeout_ms ?? null;
+  } catch {
+    // A failed shared-DB observation stays unknown, including this diagnostic.
+  }
+  return {
+    observedAt,
+    originalTaskStartedAt: env.task.startedAt,
+    platformTaskTimeoutMs: timeoutMs,
+    declaredModelBashTimeoutMs: env.model ? 600000 : null,
+    actualModelToolIssuedAt: issued?.at ?? null,
+    observedModelToolAgeMs: issued
+      ? Date.parse(observedAt) - Date.parse(issued.at)
+      : null,
+  };
+}
 async function recordCase(id, page, context, info, body) {
   let env,
     sampler,
     probeResult,
     cleaned = false;
-  const assertions = [];
-  let actual = { stage: "native-input-preflight" };
+  const assertions = [],
+    started = performance.now(),
+    measurementWindow = { startedAt: new Date().toISOString() };
+  let actual = { stage: "native-input-preflight", measurementWindow };
   try {
     env = await installation(id, page, context);
+    measurementWindow.originalSetupCompletedAt = new Date().toISOString();
     sampler = probe(env);
     actual = {
       instanceId: env.config.instanceId,
@@ -928,12 +1002,15 @@ async function recordCase(id, page, context, info, body) {
       imageProof: env.imageProof,
       runtimeId: env.input.runtimeId ?? "codex",
       actualCliVersion: env.actualCliVersion,
+      measurementWindow,
     };
     const { afterContinuity, semanticContractEvidence, ...result } =
       await body(env);
+    measurementWindow.faultBodyCompletedAt = new Date().toISOString();
     probeResult = await sampler.stop();
     sampler = null;
     const preserved = await env.continuity();
+    measurementWindow.originalContinuityConfirmedAt = new Date().toISOString();
     const qualificationModel = env.model?.evidence() ?? null;
     let subsequent = {};
     if (afterContinuity) {
@@ -987,6 +1064,8 @@ async function recordCase(id, page, context, info, body) {
       actualEvidence: {
         ...actual,
         reason: error.code ?? "NATIVE_ASSERTION_FAILED",
+        taskObservationWindow: env ? observedTaskWindow(env) : null,
+        independentFailureWindow: error.qualificationWindow ?? null,
         qualificationModel:
           env?.model?.evidence() ?? error.qualificationModelEvidence ?? null,
       },
@@ -994,6 +1073,8 @@ async function recordCase(id, page, context, info, body) {
     throw error;
   } finally {
     if (sampler) probeResult = await sampler.stop();
+    measurementWindow.measurementCompletedAt = new Date().toISOString();
+    measurementWindow.elapsedMs = performance.now() - started;
     const path = info.outputPath("upg-assertions.json");
     await fs.mkdir(dirname(path), { recursive: true, mode: 0o700 });
     await fs.writeFile(
@@ -1430,22 +1511,38 @@ async function secondRecoveryFailure(browser) {
 
 async function independentFailure(browser, id, body) {
   const context = await browser.newContext(),
-    page = await context.newPage();
+    page = await context.newPage(),
+    started = performance.now(),
+    measurementWindow = { startedAt: new Date().toISOString() };
   let env, sampler;
   try {
     env = await installation(id, page, context);
+    measurementWindow.originalSetupCompletedAt = new Date().toISOString();
     sampler = probe(env);
     const actual = await body(env),
       probes = await sampler.stop();
     sampler = null;
+    measurementWindow.faultBodyCompletedAt = new Date().toISOString();
+    const preserved = await env.continuity();
+    measurementWindow.originalContinuityConfirmedAt = new Date().toISOString();
+    measurementWindow.elapsedMs = performance.now() - started;
     return {
       ...actual,
       instanceId: env.config.instanceId,
       inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
-      preserved: await env.continuity(),
+      preserved,
+      measurementWindow,
       probes,
       qualificationModel: env.model?.evidence() ?? null,
     };
+  } catch (error) {
+    error.qualificationWindow = {
+      ...measurementWindow,
+      failedAt: new Date().toISOString(),
+      elapsedMs: performance.now() - started,
+      taskObservationWindow: env ? observedTaskWindow(env) : null,
+    };
+    throw error;
   } finally {
     try {
       if (sampler) await sampler.stop();
