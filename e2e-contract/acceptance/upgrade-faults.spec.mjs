@@ -10,7 +10,10 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
-import { populateQualifiedMaximum, maximumMigrationReceipt } from "../native/qualification-load.mjs";
+import {
+  populateQualifiedMaximum,
+  maximumMigrationReceipt,
+} from "../native/qualification-load.mjs";
 import {
   startQualificationModel,
   qualificationPrompt,
@@ -287,7 +290,8 @@ function probe(env) {
             samples.push({
               kind: "dedup",
               status: replay.status(),
-              sameId: duplicate.id === result.id && duplicate.name === result.name,
+              sameId:
+                duplicate.id === result.id && duplicate.name === result.name,
               at: duplicateAt,
               latencyMs: performance.now() - duplicateAt,
               tick: n,
@@ -609,13 +613,31 @@ async function installation(id, page, context) {
     expect(cliProbe.exitCode).toBe(0);
     expect(cliProbe.stdout.trim()).toMatch(/\d+\.\d+\.\d+/);
     const actualCliVersion = cliProbe.stdout.trim();
-    const probeAutomation = await responseJson(request, origin, "/api/projects/" + project.id + "/automations", "POST", {
-      name: "Native continuity probe", runtime: runtimeId,
-      prompt: "Qualification probe remains disabled and must never launch a job.",
-      scheduleKind: "hourly", scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 },
-      timezone: "UTC", timeoutMinutes: 30, artifactRetentionDays: 3,
-    }, 201);
-    const disabledProbe = await responseJson(request, origin, "/api/automations/" + probeAutomation.id + "/disable", "POST", {});
+    const probeAutomation = await responseJson(
+      request,
+      origin,
+      "/api/projects/" + project.id + "/automations",
+      "POST",
+      {
+        name: "Native continuity probe",
+        runtime: runtimeId,
+        prompt:
+          "Qualification probe remains disabled and must never launch a job.",
+        scheduleKind: "hourly",
+        scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 },
+        timezone: "UTC",
+        timeoutMinutes: 30,
+        artifactRetentionDays: 3,
+      },
+      201,
+    );
+    const disabledProbe = await responseJson(
+      request,
+      origin,
+      "/api/automations/" + probeAutomation.id + "/disable",
+      "POST",
+      {},
+    );
     expect(disabledProbe.enabled).toBe(false);
     const initial = await state();
     const authorize = async () => {
@@ -647,8 +669,10 @@ async function installation(id, page, context) {
           new URL(response.url()).pathname === "/api/system/upgrade/requests" &&
           response.request().method() === "POST",
       );
-      await page.getByRole("dialog", { name: "版本与更新详情", exact: true })
-        .getByRole("button", { name: "立即升级", exact: true }).click();
+      await page
+        .getByRole("dialog", { name: "版本与更新详情", exact: true })
+        .getByRole("button", { name: "立即升级", exact: true })
+        .click();
       const response = await accepted;
       expect(response.status()).toBe(202);
       const attempt = await response.json();
@@ -1405,181 +1429,403 @@ async function secondRecoveryFailure(browser) {
 }
 
 async function independentFailure(browser, id, body) {
-  const context = await browser.newContext(), page = await context.newPage();
+  const context = await browser.newContext(),
+    page = await context.newPage();
   let env, sampler;
   try {
     env = await installation(id, page, context);
     sampler = probe(env);
-    const actual = await body(env), probes = await sampler.stop(); sampler = null;
-    return { ...actual, instanceId: env.config.instanceId,
+    const actual = await body(env),
+      probes = await sampler.stop();
+    sampler = null;
+    return {
+      ...actual,
+      instanceId: env.config.instanceId,
       inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
-      preserved: await env.continuity(), probes, qualificationModel: env.model?.evidence() ?? null };
+      preserved: await env.continuity(),
+      probes,
+      qualificationModel: env.model?.evidence() ?? null,
+    };
   } finally {
     try {
       if (sampler) await sampler.stop();
       if (env) await env.clean();
-    } finally { await context.close(); }
+    } finally {
+      await context.close();
+    }
   }
 }
 
 async function x02RemainingFailures(browser) {
-  const migrationPreparation = await independentFailure(browser, "X02", async env => {
-    const manifest = env.fixture.envelope.manifest,
-      fixedPath = manifest.upgradePaths.find(row => row.migrationPlanDigest),
-      pkg = manifest.packages.find(row => row.platform === "linux" && row.arch === "arm64");
-    invariant(fixedPath && pkg, "ACTUAL_X02_MIGRATION_PACKAGE_REQUIRED");
-    const archive = join(env.input.archiveRoot, pkg.name), hash = await fileDigest(archive);
-    expect(hash.digest).toBe(pkg.digest); expect(hash.bytes).toBe(pkg.bytes);
-    const plan = JSON.parse(await actualCommand("tar", ["-xOf", archive, "./upgrade-migration.json"]));
-    expect(digest(plan)).toBe(fixedPath.migrationPlanDigest);
-    const target = plan.projections[0].targetTable;
-    expect(target).toMatch(/^upg_shadow_[a-zA-Z0-9_]+$/);
-    await env.stopController();
-    const accepted = await env.accept(), before = await env.binding();
-    expect(env.database.prepare("SELECT type FROM sqlite_master WHERE name=?").get(target)).toBeUndefined();
-    // A genuine isolated SQLite namespace collision is a preparation fault.
-    // It touches no authoritative rows, signed plan, verified code or source table.
-    env.database.exec("CREATE INDEX " + identifier(target) + " ON projects(id)");
-    try {
+  const migrationPreparation = await independentFailure(
+    browser,
+    "X02",
+    async (env) => {
+      const manifest = env.fixture.envelope.manifest,
+        fixedPath = manifest.upgradePaths.find(
+          (row) => row.migrationPlanDigest,
+        ),
+        pkg = manifest.packages.find(
+          (row) => row.platform === "linux" && row.arch === "arm64",
+        );
+      invariant(fixedPath && pkg, "ACTUAL_X02_MIGRATION_PACKAGE_REQUIRED");
+      const archive = join(env.input.archiveRoot, pkg.name),
+        hash = await fileDigest(archive);
+      expect(hash.digest).toBe(pkg.digest);
+      expect(hash.bytes).toBe(pkg.bytes);
+      const plan = JSON.parse(
+        await actualCommand("tar", [
+          "-xOf",
+          archive,
+          "./upgrade-migration.json",
+        ]),
+      );
+      expect(digest(plan)).toBe(fixedPath.migrationPlanDigest);
+      const target = plan.projections[0].targetTable;
+      expect(target).toMatch(/^upg_shadow_[a-zA-Z0-9_]+$/);
+      await env.stopController();
+      const accepted = await env.accept(),
+        before = await env.binding();
+      expect(
+        env.database
+          .prepare("SELECT type FROM sqlite_master WHERE name=?")
+          .get(target),
+      ).toBeUndefined();
+      // A genuine isolated SQLite namespace collision is a preparation fault.
+      // It touches no authoritative rows, signed plan, verified code or source table.
+      env.database.exec(
+        "CREATE INDEX " + identifier(target) + " ON projects(id)",
+      );
+      try {
+        await env.harness.restartController();
+        const failed = await stoppedAttempt(env, accepted);
+        expect(
+          env
+            .history(accepted.attemptId)
+            .filter((row) => row.kind === "activation-confirmed"),
+        ).toHaveLength(0);
+        expect(
+          env.database
+            .prepare(
+              "SELECT 1 FROM upgrade_online_migrations WHERE attempt_id=?",
+            )
+            .get(accepted.attemptId),
+        ).toBeUndefined();
+        expect(
+          env.database
+            .prepare("SELECT type FROM sqlite_master WHERE name=?")
+            .get(target).type,
+        ).toBe("index");
+        const after = await env.binding();
+        expect(after.web.digest).toBe(before.web.digest);
+        expect(after.weight).toBe(0);
+        const snapshot = await env.harness.coordinator.snapshot(
+          accepted.attemptId,
+        );
+        expect(snapshot.plan.migrationPath.migrationPlanDigest).toBe(
+          digest(plan),
+        );
+        expect(
+          snapshot.appliedSteps.some((row) => row.stepId === "migration"),
+        ).toBe(false);
+        return {
+          attemptId: accepted.attemptId,
+          planDigest: digest(plan),
+          namespaceCollision: target,
+          sourceRowsPreserved: true,
+          zeroMigrationPrepared: true,
+          reason: failed.attempt.reason,
+          actualBinding: after,
+        };
+      } finally {
+        env.database.exec("DROP INDEX " + identifier(target));
+      }
+    },
+  );
+  const candidateBeforeReadiness = await independentFailure(
+    browser,
+    "X02",
+    async (env) => {
+      const accepted = await env.accept();
+      await env.until(() =>
+        Boolean(
+          env.database
+            .prepare(
+              "SELECT 1 FROM upgrade_steps WHERE attempt_id=? AND step_id='package-verify' AND applied=1",
+            )
+            .get(accepted.attemptId),
+        ),
+      );
+      await env.stopController();
+      let lease;
+      await expect
+        .poll(
+          async () => {
+            try {
+              lease = await env.harness.coordinator.claim(accepted.attemptId, {
+                controllerId: "native-pre-ready-candidate-fault",
+                leaseMs: 15000,
+              });
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          { timeout: 45000, intervals: [100, 250] },
+        )
+        .toBe(true);
+      const snapshot = await env.harness.coordinator.snapshot(
+          accepted.attemptId,
+        ),
+        before = await env.binding();
+      expect(before.weight).toBe(0);
+      expect(
+        snapshot.appliedSteps.some((row) => row.stepId === "candidate"),
+      ).toBe(false);
+      // Start only this fixed signed package's actual ControlAPI through the real
+      // fenced Supervisor. It remains outside production and has no SDK/DB mounts.
+      // Kill it before the actual child Controller can grant release readiness.
+      const response = await fetch(env.harness.supervisor.origin + "/start", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-platform-internal-key": env.config.keys.supervisor,
+        },
+        body: JSON.stringify({
+          attemptId: accepted.attemptId,
+          fence: lease.fence,
+          kind: "api",
+        }),
+        signal: AbortSignal.timeout(120000),
+      });
+      expect(response.ok).toBe(true);
+      const candidate = await response.json(),
+        physical = await env.adapter.inspect(candidate.containerId);
+      expect(candidate.artifactDigest).toBe(
+        env.fixture.envelope.manifest.components.api.artifactDigest,
+      );
+      expect(physical.role).toBe("api");
+      expect(physical.environmentNames).not.toContain("DATABASE_URL");
+      expect(
+        physical.mounts.some(
+          (m) => resolve(m.source) === join(env.config.root, "business"),
+        ),
+      ).toBe(false);
+      expect(
+        physical.mounts.some(
+          (m) => resolve(m.source) === join(env.config.root, "original-owner"),
+        ),
+      ).toBe(false);
+      await env.signal(candidate, "SIGKILL");
+      expect((await env.adapter.inspect(candidate.containerId)).running).toBe(
+        false,
+      );
       await env.harness.restartController();
-      const failed = await stoppedAttempt(env, accepted);
-      expect(env.history(accepted.attemptId).filter(row => row.kind === "activation-confirmed")).toHaveLength(0);
-      expect(env.database.prepare("SELECT 1 FROM upgrade_online_migrations WHERE attempt_id=?").get(accepted.attemptId)).toBeUndefined();
-      expect(env.database.prepare("SELECT type FROM sqlite_master WHERE name=?").get(target).type).toBe("index");
-      const after = await env.binding();
-      expect(after.web.digest).toBe(before.web.digest); expect(after.weight).toBe(0);
-      const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId);
-      expect(snapshot.plan.migrationPath.migrationPlanDigest).toBe(digest(plan));
-      expect(snapshot.appliedSteps.some(row => row.stepId === "migration")).toBe(false);
-      return { attemptId: accepted.attemptId, planDigest: digest(plan), namespaceCollision: target,
-        sourceRowsPreserved: true, zeroMigrationPrepared: true, reason: failed.attempt.reason,
-        actualBinding: after };
-    } finally { env.database.exec("DROP INDEX " + identifier(target)); }
-  });
-  const candidateBeforeReadiness = await independentFailure(browser, "X02", async env => {
-    const accepted = await env.accept();
-    await env.until(() => Boolean(env.database.prepare(
-      "SELECT 1 FROM upgrade_steps WHERE attempt_id=? AND step_id='package-verify' AND applied=1",
-    ).get(accepted.attemptId)));
-    await env.stopController();
-    let lease;
-    await expect.poll(async () => { try {
-      lease = await env.harness.coordinator.claim(accepted.attemptId, { controllerId: "native-pre-ready-candidate-fault", leaseMs: 15000 });
-      return true;
-    } catch { return false; } }, { timeout: 45000, intervals: [100, 250] }).toBe(true);
-    const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId),
-      before = await env.binding();
-    expect(before.weight).toBe(0);
-    expect(snapshot.appliedSteps.some(row => row.stepId === "candidate")).toBe(false);
-    // Start only this fixed signed package's actual ControlAPI through the real
-    // fenced Supervisor. It remains outside production and has no SDK/DB mounts.
-    // Kill it before the actual child Controller can grant release readiness.
-    const response = await fetch(env.harness.supervisor.origin + "/start", {
-      method: "POST", headers: { "content-type": "application/json", "x-platform-internal-key": env.config.keys.supervisor },
-      body: JSON.stringify({ attemptId: accepted.attemptId, fence: lease.fence, kind: "api" }), signal: AbortSignal.timeout(120000),
-    });
-    expect(response.ok).toBe(true);
-    const candidate = await response.json(), physical = await env.adapter.inspect(candidate.containerId);
-    expect(candidate.artifactDigest).toBe(env.fixture.envelope.manifest.components.api.artifactDigest);
-    expect(physical.role).toBe("api");
-    expect(physical.environmentNames).not.toContain("DATABASE_URL");
-    expect(physical.mounts.some(m => resolve(m.source) === join(env.config.root, "business"))).toBe(false);
-    expect(physical.mounts.some(m => resolve(m.source) === join(env.config.root, "original-owner"))).toBe(false);
-    await env.signal(candidate, "SIGKILL");
-    expect((await env.adapter.inspect(candidate.containerId)).running).toBe(false);
-    await env.harness.restartController();
-    const failed = await stoppedAttempt(env, accepted), after = await env.binding();
-    expect(after.weight).toBe(0); expect(after.web.digest).toBe(before.web.digest);
-    expect(env.history(accepted.attemptId).filter(row => row.kind === "activation-confirmed")).toHaveLength(0);
-    return { attemptId: accepted.attemptId, candidate: { containerId: candidate.containerId,
-      startIdentity: candidate.startIdentity, artifactDigest: candidate.artifactDigest },
-      beforeProductionReadiness: true, actualBinding: after, reason: failed.attempt.reason };
-  });
+      const failed = await stoppedAttempt(env, accepted),
+        after = await env.binding();
+      expect(after.weight).toBe(0);
+      expect(after.web.digest).toBe(before.web.digest);
+      expect(
+        env
+          .history(accepted.attemptId)
+          .filter((row) => row.kind === "activation-confirmed"),
+      ).toHaveLength(0);
+      return {
+        attemptId: accepted.attemptId,
+        candidate: {
+          containerId: candidate.containerId,
+          startIdentity: candidate.startIdentity,
+          artifactDigest: candidate.artifactDigest,
+        },
+        beforeProductionReadiness: true,
+        actualBinding: after,
+        reason: failed.attempt.reason,
+      };
+    },
+  );
   return { migrationPreparation, candidateBeforeReadiness };
 }
 
 async function x04WebOnlyRecovery(browser) {
-  return { webOnlyRecovery: await independentFailure(browser, "X04", async env => {
-    const accepted = await env.accept();
-    await env.until(s => s.attempt?.state === "activation-confirmed");
-    await env.resumeTerminal();
-    const timeOrigin = await env.page.evaluate(() => performance.timeOrigin),
-      loadedBuild = await responseJson(env.request, env.origin, "/web-build"),
-      before = await env.binding(), writerBefore = await readJson(env.harness.bindingPath),
-      manifest = env.fixture.envelope.manifest, web = env.role("web"),
-      success = env.history(accepted.attemptId).filter(row => row.kind === "activation-confirmed");
-    expect(loadedBuild.webRevision).toBe(manifest.components.web.webRevision);
-    expect(before.weight).toBe(100);
-    expect(before.candidateApi.digest).toBe(manifest.components.api.artifactDigest);
-    let stopped = false;
-    try {
-      const fault = await signalOwnedNode(env, web, "SIGSTOP"); stopped = true;
-      // This case uses the actual Controller's measured Web failure domain and
-      // automatic recovery, never caller-invented eligibility/commit evidence.
-      const recovered = await env.until((s, b) =>
-        s.recovery?.state === "recovery-confirmed" &&
-        b.web.digest === env.initial.confirmedServiceRelease.components.web.artifactDigest &&
-        b.weight === 100 && b.candidateApi?.digest === manifest.components.api.artifactDigest);
-      const record = await env.harness.coordinator.snapshot(accepted.attemptId);
-      expect(record.recoveryPlan.componentScope).toEqual(["web"]);
-      expect(record.recoveryPlan.api).toBeNull();
-      expect(record.recoveryPlan.coordinator).toBeNull();
-      expect(record.recoveryPlan.owner).toBeNull();
-      expect(record.recoveryPlan.web.digest).toBe(env.initial.confirmedServiceRelease.components.web.artifactDigest);
-      expect(await readJson(env.harness.bindingPath)).toEqual(writerBefore);
-      expect(env.history(accepted.attemptId).filter(row => row.kind === "activation-confirmed")).toEqual(success);
-      expect(recovered.attempt.state).toBe("activation-confirmed");
-      expect(recovered.attempt.percent).toBe(100);
-      expect(recovered.confirmedServiceRelease).toBeNull();
-      expect(recovered.lastConfirmedServiceRelease.releaseId).toBe(manifest.releaseId);
-      expect(recovered.serviceState).toBe("unknown");
-      expect(recovered.availableWeb).toBeNull();
-      expect(await env.page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
-      const actual = await env.binding(), owners = await readJson(env.harness.ownerBindingPath),
-        activeOwner = owners.owners.find(row => row.ownerId === owners.activeOwnerId),
-        identity = await fetch(env.role("installer").origin + "/metadata", {
-          headers: { "x-platform-internal-key": env.config.keys.controller }, signal: AbortSignal.timeout(2000),
+  return {
+    webOnlyRecovery: await independentFailure(browser, "X04", async (env) => {
+      const accepted = await env.accept();
+      await env.until((s) => s.attempt?.state === "activation-confirmed");
+      await env.resumeTerminal();
+      const timeOrigin = await env.page.evaluate(() => performance.timeOrigin),
+        loadedBuild = await responseJson(env.request, env.origin, "/web-build"),
+        before = await env.binding(),
+        writerBefore = await readJson(env.harness.bindingPath),
+        manifest = env.fixture.envelope.manifest,
+        web = env.role("web"),
+        success = env
+          .history(accepted.attemptId)
+          .filter((row) => row.kind === "activation-confirmed");
+      expect(loadedBuild.webRevision).toBe(manifest.components.web.webRevision);
+      expect(before.weight).toBe(100);
+      expect(before.candidateApi.digest).toBe(
+        manifest.components.api.artifactDigest,
+      );
+      let stopped = false;
+      try {
+        const fault = await signalOwnedNode(env, web, "SIGSTOP");
+        stopped = true;
+        // This case uses the actual Controller's measured Web failure domain and
+        // automatic recovery, never caller-invented eligibility/commit evidence.
+        const recovered = await env.until(
+          (s, b) =>
+            s.recovery?.state === "recovery-confirmed" &&
+            b.web.digest ===
+              env.initial.confirmedServiceRelease.components.web
+                .artifactDigest &&
+            b.weight === 100 &&
+            b.candidateApi?.digest === manifest.components.api.artifactDigest,
+        );
+        const record = await env.harness.coordinator.snapshot(
+          accepted.attemptId,
+        );
+        expect(record.recoveryPlan.componentScope).toEqual(["web"]);
+        expect(record.recoveryPlan.api).toBeNull();
+        expect(record.recoveryPlan.coordinator).toBeNull();
+        expect(record.recoveryPlan.owner).toBeNull();
+        expect(record.recoveryPlan.web.digest).toBe(
+          env.initial.confirmedServiceRelease.components.web.artifactDigest,
+        );
+        expect(await readJson(env.harness.bindingPath)).toEqual(writerBefore);
+        expect(
+          env
+            .history(accepted.attemptId)
+            .filter((row) => row.kind === "activation-confirmed"),
+        ).toEqual(success);
+        expect(recovered.attempt.state).toBe("activation-confirmed");
+        expect(recovered.attempt.percent).toBe(100);
+        expect(recovered.confirmedServiceRelease).toBeNull();
+        expect(recovered.lastConfirmedServiceRelease.releaseId).toBe(
+          manifest.releaseId,
+        );
+        expect(recovered.serviceState).toBe("unknown");
+        expect(recovered.availableWeb).toBeNull();
+        expect(await env.page.evaluate(() => performance.timeOrigin)).toBe(
+          timeOrigin,
+        );
+        const actual = await env.binding(),
+          owners = await readJson(env.harness.ownerBindingPath),
+          activeOwner = owners.owners.find(
+            (row) => row.ownerId === owners.activeOwnerId,
+          ),
+          identity = await fetch(env.role("installer").origin + "/metadata", {
+            headers: { "x-platform-internal-key": env.config.keys.controller },
+            signal: AbortSignal.timeout(2000),
+          });
+        expect(identity.ok).toBe(true);
+        const installer = await identity.json();
+        const tuple = {
+          apiDigest: actual.candidateApi.digest,
+          webDigest: actual.web.digest,
+          coordinatorDigest: writerBefore.artifactDigest,
+          ownerDigest: activeOwner.artifactDigest,
+          installerDigest: installer.artifactDigest,
+        };
+        expect(tuple).toEqual({
+          apiDigest: manifest.components.api.artifactDigest,
+          webDigest:
+            env.initial.confirmedServiceRelease.components.web.artifactDigest,
+          coordinatorDigest: manifest.components.coordinator.artifactDigest,
+          ownerDigest: manifest.components.owner.artifactDigest,
+          installerDigest: manifest.components.installer.artifactDigest,
         });
-      expect(identity.ok).toBe(true);
-      const installer = await identity.json();
-      const tuple = { apiDigest: actual.candidateApi.digest, webDigest: actual.web.digest,
-        coordinatorDigest: writerBefore.artifactDigest, ownerDigest: activeOwner.artifactDigest,
-        installerDigest: installer.artifactDigest };
-      expect(tuple).toEqual({ apiDigest: manifest.components.api.artifactDigest,
-        webDigest: env.initial.confirmedServiceRelease.components.web.artifactDigest,
-        coordinatorDigest: manifest.components.coordinator.artifactDigest,
-        ownerDigest: manifest.components.owner.artifactDigest, installerDigest: manifest.components.installer.artifactDigest });
-      const created = await responseJson(env.request, env.origin, "/api/projects", "POST", {
-        name: "healthy B after Web-only recovery", sourceType: "empty",
-      }, 202);
-      expect((await responseJson(env.request, env.origin, "/api/projects/" + created.id)).name).toBe(created.name);
-      await signalOwnedNode(env, web, "SIGCONT"); stopped = false;
-      const current = await env.state();
-      expect(current.repairableCurrent?.baseConfirmedReleaseId).toBe(manifest.releaseId);
-      expect(current.catalog.availableRelease?.targetDigest).toBe(env.fixture.envelope.manifestDigest);
-      expect(current.catalog.availableRelease?.releaseId).toBe(manifest.releaseId);
-      return { attemptId: accepted.attemptId, fault, recoveryAttemptId: recovered.recovery.recoveryAttemptId,
-        recoveryPlanDigest: record.recoveryPlan.planDigest, componentScope: record.recoveryPlan.componentScope,
-        actualMixedTuple: tuple, fullReleaseUnconfirmed: true, originalBWriterPreserved: true,
-        loadedWebRevision: loadedBuild.webRevision, browserTimeOrigin: timeOrigin,
-        browserNotReloadedByRecovery: true, historyDigest: digest(success),
-        sameReleaseExplicitRepairAvailable: true, actualBusinessProjectId: created.id };
-    } finally { if (stopped) await signalOwnedNode(env, web, "SIGCONT"); }
-  }) };
+        const created = await responseJson(
+          env.request,
+          env.origin,
+          "/api/projects",
+          "POST",
+          {
+            name: "healthy B after Web-only recovery",
+            sourceType: "empty",
+          },
+          202,
+        );
+        expect(
+          (
+            await responseJson(
+              env.request,
+              env.origin,
+              "/api/projects/" + created.id,
+            )
+          ).name,
+        ).toBe(created.name);
+        await signalOwnedNode(env, web, "SIGCONT");
+        stopped = false;
+        const current = await env.state();
+        expect(current.repairableCurrent?.baseConfirmedReleaseId).toBe(
+          manifest.releaseId,
+        );
+        expect(current.catalog.availableRelease?.targetDigest).toBe(
+          env.fixture.envelope.manifestDigest,
+        );
+        expect(current.catalog.availableRelease?.releaseId).toBe(
+          manifest.releaseId,
+        );
+        return {
+          attemptId: accepted.attemptId,
+          fault,
+          recoveryAttemptId: recovered.recovery.recoveryAttemptId,
+          recoveryPlanDigest: record.recoveryPlan.planDigest,
+          componentScope: record.recoveryPlan.componentScope,
+          actualMixedTuple: tuple,
+          fullReleaseUnconfirmed: true,
+          originalBWriterPreserved: true,
+          loadedWebRevision: loadedBuild.webRevision,
+          browserTimeOrigin: timeOrigin,
+          browserNotReloadedByRecovery: true,
+          historyDigest: digest(success),
+          sameReleaseExplicitRepairAvailable: true,
+          actualBusinessProjectId: created.id,
+        };
+      } finally {
+        if (stopped) await signalOwnedNode(env, web, "SIGCONT");
+      }
+    }),
+  };
 }
 
 async function x13RemainingBudgetsAndMaximum(browser) {
-  const diskAndSql = await independentFailure(browser, "X13", async env => {
-    const migration = await acquiredMigration(env), policy = migration.snapshot.plan.policy,
+  const diskAndSql = await independentFailure(browser, "X13", async (env) => {
+    const diskRoot = join(env.config.root, "installer"),
+      diskStat = await fs.stat(diskRoot),
+      parentStat = await fs.stat(env.config.root),
+      mounts = await fs.readFile("/proc/self/mountinfo", "utf8");
+    // Exhaust only a dedicated installer filesystem. An isolated directory on
+    // the host's shared root volume is insufficient: it could exhaust space for
+    // other live Guests/profiles. Confirm the real mount/device before allocating.
+    invariant(
+      diskStat.dev !== parentStat.dev &&
+        mounts.split("\n").some((line) => {
+          const [mount, filesystem] = line.split(" - ");
+          const mountpoint = mount
+            ?.split(" ")[4]
+            ?.replace(/\\040/g, " ")
+            .replace(/\\134/g, "\\");
+          return (
+            mountpoint === diskRoot && /^(ext4|xfs) /.test(filesystem ?? "")
+          );
+        }),
+      "DEDICATED_INSTALLER_FILESYSTEM_REQUIRED_FOR_DISK_PRESSURE",
+    );
+    const migration = await acquiredMigration(env),
+      policy = migration.snapshot.plan.policy,
       checkpoint = JSON.parse(migration.row().checkpoint),
       free = await fs.statfs(join(env.config.root, "installer")),
       freeBefore = Number(free.bavail) * Number(free.bsize),
       remaining = Math.floor(policy.minFreeBytes / 2),
       allocatedBytes = freeBefore - remaining,
-      path = join(env.config.root, "qualification-disk-pressure-" + randomUUID());
-    invariant(remaining >= 32 * 1024 * 1024 && allocatedBytes > 0,
-      "FROZEN_DISK_BUDGET_REQUIRES_SAFE_PHYSICAL_PRESSURE_ROOM");
-    const file = await fs.open(path, "wx", 0o600); await file.close();
+      path = join(diskRoot, "qualification-disk-pressure-" + randomUUID());
+    invariant(
+      remaining >= 32 * 1024 * 1024 && allocatedBytes > 0,
+      "FROZEN_DISK_BUDGET_REQUIRES_SAFE_PHYSICAL_PRESSURE_ROOM",
+    );
+    const file = await fs.open(path, "wx", 0o600);
+    await file.close();
     let freeDuring;
     try {
       // Allocate real blocks on the same dedicated filesystem. Sparse truncate
@@ -1589,106 +1835,246 @@ async function x13RemainingBudgetsAndMaximum(browser) {
       freeDuring = Number(actual.bavail) * Number(actual.bsize);
       expect(freeDuring).toBeLessThan(policy.minFreeBytes);
       expect(freeDuring).toBeGreaterThanOrEqual(16 * 1024 * 1024);
-      await expect(migration.call(randomUUID(), "batch", checkpoint)).rejects.toThrow("MIGRATION_DISK_BUDGET");
+      await expect(
+        migration.call(randomUUID(), "batch", checkpoint),
+      ).rejects.toThrow("MIGRATION_DISK_BUDGET");
       expect(migration.row().checkpoint).toBe(JSON.stringify(checkpoint));
-    } finally { await fs.unlink(path); }
+    } finally {
+      await fs.unlink(path);
+    }
     // A real BEGIN IMMEDIATE lock wait counts in the production transaction
     // budget. The fault holder changes no business row or writer authority.
     const holdMs = policy.migrationBatchMs + 150;
     invariant(holdMs <= 1500, "REAL_SQL_WAIT_MUST_REMAIN_WITHIN_HTTP_DEADLINE");
     await env.harness.coordinator.renew(migration.accepted.attemptId, {
-      controllerId: "native-fault-controller", fence: migration.lease.fence, leaseMs: 120000,
+      controllerId: "native-fault-controller",
+      fence: migration.lease.fence,
+      leaseMs: 120000,
     });
-    const before = migration.row(), began = performance.now();
+    const before = migration.row(),
+      began = performance.now();
     env.database.exec("BEGIN IMMEDIATE");
     let locked = true;
-    const release = setTimeout(() => { if (locked) { env.database.exec("ROLLBACK"); locked = false; } }, holdMs);
+    const release = setTimeout(() => {
+      if (locked) {
+        env.database.exec("ROLLBACK");
+        locked = false;
+      }
+    }, holdMs);
     let sqlRejection;
     try {
       await env.harness.coordinator.migration(migration.accepted.attemptId, {
-        fence: migration.lease.fence, operationId: randomUUID(), action: "repair",
-        planDigest: migration.planDigest, checkpoint: JSON.parse(before.checkpoint),
+        fence: migration.lease.fence,
+        operationId: randomUUID(),
+        action: "repair",
+        planDigest: migration.planDigest,
+        checkpoint: JSON.parse(before.checkpoint),
       });
-      throw new Error("A real over-budget transaction wait unexpectedly applied");
+      throw new Error(
+        "A real over-budget transaction wait unexpectedly applied",
+      );
     } catch (error) {
       expect(error.code).toBe("MIGRATION_BATCH_BUDGET_EXCEEDED");
       sqlRejection = error.code;
     } finally {
-      clearTimeout(release); if (locked) { env.database.exec("ROLLBACK"); locked = false; }
+      clearTimeout(release);
+      if (locked) {
+        env.database.exec("ROLLBACK");
+        locked = false;
+      }
     }
     expect(performance.now() - began).toBeGreaterThan(policy.migrationBatchMs);
     expect(migration.row()).toEqual(before);
-    await expect(env.harness.coordinator.migration(migration.accepted.attemptId, {
-      fence: migration.lease.fence, operationId: randomUUID(), action: "contract", planDigest: migration.planDigest,
-    })).rejects.toThrow("FIXED_MIGRATION_COMMAND_REQUIRED");
-    await expect(env.harness.coordinator.migration(migration.accepted.attemptId, {
-      fence: migration.lease.fence, operationId: randomUUID(), action: "sql", planDigest: migration.planDigest,
-      sql: "DROP TABLE projects",
-    })).rejects.toThrow("FIXED_MIGRATION_COMMAND_REQUIRED");
-    expect(env.database.prepare("SELECT 1 FROM projects WHERE id=?").get(env.project.id)).toBeTruthy();
-    return { attemptId: migration.accepted.attemptId,
-      diskBudget: { declaredMinFreeBytes: policy.minFreeBytes, freeBefore, freeDuring, allocatedBytes,
-        rejectedCode: "MIGRATION_DISK_BUDGET", originalVolumeNeverRestored: true },
-      longSqlWait: { declaredBudgetMs: policy.migrationBatchMs, physicalHoldMs: holdMs, rejectedCode: sqlRejection,
-        originalCheckpointUnchanged: true, transactionRolledBack: true },
-      arbitrarySqlAndContractRejectedByValidFence: true };
+    await expect(
+      env.harness.coordinator.migration(migration.accepted.attemptId, {
+        fence: migration.lease.fence,
+        operationId: randomUUID(),
+        action: "contract",
+        planDigest: migration.planDigest,
+      }),
+    ).rejects.toThrow("FIXED_MIGRATION_COMMAND_REQUIRED");
+    await expect(
+      env.harness.coordinator.migration(migration.accepted.attemptId, {
+        fence: migration.lease.fence,
+        operationId: randomUUID(),
+        action: "sql",
+        planDigest: migration.planDigest,
+        sql: "DROP TABLE projects",
+      }),
+    ).rejects.toThrow("FIXED_MIGRATION_COMMAND_REQUIRED");
+    expect(
+      env.database
+        .prepare("SELECT 1 FROM projects WHERE id=?")
+        .get(env.project.id),
+    ).toBeTruthy();
+    return {
+      attemptId: migration.accepted.attemptId,
+      diskBudget: {
+        declaredMinFreeBytes: policy.minFreeBytes,
+        freeBefore,
+        freeDuring,
+        allocatedBytes,
+        rejectedCode: "MIGRATION_DISK_BUDGET",
+        originalVolumeNeverRestored: true,
+      },
+      longSqlWait: {
+        declaredBudgetMs: policy.migrationBatchMs,
+        physicalHoldMs: holdMs,
+        rejectedCode: sqlRejection,
+        originalCheckpointUnchanged: true,
+        transactionRolledBack: true,
+      },
+      arbitrarySqlAndContractRejectedByValidFence: true,
+    };
   });
-  const maximumAndDeferredGlobal = await independentFailure(browser, "X13", async env => {
-    const load = await populateQualifiedMaximum(env), accepted = await env.accept();
-    await env.until(s => s.attempt?.state === "activation-confirmed");
-    const maxData = maximumMigrationReceipt(env, accepted.attemptId, load);
-    await env.resumeTerminal();
-    const mainFingerprint = env.fixture.envelope.manifest.runInputFingerprint,
-      roots = await readJson(env.config.trustRootPath), catalog = await readJson(env.config.catalogFile),
-      proof = await readJson(env.config.qualificationInstallationPath),
-      current = await env.state(), originalSchema = env.database.prepare("SELECT count(*) n FROM __drizzle_migrations").get().n,
-      ddlBefore = env.database.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all(),
-      attemptsBefore = env.database.prepare("SELECT count(*) n FROM upgrade_attempts").get().n,
-      downloadsBefore = env.fixture.requestLog().length,
-      bindingBefore = await env.binding();
-    expect(originalSchema).toBe(28);
-    const variant = negativeQualificationEnvelope(env.fixture.envelope, roots, env.config.instanceId,
-      "global-schema-unqualified", manifest => {
-        manifest.releaseId = manifest.releaseId + "-unqualified-global-ddl";
-        manifest.upgradePaths = [{ fromRelease: current.lastConfirmedServiceRelease.releaseId,
-          minSchema: originalSchema, maxSchema: originalSchema, targetSchema: originalSchema + 1,
-          bridgeReleases: [], migrationPlanDigest: manifest.upgradePaths.find(path => path.migrationPlanDigest)?.migrationPlanDigest ?? null }];
-      });
-    let status, rejectedStatus;
-    try {
-      await overwriteMountedJson(env.config.trustRootPath, variant.roots);
-      await overwriteMountedJson(env.config.qualificationInstallationPath, { ...proof, trustRootDigest: digest(variant.roots) });
-      await overwriteMountedJson(env.config.catalogFile, variant.catalog);
-      await expect.poll(async () => { status = await env.state(); return status.catalog.reason; },
-        { timeout: 30000 }).toBe("GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED");
-      expect(status.catalog.availableRelease).toBeNull();
-      const requestId = randomUUID(), response = await env.request.post(env.origin + "/api/system/upgrade/requests", {
-        data: { requestId, targetReleaseId: variant.envelope.manifest.releaseId,
-          targetDigest: variant.envelope.manifestDigest, expectedActivationGeneration: status.activationGeneration },
-        headers: { Origin: env.origin, "X-Upgrade-CSRF": status.csrfToken },
-      });
-      rejectedStatus = response.status(); expect([400, 409, 412]).toContain(rejectedStatus);
-      expect((await env.request.get(env.origin + "/api/system/upgrade/requests/" + requestId)).status()).toBe(404);
-      expect(env.database.prepare("SELECT count(*) n FROM upgrade_attempts").get().n).toBe(attemptsBefore);
-      expect(env.database.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name").all()).toEqual(ddlBefore);
-      expect(env.database.prepare("SELECT count(*) n FROM __drizzle_migrations").get().n).toBe(originalSchema);
-      expect(env.fixture.requestLog()).toHaveLength(downloadsBefore);
-      expect(await env.binding()).toEqual(bindingBefore);
-    } finally {
-      await overwriteMountedJson(env.config.trustRootPath, roots);
-      await overwriteMountedJson(env.config.qualificationInstallationPath, proof);
-      await overwriteMountedJson(env.config.catalogFile, catalog);
-    }
-    return { attemptId: accepted.attemptId, maxData, forwardOnly: {
-      inputFingerprint: mainFingerprint, variantInputFingerprint: variant.envelope.manifest.runInputFingerprint,
-      declaredTargetSchema: originalSchema + 1, actualDrizzleCount: originalSchema,
-      catalogReason: status.catalog.reason, acceptRejectedStatus: rejectedStatus,
-      zeroDdl: true, zeroAttempt: true, zeroDownload: true,
-      qualificationScope: "namespace-authority-and-deferred-global-ddl", globalDestructiveDdlQualified: false,
-    } };
-  });
-  return { diskAndSql, maxData: maximumAndDeferredGlobal.maxData,
-    forwardOnly: maximumAndDeferredGlobal.forwardOnly, maximumAndDeferredGlobal };
+  const maximumAndDeferredGlobal = await independentFailure(
+    browser,
+    "X13",
+    async (env) => {
+      const load = await populateQualifiedMaximum(env),
+        accepted = await env.accept();
+      await env.until((s) => s.attempt?.state === "activation-confirmed");
+      const maxData = maximumMigrationReceipt(env, accepted.attemptId, load);
+      await env.resumeTerminal();
+      const mainFingerprint = env.fixture.envelope.manifest.runInputFingerprint,
+        roots = await readJson(env.config.trustRootPath),
+        catalog = await readJson(env.config.catalogFile),
+        proof = await readJson(env.config.qualificationInstallationPath),
+        current = await env.state(),
+        originalSchema = env.database
+          .prepare("SELECT count(*) n FROM __drizzle_migrations")
+          .get().n,
+        ddlBefore = env.database
+          .prepare(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
+          )
+          .all(),
+        attemptsBefore = env.database
+          .prepare("SELECT count(*) n FROM upgrade_attempts")
+          .get().n,
+        downloadsBefore = env.fixture.requestLog().length,
+        bindingBefore = await env.binding();
+      expect(originalSchema).toBe(28);
+      const variant = negativeQualificationEnvelope(
+        env.fixture.envelope,
+        roots,
+        env.config.instanceId,
+        "global-schema-unqualified",
+        (manifest) => {
+          const version = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(
+            manifest.releaseId,
+          );
+          invariant(version, "ACTUAL_SEMVER_QUALIFICATION_RELEASE_REQUIRED");
+          manifest.releaseId = `${version[1]}.${version[2]}.${Number(version[3]) + 1}-unqualified-global-ddl`;
+          manifest.upgradePaths = [
+            {
+              fromRelease: current.lastConfirmedServiceRelease.releaseId,
+              minSchema: originalSchema,
+              maxSchema: originalSchema,
+              targetSchema: originalSchema + 1,
+              bridgeReleases: [],
+              migrationPlanDigest:
+                manifest.upgradePaths.find((path) => path.migrationPlanDigest)
+                  ?.migrationPlanDigest ?? null,
+            },
+          ];
+        },
+      );
+      let status, rejectedStatus;
+      try {
+        await overwriteMountedJson(env.config.trustRootPath, variant.roots);
+        await overwriteMountedJson(env.config.qualificationInstallationPath, {
+          ...proof,
+          trustRootDigest: digest(variant.roots),
+        });
+        await overwriteMountedJson(env.config.catalogFile, variant.catalog);
+        await expect
+          .poll(
+            async () => {
+              status = await env.state();
+              return status.catalog.reason;
+            },
+            { timeout: 30000 },
+          )
+          .toBe("GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED");
+        expect(status.catalog.availableRelease).toBeNull();
+        const requestId = randomUUID(),
+          response = await env.request.post(
+            env.origin + "/api/system/upgrade/requests",
+            {
+              data: {
+                requestId,
+                targetReleaseId: variant.envelope.manifest.releaseId,
+                targetDigest: variant.envelope.manifestDigest,
+                expectedActivationGeneration: status.activationGeneration,
+              },
+              headers: {
+                Origin: env.origin,
+                "X-Upgrade-CSRF": status.csrfToken,
+              },
+            },
+          );
+        rejectedStatus = response.status();
+        expect([400, 409, 412]).toContain(rejectedStatus);
+        expect(
+          (
+            await env.request.get(
+              env.origin + "/api/system/upgrade/requests/" + requestId,
+            )
+          ).status(),
+        ).toBe(404);
+        expect(
+          env.database.prepare("SELECT count(*) n FROM upgrade_attempts").get()
+            .n,
+        ).toBe(attemptsBefore);
+        expect(
+          env.database
+            .prepare(
+              "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
+            )
+            .all(),
+        ).toEqual(ddlBefore);
+        expect(
+          env.database
+            .prepare("SELECT count(*) n FROM __drizzle_migrations")
+            .get().n,
+        ).toBe(originalSchema);
+        expect(env.fixture.requestLog()).toHaveLength(downloadsBefore);
+        expect(await env.binding()).toEqual(bindingBefore);
+      } finally {
+        await overwriteMountedJson(env.config.trustRootPath, roots);
+        await overwriteMountedJson(
+          env.config.qualificationInstallationPath,
+          proof,
+        );
+        await overwriteMountedJson(env.config.catalogFile, catalog);
+      }
+      return {
+        attemptId: accepted.attemptId,
+        maxData,
+        forwardOnly: {
+          inputFingerprint: mainFingerprint,
+          variantInputFingerprint:
+            variant.envelope.manifest.runInputFingerprint,
+          declaredTargetSchema: originalSchema + 1,
+          actualDrizzleCount: originalSchema,
+          catalogReason: status.catalog.reason,
+          acceptRejectedStatus: rejectedStatus,
+          zeroDdl: true,
+          zeroAttempt: true,
+          zeroDownload: true,
+          qualificationScope: "namespace-authority-and-deferred-global-ddl",
+          globalDestructiveDdlQualified: false,
+        },
+      };
+    },
+  );
+  return {
+    diskAndSql,
+    maxData: maximumAndDeferredGlobal.maxData,
+    forwardOnly: maximumAndDeferredGlobal.forwardOnly,
+    maximumAndDeferredGlobal,
+  };
 }
 async function stoppedAttempt(env, attempt) {
   const current = await env.until(
@@ -1700,13 +2086,17 @@ async function stoppedAttempt(env, attempt) {
   expect(current.attempt.percent).not.toBe(100);
   return current;
 }
-async function acquiredMigration(env, sourceTable = "projects", existingAttempt) {
+async function acquiredMigration(
+  env,
+  sourceTable = "projects",
+  existingAttempt,
+) {
   const manifest = env.fixture.envelope.manifest;
   invariant(
     manifest.upgradePaths.some((path) => path.migrationPlanDigest),
     "REAL_FROZEN_MIGRATION_PACKAGE_REQUIRED",
   );
-  const accepted = existingAttempt ?? await env.accept();
+  const accepted = existingAttempt ?? (await env.accept());
   await env.until(() =>
     Boolean(
       env.database
@@ -3102,8 +3492,14 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
       { name: "migration cascade source", sourceType: "empty" },
       202,
     );
-    const racedRule = await createDisabled(cascadeProject.id, "before online backfill"),
-      cascadedRule = await createDisabled(cascadeProject.id, "cascaded child rule");
+    const racedRule = await createDisabled(
+        cascadeProject.id,
+        "before online backfill",
+      ),
+      cascadedRule = await createDisabled(
+        cascadeProject.id,
+        "cascaded child rule",
+      );
     const m = await acquiredMigration(env, "automations"),
       operationId = randomUUID();
     // The actual bounded repair operation establishes a fresh reconciliation
@@ -3118,7 +3514,9 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
     await expect(
       m.call(operationId, "batch", { phase: "different" }),
     ).rejects.toThrow();
-    const projection = m.plan.projections.find((p) => p.sourceTable === "automations"),
+    const projection = m.plan.projections.find(
+        (p) => p.sourceTable === "automations",
+      ),
       nameField = projection.fields.find((field) => field.source === "name");
     invariant(nameField, "AUTOMATION_NAME_PROJECTION_REQUIRED");
     const raceStartedAt = performance.now();
@@ -3133,7 +3531,10 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
           env.origin + `/api/automations/${racedRule.id}`,
           {
             data: { name: update.name },
-            headers: { Origin: env.origin, "X-Operation-Id": update.operationId },
+            headers: {
+              Origin: env.origin,
+              "X-Operation-Id": update.operationId,
+            },
             timeout: 2000,
           },
         );
@@ -3155,7 +3556,11 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
       .get(m.planDigest, projection.targetTable, racedRule.id).revision;
     await advanceMigration(m);
     const reconciled = env.database
-      .prepare("SELECT * FROM " + identifier(projection.targetTable) + " WHERE row_key=?")
+      .prepare(
+        "SELECT * FROM " +
+          identifier(projection.targetTable) +
+          " WHERE row_key=?",
+      )
       .get(racedRule.id);
     expect(reconciled.tombstone).toBe(0);
     expect(reconciled[nameField.name]).toBe(latest.name);
@@ -3165,8 +3570,13 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
       env.origin,
       `/api/projects/${env.project.id}/automations`,
       "POST",
-      { ...env.input.automationInput, name: "newer migration write",
-        scheduleKind: "hourly", scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 }, timezone: "UTC" },
+      {
+        ...env.input.automationInput,
+        name: "newer migration write",
+        scheduleKind: "hourly",
+        scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 },
+        timezone: "UTC",
+      },
       201,
     );
     await responseJson(
@@ -3186,12 +3596,12 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
     );
     await advanceMigration(m);
     const shadow = env.database
-        .prepare(
-          "SELECT * FROM " +
-            identifier(projection.targetTable) +
-            " WHERE row_key=?",
-        )
-        .get(newer.id);
+      .prepare(
+        "SELECT * FROM " +
+          identifier(projection.targetTable) +
+          " WHERE row_key=?",
+      )
+      .get(newer.id);
     expect(shadow?.tombstone).toBe(1);
     expect(
       env.database
@@ -3209,20 +3619,34 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
     await m.call(randomUUID(), "repair", JSON.parse(m.row().checkpoint));
     await advanceMigration(m);
     for (const child of [racedRule, cascadedRule]) {
-      expect(env.database.prepare("SELECT 1 FROM automations WHERE id=?").get(child.id))
-        .toBeUndefined();
+      expect(
+        env.database
+          .prepare("SELECT 1 FROM automations WHERE id=?")
+          .get(child.id),
+      ).toBeUndefined();
       const deletedShadow = env.database
-        .prepare("SELECT tombstone,row_revision FROM " + identifier(projection.targetTable) + " WHERE row_key=?")
+        .prepare(
+          "SELECT tombstone,row_revision FROM " +
+            identifier(projection.targetTable) +
+            " WHERE row_key=?",
+        )
         .get(child.id);
       expect(deletedShadow.tombstone).toBe(1);
-      const deletion = env.database.prepare(
-        "SELECT max(id) revision FROM upgrade_projection_changes WHERE plan_digest=? AND projection=? AND row_key=? AND tombstone=1 AND projected=1",
-      ).get(m.planDigest, projection.targetTable, child.id);
+      const deletion = env.database
+        .prepare(
+          "SELECT max(id) revision FROM upgrade_projection_changes WHERE plan_digest=? AND projection=? AND row_key=? AND tombstone=1 AND projected=1",
+        )
+        .get(m.planDigest, projection.targetTable, child.id);
       expect(deletion.revision).toBeGreaterThan(0);
-      expect(deletedShadow.row_revision).toBeGreaterThanOrEqual(deletion.revision);
+      expect(deletedShadow.row_revision).toBeGreaterThanOrEqual(
+        deletion.revision,
+      );
     }
-    expect(env.database.prepare("SELECT 1 FROM projects WHERE id=?").get(cascadeProject.id))
-      .toBeUndefined();
+    expect(
+      env.database
+        .prepare("SELECT 1 FROM projects WHERE id=?")
+        .get(cascadeProject.id),
+    ).toBeUndefined();
     expect(env.database.pragma("foreign_key_check")).toEqual([]);
     expect(m.row().degraded).toBe(0);
     return {
@@ -3230,13 +3654,23 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
       checkpoint: JSON.parse(m.row().checkpoint),
       completedWork: m.row().completed_work,
       deletedRowDigest: digest(newer.id),
-      concurrentRevision: { count: operations.length,
-        operationDigests: operations.map((update) => digest(update.operationId)),
-        raceStartedAt, raceFinishedAt, latestRevision,
-        shadowRevision: reconciled.row_revision, authoritativeNameDigest: digest(latest.name) },
-      cascade: { projectDigest: digest(cascadeProject.id),
+      concurrentRevision: {
+        count: operations.length,
+        operationDigests: operations.map((update) =>
+          digest(update.operationId),
+        ),
+        raceStartedAt,
+        raceFinishedAt,
+        latestRevision,
+        shadowRevision: reconciled.row_revision,
+        authoritativeNameDigest: digest(latest.name),
+      },
+      cascade: {
+        projectDigest: digest(cascadeProject.id),
         childDigests: [racedRule, cascadedRule].map((rule) => digest(rule.id)),
-        foreignKeysValid: true, tombstonesConfirmed: true },
+        foreignKeysValid: true,
+        tombstonesConfirmed: true,
+      },
     };
   }));
 
@@ -3307,41 +3741,128 @@ test("isolated shadow loss preserves original write/outbox; actual outbox failur
     };
   }));
 
-test("real WAL/disk budget and unauthorized contract refuse advancement without stopping tasks [X13]", async ({
+test("actual pinned WAL, allocated disk, transaction waits and maximum public data qualify only namespace changes and defer global DDL [X13]", async ({
   page,
   context,
 }, info) =>
   recordCase("X13", page, context, info, async (env) => {
     invariant(
-      env.input.matrixInputs?.X13 || env.input.requireBudgetFailure === true,
-      "FROZEN_REAL_BUDGET_FAILURE_VARIANT_REQUIRED",
+      env.input.automationInput,
+      "REAL_WAL_BUSINESS_LOAD_INPUT_REQUIRED",
     );
-    const accepted = await env.accept(),
-      status = await stoppedAttempt(env, accepted);
-    expect(status.attempt.reason).toMatch(
-      /MIGRATION_(?:WAL|DISK|BATCH)_BUDGET/,
-    );
-    const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId);
-    await expect(
-      env.harness.coordinator.migration(accepted.attemptId, {
-        fence: snapshot.fence,
-        operationId: randomUUID(),
-        action: "contract",
-        planDigest: snapshot.plan.migrationPath.migrationPlanDigest,
+    const rules = [];
+    for (let i = 0; i < 8; i++) {
+      const rule = await responseJson(
+        env.request,
+        env.origin,
+        `/api/projects/${env.project.id}/automations`,
+        "POST",
+        {
+          ...env.input.automationInput,
+          name: "WAL qualification writer " + i,
+          scheduleKind: "hourly",
+          scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 },
+          timezone: "UTC",
+        },
+        201,
+      );
+      await responseJson(
+        env.request,
+        env.origin,
+        `/api/automations/${rule.id}/disable`,
+        "POST",
+        {},
+      );
+      rules.push(rule.id);
+    }
+    const migration = await acquiredMigration(env),
+      policy = migration.snapshot.plan.policy,
+      Database = createRequire(
+        join(env.config.initialRoot, "api/package.json"),
+      )("better-sqlite3"),
+      reader = new Database(env.database.name, {
+        readonly: true,
+        fileMustExist: true,
       }),
-    ).rejects.toThrow();
-    expect(
-      env.database
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type='table' AND name='projects'",
+      checkpointBefore = migration.row().checkpoint;
+    reader.pragma("query_only=ON");
+    reader.exec("BEGIN");
+    reader.prepare("SELECT count(*) n FROM projects").get();
+    let loading = true,
+      count = 0,
+      workerError,
+      leaseError;
+    const leaseTimer = setInterval(() => {
+      env.harness.coordinator
+        .renew(migration.accepted.attemptId, {
+          controllerId: "native-fault-controller",
+          fence: migration.lease.fence,
+          leaseMs: 120000,
+        })
+        .catch((error) => {
+          leaseError = error;
+        });
+    }, 1000);
+    const workers = rules.map((ruleId, worker) =>
+      (async () => {
+        let n = 0;
+        while (loading) {
+          const response = await env.request.put(
+            env.origin + "/api/automations/" + ruleId,
+            {
+              data: { name: "wal-pressure-" + worker + "-" + ++n },
+              headers: { Origin: env.origin, "X-Operation-Id": randomUUID() },
+              timeout: 2000,
+            },
+          );
+          expect(response.status()).toBe(200);
+          count++;
+        }
+      })().catch((error) => {
+        workerError = error;
+        loading = false;
+      }),
+    );
+    let walBytes, observedBudget;
+    try {
+      await expect
+        .poll(
+          async () => {
+            if (workerError) throw workerError;
+            if (leaseError) throw leaseError;
+            walBytes = (await fs.stat(env.database.name + "-wal")).size;
+            return walBytes;
+          },
+          { timeout: 240000, intervals: [25, 50] },
         )
-        .get(),
-    ).toBeTruthy();
-    expect((await env.state()).attempt.percent).not.toBe(100);
+        .toBeGreaterThan(policy.maxWalBytes);
+      loading = false;
+      await Promise.all(workers);
+      if (workerError) throw workerError;
+      await expect(
+        migration.call(randomUUID(), "batch", JSON.parse(checkpointBefore)),
+      ).rejects.toThrow("MIGRATION_WAL_BUDGET");
+      observedBudget = {
+        declaredMaxWalBytes: policy.maxWalBytes,
+        measuredWalBytes: walBytes,
+        actualPublicWrites: count,
+        realPinnedReadTransaction: true,
+        rejectedCode: "MIGRATION_WAL_BUDGET",
+      };
+      expect(count).toBeGreaterThan(0);
+      expect(migration.row().checkpoint).toBe(checkpointBefore);
+    } finally {
+      loading = false;
+      await Promise.all(workers);
+      clearInterval(leaseTimer);
+      reader.exec("ROLLBACK");
+      reader.close();
+    }
     return {
-      attemptId: accepted.attemptId,
-      actualBudgetReason: status.attempt.reason,
-      contractNotAccepted: true,
+      attemptId: migration.accepted.attemptId,
+      walBudget: observedBudget,
+      inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
+      afterContinuity: () => x13RemainingBudgetsAndMaximum(context.browser()),
     };
   }));
 
@@ -3351,27 +3872,69 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
 }, info) =>
   recordCase("X14", page, context, info, async (env) => {
     invariant(env.input.automationInput, "REAL_DUE_AUTOMATION_INPUT_REQUIRED");
-    invariant(env.model && typeof env.model.finishTask === "function", "ACTUAL_CONTROLLED_MODEL_EXIT_CAPABILITY_REQUIRED");
+    invariant(
+      env.model && typeof env.model.finishTask === "function",
+      "ACTUAL_CONTROLLED_MODEL_EXIT_CAPABILITY_REQUIRED",
+    );
+    // The real Tasks application admits any running sandbox with the delivered
+    // runtime and jobs/files planes. Reuse the original interactive Guest while
+    // its original tmux and seconds counter continue, rather than allocating a
+    // fourth Guest beyond the qualification host's actual memory/CPU capacity.
     const exitProofId = randomUUID(),
-      exitSandbox = await responseJson(env.request, env.origin, "/api/sandboxes", "POST", {
-        projectId: env.project.id, runtime: env.model.runtimeId, headless: true,
-        ...(env.imageProof ? { image: env.imageProof.imageManifestId } : {}),
-      }, 201);
-    env.owned.push(exitSandbox.id);
-    await expect.poll(async () => (await responseJson(env.request, env.origin, "/api/sandboxes/" + exitSandbox.id)).status,
-      { timeout: 180000 }).toBe("running");
-    const natural = await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/runtimes/${env.model.runtimeId}/tasks`, "POST",
-      { prompt: qualificationExitPrompt(exitProofId), timeoutMinutes: 30 }, 202);
-    await expect.poll(() => env.model.evidence().requests.filter(row =>
-      row.taskId === exitProofId && row.phase === "tool-result-held").length,
-      { timeout: 180000 }).toBeGreaterThan(0);
-    const naturalJob = JSON.parse(env.database.prepare("SELECT job_handle FROM agent_tasks WHERE id=?").get(natural.id).job_handle);
-    expect((await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/tasks/${natural.id}`)).status).toBe("running");
-    const finiteCounter = await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/exec`, "POST", {
-      command: "cat /workspace/.upg-agent-proof/" + exitProofId + "/counter",
-    });
+      exitSandbox = env.original;
+    const beforeTasks = await responseJson(
+      env.request,
+      env.origin,
+      `/api/sandboxes/${exitSandbox.id}`,
+    );
+    expect(beforeTasks.status).toBe("running");
+    const natural = await responseJson(
+      env.request,
+      env.origin,
+      `/api/sandboxes/${exitSandbox.id}/runtimes/${env.model.runtimeId}/tasks`,
+      "POST",
+      { prompt: qualificationExitPrompt(exitProofId), timeoutMinutes: 30 },
+      202,
+    );
+    await expect
+      .poll(
+        () =>
+          env.model
+            .evidence()
+            .requests.filter(
+              (row) =>
+                row.taskId === exitProofId && row.phase === "tool-result-held",
+            ).length,
+        { timeout: 180000 },
+      )
+      .toBeGreaterThan(0);
+    const naturalJob = JSON.parse(
+      env.database
+        .prepare("SELECT job_handle FROM agent_tasks WHERE id=?")
+        .get(natural.id).job_handle,
+    );
+    expect(
+      (
+        await responseJson(
+          env.request,
+          env.origin,
+          `/api/sandboxes/${exitSandbox.id}/tasks/${natural.id}`,
+        )
+      ).status,
+    ).toBe("running");
+    const finiteCounter = await responseJson(
+      env.request,
+      env.origin,
+      `/api/sandboxes/${exitSandbox.id}/exec`,
+      "POST",
+      {
+        command: "cat /workspace/.upg-agent-proof/" + exitProofId + "/counter",
+      },
+    );
     expect(finiteCounter.exitCode).toBe(0);
-    expect(finiteCounter.stdout.trim().split("\n").map(Number)).toEqual([1, 2, 3]);
+    expect(finiteCounter.stdout.trim().split("\n").map(Number)).toEqual([
+      1, 2, 3,
+    ]);
     const automationInput = env.model
       ? {
           ...env.input.automationInput,
@@ -3414,49 +3977,146 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
     );
     expect(read.state).toBe("complete");
     const migration = await acquiredMigration(env, "projects", accepted);
-    const projection = migration.plan.projections.find(row => row.sourceTable === "projects");
+    const projection = migration.plan.projections.find(
+      (row) => row.sourceTable === "projects",
+    );
     // Recreate only this signed isolated shadow representation through the real
     // migration repair command. The original authoritative rows remain intact.
     // Keeping the actual repaired backfill pending provides a genuine ongoing
     // conversion/recovery window for the Guest CLI exit and explicit cancel.
     env.database.exec("DROP TABLE " + identifier(projection.targetTable));
-    await migration.call(randomUUID(), "repair", JSON.parse(migration.row().checkpoint));
+    await migration.call(
+      randomUUID(),
+      "repair",
+      JSON.parse(migration.row().checkpoint),
+    );
     expect(migration.row().stage).not.toBe("complete");
     const migrationPhaseAtExit = migration.row().stage,
       released = env.model.finishTask(exitProofId);
     expect(released.finalResponseReleased).toBe(true);
     let naturalResult;
-    await expect.poll(async () => {
-      naturalResult = await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/tasks/${natural.id}`);
-      return naturalResult.status;
-    }, { timeout: 30000 }).toBe("succeeded");
+    await expect
+      .poll(
+        async () => {
+          naturalResult = await responseJson(
+            env.request,
+            env.origin,
+            `/api/sandboxes/${exitSandbox.id}/tasks/${natural.id}`,
+          );
+          return naturalResult.status;
+        },
+        { timeout: 30000 },
+      )
+      .toBe("succeeded");
     expect(migration.row().stage).not.toBe("complete");
-    const completion = env.database.prepare("SELECT * FROM agent_task_job_completions WHERE task_id=?").get(natural.id);
-    expect(completion).toMatchObject({ sandbox_id: exitSandbox.id, exit_kind: "natural", exit_code: 0,
-      job_handle_digest: digest({ provider: naturalJob.provider, jobId: naturalJob.jobId }) });
+    const completion = env.database
+      .prepare("SELECT * FROM agent_task_job_completions WHERE task_id=?")
+      .get(natural.id);
+    expect(completion).toMatchObject({
+      sandbox_id: exitSandbox.id,
+      exit_kind: "natural",
+      exit_code: 0,
+      job_handle_digest: digest({
+        provider: naturalJob.provider,
+        jobId: naturalJob.jobId,
+      }),
+    });
     expect(completion.last_seq).toBe(naturalResult.lastSeq);
-    const baseline = JSON.parse(env.database.prepare("SELECT snapshot FROM upgrade_continuity_baselines WHERE attempt_id=?").get(accepted.attemptId).snapshot);
-    expect(baseline.tasks.some(row => row.id === natural.id)).toBe(true);
-    expect(completion.observed_at).toBeGreaterThanOrEqual(Date.parse(baseline.observedAt));
-    expect(env.model.evidence().finalResponses.filter(row => row.taskId === exitProofId)).toHaveLength(1);
-    expect(env.model.evidence().requests.filter(row => row.taskId === exitProofId && row.phase === "tool-issued")).toHaveLength(1);
+    const baseline = JSON.parse(
+      env.database
+        .prepare(
+          "SELECT snapshot FROM upgrade_continuity_baselines WHERE attempt_id=?",
+        )
+        .get(accepted.attemptId).snapshot,
+    );
+    expect(baseline.tasks.some((row) => row.id === natural.id)).toBe(true);
+    expect(completion.observed_at).toBeGreaterThanOrEqual(
+      Date.parse(baseline.observedAt),
+    );
+    expect(
+      env.model
+        .evidence()
+        .finalResponses.filter((row) => row.taskId === exitProofId),
+    ).toHaveLength(1);
+    expect(
+      env.model
+        .evidence()
+        .requests.filter(
+          (row) => row.taskId === exitProofId && row.phase === "tool-issued",
+        ),
+    ).toHaveLength(1);
     const cancelProofId = randomUUID(),
-      cancelled = await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/runtimes/${env.model.runtimeId}/tasks`, "POST",
-        { prompt: qualificationPrompt(cancelProofId), timeoutMinutes: 30 }, 202);
-    await expect.poll(() => env.model.evidence().requests.filter(row => row.taskId === cancelProofId && row.phase === "tool-issued").length,
-      { timeout: 180000 }).toBe(1);
-    const cancelJob = JSON.parse(env.database.prepare("SELECT job_handle FROM agent_tasks WHERE id=?").get(cancelled.id).job_handle);
-    await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/tasks/${cancelled.id}/cancel`, "POST", {}, 202);
-    await expect.poll(async () => (await responseJson(env.request, env.origin, `/api/sandboxes/${exitSandbox.id}/tasks/${cancelled.id}`)).status,
-      { timeout: 30000 }).toBe("killed");
-    const cancelReceipt = env.database.prepare("SELECT * FROM agent_task_job_completions WHERE task_id=?").get(cancelled.id);
-    expect(cancelReceipt).toMatchObject({ sandbox_id: exitSandbox.id, exit_kind: "cancelled",
-      job_handle_digest: digest({ provider: cancelJob.provider, jobId: cancelJob.jobId }) });
-    expect(env.database.prepare("SELECT cancel_requested_at FROM agent_tasks WHERE id=?").get(cancelled.id).cancel_requested_at).toBeTruthy();
+      cancelled = await responseJson(
+        env.request,
+        env.origin,
+        `/api/sandboxes/${exitSandbox.id}/runtimes/${env.model.runtimeId}/tasks`,
+        "POST",
+        { prompt: qualificationPrompt(cancelProofId), timeoutMinutes: 30 },
+        202,
+      );
+    await expect
+      .poll(
+        () =>
+          env.model
+            .evidence()
+            .requests.filter(
+              (row) =>
+                row.taskId === cancelProofId && row.phase === "tool-issued",
+            ).length,
+        { timeout: 180000 },
+      )
+      .toBe(1);
+    const cancelJob = JSON.parse(
+      env.database
+        .prepare("SELECT job_handle FROM agent_tasks WHERE id=?")
+        .get(cancelled.id).job_handle,
+    );
+    await responseJson(
+      env.request,
+      env.origin,
+      `/api/sandboxes/${exitSandbox.id}/tasks/${cancelled.id}/cancel`,
+      "POST",
+      {},
+      202,
+    );
+    await expect
+      .poll(
+        async () =>
+          (
+            await responseJson(
+              env.request,
+              env.origin,
+              `/api/sandboxes/${exitSandbox.id}/tasks/${cancelled.id}`,
+            )
+          ).status,
+        { timeout: 30000 },
+      )
+      .toBe("killed");
+    const cancelReceipt = env.database
+      .prepare("SELECT * FROM agent_task_job_completions WHERE task_id=?")
+      .get(cancelled.id);
+    expect(cancelReceipt).toMatchObject({
+      sandbox_id: exitSandbox.id,
+      exit_kind: "cancelled",
+      job_handle_digest: digest({
+        provider: cancelJob.provider,
+        jobId: cancelJob.jobId,
+      }),
+    });
+    expect(
+      env.database
+        .prepare("SELECT cancel_requested_at FROM agent_tasks WHERE id=?")
+        .get(cancelled.id).cancel_requested_at,
+    ).toBeTruthy();
     await advanceMigration(migration);
-    const classification = await env.harness.coordinator.continuity(accepted.attemptId, { fence: migration.lease.fence });
+    const classification = await env.harness.coordinator.continuity(
+      accepted.attemptId,
+      { fence: migration.lease.fence },
+    );
     expect(classification.qualified).toBe(true);
-    expect(classification.reasons).not.toContain("NATURAL_JOB_EXIT_NEEDS_OWNER_RECEIPT");
+    expect(classification.reasons).not.toContain(
+      "NATURAL_JOB_EXIT_NEEDS_OWNER_RECEIPT",
+    );
     await env.harness.restartController();
     await env.until((s) => s.attempt?.state === "activation-confirmed");
     await expect
@@ -3506,10 +4166,21 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
       attemptId: accepted.attemptId,
       operationDigest: digest(operationId),
       occurrences: occurrences.map((row) => ({ runId: row.run_id })),
-      naturalExit: { taskId: natural.id, sandboxId: exitSandbox.id, modelProofId: exitProofId,
-        receipt: completion, migrationPhaseAtExit, modelFinalResponse: released,
-        actualCliStatus: naturalResult.status, modelQualityQualified: false },
-      userCancel: { taskId: cancelled.id, sameSandboxId: exitSandbox.id, receipt: cancelReceipt },
+      naturalExit: {
+        taskId: natural.id,
+        sandboxId: exitSandbox.id,
+        modelProofId: exitProofId,
+        receipt: completion,
+        migrationPhaseAtExit,
+        modelFinalResponse: released,
+        actualCliStatus: naturalResult.status,
+        modelQualityQualified: false,
+      },
+      userCancel: {
+        taskId: cancelled.id,
+        sameSandboxId: exitSandbox.id,
+        receipt: cancelReceipt,
+      },
       exitClassification: classification,
     };
   }));
