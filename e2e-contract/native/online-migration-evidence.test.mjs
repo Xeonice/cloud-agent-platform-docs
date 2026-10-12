@@ -72,6 +72,13 @@ test("a refusal alone does not qualify the irreversible boundary", () => {
     false,
   );
 });
+test("duplicate scenario or semantic proof cannot conceal another execution", () => {
+  for (const index of [0, 2, 4]) {
+    const records = evidence();
+    records.push({ ...records[index], testStatus: "failed" });
+    assert.equal(onlineMigrationGate(records, input).result, "partial");
+  }
+});
 test("stale inputs, inconsistent rows and failed native executions remain blocked", () => {
   for (const mutate of [
     (records) => {

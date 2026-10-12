@@ -1,18 +1,15 @@
-const passed = (assertion) =>
-  assertion?.result === "passed" &&
-  assertion.testStatus === "passed" &&
-  assertion.expectLocation &&
-  assertion.actualEvidence;
+import {
+  checkedPassed as passed,
+  uniqueAssertion,
+} from "./execution-assertions.mjs";
 export function onlineMigrationGate(assertions, inputFingerprint) {
   const selected = ["X11", "X12", "X13", "X14"].map((id) =>
-    assertions.find((assertion) => assertion.id === id),
+    uniqueAssertion(assertions, id),
   );
   const facts = selected[2]?.actualEvidence?.actual,
     maximum = facts?.maxData,
     forward = facts?.forwardOnly,
-    contract = assertions.find(
-      (assertion) => assertion.id === "semantic-contract",
-    );
+    contract = uniqueAssertion(assertions, "semantic-contract");
   const maxDataTested = Boolean(
     passed(selected[2]) &&
     maximum?.inputFingerprint === inputFingerprint &&

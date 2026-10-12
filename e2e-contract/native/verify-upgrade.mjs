@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { semanticContractGate } from "./semantic-contract-evidence.mjs";
 import { onlineMigrationGate } from "./online-migration-evidence.mjs";
+import { checkedPassed, uniqueAssertion } from "./execution-assertions.mjs";
 import {
   atomicJson,
   treeManifest,
@@ -120,6 +121,13 @@ async function collectAssertions(browser, outputRoot) {
             );
             collected.push({
               ...assertion,
+              reportedResult: assertion.result,
+              result:
+                result.status === "passed"
+                  ? assertion.result
+                  : result.status === "skipped"
+                    ? "not-run"
+                    : "failed",
               expectLocation: `${spec.file}:${spec.line}`,
               actualEvidence: {
                 path: relative(dirname(outputRoot), attachment.path),
@@ -334,18 +342,7 @@ export async function verifyNativeUpgrade(input) {
     );
     const browser = JSON.parse(await fs.readFile(browserPath, "utf8"));
     const actual = await collectAssertions(browser, outputRoot);
-    report.assertions = REQUIRED.map(
-      (id) =>
-        actual.find((assertion) => assertion.id === id) ?? {
-          id,
-          result: "not-run",
-          expectLocation: "acceptance/upgrade-*.spec.mjs",
-          actualEvidence: {
-            reason:
-              "No executed assertion for this mandatory scenario in this run.",
-          },
-        },
-    );
+    report.assertions = REQUIRED.map((id) => uniqueAssertion(actual, id));
     for (const name of [
       "contracts",
       "four-combinations",
@@ -370,8 +367,7 @@ export async function verifyNativeUpgrade(input) {
       );
       report.gates[name] = {
         result:
-          assertions.length === ids.length &&
-          assertions.every((a) => a.result === "passed")
+          assertions.length === ids.length && assertions.every(checkedPassed)
             ? "passed"
             : "partial",
         assertions,
@@ -392,9 +388,7 @@ export async function verifyNativeUpgrade(input) {
     report.result =
       executed.code === 0 &&
       report.skipped === 0 &&
-      report.assertions.every(
-        (a) => a.result === "passed" && a.expectLocation && a.actualEvidence,
-      ) &&
+      report.assertions.every(checkedPassed) &&
       Object.values(report.gates).every((gate) => gate.result === "passed")
         ? "passed"
         : "failed";
