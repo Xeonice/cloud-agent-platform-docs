@@ -274,6 +274,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     model,
     modelImage,
     database,
+    nativePhase = "setup",
+    bodyErrorSummary = null,
     upgradeObservation = null,
     lastKnownProgress = null,
     resourcesCleaned = false;
@@ -677,6 +679,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       200,
     );
     expect(disabledRule.enabled).toBe(false);
+    nativePhase = "upgrade-admission";
     const mutationStart = evidence.mutations.length;
     probe = sampling(request, origin, trafficRule.id);
     const acceptedResponse = page.waitForResponse(
@@ -744,6 +747,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       acceptedAt: accepted.acceptedAt,
       admittedThroughRealBrowserPost: true,
     };
+    nativePhase = "upgrade-confirmation";
     const frozenTarget = accepted.targetDigest;
     const confirmationDeadline = performance.now() + 900000,
       failedStates = new Set([
@@ -815,6 +819,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(installed.activationGeneration).toBeGreaterThan(
       initial.activationGeneration,
     );
+    nativePhase = "page-refresh-and-terminal-attach";
     const beforeRefresh = evidence.ready.length,
       refreshStart = performance.now();
     const refreshButton = page.getByRole("button", {
@@ -860,6 +865,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         intervals: [25, 50, 100],
       })
       .toBe(true);
+    nativePhase = "original-runtime-continuity";
     const snapshotB = await guestSnapshot(request, origin, original.id);
     const originalAfter = await json(
       request,
@@ -1099,6 +1105,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       },
     );
     // Explicit cleanup is outside the continuity window and independently audited.
+    nativePhase = "explicit-resource-cleanup";
     await json(
       request,
       origin,
@@ -1133,7 +1140,105 @@ test("real user acceptance, durable installation and original VM/terminal contin
         204,
       );
     resourcesCleaned = true;
+  } catch (error) {
+    // APIRequestContext errors can include authentication headers in their raw
+    // message. Record only a known failure category, never that message/body.
+    const category = [
+      "N01_INSTANCE_UPGRADE_TERMINATED",
+      "N01_INSTANCE_UPGRADE_CONFIRMATION_TIMEOUT",
+    ].find(
+      (code) =>
+        typeof error?.message === "string" &&
+        error.message.startsWith(code + ":"),
+    );
+    bodyErrorSummary = {
+      category: category ?? "N01_BODY_FAILED",
+      name: ["Error", "AssertionError", "TimeoutError"].includes(error?.name)
+        ? error.name
+        : "Error",
+      rawMessageOmitted: true,
+    };
+    throw error;
   } finally {
+    // Keep this diagnostic independent from mandatory UPG assertion IDs. Persist
+    // it before any teardown await can hide a body failure behind an open SSE.
+    const attempt = upgradeObservation?.attempt,
+      recovery = upgradeObservation?.recovery,
+      diagnostic = {
+        schemaVersion: 1,
+        kind: "native-upgrade-before-teardown-diagnostic",
+        qualificationEvidence: false,
+        bodyOutcome: bodyErrorSummary === null ? "completed" : "failed",
+        phase: nativePhase,
+        instanceId: fixture?.config?.instanceId ?? null,
+        sourceInputFingerprint:
+          fixture?.config?.qualification?.inputFingerprint ?? null,
+        targetManifestDigest: fixture?.envelope?.manifestDigest ?? null,
+        error: bodyErrorSummary,
+        publicObservation:
+          upgradeObservation === null
+            ? null
+            : {
+                instanceId: upgradeObservation.instanceId,
+                observedAt: upgradeObservation.observedAt,
+                activationGeneration: upgradeObservation.activationGeneration,
+                serviceState: upgradeObservation.serviceState,
+                attempt:
+                  attempt == null
+                    ? null
+                    : {
+                        attemptId: attempt.attemptId,
+                        targetReleaseId: attempt.targetReleaseId,
+                        targetDigest: attempt.targetDigest,
+                        generation: attempt.generation,
+                        sequence: attempt.sequence,
+                        state: attempt.state,
+                        stage: attempt.stage,
+                        percent: attempt.percent,
+                        completedWork: attempt.completedWork,
+                        totalWork: attempt.totalWork,
+                        observedAt: attempt.observedAt,
+                        reasonCode:
+                          attempt.reason === "INTERNAL" ? "INTERNAL" : null,
+                        reasonPresent: typeof attempt.reason === "string",
+                      },
+                recovery:
+                  recovery == null
+                    ? null
+                    : {
+                        recoveryAttemptId: recovery.recoveryAttemptId,
+                        triggeringAttemptId: recovery.triggeringAttemptId,
+                        generation: recovery.generation,
+                        sequence: recovery.sequence,
+                        state: recovery.state,
+                        planDigest: recovery.planDigest,
+                        observedAt: recovery.observedAt,
+                      },
+                lastKnownProgress,
+              },
+        observedAt: new Date().toISOString(),
+      };
+    try {
+      const diagnosticPath = info.outputPath(
+        "upg-diagnostic-before-teardown.json",
+      );
+      await mkdir(resolve(diagnosticPath, ".."), {
+        recursive: true,
+        mode: 0o700,
+      });
+      await writeFile(
+        diagnosticPath,
+        JSON.stringify(diagnostic, null, 2) + "\n",
+        { mode: 0o600 },
+      );
+      await info.attach("UPG-before-teardown", {
+        path: diagnosticPath,
+        contentType: "application/json",
+      });
+    } catch {
+      // A diagnostic write must not replace the original acceptance failure.
+      console.error("N01_BEFORE_TEARDOWN_DIAGNOSTIC_UNAVAILABLE");
+    }
     if (probe) probeResult = await probe.stop();
     database?.close();
     let cleanup, cleanupError;
