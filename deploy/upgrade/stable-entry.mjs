@@ -25,7 +25,14 @@ export async function createStableEntry({ root, instanceId, controlKey, stickyKe
   validateBinding(binding); invariant(binding.instanceId === instanceId, 'WRONG_INSTANCE');
   const fencePath=join(root,'entry-fence.json');let admission=await readJson(fencePath,{instanceId,attemptId:binding.attemptId,fence:binding.fence});invariant(admission.instanceId===instanceId&&Number.isSafeInteger(admission.fence)&&admission.fence>=binding.fence,'INVALID_ENTRY_ADMISSION');await atomicJson(fencePath,admission);
   const actualGateway={...await actualInstallerIdentity({instanceId,startIdentity:randomUUID()}),role:'gateway',independentFoundation:true,preservesExistingSockets:true};
-  const connections = new Map(), httpByDigest = new Map(); let inFlight = 0;
+  const connections = new Map(), httpByDigest = new Map(), httpTransfers = new Set(), ownedSockets = new Set(); let inFlight = 0, closing = false, closingPromise;
+  function trackHTTP(proxy,res) {
+    const transfer={request:proxy,response:null};httpTransfers.add(transfer);
+    proxy.once('close',()=>httpTransfers.delete(transfer));
+    res.once('close',()=>{if(!res.writableEnded){transfer.response?.destroy();proxy.destroy();}httpTransfers.delete(transfer);});
+    return transfer;
+  }
+  function trackSocket(socket){if(closing){socket.destroy();return;}ownedSockets.add(socket);socket.once('close',()=>ownedSockets.delete(socket));}
   function backend(req) {
     // One route per authenticated session; no fan-out, duplicate writes, retries or input replay.
     const identity = String(req.headers.cookie || req.headers.authorization || req.headers['x-operation-id'] || req.socket.remoteAddress);
@@ -44,26 +51,30 @@ export async function createStableEntry({ root, instanceId, controlKey, stickyKe
       if (!file) { res.writeHead(404); res.end(); return; }
     }
     if (web.origin && !match && !requestPath.startsWith('/_next/')) {
-      const u = new URL(web.origin); const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:req.headers }, upstream => { res.writeHead(upstream.statusCode,{...upstream.headers,'x-platform-web-digest':web.digest}); upstream.pipe(res); }); proxy.once('error',()=>{if(!res.headersSent)res.writeHead(502);res.end();});req.pipe(proxy);return;
+      const u = new URL(web.origin); let transfer; const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:req.headers }, upstream => { transfer.response=upstream;if(res.destroyed){upstream.destroy();return;}res.writeHead(upstream.statusCode,{...upstream.headers,'x-platform-web-digest':web.digest}); upstream.pipe(res); });transfer=trackHTTP(proxy,res);proxy.once('error',()=>{if(res.destroyed)return;if(!res.headersSent)res.writeHead(502);res.end();});req.pipe(proxy);return;
     }
     const bytes = await readFile(file); const extension = file.split('.').at(-1); const types = { html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml',woff2:'font/woff2' };
     res.writeHead(200,{ 'content-type': types[extension] || 'application/octet-stream', 'cache-control': requestPath.startsWith('/_next/') || match ? 'public, max-age=31536000, immutable' : 'no-store', 'x-platform-web-digest': web.digest }); res.end(bytes);
   }
   const server = http.createServer((req,res) => {
+    if(closing){res.writeHead(503);res.end();return;}
     const pathname=new URL(req.url,'http://localhost').pathname;
     const controlPath=['/api','/mcp','/ws','/socket.io'].some(prefix=>pathname===prefix||pathname.startsWith(prefix+'/'));
     if (!controlPath) { staticWeb(req,res).catch(() => { if (!res.headersSent) res.writeHead(503); res.end(); }); return; }
     const selected = backend(req), u = new URL(selected.origin); inFlight++; httpByDigest.set(selected.digest,(httpByDigest.get(selected.digest)||0)+1);
-    const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:{ ...req.headers, 'x-forwarded-host':req.headers.host, 'x-forwarded-proto':'http', 'x-platform-route-generation':String(binding.routeGeneration) } }, upstream => { res.writeHead(upstream.statusCode,upstream.headers); upstream.pipe(res); });
-    res.once('close',()=>{ inFlight--; httpByDigest.set(selected.digest,Math.max(0,(httpByDigest.get(selected.digest)||1)-1)); }); proxy.once('error',()=>{ if (!res.headersSent) res.writeHead(502); res.end(); }); req.pipe(proxy);
+    let transfer;const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:{ ...req.headers, 'x-forwarded-host':req.headers.host, 'x-forwarded-proto':'http', 'x-platform-route-generation':String(binding.routeGeneration) } }, upstream => {transfer.response=upstream;if(res.destroyed){upstream.destroy();return;}res.writeHead(upstream.statusCode,upstream.headers); upstream.pipe(res); });transfer=trackHTTP(proxy,res);
+    res.once('close',()=>{ inFlight--; httpByDigest.set(selected.digest,Math.max(0,(httpByDigest.get(selected.digest)||1)-1)); }); proxy.once('error',()=>{ if(res.destroyed)return;if (!res.headersSent) res.writeHead(502); res.end(); }); req.pipe(proxy);
   });
+  server.on('connection',trackSocket);
   server.on('upgrade',(req,socket,head)=>{
+    if(closing){socket.destroy();return;}
     const selected = backend(req), u = new URL(selected.origin); const target = net.connect({host:u.hostname,port:Number(u.port)}); const id = Symbol(); connections.set(id,{target,socket,digest:selected.digest,openedAt:Date.now()});
     target.once('connect',()=>{ let headers = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`; for (let i=0;i<req.rawHeaders.length;i+=2) headers += `${req.rawHeaders[i]}: ${req.rawHeaders[i+1]}\r\n`; target.write(headers+'\r\n'); if(head.length) target.write(head); socket.pipe(target).pipe(socket); });
     const remove = ()=>connections.delete(id); socket.once('close',remove); target.once('close',remove); target.once('error',()=>socket.destroy()); socket.once('error',()=>target.destroy());
   });
   let applying = false;
   const control = http.createServer(async(req,res)=>{
+    if(closing){res.writeHead(503);res.end();return;}
     let ownsApply=false;
     try {
       invariant(isLoopback(req.socket.remoteAddress) && tokenMatches(req.headers['x-platform-internal-key'],controlKey), 'ENTRY_UNAUTHORIZED');
@@ -78,6 +89,20 @@ export async function createStableEntry({ root, instanceId, controlKey, stickyKe
       await atomicJson(configPath,next); binding=next; res.setHeader('content-type','application/json'); res.end(JSON.stringify(binding));
     } catch(e) { res.writeHead(e.code === 'ENTRY_UNAUTHORIZED' ? 403 : 409); res.end(JSON.stringify({code:e.code||'ENTRY_FAILED'})); } finally { if(ownsApply)applying=false; }
   });
+  control.on('connection',trackSocket);
+  async function close(){
+    if(closingPromise)return closingPromise;closing=true;
+    closingPromise=(async()=>{
+      // Stop admission before touching this gateway's own transports. Backend
+      // servers, RuntimeOwners and jobs are outside this shutdown capability.
+      const stopped=[server,control].map(listener=>new Promise((ok,fail)=>listener.close(error=>error&&error.code!=='ERR_SERVER_NOT_RUNNING'?fail(error):ok())));
+      for(const c of connections.values()){c.socket.destroy();c.target.destroy();}
+      for(const transfer of httpTransfers){transfer.response?.destroy();transfer.request.destroy();}
+      for(const listener of [server,control])listener.closeAllConnections();
+      for(const socket of ownedSockets)socket.destroy();
+      let timer;try{await Promise.race([Promise.all(stopped),new Promise((_,fail)=>{timer=setTimeout(()=>fail(Object.assign(Error('Owned gateway transports did not close'),{code:'ENTRY_TRANSPORT_CLOSE_UNCONFIRMED'})),5000);})]);}finally{clearTimeout(timer);}
+    })();return closingPromise;
+  }
   await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,host,ok);}); await new Promise((ok,fail)=>{control.once('error',fail);control.listen(controlPort,'127.0.0.1',ok);});
-  return { server,control, origin:`http://${host}:${server.address().port}`,controlOrigin:`http://127.0.0.1:${control.address().port}`,observe:()=>({...binding,inFlight,activeWS:connections.size,httpByDigest:Object.fromEntries(httpByDigest),wsByDigest:[...connections.values()].reduce((a,c)=>{a[c.digest]=(a[c.digest]||0)+1;return a;},{})}),close:async()=>{for(const c of connections.values()){c.socket.destroy();c.target.destroy();}await Promise.all([new Promise(ok=>server.close(ok)),new Promise(ok=>control.close(ok))]);} };
+  return { server,control, origin:`http://${host}:${server.address().port}`,controlOrigin:`http://127.0.0.1:${control.address().port}`,observe:()=>({...binding,inFlight,activeWS:connections.size,httpByDigest:Object.fromEntries(httpByDigest),wsByDigest:[...connections.values()].reduce((a,c)=>{a[c.digest]=(a[c.digest]||0)+1;return a;},{})}),close };
 }
