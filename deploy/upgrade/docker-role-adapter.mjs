@@ -69,7 +69,20 @@ export async function createDockerRoleAdapter(c){
   }
   async function signal(containerId,signal='SIGTERM'){
     invariant(['SIGTERM','SIGKILL'].includes(signal),'FIXED_OWNED_SIGNAL_REQUIRED');
-    const receipt=await readJson(join(registryRoot,containerId+'.json'),null);invariant(owned.has(containerId)||receipt?.instanceId===c.instanceId,'CONTAINER_NOT_OWNED');const proof=await inspect(containerId);if(proof.running)await docker(['kill','--signal',signal,containerId]);
+    const receipt=await readJson(join(registryRoot,containerId+'.json'),null);invariant(owned.has(containerId)||receipt?.instanceId===c.instanceId,'CONTAINER_NOT_OWNED');const proof=await inspect(containerId);
+    if(!proof.running)return proof;
+    await docker(['kill','--signal',signal,containerId]);
+    // Sending a signal is not evidence of absence. In particular, parking an
+    // Installer and immediately starting the same owned container must wait for
+    // the previous Node process to exit. Never escalate or signal it a second time.
+    const deadline=Date.now()+5000;
+    while(Date.now()<deadline){
+      const row=JSON.parse(await docker(['inspect',containerId]))[0];
+      invariant(row.Id===containerId&&row.Image===imageId&&row.Config.Labels['agent-platform.instance']===c.instanceId&&row.Config.Labels['agent-platform.installation']===digest(installationRoot)&&row.Config.Labels['agent-platform.start']===proof.startIdentity&&row.State.StartedAt===proof.startedAt,'CONTAINER_INCARNATION_CHANGED');
+      if(row.State.Running===false&&row.State.Pid===0)return inspect(containerId);
+      await new Promise(ok=>setTimeout(ok,50));
+    }
+    throw Object.assign(Error('The owned process has not been physically confirmed stopped'),{code:'OWNED_CONTAINER_STOP_UNCONFIRMED'});
   }
   async function restartInstaller(containerId){
     const receipt=await readJson(join(registryRoot,containerId+'.json'));invariant(receipt.instanceId===c.instanceId&&receipt.kind==='installer','ONLY_OWNED_INSTALLER_MAY_RESTART');

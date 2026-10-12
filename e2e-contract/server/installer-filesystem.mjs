@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
-import { join, isAbsolute } from 'node:path';
+import { join, resolve, isAbsolute, relative } from 'node:path';
+import { createHash } from 'node:crypto';
 import { command } from '../../deploy/upgrade/artifacts.mjs';
 import { secureDirectory, atomicJson, readJson, inside } from '../../deploy/upgrade/io.mjs';
 import { invariant } from '../../deploy/upgrade/trust.mjs';
@@ -20,7 +21,7 @@ export async function createInstallerFilesystem(input) {
   invariant(spec && Object.keys(spec).every(k => ['kind', 'bytes', 'managerImage'].includes(k)) &&
     spec.kind === 'loop-ext4' && Number.isSafeInteger(spec.bytes) &&
     spec.bytes >= MIN_BYTES && spec.bytes <= MAX_BYTES && IMAGE.test(spec.managerImage), 'FIXED_INSTALLER_FILESYSTEM_REQUIRED');
-  invariant(isAbsolute(input.root) && /^\/tmp\/upg-qa-[a-z0-9-]+-work\//.test(input.root) &&
+  invariant(isAbsolute(input.root) && resolve(input.root) === input.root && /^\/tmp\/upg-qa-[a-z0-9-]+-work\//.test(input.root) &&
     !input.root.includes(',') && Array.isArray(input.docker.args) &&
     input.docker.args.every(v => typeof v === 'string' && !/[\r\n]/.test(v)), 'DEDICATED_QA_FILESYSTEM_ROOT_REQUIRED');
   const root = await secureDirectory(input.root), mountpoint = await secureDirectory(join(root, 'installer'));
@@ -92,6 +93,46 @@ export async function createInstallerFilesystem(input) {
     const ids = (await docker(['ps', '-q'])).trim().split('\n').filter(Boolean);
     const running = ids.length ? JSON.parse(await docker(['inspect', ...ids])) : [];
     invariant(!running.some(c => c.Mounts.some(m => m.Source === mountpoint || inside(mountpoint, m.Source))), 'FILESYSTEM_STILL_BOUND_TO_RUNNING_ROLE');
+    invariant(!running.some(c => c.Config.Labels?.['agent-platform.instance'] === input.instanceId), 'FILESYSTEM_INSTANCE_ROLE_STILL_RUNNING');
+    const evidenceRoot = await secureDirectory(join(root, 'installer-filesystem-evidence'));
+    const sealed = [];
+    async function preserve(directory) {
+      for (const name of (await fs.readdir(directory)).sort()) {
+        const path = join(directory, name), stat = await fs.lstat(path), suffix = relative(mountpoint, path);
+        if (stat.isDirectory()) {
+          // Physical code remains in the externally verified input archive and
+          // packageRoot. Keep its installed manifests/receipts, not another copy
+          // of every module or temporary downloaded blob.
+          if (suffix === 'downloads') continue;
+          if (suffix === 'artifacts') {
+            for (const artifact of await fs.readdir(path)) {
+              const candidate = join(path, artifact);
+              if ((await fs.lstat(candidate)).isDirectory()) {
+                for (const manifest of ['installed.json', 'upgrade-artifact.json']) {
+                  const file = join(candidate, manifest);
+                  if ((await fs.lstat(file).catch(() => null))?.isFile()) await preserveFile(file);
+                }
+              } else if ((await fs.lstat(candidate)).isFile()) await preserveFile(candidate);
+            }
+            continue;
+          }
+          await preserve(path);
+        } else if (stat.isFile()) await preserveFile(path);
+        else invariant(false, 'UNSUPPORTED_INSTALLER_EVIDENCE_FILE');
+      }
+    }
+    async function preserveFile(path) {
+      const suffix = relative(mountpoint, path), target = join(evidenceRoot, suffix);
+      invariant(inside(mountpoint, path) && inside(evidenceRoot, target), 'INSTALLER_EVIDENCE_PATH_ESCAPE');
+      const bytes = await fs.readFile(path);await secureDirectory(resolve(target, '..'));
+      const old = await fs.readFile(target).catch(e => { if (e.code === 'ENOENT') return null; throw e; });
+      invariant(old === null || old.equals(bytes), 'SEALED_INSTALLER_EVIDENCE_CHANGED');
+      if (old === null) await fs.writeFile(target, bytes, { mode: 0o600, flag: 'wx' });
+      sealed.push({ path: suffix, bytes: bytes.length, digest: 'sha256:' + createHash('sha256').update(bytes).digest('hex'), mode: 0o600 });
+    }
+    await preserve(mountpoint);
+    await atomicJson(join(evidenceRoot, 'sealed-files.json'), { schemaVersion: 1, instanceId: input.instanceId, originalMountpoint: mountpoint,
+      files: sealed, filesystemProof: evidence, resourcesCleaned: true, observedStoppedContainers: true, recordedAt: new Date().toISOString() });
     if (runnerMounted) await command('umount', [mountpoint]);
     const fresh = JSON.parse(await host(['/usr/bin/findmnt', '--json', '--target', mountpoint,
       '--output', 'SOURCE,TARGET,FSTYPE'])).filesystems[0];
@@ -101,8 +142,8 @@ export async function createInstallerFilesystem(input) {
     // never detached by an unrelated filesystem cleanup operation.
     const attached = (await host(['/usr/sbin/losetup', '--associated', backing])).trim();
     invariant(attached === '', 'FILESYSTEM_LOOP_STILL_REFERENCED');
-    await fs.unlink(backing);await atomicJson(journal, { ...record, state: 'cleaned', cleanedAt: new Date().toISOString() });
-    return { cleaned: true, journal };
+    await fs.unlink(backing);await atomicJson(journal, { ...record, state: 'cleaned', evidenceRoot, cleanedAt: new Date().toISOString() });
+    return { cleaned: true, journal, evidenceRoot };
   }
   return { evidence, journal, close };
 }
