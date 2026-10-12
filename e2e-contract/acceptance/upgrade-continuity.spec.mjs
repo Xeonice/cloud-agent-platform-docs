@@ -696,11 +696,23 @@ test("real user acceptance, durable installation and original VM/terminal contin
         )
         .get(fixture.config.instanceId, accepted.attemptId);
     expect(accepted.state).toBe("accepted");
-    expect(accepted.percent).toBeLessThan(100);
     expect(
       Boolean(intent),
       "Actual authorized command has a durable acceptance record",
     ).toBe(true);
+    const acceptedPlan = JSON.parse(intent.plan);
+    expect(accepted.completedWork).toBe(0);
+    if (acceptedPlan.steps.some((step) => step.totalWork === null)) {
+      // An unapplied step with unknown work keeps the real denominator unknown.
+      // The UI must wait for observed progress rather than fabricate zero.
+      expect(accepted.percent).toBeNull();
+      expect(accepted.totalWork).toBeNull();
+    } else {
+      expect(typeof accepted.percent).toBe("number");
+      expect(Number.isFinite(accepted.percent)).toBe(true);
+      expect(accepted.percent).toBeGreaterThanOrEqual(0);
+      expect(accepted.percent).toBeLessThan(100);
+    }
     expect(
       intent.actor_id === "instance-administrator",
       "Only the actual instance upgrade grant accepts this intent",
@@ -711,7 +723,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(intent.target_digest).toBe(submittedCommand.targetDigest);
     expect(intent.target_digest).toBe(accepted.targetDigest);
     expect(intent.request_digest).toBe(upgradeDigest(submittedCommand));
-    expect(JSON.parse(intent.plan).sourceActivationGeneration).toBe(
+    expect(acceptedPlan.sourceActivationGeneration).toBe(
       submittedCommand.expectedActivationGeneration,
     );
     expect(submittedCommand.expectedActivationGeneration).toBe(
