@@ -12,6 +12,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { userInfo } from "node:os";
+import { digest as upgradeDigest, invariant as upgradeInvariant, runInputFingerprint } from "../upgrade/trust.mjs";
+import { unpackVerified } from "../upgrade/artifacts.mjs";
 import { validateManifest as validateWebManifest } from "./jenkins-web.mjs";
 import {
   LINUX_DEPLOY,
@@ -53,6 +55,8 @@ export const JOBS = Object.freeze({
   web: "agent-platform-web",
   contract: "agent-platform-contract",
   release: "agent-platform-release",
+  instance: "agent-platform-instance-package",
+  evidence: "agent-platform-upgrade-evidence",
 });
 const ARCHIVES = Object.freeze({
   "prebuilt.tar.gz": ASSETS[1],
@@ -109,6 +113,8 @@ export function buildParameters(kind, plan) {
       API_SHA: plan.commits.api,
       WEB_SHA: plan.commits.web,
     };
+  if (kind === "instance") return { ROOT_SHA: plan.commits.project, API_SHA: plan.commits.api, WEB_SHA: plan.commits.web, RELEASE_ID: plan.tag, PLATFORM: "linux", ARCH: "arm64" };
+  if (kind === "evidence") return { ROOT_SHA: plan.commits.project, API_SHA: plan.commits.api, WEB_SHA: plan.commits.web, INSTANCE_PACKAGE_BUILD: String(plan.instancePackageBuild) };
   throw new Error("Invalid child build kind");
 }
 export function validateBuild(value, kind, number, plan) {
@@ -768,12 +774,8 @@ export function createReleaseRunner(overrides = {}) {
       validateBuild(value.result, kind, number, plan);
       return { ...value, number: Number(number), url: prefix };
     }
-    const credential = await readJson(join(tools, "admin-api.json"));
-    const auth =
-      "Basic " +
-      Buffer.from(credential.username + ":" + credential.token).toString(
-        "base64",
-      );
+    const credential = await readJson(join(tools, "publication-reader.json"));
+    const readerOrigin=new URL(credential.origin);upgradeInvariant(["http:","https:"].includes(readerOrigin.protocol)&&!readerOrigin.username&&!readerOrigin.password&&readerOrigin.pathname==="/"&&!readerOrigin.search&&!readerOrigin.hash&&credential.key?.length>=32,"READ_ONLY_PUBLICATION_CREDENTIAL_REQUIRED");
     async function response(path) {
       if (
         !/^(?:api\/json\?tree=[A-Za-z0-9_,[\]]+|artifact\/[A-Za-z0-9_./-]+)$/.test(
@@ -782,8 +784,8 @@ export function createReleaseRunner(overrides = {}) {
         path.includes("..")
       )
         throw new Error("Invalid fixed Jenkins evidence path");
-      const result = await fetcher(jenkinsTransport(prefix + path, context), {
-        headers: { authorization: auth },
+      const result = await fetcher(readerOrigin.origin + new URL(prefix + path).pathname + new URL(prefix + path).search, {
+        headers: { "x-publication-reader-key":credential.key },
         redirect: "error",
         signal: AbortSignal.timeout(
           /\.(?:tar\.gz|tgz)$/.test(path) ? 1_200_000 : 20_000,
@@ -823,8 +825,7 @@ export function createReleaseRunner(overrides = {}) {
     return plan;
   }
   async function apiEvidence(proof, plan) {
-    const ci = await proof.get("artifact/ci.json"),
-      deployment = await proof.get("artifact/deployment.json");
+    const ci = await proof.get("artifact/ci.json");
     if (
       ci.sha !== plan.commits.api ||
       ci.runId !== proof.number ||
@@ -833,14 +834,10 @@ export function createReleaseRunner(overrides = {}) {
         join(root, "releases", plan.commits.project + "-" + plan.commits.api) ||
       ci.state !== "ci-passed" ||
       ci.nativeProbe !== "passed" ||
-      !/^sha256:[a-f0-9]{64}$/.test(ci.imageId ?? "") ||
-      !["current", "deployed"].includes(deployment.state) ||
-      deployment.sha !== plan.commits.api ||
-      deployment.rootSha !== plan.commits.project ||
-      deployment.imageId !== ci.imageId
+      !/^sha256:[a-f0-9]{64}$/.test(ci.imageId ?? "")
     )
       throw new Error(
-        "API child evidence is not the pinned completed Docker release",
+        "API child evidence is not the pinned completed Docker build",
       );
     if (overrides.apiReceipt) await overrides.apiReceipt(proof, plan, ci);
     else {
@@ -895,7 +892,7 @@ export function createReleaseRunner(overrides = {}) {
     );
     if (manifest.imageId !== expectedImageId)
       throw new Error(
-        "Packaged API image differs from the deployed trusted receipt",
+        "Packaged API image differs from the trusted build receipt",
       );
     await download(
       proof,
@@ -1525,8 +1522,60 @@ export function createReleaseRunner(overrides = {}) {
         unchanged: false,
       };
     }
+    if (action === "prepare-evidence") {
+      const commits={project:args[0],api:args[1],web:args[2]}; projectKey(commits);
+      const planRecord=await readJson(join(releases,projectKey(commits),"plan.json"));
+      const instance=await jenkins("instance",args[3],planRecord),receipt=await instance.get("artifact/bundle-result.json");
+      upgradeInvariant(receipt.releaseId===planRecord.tag && JSON.stringify(receipt.commits)===JSON.stringify(commits),"EVIDENCE_SOURCE_MISMATCH");
+      const workspace=resolve(args[4]),outputRoot=join(workspace,"upgrade-evidence"),packageRoot=join(workspace,"upgrade-native-input");
+      await fs.mkdir(packageRoot,{recursive:true,mode:0o700}); const pkg=receipt.package;
+      await download(instance,"artifact/instance-package/distribution/"+pkg.name,{size:pkg.bytes,sha256:pkg.digest.slice(7)},join(packageRoot,pkg.name));
+      const policy=await readJson(join(tools,"upgrade-distribution-policy.json"));
+      upgradeInvariant(policy.upgradePaths.every(path=>path.migrationPlanDigest===null||path.migrationPlanDigest===receipt.migrationPlanDigest),"MIGRATION_PACKAGE_POLICY_MISMATCH");
+      const manifest={schemaVersion:2,releaseId:planRecord.tag,channel:policy.channel,publishedAt:now(),commits,components:receipt.components,packages:[pkg],upgradePaths:policy.upgradePaths,policy:policy.policy};
+      manifest.runInputFingerprint=runInputFingerprint(manifest);
+      const sourceRoot=join(workspace,"upgrade-source");await fs.mkdir(sourceRoot,{mode:0o700});
+      await run("git",["init"],sourceRoot);await run("git",["fetch","--depth=1","https://github.com/"+REPOSITORIES.project.name+".git",commits.project],sourceRoot);await run("git",["checkout","--detach","FETCH_HEAD"],sourceRoot);
+      for(const name of ["api","web"]){const target=join(sourceRoot,name);await fs.mkdir(target,{recursive:true,mode:0o700});await run("git",["init"],target);await run("git",["fetch","--depth=1","https://github.com/"+REPOSITORIES[name].name+".git",commits[name]],target);await run("git",["checkout","--detach","FETCH_HEAD"],target);}
+      const manifestPath=join(packageRoot,"release-manifest.json");await writeJson(manifestPath,manifest);
+      const bundle=await unpackVerified(join(packageRoot,pkg.name),pkg,packageRoot,receipt.components);
+      const fixedInputsPath=join(tools,"upgrade-qualification-inputs.json"),fixedStat=await fs.lstat(fixedInputsPath);
+      upgradeInvariant(fixedStat.isFile()&&!fixedStat.isSymbolicLink()&&(fixedStat.mode&0o022)===0,"INSECURE_QUALIFICATION_INPUTS");
+      const fixedInputs=await readJson(fixedInputsPath);
+      upgradeInvariant(fixedInputs.isolated===true&&isAbsolute(fixedInputs.initialRoot||'')&&isAbsolute(fixedInputs.legacyRoot||'')&&fixedInputs.docker?.dedicated===true&&fixedInputs.runtimeCredential&&fixedInputs.headlessPrompt&&fixedInputs.automationInput,"REAL_QUALIFICATION_BASELINE_REQUIRED");
+      const acceptanceConfigPath=join(packageRoot,"acceptance-input.json"),acceptanceRoot=join(workspace,'qualification-installation-'+randomUUID());
+      await writeJson(acceptanceConfigPath,{...fixedInputs,root:acceptanceRoot,instanceId:'upgrade-acceptance-cd-'+randomUUID(),archiveRoot:packageRoot,targetRoot:bundle.root,targetManifest:manifest,isolated:true,isolation:'containers'});
+      await run('corepack',['pnpm','install','--frozen-lockfile'],join(sourceRoot,'e2e-contract'));
+      await run('corepack',['pnpm','exec','playwright','install','chromium'],join(sourceRoot,'e2e-contract'));
+      return {sourceRoot,outputRoot,archiveRoot:packageRoot,packageRoot:bundle.root,manifestPath,acceptanceConfigPath,commits,packageDigest:pkg.digest,runInputFingerprint:manifest.runInputFingerprint,platform:pkg.platform,arch:pkg.arch,migrationPlanDigest:manifest.upgradePaths.find(p=>p.migrationPlanDigest)?.migrationPlanDigest||null};
+    }
     const plan = await readPlan(args[0]),
       folder = join(releases, plan.key);
+    if (action === "prepare-distribution") {
+      await ensureHeads(plan);
+      const instance = await jenkins("instance", args[1], plan);
+      const receipt = await instance.get("artifact/bundle-result.json");
+      upgradeInvariant(receipt.releaseId === plan.tag && JSON.stringify(receipt.commits) === JSON.stringify(plan.commits) && receipt.builtOn?.platform === "linux" && receipt.builtOn?.arch === "arm64" && receipt.builtOn?.nodeMajor === 22, "PACKAGE_PROVENANCE_INVALID");
+      const outputRoot = join(folder, "distribution");
+      await fs.mkdir(outputRoot, { recursive: true, mode: 0o700 });
+      const pkg = receipt.package;
+      upgradeInvariant(pkg && basename(pkg.name) === pkg.name && /^sha256:[a-f0-9]{64}$/.test(pkg.digest), "PACKAGE_IDENTITY_INVALID");
+      await download(instance, "artifact/instance-package/distribution/" + pkg.name, {size: pkg.bytes, sha256: pkg.digest.slice(7)}, join(outputRoot, pkg.name));
+      const policy = await readJson(join(tools, "upgrade-distribution-policy.json"));
+      upgradeInvariant(policy.upgradePaths.every(path=>path.migrationPlanDigest===null||path.migrationPlanDigest===receipt.migrationPlanDigest),"MIGRATION_PACKAGE_POLICY_MISMATCH");
+      const manifest = { schemaVersion: 2, releaseId: plan.tag, channel: policy.channel, publishedAt: now(), commits: plan.commits, components: receipt.components, packages: [pkg], upgradePaths: policy.upgradePaths, policy: policy.policy };
+      manifest.runInputFingerprint = runInputFingerprint(manifest);
+      const evidence = await jenkins("evidence", args[2], {...plan, instancePackageBuild: Number(args[1])});
+      const reports = await evidence.get("artifact/upgrade-evidence/report-set.json");
+      upgradeInvariant(reports.runInputFingerprint === manifest.runInputFingerprint && Array.isArray(reports.reports), "EVIDENCE_INPUT_MISMATCH");
+      const gateReportPaths=[];
+      for (const report of reports.reports) {
+        upgradeInvariant(/^(build|contracts|four-combinations|native-continuity|fault-recovery|online-migration)\.json$/.test(report.name) && /^sha256:[a-f0-9]{64}$/.test(report.digest), "INVALID_GATE_REPORT");
+        const path = join(outputRoot, report.name);
+        await download(evidence,"artifact/upgrade-evidence/"+report.name,{size:report.bytes,sha256:report.digest.slice(7)},path); gateReportPaths.push(path);
+      }
+      return {manifest,outputRoot,keyId:policy.keyId,privateKeyPath:join(tools,"release-signing-key.pem"),gateReportPaths};
+    }
     if (action === "record-build")
       return recordBuild(plan, args[1], args[2], folder);
     if (action === "fetch-web") return fetchWeb(plan, args[1], args[2]);

@@ -490,9 +490,8 @@ test("trusted Linux runner accepts actual public Jenkins metadata at the gateway
   const root = await fixture(t),
     tools = join(root, "tools");
   await fs.mkdir(tools, { mode: 0o700 });
-  await writeJson(join(tools, "admin-api.json"), {
-    username: "fixture",
-    token: "fixture-not-a-real-credential",
+  await writeJson(join(tools, "publication-reader.json"), {
+    origin:"http://artifact-reader:8020",key:"fixture-readonly-token".padEnd(32,"x"),
   });
   const commits = {
     project: "a".repeat(40),
@@ -543,7 +542,7 @@ test("trusted Linux runner accepts actual public Jenkins metadata at the gateway
   assert.equal(layoutChecks, 1);
   assert.equal(
     requests[0].url.startsWith(
-      "http://host.lima.internal:8080/job/agent-platform-contract/8/",
+      "http://artifact-reader:8020/job/agent-platform-contract/8/",
     ),
     true,
   );
@@ -558,7 +557,7 @@ test("trusted Linux runner accepts actual public Jenkins metadata at the gateway
     /completed SUCCESS/,
   );
   await fs.writeFile(
-    join(tools, "admin-api.json"),
+    join(tools, "publication-reader.json"),
     '{"token":"malformed-fixture-private-value',
     { mode: 0o600 },
   );
@@ -648,7 +647,7 @@ test("API evidence requires the matching private root/API receipt and refuses st
   ci.rootSha = "e".repeat(40);
   await assert.rejects(
     runner("record-build", path, "api", "6"),
-    /pinned completed Docker release/,
+    /pinned completed Docker build/,
   );
 });
 
@@ -776,19 +775,20 @@ test("Linux discovery consumes public queue/build metadata through the gateway a
   );
 });
 
-test("new Linux trusted pipelines preserve executor release before child waits and use container monitor CLI", async () => {
+test("trusted publication waits release executors and leaves monitoring in its independent service job", async () => {
   for (const name of ["release", "discover", "monitor", "web"]) {
     const source = await fs.readFile(
       new URL(`./${name}.groovy`, import.meta.url),
       "utf8",
     );
-    assert.match(source, /agent-platform-linux-deploy/);
+    assert.match(source, ["release","web"].includes(name) ? /agent-platform-linux-publisher/ : /agent-platform-linux-deploy/);
     assert.doesNotMatch(
       source,
       /agent-platform-deploy'|@NODE22@|@JENKINS_SOURCE@|@DEPLOY_CONFIG@|@DEPLOY_TOOLS@|\/Library\/Application Support/,
     );
-    if (["monitor", "release"].includes(name))
-      assert.match(source, /\$MONITOR_TOOL" monitor/);
+    if(name==="web")assert.doesNotMatch(source,/TRUSTED_WEB_TOOL|prepare-env|agent-platform-linux-deploy/);
+    if (name === "monitor") assert.match(source, /\$MONITOR_TOOL" monitor/);
+    if (name === "release") assert.doesNotMatch(source, /MONITOR_TOOL|\bpromote\b|API_TOOL/);
     if (name === "release") {
       assert.match(source, /agent none/);
       assert.match(source, /record-build "\$PLAN_PATH" web "\$WEB_BUILD"/);

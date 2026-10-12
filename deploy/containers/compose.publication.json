@@ -1,0 +1,329 @@
+{
+  "name": "agent-platform-publication",
+  "services": {
+    "publisher": {
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "networks": [
+        "publication"
+      ],
+      "restart": "unless-stopped",
+      "mem_limit": "4g",
+      "cpus": 2,
+      "pids_limit": 2048,
+      "image": "${PUBLICATION_IMAGE:?Provide immutable Node22 publication image}",
+      "environment": {
+        "JENKINS_URL": "${JENKINS_URL:?Provide publication controller URL}",
+        "JENKINS_AGENT_NAME": "linux-publisher",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret",
+        "HOME": "/home/jenkins"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "linux-publisher_work",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "publication_assets",
+          "target": "/srv/agent-platform"
+        },
+        {
+          "type": "volume",
+          "source": "linux-publisher_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "linux-publisher_credentials",
+          "target": "/run/agent-platform/jenkins-tools",
+          "read_only": true
+        }
+      ],
+      "labels": {
+        "com.agent-platform.role": "distribution-publisher"
+      }
+    },
+    "api-build": {
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "networks": [
+        "publication"
+      ],
+      "restart": "unless-stopped",
+      "mem_limit": "4g",
+      "cpus": 2,
+      "pids_limit": 2048,
+      "image": "${PUBLICATION_BUILD_IMAGE:?Provide immutable isolated Docker build worker}",
+      "environment": {
+        "JENKINS_URL": "${JENKINS_URL:?Provide publication controller URL}",
+        "JENKINS_AGENT_NAME": "linux-api-build",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret",
+        "HOME": "/home/jenkins",
+        "DOCKER_HOST": "unix:///run/build-docker/docker.sock"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "linux-api-build_work",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "publication_assets",
+          "target": "/srv/agent-platform"
+        },
+        {
+          "type": "volume",
+          "source": "linux-api-build_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "build_socket",
+          "target": "/run/build-docker"
+        },
+        {
+          "type": "volume",
+          "source": "linux-api-build_credentials",
+          "target": "/run/agent-platform/jenkins-tools",
+          "read_only": true
+        }
+      ],
+      "labels": {
+        "com.agent-platform.role": "isolated-api-builder"
+      }
+    },
+    "instance-package": {
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "networks": [
+        "publication"
+      ],
+      "restart": "unless-stopped",
+      "mem_limit": "4g",
+      "cpus": 2,
+      "pids_limit": 2048,
+      "image": "${PUBLICATION_IMAGE:?Provide immutable Node22 publication image}",
+      "environment": {
+        "JENKINS_URL": "${JENKINS_URL:?Provide publication controller URL}",
+        "JENKINS_AGENT_NAME": "linux-arm64-package",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret",
+        "HOME": "/home/jenkins",
+        "PLATFORM_DISTRIBUTION_ORIGIN": "https://github.com/Xeonice/cloud-agent-platform-docs/releases/download/"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "linux-arm64-package_work",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "publication_assets",
+          "target": "/srv/agent-platform"
+        },
+        {
+          "type": "volume",
+          "source": "linux-arm64-package_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "linux-arm64-package_credentials",
+          "target": "/run/agent-platform/jenkins-tools",
+          "read_only": true
+        }
+      ],
+      "labels": {
+        "com.agent-platform.role": "architecture-package"
+      }
+    },
+    "build-daemon": {
+      "image": "${PUBLICATION_DIND_IMAGE:?Provide verified docker29.5.2 dind image digest}",
+      "platform": "linux/arm64",
+      "privileged": true,
+      "command": [
+        "dockerd",
+        "--host=unix:///run/build-docker/docker.sock",
+        "--group=1000"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "build_socket",
+          "target": "/run/build-docker"
+        },
+        {
+          "type": "volume",
+          "source": "build_images",
+          "target": "/var/lib/docker"
+        }
+      ],
+      "networks": [
+        "publication"
+      ],
+      "mem_limit": "6g",
+      "cpus": 3,
+      "pids_limit": 4096
+    },
+    "artifact-reader": {
+      "image": "${PUBLICATION_IMAGE:?Provide immutable Node22 publication image}",
+      "platform": "linux/arm64",
+      "user": "1000:1000",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "networks": [
+        "publication"
+      ],
+      "restart": "unless-stopped",
+      "mem_limit": "512m",
+      "cpus": 0.5,
+      "pids_limit": 128,
+      "entrypoint": [
+        "/usr/bin/tini",
+        "--",
+        "/usr/local/bin/node",
+        "/opt/agent-platform/tools/deploy/jenkins/publication-artifact-reader.mjs",
+        "/run/secrets/reader-installation.json"
+      ],
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "publication-reader_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        }
+      ],
+      "labels": {
+        "com.agent-platform.role": "read-only-jenkins-artifact-gateway"
+      }
+    },
+    "upgrade-evidence": {
+      "platform": "linux/arm64",
+      "user": "0:0",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "cap_drop": [
+        "ALL"
+      ],
+      "networks": [
+        "publication"
+      ],
+      "restart": "unless-stopped",
+      "mem_limit": "12g",
+      "cpus": 4,
+      "pids_limit": 8192,
+      "image": "${PUBLICATION_QUALIFICATION_IMAGE:?Provide immutable dedicated qualification worker image}",
+      "environment": {
+        "JENKINS_URL": "${JENKINS_URL:?Provide publication controller URL}",
+        "JENKINS_AGENT_NAME": "linux-upgrade-evidence",
+        "JENKINS_AGENT_SECRET_FILE": "/run/secrets/jenkins_agent_secret",
+        "HOME": "/home/jenkins"
+      },
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "linux-upgrade-evidence_work",
+          "target": "/home/jenkins"
+        },
+        {
+          "type": "volume",
+          "source": "publication_assets",
+          "target": "/srv/agent-platform"
+        },
+        {
+          "type": "volume",
+          "source": "linux-upgrade-evidence_credentials",
+          "target": "/run/secrets",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "linux-upgrade-evidence_credentials",
+          "target": "/run/agent-platform/jenkins-tools",
+          "read_only": true
+        },
+        {
+          "type": "volume",
+          "source": "qualification_images",
+          "target": "/var/lib/qualification-docker"
+        }
+      ],
+      "labels": {
+        "com.agent-platform.role": "isolated-native-qualification",
+        "com.agent-platform.resource-scope": "synthetic-only"
+      },
+      "profiles": [
+        "qualification"
+      ],
+      "privileged": true,
+      "devices": [
+        "/dev/kvm:/dev/kvm"
+      ]
+    }
+  },
+  "volumes": {
+    "publication_assets": {},
+    "build_socket": {},
+    "build_images": {},
+    "linux-publisher_work": {},
+    "linux-publisher_credentials": {
+      "external": true
+    },
+    "linux-api-build_work": {},
+    "linux-api-build_credentials": {
+      "external": true
+    },
+    "linux-arm64-package_work": {},
+    "linux-arm64-package_credentials": {
+      "external": true
+    },
+    "publication-reader_credentials": {
+      "external": true
+    },
+    "linux-upgrade-evidence_work": {},
+    "linux-upgrade-evidence_credentials": {
+      "external": true
+    },
+    "qualification_images": {}
+  },
+  "networks": {
+    "publication": {
+      "driver": "bridge"
+    }
+  },
+  "x-agent-platform-installation": {
+    "requiredDockerContext": "colima-agent-platform-publication",
+    "mustNotShareVmWithRuntime": true,
+    "profile": "agent-platform-publication",
+    "launchTool": "deploy/containers/publication-context.mjs"
+  }
+}

@@ -7,11 +7,13 @@
 > Task 发起链路的 6 条裁决见 [TASK-LAUNCH-DECISIONS.md](./TASK-LAUNCH-DECISIONS.md)（S5历史ADR；产品行为以2026-10规格为准）。
 > 本轮**跑起来才发现**的 9 件事见 [LIVE-RUN-FINDINGS.md](./LIVE-RUN-FINDINGS.md)，附录另收从 11 迁出的部署形态实测经过（与上面三份的分工：那三份记开工前的裁决，这份记做完之后跑起来才知道错了的部分）。
 > 本索引与实际文件集合由 `pnpm docs:check`（09 §2.4 · A3）双向把关，漏收新文档会红。
-> 目录按归属切分：`api/`、`web/` 已是主仓的子模块（各自独立仓库），`backend/`、`frontend/` 分别记录这两个仓库的设计，`shared/` 与 `00` 是跨仓约定，`ops/` 是本项目生产的运维文档。
+> 目录按归属切分：`api/`、`web/` 已是主仓的子模块（各自独立仓库），`backend/`、`frontend/` 分别记录这两个仓库的设计，`testing/` 维护独立功能测试计划，`shared/` 与 `00` 是跨仓约定，`ops/` 是本项目生产的运维文档。
 
 当前产品行为见 [领域需求索引](./product/requirements/README.md)，REQ/AC 保持稳定编号；适用范围见 [产品裁决](./product/requirements/decisions.md)。当前实现和执行入口见 [主仓状态](../IMPLEMENTATION-STATUS.md)。
 
 本轮需求设计见 [任务选择搜索与镜像别名变更及实施验收](./product/changes/2026-10-09-任务选择与镜像别名.md)，配套 [交互设计稿](./design/task-search-image-alias.html)。业务实现状态与 PRD／原型分开记录。
+
+新增功能设计见 [不停机升级与沙箱续接](./product/changes/2026-10-10-不停机升级与沙箱续接.md)：[UPG 产品需求](./product/requirements/UPG.md)定义9条需求／52条AC，CD只发布版本安装包，实例用户主动决定升级。[交互设计稿](./design/upgrade-sandbox-reconnect.html#task-login)沿用原工作台，入口加`?scene=upgrade-available`查看发现新版，点击“立即升级”才进入模拟过程；`?scene=upgrade-progress`直接查看明确发起后的进度，`?scene=upgrade-ready`查看已安装后的页面刷新。演示工具可切三态／无新版；[后端与部署计划](./backend/changes/2026-10-10-不停机升级与运行环境分离.md)、[前端实施计划](./frontend/changes/2026-10-10-升级提示与原终端续接.md)分别记录实现变更；[独立测试计划](./testing/changes/2026-10-10-不停机升级与沙箱续接测试计划.md)统一覆盖前端、后端、契约、真实联调及运行连续性，逐项映射52条AC。业务实现与实际检查见[实施验证记录](./testing/results/2026-10-12-升级实现验证记录.md)；完整同构门禁尚未完成，原型不连接生产。
 
 运维与发布见 [运维入口](./ops/README.md)；本地开发与贡献流程见 [CONTRIBUTING](../CONTRIBUTING.md)。
 
@@ -26,8 +28,8 @@ docs/
 ├── LIVE-RUN-FINDINGS.md     # 跑起来才发现的 9 件事（完整克隆 / 克隆进度 / MSW 拦截 / 任务树 / 终端高度 / xterm 竞态 / tmux 尺寸 / 无头面板 / ⏳ 浅仓迁移）+ 部署形态实测附录
 ├── 00-总体架构概览.md         # 全局鸟瞰（跨仓）
 ├── product/                 # 产品文档族（跨仓）
-│   ├── requirements/        #   当前 11 域 REQ/AC 与产品裁决
-│   ├── changes/             #   需求变更说明与前后端/测试实施计划
+│   ├── requirements/        #   11 个已有领域及新增 UPG 规划领域的 REQ/AC 与产品裁决
+│   ├── changes/             #   需求变更说明与实施顺序
 │   ├── 19-产品总纲.md        #   定位、画像、功能分级、指标、路线图——先读这篇
 │   ├── 20-核心使用链路.md     #   主链路 + §8 页面跳转总图（跨页面导航唯一权威）
 │   ├── 21-页面信息架构与交互.md  # 页面层总览 + 逐页索引
@@ -42,6 +44,8 @@ docs/
 │       ├── 21-7-自动化.md     # 定时唤起无头 Task（v1.1）：调度/边界决策/运行历史
 │       └── 21-8-部署与初始化.md # 首启初始化与访问口令（产品页面，不是运维文档）
 ├── design/                  #   可直接打开的离线交互设计稿
+├── testing/                 # 独立功能测试计划，统一验证前后端与真实运行边界
+│   └── changes/             #   不停机升级与沙箱续接测试计划
 ├── backend/                 # → 后端仓库 agent-platform-api
 │   ├── 17-后端总纲.md        #   后端统合入口，先读这篇
 │   ├── 01-后端目录结构与DDD分层.md
@@ -118,7 +122,8 @@ docs/
 | 27 | [接口暴露设计（DDD → API/MCP）](./backend/27-接口暴露设计（DDD到API与MCP）.md) | **前端主用**：7 个上下文 + 平台面的对外能力目录（端点 × tool × 应用服务 × 不变量 × 错误码 × WS 事件）、按页面反查的消费速查、REST/MCP 差异清单与一致性保证 | ✅ 可评审 |
 | 28 | [类型与领域类型详细设计（后端）](./backend/28-类型与领域类型详细设计.md) | 后端实际 TS 类型声明：branded ID / 聚合类型 / DB row，以及 wire↔domain↔row 三层映射 | ✅ 可评审 |
 | 28 | [前端类型详细设计](./frontend/28-前端类型详细设计.md) | 生成类型（`openapi.d.ts`）怎么消费 + store / query key / props / 纯函数的类型契约 | ✅ 可评审 |
-| 29 | [测试策略与测试 Agent](./shared/29-测试策略与测试Agent.md) | **跨仓测试的唯一落点**：3471 条用例的金字塔实测、⛔「没有一条测试让前端真的调到后端」这个缺口、测试 Agent 的职责与边界、真链路 e2e 方案、变异验证制度化。25/12 各管一个仓，缺口在两仓之间时看这里 |
+| 29 | [测试策略与测试 Agent](./shared/29-测试策略与测试Agent.md) | 跨仓验收的通用策略：分层职责、隔离环境、替身边界、真实联调及证据口径。25/12各管一个仓，具体功能的前后端联合用例与门禁独立维护在testing文档中 |
+| UPG验证 | [升级实现验证记录](./testing/results/2026-10-12-升级实现验证记录.md) | 实际源码、局部检查与同构交付阻断；不以原型／测试数量冒充上线 | ⏳ 验证中 |
 | ADR | [沙箱运行时架构决策](./SANDBOX-RUNTIME-DECISIONS.md) | S1 定基线：控制面 / 数据面分离（沙箱内 API 暴露 fs/process/pty）与 provider 选型，据此回改 04/06/03/13/P19 | ✅ 已决策 |
 | ADR | [Task 发起链路决策存档](./TASK-LAUNCH-DECISIONS.md) | S5 开工前 6 条：`initialPrompt` 落库 / 「启动即执行」由 provision 触发 / install 编排与事务归属 / 无头 Task 出 S5 / 占位版 auth.json 的类型分家 / `$HOME` 展开点，据此回改 13/23/24/26/03/04/05/02/27/10/25/P20/P22 | ✅ 已决策 |
 

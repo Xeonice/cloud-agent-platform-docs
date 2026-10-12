@@ -1,6 +1,6 @@
 # 当前实现与验收入口
 
-当前产品规格包含 250 个 REQ、1036 个 AC，覆盖工作台、项目、任务、Agent/Git 凭证、访问口令、镜像、系统诊断/审计、自动化和初始化。稳定编号与 Given/When/Then 保存在 [领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见 [产品裁决](./docs/product/requirements/decisions.md)。
+当前产品规格包含 259 个 REQ、1088 个 AC。原有 250 个 REQ、1036 个 AC 的编号保持，新增的 UPG 领域包含 9 个 REQ、52 个 AC，状态为 planned。稳定编号与 Given/When/Then 保存在 [领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见 [产品裁决](./docs/product/requirements/decisions.md)。
 
 ## 当前实现
 
@@ -9,6 +9,10 @@
 任务发起的项目、分支与镜像采用统一搜索单选控件；镜像支持注册别名、独立编辑和按别名查找，任务继续提交真实镜像坐标。代码、迁移与本地验收见[任务选择与镜像别名记录](./docs/product/changes/2026-10-09-任务选择与镜像别名.md#8-本轮交付检查)，该记录不代表已发布到远端。
 
 正式构建与发布由本地 Jenkins 管理，发布来源固定为主仓及 API/Web 三仓 `main` 的精确 SHA；PR 构建用于验收。生产 API/BoxLite/Tunnel、Jenkins controller 和通用构建分离运行；前端采用 Vercel prebuilt 发布。部署、运行与维护见 [运维入口](./docs/ops/README.md)。本页不保存容易过期的 PID、构建号或部署快照。
+
+## 实施中的升级连续性
+
+[不停机升级与沙箱续接](./docs/product/changes/2026-10-10-不停机升级与沙箱续接.md)已确定CD只发布版本与安装包，实例升级时机由用户主动决定；PRD、原工作台增量设计及前后端实施方案据此更新。[独立测试计划](./docs/testing/changes/2026-10-10-不停机升级与沙箱续接测试计划.md)统一验证前端、后端、契约、真实升级联调及原任务连续性，逐项覆盖52条AC。发现新版／用户发起升级／安装后刷新为三个阶段，检查和日提醒不升级，原沙箱与终端持续。本轮源码已接入独立授权受理、持久实例控制器、版本化Web入口、纯发包CD、RuntimeOwner／StateCoordinator／ControlAPI角色、唯一写权交接、兼容投影迁移与恢复。实际完成范围和本地检查见[验证记录](./docs/testing/results/2026-10-12-升级实现验证记录.md)。完整同构连续性与故障门禁仍未完成，未发布或替换已有实例，UPG的52条AC不记为全部通过。
 
 ## 持续验收
 

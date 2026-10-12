@@ -21,6 +21,8 @@ const JENKINS_JOBS = new Set([
   "agent-platform-web",
   "agent-platform-contract",
   "agent-platform-release",
+  "agent-platform-instance-package",
+  "agent-platform-upgrade-evidence",
   "agent-platform-ci-discovery",
   "agent-platform-mutation",
   "agent-platform-sandbox-images",
