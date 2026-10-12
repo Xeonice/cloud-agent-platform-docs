@@ -6,6 +6,27 @@ import { digest, canonical, signManifest, signQualificationManifest, runInputFin
 import { treeManifest, fileDigest, atomicJson, secureDirectory, readJson } from './io.mjs';
 import { command } from './artifacts.mjs';
 const ENTRY_FILES=['apps/api/dist/roles/coordinator-main.js','apps/api/dist/roles/coordinator-prepared-main.js','apps/api/dist/roles/control-api-main.js','apps/api/dist/roles/runtime-owner-main.js'];
+export async function probeProductionControlDependencies(apiRoot,{run=command,node=process.execPath}={}) {
+  // The transport main is guarded by require.main===module. Loading it in a
+  // separate process checks the actual production dependency closure without
+  // importing Coordinator/Owner bootstrap or creating a database/SDK home.
+  const script="require('./apps/api/dist/roles/control-api-main.js');process.stdout.write('production-control-dependencies-passed')";
+  const result=await run(node,['-e',script],{cwd:resolve(apiRoot),env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});
+  invariant(result.trim()==='production-control-dependencies-passed','PRODUCTION_CONTROL_DEPENDENCIES_FAILED');
+  return {kind:'production-dependencies',result:'passed',entry:ENTRY_FILES[2],startsListeners:false,opensDatabase:false,opensSdkHome:false};
+}
+export async function probeCoordinatorDataFormats(apiRoot,{run=command,node=process.execPath}={}) {
+  const factory=join(resolve(apiRoot),'apps/api/dist/platform/upgrade/upgrade-project-projection.js');
+  const stat=await fs.lstat(factory).catch(e=>{if(e.code==='ENOENT')return null;throw e;});if(!stat)return [];
+  invariant(stat.isFile()&&!stat.isSymbolicLink(),'COORDINATOR_CAPABILITY_FACTORY_INVALID');
+  const script="const{createRequire}=require('node:module');const r=createRequire(require.resolve('./apps/api/dist/platform/upgrade/upgrade.module.js'));r('reflect-metadata');const{MODULE_METADATA}=r('@nestjs/common/constants');const{PROJECT_READ_PROJECTION}=r('@platform/project');const f=require('./apps/api/dist/platform/upgrade/upgrade-project-projection.js');const{UpgradeModule}=require('./apps/api/dist/platform/upgrade/upgrade.module.js');const p=Reflect.getMetadata(MODULE_METADATA.PROVIDERS,UpgradeModule)||[];const bound=p.find(x=>x&&x.provide===PROJECT_READ_PROJECTION);if(bound&&bound.useFactory!==f.createUpgradeProjectProjection)throw Error('Capability binding differs');const formats=bound?f.UPGRADE_PROJECT_DATA_FORMATS:[];if(!Array.isArray(formats)||formats.some(x=>x!=='project-name-v2-authority')||new Set(formats).size!==formats.length)throw Error('Unsupported capability');process.stdout.write('production-coordinator-formats:'+JSON.stringify(formats));";
+  const result=await run(node,['-e',script],{cwd:resolve(apiRoot),env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});invariant(result.startsWith('production-coordinator-formats:'),'COORDINATOR_CAPABILITY_PROBE_FAILED');return JSON.parse(result.slice('production-coordinator-formats:'.length));
+}
+export async function probeProductionWebDependencies(webRoot,{run=command,node=process.execPath}={}){
+  // Do not require standalone server.js, which binds a listener immediately.
+  const script="const{createRequire}=require('node:module');const r=createRequire(process.cwd()+'/server.js');r('next');process.stdout.write('production-web-dependencies-passed')";
+  const result=await run(node,['-e',script],{cwd:resolve(webRoot),env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});invariant(result.trim()==='production-web-dependencies-passed','PRODUCTION_WEB_DEPENDENCIES_FAILED');return {kind:'production-web-dependencies',result:'passed',startsListeners:false};
+}
 export async function buildNativeBundle({builtRoot,outputRoot,platform,arch,components,releaseId,distributionOrigin,run=command}) {
   invariant(/^v?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/.test(releaseId),'INVALID_PACKAGE_RELEASE');
   invariant(platform===process.platform&&arch===process.arch&&Number(process.versions.node.split('.')[0])===22,'NATIVE_BUILD_ARCHITECTURE_MISMATCH');
@@ -15,12 +36,15 @@ export async function buildNativeBundle({builtRoot,outputRoot,platform,arch,comp
   const u=new URL(distributionOrigin);invariant(u.protocol==='https:'&&!u.username&&!u.password&&!u.search&&!u.hash,'INVALID_DISTRIBUTION_ORIGIN');
   const stage=await fs.mkdtemp(join(outputRoot,'.bundle-'));
   try {
-    // Materialize contained pnpm links into plain files. Extraction never accepts links or devices.
-    await fs.cp(builtRoot,stage,{recursive:true,dereference:true});
-    const files=await treeManifest(stage);invariant(files.every(f=>!f.link),'UNMATERIALIZED_PACKAGE_LINK');
+    // Preserve contained pnpm links: multiple physical copies would give
+    // @platform/contracts different Symbol tokens and break Nest DI.
+    await fs.cp(builtRoot,stage,{recursive:true,dereference:false,verbatimSymlinks:true});
+    const files=await treeManifest(stage);
     const api=files.filter(f=>f.path.startsWith('api/')),web=files.filter(f=>f.path.startsWith('web/'));
     invariant(digest(api)===components.api.artifactDigest&&digest(web)===components.web.artifactDigest&&digest(api)===components.coordinator.artifactDigest&&(!components.owner||digest(api)===components.owner.artifactDigest)&&digest(files.filter(f=>f.path.startsWith('installer/')))===components.installer.artifactDigest,'COMPONENT_TREE_IDENTITY_MISMATCH');
     const apiRoot=join(stage,'api');
+    await probeProductionControlDependencies(apiRoot,{run});
+    await probeProductionWebDependencies(join(stage,'web'),{run});
     const probe="const{createRequire}=require('node:module');const r=createRequire(process.cwd()+'/package.json');const D=r('better-sqlite3');const db=new D(':memory:');if(db.prepare('select 1 as ok').get().ok!==1)throw Error('SQLite');db.close();if(process.platform!==process.env.EXPECT_PLATFORM||process.arch!==process.env.EXPECT_ARCH)throw Error('Native ABI');process.stdout.write('native-abi-passed')";
     const result=await run(process.execPath,['-e',probe],{cwd:apiRoot,env:{...process.env,EXPECT_PLATFORM:platform,EXPECT_ARCH:arch}});invariant(result.trim()==='native-abi-passed','NATIVE_ABI_PROBE_FAILED');
     const bundle={schemaVersion:1,releaseId,platform,arch,nodeMajor:22,nodeABI:process.versions.modules,components,treeDigest:digest(files),files};await atomicJson(join(stage,'upgrade-artifact.json'),bundle);
@@ -51,6 +75,7 @@ export async function buildQualificationDistribution({manifest,outputRoot,instan
   for(const kind of ['build','contracts','four-combinations','native-continuity','fault-recovery',...(manifest.upgradePaths.some(p=>p.migrationPlanDigest)?['online-migration']:[])]) {
     const pending={kind,result:'not-run',inputFingerprint,runId,recordedAt:new Date().toISOString(),reason:'Isolated qualification has not yet executed this gate.'};const path=join(output,'qualification-'+kind+'.json');await atomicJson(path,pending);evidence.push({...pending,reportDigest:(await fileDigest(path)).digest});
   }
+  for(const plan of manifest.contractPlans||[]){const pending={kind:'semantic-contract',result:'not-run',contractPlanDigest:plan.planDigest,inputFingerprint,runId,recordedAt:new Date().toISOString(),reason:'This independent semantic contract has not yet executed in the isolated installation.'};const path=join(output,'qualification-semantic-contract-'+plan.planDigest.slice(7)+'.json');await atomicJson(path,pending);evidence.push({...pending,reportDigest:(await fileDigest(path)).digest});}
   const keys=generateKeyPairSync('ed25519'),qualified={...manifest,policy:{...manifest.policy,fallbacks:manifest.policy.fallbacks.map(f=>({...f,rehearsed:false}))},purpose:'qualification',qualification:{instanceId,inputFingerprint},runInputFingerprint:inputFingerprint,evidence};
   const envelope=signQualificationManifest(qualified,keyId,keys.privateKey.export({format:'pem',type:'pkcs8'}));
   const trustRoot={schemaVersion:1,purpose:'qualification',qualificationInstanceId:instanceId,channel:qualified.channel,distributionOrigins:[...new Set(qualified.packages.map(p=>new URL(p.url).origin))],keys:[{id:keyId,publicKey:keys.publicKey.export({format:'pem',type:'spki'})}]};

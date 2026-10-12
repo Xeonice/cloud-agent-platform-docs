@@ -4,6 +4,8 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { semanticContractGate } from "./semantic-contract-evidence.mjs";
+import { onlineMigrationGate } from "./online-migration-evidence.mjs";
 import {
   atomicJson,
   treeManifest,
@@ -244,6 +246,14 @@ export async function verifyNativeUpgrade(input) {
     );
     const config = JSON.parse(await fs.readFile(configPath, "utf8"));
     invariant(
+      ["external-model", "local-protocol-test"].includes(
+        config.modelMode ?? "external-model",
+      ),
+      "INVALID_MODEL_QUALIFICATION_MODE",
+    );
+    report.modelMode = config.modelMode ?? "external-model";
+    report.modelQualityQualified = false;
+    invariant(
       config.isolated === true &&
         config.initialRoot &&
         config.archiveRoot &&
@@ -367,6 +377,17 @@ export async function verifyNativeUpgrade(input) {
         assertions,
       };
     }
+    if (manifest.contractPlans?.length)
+      report.gates["semantic-contract"] = semanticContractGate(
+        manifest.contractPlans,
+        actual,
+        report.runInputFingerprint,
+      );
+    if (manifest.upgradePaths.some((path) => path.migrationPlanDigest))
+      report.gates["online-migration"] = onlineMigrationGate(
+        actual,
+        report.runInputFingerprint,
+      );
     report.skipped = browser.stats?.skipped ?? 0;
     report.result =
       executed.code === 0 &&

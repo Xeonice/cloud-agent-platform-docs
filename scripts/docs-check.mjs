@@ -71,6 +71,8 @@ const TRANSPORT_ONLY_PATHS = new Map([
   ['/api/mcp', 'MCP Streamable HTTP 传输端点，@rekog/mcp-nest 自动挂载（02 §6）'],
   ['/api/sse', 'MCP HTTP+SSE 传输端点（旧传输的事件流），同上'],
   ['/api/messages', 'MCP HTTP+SSE 传输端点（旧传输的回帖通道），同上'],
+  ['/api/internal/contracts/{id}', '独立contract私有固定计划读取；Controller独立PSK及loopback，普通用户不能执行或修改，见09 §2.4'],
+  ['/api/internal/contracts/{id}/check', '独立contract私有fence／依赖退休门禁；固定已受理意图、独立PSK及loopback，见09 §2.4'],
   ['/api/internal/upgrades/observation', '升级角色私有管理／应用RPC／连续性采样；独立PSK，仅loopback，无普通用户能力，见09 §2.4'],
   ['/api/internal/upgrades/{attemptId}/owner-candidate', '升级角色私有管理／应用RPC／连续性采样；独立PSK，仅loopback，无普通用户能力，见09 §2.4'],
   ['/api/internal/upgrades/{attemptId}/controller-handoff', '升级角色私有管理／应用RPC／连续性采样；独立PSK，仅loopback，无普通用户能力，见09 §2.4'],

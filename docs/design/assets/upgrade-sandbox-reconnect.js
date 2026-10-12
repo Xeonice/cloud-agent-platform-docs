@@ -45,6 +45,11 @@
     ['maintenance-delayed', '维护升级延后：等待长任务自然结束'],
     ['version-unknown', '版本读取失败：保留上次确认，结论待确认'],
     ['restored', '已刷新：重新连接原任务和原终端'],
+    ['contract-waiting', '旧数据格式：回退窗口尚未结束'],
+    ['contract-available', '旧数据格式：可由用户单独清理'],
+    ['contract-clearing', '旧数据格式：已主动发起清理'],
+    ['contract-completed', '旧数据格式：清理完成，历史回退关闭'],
+    ['contract-unknown', '旧数据格式：原清理请求结果待确认'],
   ];
   const templates = new Set(['term-login', 'term-login-shell', 'term-new-shell', 'term-new-codex', 'term-new-claude']);
   const kinds = new Set(['agent', 'shell', 'codex', 'claude']);
@@ -54,6 +59,7 @@
     refreshed: false, shellRecovered: false, lastVerifiedAt: '刚刚', timer: 0,
     snoozedDate: null, demoDayOffset: 0, versionChecking: false, focusVersionCard: false,
     progress: null, entryScene: null, attempt: null, requestSeq: 0, acceptedCount: 0,
+    contract: null,
     catalog: { version: BASE_VERSION, packageRevision: null, verified: true },
     fakePermission: { verified: true, mayUpgrade: true },
     version: { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION, target: null,
@@ -100,6 +106,7 @@
       progress: state.progress ? { percent: state.progress.percent, confirmedAt: state.progress.confirmedAt } : null, entryScene: state.entryScene,
       catalog: state.catalog, fakePermission: state.fakePermission,
       attempt: state.attempt, requestSeq: state.requestSeq, acceptedCount: state.acceptedCount,
+      contract: state.contract,
       tabs: tabs.list.map((tab) => ({
         id: tab.id, kind: tab.kind, label: tab.label, template: tab.tpl,
         demoOutput: tab.demoOutput === true,
@@ -159,8 +166,12 @@
     }
     // 兼容上一版的已发起夹具记录；目录发现记录本身绝不创建 attempt。
     if (!state.attempt && state.progress) createOfflineAttempt(state.progress.percent === 100 ? 'completed' : 'upgrading');
-    state.entryScene = ['upgrade-available', 'upgrade-ready', 'upgrade-progress', 'upgrade-shared-web', 'upgrade-page-target'].includes(record.entryScene) ? record.entryScene : null;
+    state.entryScene = ['upgrade-available', 'upgrade-ready', 'upgrade-progress', 'upgrade-shared-web', 'upgrade-page-target', 'upgrade-contract'].includes(record.entryScene) ? record.entryScene : null;
     if (SCENARIOS.some(([value]) => value === record.scenario)) state.scenario = record.scenario;
+    if (record.contract && ['waiting', 'available', 'clearing', 'completed', 'unknown'].includes(record.contract.phase)) {
+      state.contract = { phase: record.contract.phase,
+        requestId: /^demo-contract-\d+$/.test(record.contract.requestId || '') ? record.contract.requestId : null };
+    }
     state.shellRecovered = tabs.some((tab) => tab.kind !== 'agent');
     return true;
   }
@@ -267,6 +278,7 @@
   }
   function applyVersionScenario(value) {
     const version = state.version;
+    state.contract = null;
     const known = (service, target, phase, reuseWeb = false) => {
       state.version = { service, page: version.page, target,
         loadedWebRevision: version.page === TARGET_VERSION ? TARGET_REVISION : BASE_REVISION,
@@ -274,7 +286,17 @@
         requiresRefresh: !!target && !reuseWeb, phase, verified: true, checkedAt: '刚刚（示例）' };
     };
     if (['normal', 'preparing', 'installable', 'permission-denied', 'shared-web', 'page-target'].includes(value)) { state.progress = null; state.attempt = null; }
-    if (value === 'normal') {
+    if (value.startsWith('contract-')) {
+      known(TARGET_VERSION, TARGET_VERSION, 'current');
+      state.version.page = TARGET_VERSION; state.version.loadedWebRevision = TARGET_REVISION;
+      state.version.requiresRefresh = false;
+      state.progress = demoProgress(PROGRESS_STEPS[4]);
+      state.catalog = { ...fakeCatalog, verified: true };
+      if (!state.attempt) createOfflineAttempt('completed'); else state.attempt.status = 'completed';
+      const phase = value.slice('contract-'.length);
+      state.contract = { phase, requestId: ['clearing', 'completed', 'unknown'].includes(phase) ? 'demo-contract-1' : null };
+    }
+    else if (value === 'normal') {
       known(version.service, null, 'current'); state.catalog = { version: version.service, packageRevision: null, verified: true };
     }
     else if (['installable', 'permission-denied', 'shared-web', 'page-target'].includes(value)) {
@@ -443,7 +465,7 @@
             <li class="list__row"><div class="list__line"><span class="list__name">更新状态</span><span class="badge badge--20 badge--neutral" data-upgrade-version-status></span></div><p class="list__note" data-upgrade-version-description role="status"></p></li>
             <li class="list__row" data-upgrade-card-progress hidden></li>
             <li class="list__row" data-upgrade-install-permission hidden></li>
-          </ul><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-authorize" data-fk="upgrade-authorize" hidden>授权升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
+          </ul><section class="upgrade-contract-section" aria-labelledby="upgrade-contract-heading" data-upgrade-contract hidden></section><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-authorize" data-fk="upgrade-authorize" hidden>授权升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
         </article>`;
       board.prepend(section);
     }
@@ -474,10 +496,23 @@
     const progress = $('[data-upgrade-card-progress]', section); const progressMarkup = progressDisplayHtml();
     if (progress.dataset.html !== progressMarkup) { progress.innerHTML = progressMarkup; progress.dataset.html = progressMarkup; }
     progress.hidden = !progressMarkup;
+    paintContract(section);
     if (state.focusVersionCard) {
       state.focusVersionCard = false; const card = $('#upgrade-version-card');
       card.focus({ preventScroll: true }); section.scrollIntoView({ block: 'start', behavior: 'auto' });
     }
+  }
+  function paintContract(section) {
+    const element = $('[data-upgrade-contract]', section), contract = state.contract;
+    element.hidden = !contract;
+    if (!contract) return;
+    const labels = { waiting: '旧数据格式继续保留', available: '旧数据格式可单独清理',
+      clearing: '正在清理旧数据格式', completed: '旧数据格式清理已完成', unknown: '清理结果待确认' };
+    const reason = contract.phase === 'waiting' ? '回退窗口尚未结束，继续保留旧数据格式。'
+      : contract.phase === 'unknown' ? '仅查询原请求，不重复执行。历史升级的100%记录保持不变。'
+      : contract.phase === 'completed' ? '使用旧数据格式的历史版本无法重新接流。原任务继续运行。' : '';
+    const html = `<h3 class="section-head__title" id="upgrade-contract-heading">旧数据格式清理</h3><p class="text-muted" role="status">${labels[contract.phase]}</p>${reason ? `<p class="text-muted">${esc(reason)}</p>` : ''}<dl class="kv"><dt>所属服务版本</dt><dd>${TARGET_VERSION}</dd><dt>回退窗口截止</dt><dd>${contract.phase === 'waiting' ? '明天 09:00（示例）' : '今天 09:00，已结束（示例）'}</dd><dt>旧版本读者</dt><dd>${['completed', 'clearing'].includes(contract.phase) ? '0' : '1'}（示例）</dd>${contract.requestId ? `<dt>本次清理阶段</dt><dd>${contract.phase === 'completed' ? 'completed' : contract.phase === 'unknown' ? '待确认' : 'clearing'}</dd><dt>已清理行数</dt><dd>${contract.phase === 'completed' ? '3 / 3' : contract.phase === 'unknown' ? '待确认' : '1 / 3'}（示例）</dd>` : ''}</dl>${contract.phase === 'available' && state.fakePermission.mayUpgrade ? '<button class="btn btn--secondary btn--32" type="button" data-action="upgrade-contract-confirm">清理旧数据格式</button>' : ''}`;
+    if (element.dataset.html !== html) { element.innerHTML = html; element.dataset.html = html; }
   }
   function connectionHtml() {
     if (state.scenario === 'reconnect-confirmed') return `<div class="conn-bar conn-bar--warn wb-conn--wrap upgrade-connection" role="status" data-upgrade-connection><span class="icon icon--spin i-loader-circle" aria-hidden="true"></span><span class="wb-conn__text"><span class="conn-bar__title">连接短暂切换，正在重连。</span> 已确认原任务仍在后台运行，重新连接后继续显示输出。</span></div>`;
@@ -687,6 +722,18 @@
     });
     modal.onClose = () => { input.value = ''; };
   };
+  P.actions['upgrade-contract-confirm'] = () => {
+    if (state.contract?.phase !== 'available' || !state.fakePermission.mayUpgrade) return;
+    const modal = P.openModal(`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-contract-title"><div class="dialog__header"><h2 class="dialog__title" id="upgrade-contract-title">确认清理旧数据格式</h2></div><div class="dialog__body"><p>这一步单独提交清理请求。服务端会重新核验回退窗口已结束、旧版本读者已退休、数据对账一致，随后停用旧数据表示并继续使用当前格式。</p><p>清理完成后，使用旧数据格式的历史版本无法重新接流。</p></div><div class="dialog__footer"><div class="dialog__footer-end"><button class="btn btn--secondary btn--32" type="button" data-dlg="cancel">取消</button><button class="btn btn--primary btn--32" type="button" data-contract-accept>确认清理</button></div></div></div>`, { kind: 'upgrade-contract', returnTo: document.activeElement, initialFocus: '[data-dlg="cancel"]' });
+    modal.box.addEventListener('click', (event) => {
+      if (event.target.closest('[data-dlg="cancel"]')) { P.closeModal(modal); return; }
+      if (!event.target.closest('[data-contract-accept]')) return;
+      if (state.contract?.phase !== 'available' || !state.fakePermission.mayUpgrade) { P.closeModal(modal); return; }
+      state.contract = { phase: 'clearing', requestId: 'demo-contract-1' };
+      state.scenario = 'contract-clearing'; P.closeModal(modal); update();
+      P.announce('离线模拟：独立清理请求已受理。用演示场景切换查看完成或待确认状态。');
+    });
+  };
   P.actions['upgrade-check-version'] = () => {
     if (state.versionChecking) return;
     state.versionChecking = true; paintVersionCard(); paintVersionPopover();
@@ -715,6 +762,7 @@
     state.sequence = 41; state.observedSequence = 41; state.refreshed = false; state.shellRecovered = false;
     state.snoozedDate = null; state.demoDayOffset = 0; state.versionChecking = false;
     state.progress = null; state.entryScene = null; state.attempt = null; state.requestSeq = 0; state.acceptedCount = 0;
+    state.contract = null;
     state.catalog = { version: BASE_VERSION, packageRevision: null, verified: true };
     state.fakePermission = { verified: true, mayUpgrade: true };
     state.version = { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION,
@@ -735,6 +783,9 @@
   P.hook('boot', () => {
     readDailyReminder();
     const restored = restoreRecord(saved);
+    if (entryScene === 'upgrade-contract' && !state.entryScene) {
+      state.entryScene = entryScene; state.scenario = 'contract-available'; applyVersionScenario(state.scenario);
+    }
     if (restored && state.refreshed && state.version.verified && ['normal', 'restored'].includes(state.scenario)) state.scenario = 'restored';
     if (['upgrade-available', 'upgrade-ready', 'upgrade-progress', 'upgrade-shared-web', 'upgrade-page-target'].includes(entryScene)
       && !state.entryScene && !state.progress && !state.attempt && state.version.service !== TARGET_VERSION) {
@@ -749,7 +800,7 @@
     syncingScenario = false;
     paintOutput(); paintVersionEntry();
   });
-  P.hook('loaded', () => { update(); });
+  P.hook('loaded', () => { if (entryScene === 'upgrade-contract') P.go('system'); update(); });
   P.clock.ticker({
     active: () => !!target() && target().state === 'running',
     tick(now) {
@@ -769,7 +820,7 @@
       paragraph.innerHTML = paragraph.innerHTML.replace('任务深链 <code class="code">?taskId=</code>（计划中，原型用自己的 <code class="code">#task-&lt;id&gt;</code>）；', '本原型使用 <code class="code">#task-&lt;id&gt;</code> 定位示例任务；真实页面的 <code class="code">?taskId=</code> 值为 sandbox ID，本轮沿用现有任务定位；');
     }
     const note = document.createElement('div');
-    note.innerHTML = '<h3>本轮：服务升级与原沙箱续接</h3><p>CD只发布安装包；<code class="code">?scene=upgrade-available</code> 首次展示发现新版但本实例尚未升级，需有权限用户主动点「立即升级」才模拟受理。待升级和已安装待刷新有静态点；进行中无点且百分比只由演示按钮推进。<code class="code">?scene=upgrade-progress</code> 是已主动发起45%夹具，<code class="code">?scene=upgrade-ready</code> 是已安装待刷新夹具。今日关闭浮卡不会阻止主动升级，阶段变化不重出；次日复核恢复。右下角升级演示有恢复待升级提示、已安装待刷新、开始／推进升级和无权限场景；原任务与终端保持。系统页区分已发布包、已安装服务和已加载页面。</p>';
+    note.innerHTML = '<h3>本轮：服务升级与原沙箱续接</h3><p>CD只发布安装包；<code class="code">?scene=upgrade-available</code> 首次展示发现新版但本实例尚未升级，需有权限用户主动点「立即升级」才模拟受理。待升级和已安装待刷新有静态点；进行中无点且百分比只由演示按钮推进。<code class="code">?scene=upgrade-progress</code> 是已主动发起45%夹具，<code class="code">?scene=upgrade-ready</code> 是已安装待刷新夹具。今日关闭浮卡不会阻止主动升级，阶段变化不重出；次日复核恢复。右下角升级演示有恢复待升级提示、已安装待刷新、开始／推进升级和无权限场景；原任务与终端保持。系统页区分已发布包、已安装服务和已加载页面。<code class="code">?scene=upgrade-contract</code> 展示独立旧数据格式清理；演示场景可切换等待、可清理、进行中、完成与结果待确认，原升级100%与原任务保持。</p>';
     panel.prepend(note);
     const gallery = $('.dialog__footer a', modal.box);
     if (gallery) { gallery.href = 'task-search-image-alias.html'; gallery.lastChild.textContent = '原 v2 原型'; }

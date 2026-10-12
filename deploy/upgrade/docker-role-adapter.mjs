@@ -23,7 +23,7 @@ export async function createDockerRoleAdapter(c){
     const row=JSON.parse(await docker(['inspect',containerId]))[0];
     invariant(row.Config.Labels['agent-platform.instance']===c.instanceId&&row.Config.Labels['agent-platform.installation']===digest(installationRoot)&&row.Image===imageId,'CONTAINER_IDENTITY_SCOPE_MISMATCH');
     let cgroup=null;if(row.State.Running)cgroup=(await docker(['exec',containerId,'cat','/proc/1/cgroup'])).trim();
-    return {containerId:row.Id,imageDigest:row.Image,pid:1,hostPid:row.State.Pid,startIdentity:row.Config.Labels['agent-platform.start'],startedAt:row.State.StartedAt,running:row.State.Running,pidNamespace:row.HostConfig.PidMode||'private',network:row.HostConfig.NetworkMode,privileged:row.HostConfig.Privileged,cgroup,mounts:row.Mounts.map(m=>({type:m.Type,source:m.Source,destination:m.Destination,rw:m.RW})),capabilities:row.HostConfig.CapAdd||[]};
+    return {containerId:row.Id,imageDigest:row.Image,pid:1,hostPid:row.State.Pid,startIdentity:row.Config.Labels['agent-platform.start'],role:row.Config.Labels['agent-platform.role'],entrypoint:row.Config.Entrypoint,command:row.Config.Cmd,environmentNames:(row.Config.Env||[]).map(e=>e.split('=',1)[0]),workingDirectory:row.Config.WorkingDir,startedAt:row.State.StartedAt,running:row.State.Running,pidNamespace:row.HostConfig.PidMode||'private',network:row.HostConfig.NetworkMode,privileged:row.HostConfig.Privileged,cgroup,mounts:row.Mounts.map(m=>({type:m.Type,source:m.Source,destination:m.Destination,rw:m.RW})),capabilities:row.HostConfig.CapAdd||[]};
   }
   async function launch({kind,args,entry,env,cwd,artifactRoot,processRoot,ownerHome,record}){
     invariant(['api','web','coordinator','owner','installer'].includes(kind),'FIXED_CONTAINER_ROLE_REQUIRED');
@@ -50,6 +50,7 @@ export async function createDockerRoleAdapter(c){
       }
     }
     mount(env.NODE_EXTRA_CA_CERTS);
+    mount(env.SSL_CERT_FILE);mount(env.SSL_CERT_DIR);
     for(const [path]of mounts)invariant((await fs.lstat(path).catch(()=>null)),'FIXED_CONTAINER_MOUNT_MISSING');
     const uid=c.uid??process.getuid(),gid=c.gid??process.getgid();invariant(Number.isSafeInteger(uid)&&uid>=0&&Number.isSafeInteger(gid)&&gid>=0,'FIXED_CONTAINER_USER_REQUIRED');
     const name='upg-'+digest({instance:c.instanceId,start:record.startIdentity,kind}).slice(7,35),argv=['run','--detach','--name',name,'--network','host','--read-only','--user',uid+':'+gid,'--label','agent-platform.instance='+c.instanceId,'--label','agent-platform.installation='+digest(installationRoot),'--label','agent-platform.start='+record.startIdentity,'--label','agent-platform.role='+kind,'--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--workdir',cwd];
@@ -70,5 +71,11 @@ export async function createDockerRoleAdapter(c){
     invariant(['SIGTERM','SIGKILL'].includes(signal),'FIXED_OWNED_SIGNAL_REQUIRED');
     const receipt=await readJson(join(registryRoot,containerId+'.json'),null);invariant(owned.has(containerId)||receipt?.instanceId===c.instanceId,'CONTAINER_NOT_OWNED');const proof=await inspect(containerId);if(proof.running)await docker(['kill','--signal',signal,containerId]);
   }
-  return {launch,inspect,signal,imageDigest:imageId,isolation:'containers',ownedContainers:()=>[...owned]};
+  async function restartInstaller(containerId){
+    const receipt=await readJson(join(registryRoot,containerId+'.json'));invariant(receipt.instanceId===c.instanceId&&receipt.kind==='installer','ONLY_OWNED_INSTALLER_MAY_RESTART');
+    const before=await inspect(containerId);invariant(before.running===false&&before.startIdentity===receipt.startIdentity,'INSTALLER_STILL_RUNNING');
+    await docker(['start',containerId]);const proof=await inspect(containerId);invariant(proof.running&&proof.startIdentity===receipt.startIdentity&&proof.imageDigest===receipt.imageDigest,'INSTALLER_RESTART_IDENTITY_MISMATCH');
+    owned.add(containerId);await atomicJson(join(registryRoot,containerId+'.json'),{...receipt,...proof});return proof;
+  }
+  return {launch,inspect,signal,restartInstaller,imageDigest:imageId,isolation:'containers',ownedContainers:()=>[...owned]};
 }

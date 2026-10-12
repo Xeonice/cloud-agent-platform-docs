@@ -23,7 +23,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const actualSource=record.sourceActual;
       if(actualSource){const proof={...actualSource};delete proof.proofDigest;invariant(actualSource.schemaVersion===1&&actualSource.qualified===true&&actualSource.partial===true&&actualSource.instanceId===instanceId&&actualSource.baseConfirmedReleaseId===source.releaseId&&actualSource.activationGeneration===source.activationGeneration&&digest(proof)===actualSource.proofDigest,'SOURCE_ACTUAL_UNQUALIFIED');}
       const components=actualSource?.components||source.components;
-      const current={...source,schema:actualSource?.schema??source.schema,instanceId,platform:process.platform,arch:process.arch,generation:source.activationGeneration,apiDigest:components.api.artifactDigest,apiInputFingerprint:components.api.inputFingerprint,webDigest:components.web.artifactDigest,webInputFingerprint:components.web.inputFingerprint,installerDigest:components.installer.artifactDigest,installerInputFingerprint:components.installer.inputFingerprint,coordinatorDigest:components.coordinator?.artifactDigest||components.api.artifactDigest,coordinatorInputFingerprint:components.coordinator?.inputFingerprint||components.api.inputFingerprint,ownerDigest:components.owner?.artifactDigest||null,ownerInputFingerprint:components.owner?.inputFingerprint||null,protocols:Object.fromEntries(['api','web','installer','coordinator','owner'].map(k=>[k,components[k]?.protocol||components.api.protocol])),bridges:source.bridges||[]};
+      const current={...source,schema:actualSource?.schema??source.schema,instanceId,platform:process.platform,arch:process.arch,generation:source.activationGeneration,partialRepair:Boolean(actualSource),apiDigest:components.api.artifactDigest,apiInputFingerprint:components.api.inputFingerprint,webDigest:components.web.artifactDigest,webInputFingerprint:components.web.inputFingerprint,installerDigest:components.installer.artifactDigest,installerInputFingerprint:components.installer.inputFingerprint,coordinatorDigest:components.coordinator?.artifactDigest||components.api.artifactDigest,coordinatorInputFingerprint:components.coordinator?.inputFingerprint||components.api.inputFingerprint,ownerDigest:components.owner?.artifactDigest||null,ownerInputFingerprint:components.owner?.inputFingerprint||null,protocols:Object.fromEntries(['api','web','installer','coordinator','owner'].map(k=>[k,components[k]?.protocol||components.api.protocol])),bridges:record.appliedBridgeReleases||[]};
       const verified=verifyManifest(envelope,roots,current);const unsigned={...plan};delete unsigned.planDigest;
       invariant(verified.manifestDigest===accepted.targetDigest&&plan.manifestDigest===accepted.targetDigest&&digest(unsigned)===plan.planDigest&&accepted.planDigest===plan.planDigest,'FIXED_PLAN_MISMATCH');
       const claim=await coordinator.claim(accepted.attemptId,{controllerId,leaseMs});session={...(claim.snapshot||record),attempt:claim.attempt||claim.snapshot?.attempt||accepted,fence:claim.fence,generation:claim.generation??claim.snapshot?.attempt?.generation??claim.attempt?.generation??accepted.generation,recovering:record.recovery?.state==='recovering'};
@@ -51,6 +51,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
         const result=await commit('recovery-confirmed',{recoveryAttemptId:record.recovery.recoveryAttemptId,actual,continuity});journal.recovery.state='confirmed';journal.monitorStopped='recovered';await atomicJson(journalPath,journal);return {state:'recovery-confirmed',attemptId:attempt.attemptId,recovery:result.recovery};
       }
       for(const step of plan.steps) {
+        session.currentStep={stepId:step.stepId,kind:step.kind};
         await assertFence();const prior=await coordinator.step(attempt.attemptId,step.stepId);
         if(prior?.state==='applied'||prior?.applied===true){if(step.kind==='installer-handoff'&&!await executor.installerIsCurrent({attempt,fence:session.fence})){const candidateInstaller=prior.evidence;await executor.installerHandoff({attempt,fence:session.fence,operationId:candidateInstaller.operationId,candidate:candidateInstaller});return {state:'controller-handoff',attemptId:attempt.attemptId};}journal.steps[step.stepId]={state:'applied',...prior};if(step.kind==='download')download=prior.evidence;if(step.kind==='verify')artifact=prior.evidence;if(step.kind==='candidate')candidate=prior.evidence;continue;}
         const local=journal.steps[step.stepId];
@@ -89,7 +90,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
           invariant(evidence.weight===step.weight&&evidence.candidateApi?.digest===attempt.manifest.components.api.artifactDigest,'ROUTE_APPLY_UNCONFIRMED');await applied(step,evidence,1);
         }else if(step.kind==='observe') {
           let previous={};while(true){await assertFence();const evidence=await executor.observe({attempt,fence:session.fence,weight:step.weight}),inspection=inspectObservation(evidence,plan.policy,Date.now(),previous);previous=inspection;
-            if(inspection.fault)throw Object.assign(Error(inspection.fault),{code:inspection.fault,faultEvidence:evidence,shared:inspection.shared});
+            if(inspection.fault)throw Object.assign(Error(inspection.fault),{code:inspection.fault,faultEvidence:evidence,shared:inspection.shared,componentScope:inspection.componentScope});
             await commit('progress',{stepId:step.stepId,completedWork:inspection.completedWork,totalWork:step.totalWork,evidence,stage:'observing'});
             if(inspection.qualified){await applied(step,evidence,step.totalWork);break;}await sleep(plan.policy.evaluationIntervalMs,signal);
           }
@@ -132,7 +133,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       if(inspection.fault){
         // Persist the tripped circuit before invoking recovery. Unknown recovery is never retried.
         journal.circuitBroken=true;journal.faultCode=inspection.fault;journal.detectedFault={evidence,shared:inspection.shared===true};await atomicJson(path,journal);
-        const result=await handleFault(session,Object.assign(Error(inspection.fault),{code:inspection.fault,faultEvidence:evidence,shared:inspection.shared}));
+        const result=await handleFault(session,Object.assign(Error(inspection.fault),{code:inspection.fault,faultEvidence:evidence,shared:inspection.shared,componentScope:inspection.componentScope}));
         const latest=await readJson(path);latest.faultRecordingComplete=true;latest.recoveryResult=result?.state||'recorded';await atomicJson(path,latest);return {state:'ready-revoked',attemptId:accepted.attemptId,code:inspection.fault};
       }
       await atomicJson(path,journal);onEvent?.({kind:'retention-observed',attemptId:accepted.attemptId,qualified:inspection.qualified});return {state:'retention-observed',attemptId:accepted.attemptId};
@@ -143,7 +144,8 @@ export function createInstanceController({root,instanceId,controllerId,startIden
     const id=session.attempt.attemptId;await coordinator.assertFence(id,session.fence);const fresh=await coordinator.snapshot(id);const attempt=fresh.attempt||fresh;const plan=fresh.plan;
     if(!plan)return;const actual=await executor.actual();const confirmed=attempt.state==='activation-confirmed';
     const base={fence:session.fence,generation:session.generation,expectedSequence:attempt.sequence,eventId:randomUUID()};
-    const fault={code:error.code||'UPGRADE_FAILED',observedAt:new Date().toISOString(),actual,evidence:error.faultEvidence||null};
+    const scope=error.componentScope||(session.currentStep?.kind==='web'?['web']:null);
+    const fault={code:error.code||'UPGRADE_FAILED',observedAt:new Date().toISOString(),actual,evidence:error.faultEvidence||null,currentStep:session.currentStep||null,...(scope?{componentScope:scope}:{})};
     const journalPath=join(root,'journals',id+'.json'),faultJournal=await readJson(journalPath,{});
     faultJournal.faultCommit ||= {...base,kind:confirmed?'ready-revoked':'failed',payload:{reason:fault.code,evidence:fault}};await atomicJson(journalPath,faultJournal);let stopped;
     try{stopped=await coordinator.commit(id,faultJournal.faultCommit);}catch(e){if(['UPGRADE_FENCE_EXPIRED','STALE_FENCE','LEASE_EXPIRED'].includes(e.code)){faultJournal.faultCommit={...faultJournal.faultCommit,...base,eventId:randomUUID()};await atomicJson(journalPath,faultJournal);}throw e;}

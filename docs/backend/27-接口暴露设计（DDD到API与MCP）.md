@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **74 条能力 path / 84 个 operation**（2026-10 新增用户自主升级及原操作结果5条；**73 条 path / 83 个 operation 已实现**，另 1 条 `POST /api/system/backup` 为 ⏳ 预留。MCP传输与独立PSK保护的角色私有RPC／采样不计普通用户能力，排除口径见09 §2.4；诊断SSE计入HTTP清单） | 10 §6.1–6.6 |
+| REST 端点 | **76 条能力 path / 86 个 operation**（2026-10 新增用户自主升级、独立旧表示清理及原操作结果7条；**75 条 path / 85 个 operation 已实现**，另 1 条 `POST /api/system/backup` 为 ⏳ 预留。MCP传输与独立PSK保护的角色私有RPC／采样不计普通用户能力，排除口径见09 §2.4；诊断SSE计入HTTP清单） | 10 §6.1–6.6 |
 | MCP tools | **14 设计 / 14 已注册**（本迭代把最后四个补齐——它们的 REST 端点此前也不存在，所以是「先做端点、再包壳」两层一起落地，见 §2） | 02 §5.2 |
 | WS 通道 | **3**（`/events`、`/terminal`、`/tasks`） | 10 §6.7 |
 | WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
@@ -345,6 +345,8 @@
 | `grantInstanceUpgrade` | `POST /api/system/upgrade/access` | 独立升级密钥／Origin／CSRF | `UpgradeStatus` + HttpOnly grant | 统一信封 | 授权不升级，普通口令不默认admin |
 | `requestInstanceUpgrade` | `POST /api/system/upgrade/requests` | 精确target digest／requestId／expected generation | 202 `UpgradeAttempt` | 统一信封 | 服务端instance CAS；目录不替换已接纳目标 |
 | `lookupInstanceUpgrade` | `GET /api/system/upgrade/requests/:requestId` | 同actor原请求ID | 原`UpgradeAttempt` | 统一信封 | 只查原结果，响应未知不自动新POST |
+| `requestUpgradeContract` | `POST /api/system/upgrade/contracts/requests` | 固定plan digest／requestId／generation／明确关闭回退确认 | 202 `UpgradeContractAttempt` | 统一信封 | 独立授权／Origin／CSRF，全实例与升级互斥；非升级自动步骤 |
+| `lookupUpgradeContract` | `GET /api/system/upgrade/contracts/requests/:requestId` | 同actor原请求ID | 原`UpgradeContractAttempt` | 统一信封 | 只读查询；未知不重发或自动重试 |
 | `lookupApplicationOperation` | `GET /api/operations/:operationId` | 认证actor范围 | 原状态及可公开结果 | `OPERATION_RESULT_UNKNOWN` | 无SDK操作／无journal写；敏感结果不回显 |
 
 上述升级能力不进MCP。私有管理／应用RPC独立PSK与loopback认证，ControllerKey不授权任意业务、URL、shell或Docker参数；目录信任、唯一writer、固定工作计划、整体100、原任务连续性与安全回退见[升级后端方案](./changes/2026-10-10-不停机升级与运行环境分离.md)。

@@ -16,6 +16,11 @@ export function canonical(value) {
 export const digest = value => 'sha256:' + createHash('sha256').update(typeof value === 'string' || Buffer.isBuffer(value) ? value : canonical(value)).digest('hex');
 const positive = n => Number.isSafeInteger(n) && n > 0;
 const range = p => p && positive(p.min) && positive(p.max) && p.min <= p.max;
+export function validateContractPlan(p) {
+  const keys=['schemaVersion','kind','planDigest','expandPlanDigest','targetTable','nameColumn','artifactInputFingerprint','rollbackWindowMs','maxValidationRows','maxBatchRows','batchBudgetMs','minFreeBytes','maxWalBytes','preserveUserResources','rollbackToLegacy'];
+  invariant(p&&Object.keys(p).length===keys.length&&Object.keys(p).every(k=>keys.includes(k))&&p.schemaVersion===1&&p.kind==='project-name-contract'&&DIGEST.test(p.planDigest)&&DIGEST.test(p.expandPlanDigest)&&DIGEST.test(p.artifactInputFingerprint)&&/^upg_shadow_[a-z0-9_]{1,64}$/.test(p.targetTable)&&/^[a-z][a-z0-9_]{0,80}$/.test(p.nameColumn)&&positive(p.rollbackWindowMs)&&p.rollbackWindowMs>=60000&&positive(p.maxValidationRows)&&p.maxValidationRows<=10000&&positive(p.maxBatchRows)&&p.maxBatchRows<=1000&&positive(p.batchBudgetMs)&&p.batchBudgetMs<=1000&&positive(p.minFreeBytes)&&positive(p.maxWalBytes)&&p.preserveUserResources===true&&p.rollbackToLegacy===false,'INVALID_CONTRACT_PLAN');
+  const {planDigest,...facts}=p;invariant(digest(facts)===planDigest,'CONTRACT_PLAN_DIGEST_INVALID');return p;
+}
 export function validatePolicy(p, {purpose='release'} = {}) {
   invariant(p && NAME.test(p.id) && canonical(p.weights) === '[1,5,25,100]', 'INVALID_POLICY');
   invariant(p.stageDurationMs >= 60_000 && p.minRequests >= 100 && p.observationFreshnessMs > 0 && p.observationFreshnessMs <= 5000, 'INVALID_OBSERVATION_POLICY');
@@ -32,6 +37,7 @@ export function validateManifest(m, { purpose = 'release' } = {}) {
   invariant(m && m.schemaVersion === 2 && RELEASE.test(m.releaseId) && NAME.test(m.channel) && Number.isFinite(Date.parse(m.publishedAt)) && m.withdrawn !== true, 'INVALID_RELEASE_MANIFEST');
   invariant(m.commits && ['project','api','web'].every(k => SHA.test(m.commits[k])), 'INVALID_COMMITS');
   invariant(m.components && ['api','web','installer','coordinator'].every(k => { const c = m.components[k]; return c && DIGEST.test(c.artifactDigest) && DIGEST.test(c.inputFingerprint) && SHA.test(c.sourceRevision) && range(c.protocol); }), 'INVALID_COMPONENT_IDENTITY');
+  for(const c of Object.values(m.components))if(c.dataFormats!==undefined)invariant(Array.isArray(c.dataFormats)&&c.dataFormats.every(v=>v==='project-name-v2-authority')&&new Set(c.dataFormats).size===c.dataFormats.length,'INVALID_COMPONENT_DATA_FORMATS');
   if(m.components.owner)invariant(DIGEST.test(m.components.owner.artifactDigest)&&DIGEST.test(m.components.owner.inputFingerprint)&&SHA.test(m.components.owner.sourceRevision)&&range(m.components.owner.protocol),'INVALID_OWNER_IDENTITY');
   invariant(SHA.test(m.components.web.webRevision), 'WEB_BUILD_IDENTITY_MISSING');
   invariant(Array.isArray(m.packages) && m.packages.length && m.packages.length <= 16, 'PACKAGES_MISSING');
@@ -43,10 +49,12 @@ export function validateManifest(m, { purpose = 'release' } = {}) {
   }
   invariant(Array.isArray(m.upgradePaths) && m.upgradePaths.length > 0 && m.upgradePaths.every(p => RELEASE.test(p.fromRelease) && Number.isSafeInteger(p.minSchema) && p.minSchema >= 0 && Number.isSafeInteger(p.maxSchema) && p.maxSchema >= p.minSchema && Number.isSafeInteger(p.targetSchema) && p.targetSchema >= 0 && Array.isArray(p.bridgeReleases) && p.bridgeReleases.every(RELEASE.test.bind(RELEASE)) && (p.migrationPlanDigest === null || DIGEST.test(p.migrationPlanDigest))), 'INVALID_UPGRADE_PATH');
   validatePolicy(m.policy,{purpose});
+  if(m.contractPlans!==undefined){invariant(Array.isArray(m.contractPlans)&&m.contractPlans.length<=16,'INVALID_CONTRACT_PLANS');const ids=new Set();for(const plan of m.contractPlans){validateContractPlan(plan);invariant(!ids.has(plan.planDigest),'DUPLICATE_CONTRACT_PLAN');ids.add(plan.planDigest);invariant(plan.artifactInputFingerprint===runInputFingerprint(m)&&m.upgradePaths.some(p=>p.migrationPlanDigest===plan.expandPlanDigest),'CONTRACT_PLAN_INPUT_MISMATCH');}}
   if (purpose === 'release') {
     invariant(Array.isArray(m.evidence) && ['build','contracts','four-combinations','native-continuity','fault-recovery'].every(kind => m.evidence.some(e => e.kind === kind && e.result === 'passed' && DIGEST.test(e.inputFingerprint) && DIGEST.test(e.reportDigest) && NAME.test(e.runId) && Number.isFinite(Date.parse(e.recordedAt)))), 'RELEASE_GATES_MISSING');
     if (m.upgradePaths.some(p => p.migrationPlanDigest)) invariant(m.evidence.some(e => e.kind === 'online-migration' && e.result === 'passed' && e.maxDataTested === true && e.forwardOnlyTested === true && DIGEST.test(e.reportDigest)), 'MIGRATION_GATES_MISSING');
   } else invariant(Array.isArray(m.evidence) && m.evidence.every(e => ['qualification','not-run','passed'].includes(e.result) && DIGEST.test(e.inputFingerprint) && DIGEST.test(e.reportDigest)), 'INVALID_QUALIFICATION_EVIDENCE');
+  for(const plan of m.contractPlans||[])invariant(m.evidence.some(e=>e.kind==='semantic-contract'&&e.contractPlanDigest===plan.planDigest&&e.inputFingerprint===plan.artifactInputFingerprint&&DIGEST.test(e.reportDigest)&&(e.result==='passed'||(purpose==='qualification'&&e.result==='not-run'))),'SEMANTIC_CONTRACT_GATES_MISSING');
 
   return m;
 }
@@ -84,8 +92,10 @@ export function verifyManifest(envelope, roots, current, now = Date.now()) {
   for (const p of manifest.packages) invariant(roots.distributionOrigins.includes(new URL(p.url).origin), 'UNTRUSTED_DISTRIBUTION_ORIGIN');
   const path = manifest.upgradePaths.find(p => p.fromRelease === current.releaseId && current.schema >= p.minSchema && current.schema <= p.maxSchema);
   invariant(path && path.bridgeReleases.every(b => (current.bridges || []).includes(b)), 'UPGRADE_PATH_NOT_SUPPORTED');
+  invariant(path.targetSchema===current.schema,'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
   for (const name of ['api','web','installer','coordinator',...(manifest.components.owner?['owner']:[])]) { const live = current.protocols?.[name] || (['coordinator','owner'].includes(name)?current.protocols?.api:null); invariant(live && range(live) && live.min <= manifest.components[name].protocol.max && live.max >= manifest.components[name].protocol.min, 'INCOMPATIBLE_PROTOCOL'); }
-  invariant(current.releaseId !== manifest.releaseId, 'ALREADY_INSTALLED');
+  const different=['api','web','installer','coordinator',...(manifest.components.owner?['owner']:[])].some(name=>current[name+'Digest']!==manifest.components[name].artifactDigest||current[name+'InputFingerprint']!==manifest.components[name].inputFingerprint);
+  invariant(current.releaseId !== manifest.releaseId||(current.partialRepair===true&&different),'ALREADY_INSTALLED');
   return { manifest, manifestDigest, package: pkg, path };
 }
 export async function loadTrustRoot(path) {
@@ -95,6 +105,7 @@ export async function loadTrustRoot(path) {
 }
 export function freezePlan(verified, current) {
   const { manifest: m, manifestDigest, package: pkg, path } = verified;
+  invariant(path.targetSchema===current.schema,'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
   const apiReused = current.apiDigest === m.components.api.artifactDigest && current.apiInputFingerprint === m.components.api.inputFingerprint;
   const webReused = current.webDigest === m.components.web.artifactDigest && current.webInputFingerprint === m.components.web.inputFingerprint;
   const coordinatorDigest=current.coordinatorDigest||current.apiDigest,coordinatorInputFingerprint=current.coordinatorInputFingerprint||current.apiInputFingerprint;

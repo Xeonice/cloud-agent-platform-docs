@@ -3,12 +3,15 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { command } from '../upgrade/artifacts.mjs';
-import { buildNativeBundle, runtimeFingerprint } from '../upgrade/build-distribution.mjs';
+import { buildNativeBundle, runtimeFingerprint,probeCoordinatorDataFormats } from '../upgrade/build-distribution.mjs';
 import { treeManifest, atomicJson, readJson, secureDirectory,fileDigest } from '../upgrade/io.mjs';
 import { digest, invariant,canonical,loadTrustRoot,verifySignedManifest } from '../upgrade/trust.mjs';
 import { validateMigrationPlan } from '../upgrade/migration-plan.mjs';
 const SHA=/^[a-f0-9]{40}$/;
 const REPOS={project:'cloud-agent-platform-docs',api:'agent-platform-api',web:'agent-platform-web'};
+// ssh2 publishes upstream test-only TLS private keys. They are never runtime
+// inputs and may not cross the package's private-file boundary.
+const runtimeCopyAllowed=path=>!/(?:^|\/)node_modules\/ssh2\/test(?:\/|$)/.test(path);
 export async function packagePinnedInstance({workspace,commits,releaseId,channel,distributionOrigin,protocols,previousBundle=null,migrationPlan=null,purpose='release',sourceRepositories=null,sourceBundles=null,run=command}) {
   invariant(['project','api','web'].every(k=>SHA.test(commits[k])),'PINNED_COMMITS_REQUIRED');
   invariant(['release','qualification'].includes(purpose)&&(!(sourceRepositories||sourceBundles)||purpose==='qualification')&&!(sourceRepositories&&sourceBundles),'PRODUCTION_SOURCE_OVERRIDE_FORBIDDEN');
@@ -31,13 +34,26 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   for(const cwd of [...(reuseApi?[]:[api]),...(reuseWeb?[]:[web])]){await run('corepack',['pnpm','install','--frozen-lockfile'],{cwd,env:cleanEnv});await run('corepack',['pnpm','run','build'],{cwd,env:cleanEnv});}
   for(const cwd of [project,api,web])await run('git',['diff','--exit-code','HEAD','--'],{cwd});
   const built=join(root,'built');await fs.mkdir(built,{mode:0o700});await fs.mkdir(join(built,'api'),{mode:0o700});
-  if(reuseApi)await fs.cp(join(prior.root,'api'),join(built,'api'),{recursive:true,dereference:true});
-  else for(const name of ['package.json','pnpm-lock.yaml','node_modules','packages','apps/api/dist','apps/api/node_modules','drizzle']){
-    const target=join(built,'api',name);await fs.mkdir(join(target,'..'),{recursive:true,mode:0o700});await fs.cp(join(api,name),target,{recursive:true,dereference:true});
+  if(reuseApi)await fs.cp(join(prior.root,'api'),join(built,'api'),{recursive:true,dereference:false,verbatimSymlinks:true});
+  else {
+    const production=join(root,'api-production');await run('corepack',['pnpm','--filter','@platform/api','deploy','--prod',production],{cwd:api,env:cleanEnv});
+    await fs.cp(production,join(built,'api'),{recursive:true,dereference:false,verbatimSymlinks:true,filter:runtimeCopyAllowed});
+    await fs.mkdir(join(built,'api/apps/api'),{recursive:true,mode:0o700});await fs.rename(join(built,'api/dist'),join(built,'api/apps/api/dist'));
+    await fs.symlink('apps/api/dist',join(built,'api/dist'));
+    // pnpm9 deploy leaves its self-workspace alias pointing at the build
+    // checkout. Rebind only that known self alias to the deployed API root.
+    const selfAlias=join(built,'api/node_modules/.pnpm/node_modules/@platform/api');if((await fs.lstat(selfAlias).catch(()=>null))?.isSymbolicLink()){await fs.unlink(selfAlias);await fs.symlink('../../../..',selfAlias);}
+    await fs.cp(join(api,'drizzle'),join(built,'api/drizzle'),{recursive:true,dereference:false});
+    // Keep the canonical introspection paths used by native/compatibility
+    // readers, pointing to the same production workspace modules Node loads.
+    for(const location of ['shared-kernel','contracts',...(await fs.readdir(join(api,'packages/modules'))).map(name=>'modules/'+name)]){
+      const name=location.split('/').at(-1),target=join(built,'api/packages',location);await fs.mkdir(join(target,'..'),{recursive:true,mode:0o700});
+      if(await fs.lstat(join(built,'api/node_modules/@platform',name)).catch(()=>null)){const relative=location.startsWith('modules/')?'../../node_modules/@platform/':'../node_modules/@platform/';await fs.symlink(relative+name,target);}
+    }
   }
-  if(reuseWeb)await fs.cp(join(prior.root,'web'),join(built,'web'),{recursive:true,dereference:true});
-  else {await fs.cp(join(web,'.next/standalone'),join(built,'web'),{recursive:true,dereference:true});await fs.cp(join(web,'.next/static'),join(built,'web/_next/static'),{recursive:true,dereference:true});
-  await fs.cp(join(web,'public'),join(built,'web/public'),{recursive:true,dereference:true});await fs.cp(join(web,'.next/static'),join(built,'web/.next/static'),{recursive:true,dereference:true});
+  if(reuseWeb)await fs.cp(join(prior.root,'web'),join(built,'web'),{recursive:true,dereference:false,verbatimSymlinks:true});
+  else {await fs.cp(join(web,'.next/standalone'),join(built,'web'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/_next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});
+  await fs.cp(join(web,'public'),join(built,'web/public'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/.next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});
   }
   await fs.cp(join(project,'deploy/upgrade'),join(built,'installer'),{recursive:true,dereference:true,filter:path=>!path.endsWith('.test.mjs')});
   const migration=migrationPlan?validateMigrationPlan(migrationPlan):null;
@@ -47,7 +63,7 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   if(reuseApi)components.api={...prior.manifest.components.api};if(reuseWeb)components.web={...prior.manifest.components.web};
   // Conservative role closures include the complete built API tree and its actual runtime inputs.
   // No role is considered reused on a source-tag comparison alone.
-  components.coordinator={...components.api,protocol:protocols.coordinator||protocols.api};components.owner={...components.api,protocol:protocols.owner||protocols.api};
+  const coordinatorDataFormats=await probeCoordinatorDataFormats(join(built,'api'),{run});components.coordinator={...components.api,protocol:protocols.coordinator||protocols.api,...(coordinatorDataFormats.length?{dataFormats:coordinatorDataFormats}:{})};components.owner={...components.api,protocol:protocols.owner||protocols.api};
   const outputRoot=join(root,'distribution'),pkg=await buildNativeBundle({builtRoot:built,outputRoot,platform:process.platform,arch:process.arch,components,releaseId,distributionOrigin,run});
   const result={purpose,sourceWitness,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn:{platform:process.platform,arch:process.arch,nodeMajor:22,nodeABI:process.versions.modules},outputRoot};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
 }

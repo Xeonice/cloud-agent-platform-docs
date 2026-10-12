@@ -5,6 +5,11 @@ import { performance } from "node:perf_hooks";
 import { randomUUID, createHash } from "node:crypto";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
+import {
+  startQualificationModel,
+  qualificationPrompt,
+  configureQualificationImage,
+} from "../server/qualification-model.mjs";
 
 const digest = (value) =>
   "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -128,7 +133,32 @@ async function guestSnapshot(request, origin, sandboxId) {
     tmuxDigest: digest(match[4].trim().split("\n").sort()),
   };
 }
-function sampling(request, origin, projectId) {
+
+async function agentCounter(request, origin, sandboxId, marker) {
+  const folder = "/workspace/.upg-agent-proof/" + marker;
+  const result = await json(
+    request,
+    origin,
+    `/api/sandboxes/${sandboxId}/exec`,
+    "POST",
+    {
+      command: `printf 'PID '; cat ${folder}/pid; printf 'BIRTH '; cat ${folder}/birth; printf 'LAUNCHES\\n'; cat ${folder}/launches; printf 'SEQ\\n'; cat ${folder}/counter`,
+    },
+  );
+  expect(result.exitCode).toBe(0);
+  const match =
+    /^PID (\d+)\s+BIRTH (\d+)\s+LAUNCHES\n([\d\n]+)SEQ\n([\d\n]+)$/.exec(
+      result.stdout,
+    );
+  expect(match, "Actual Agent CLI Bash task counter").not.toBeNull();
+  return {
+    pid: Number(match[1]),
+    birth: match[2],
+    launches: match[3].trim().split("\n").map(Number),
+    seq: match[4].trim().split("\n").map(Number),
+  };
+}
+function sampling(request, origin, automationId) {
   const samples = [],
     ids = new Set(),
     pending = new Set();
@@ -139,27 +169,23 @@ function sampling(request, origin, projectId) {
     if (!running) return;
     const operationId = randomUUID(),
       tick = ++sequence;
+    const path = origin + "/api/automations/" + automationId,
+      update = { name: `UPG probe ${tick}` };
     ids.add(operationId);
     const work = (async () => {
       for (const kind of ["read", "write"]) {
         const begin = performance.now();
         try {
-          const response = await request.fetch(
-            origin + (kind === "read" ? "/api/projects" : "/api/projects"),
-            {
-              method: kind === "read" ? "GET" : "POST",
-              ...(kind === "write"
-                ? {
-                    data: {
-                      name: `UPG probe ${projectId.slice(0, 8)} ${tick}`,
-                      sourceType: "empty",
-                    },
-                  }
-                : {}),
-              headers: { Origin: origin, "X-Operation-Id": operationId },
-              timeout: 2000,
-            },
-          );
+          const response = await request.fetch(path, {
+            method: kind === "read" ? "GET" : "PUT",
+            ...(kind === "write"
+              ? {
+                  data: update,
+                }
+              : {}),
+            headers: { Origin: origin, "X-Operation-Id": operationId },
+            timeout: 2000,
+          });
           const body = await response.json();
           samples.push({
             kind,
@@ -168,13 +194,15 @@ function sampling(request, origin, projectId) {
             tick,
             operationDigest: digest(operationId),
             resultId: kind === "write" ? body.id : undefined,
+            correctWrite:
+              kind === "write"
+                ? body.id === automationId && body.name === update.name
+                : undefined,
           });
-          if (kind === "write" && response.status() === 202) {
-            const duplicate = await request.post(origin + "/api/projects", {
-              data: {
-                name: `UPG probe ${projectId.slice(0, 8)} ${tick}`,
-                sourceType: "empty",
-              },
+          if (kind === "write" && response.status() === 200) {
+            const dedupStart = performance.now();
+            const duplicate = await request.put(path, {
+              data: update,
               headers: { Origin: origin, "X-Operation-Id": operationId },
               timeout: 2000,
             });
@@ -182,9 +210,10 @@ function sampling(request, origin, projectId) {
             samples.push({
               kind: "dedup",
               status: duplicate.status(),
-              latencyMs: performance.now() - begin,
+              latencyMs: performance.now() - dedupStart,
               tick,
               sameId: original.id === body.id,
+              sameResult: digest(original) === digest(body),
             });
           }
         } catch {
@@ -206,10 +235,13 @@ function sampling(request, origin, projectId) {
     async stop() {
       running = false;
       clearInterval(timer);
+      const seconds = (performance.now() - started) / 1000,
+        drainStart = performance.now();
       await Promise.all(pending);
       return {
         samples,
-        seconds: (performance.now() - started) / 1000,
+        seconds,
+        drainMs: performance.now() - drainStart,
         operations: ids.size,
       };
     },
@@ -226,6 +258,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     harness,
     probe,
     probeResult,
+    model,
+    modelImage,
     resourcesCleaned = false;
   const owned = [];
   const check = async (id, description, verify, actual) => {
@@ -251,6 +285,27 @@ test("real user acceptance, durable installation and original VM/terminal contin
   };
   try {
     const source = await configuration();
+    if (source.modelMode === "local-protocol-test") {
+      model = await startQualificationModel({
+        isolated: source.isolated,
+        instanceId: source.instanceId,
+        host: source.localModel?.bindHost ?? "127.0.0.1",
+        guestHost: source.localModel?.guestHost ?? "host.boxlite.internal",
+      });
+      source.runtimeId = model.runtimeId;
+      source.runtimeCredential = model.runtimeCredential;
+      source.headlessPrompt = qualificationPrompt(randomUUID());
+      source.automationInput = {
+        name: "UPG actual due automation",
+        timeoutMinutes: 30,
+        artifactRetentionDays: 7,
+        triggerOn: "all",
+        ...source.automationInput,
+        runtime: model.runtimeId,
+        prompt: qualificationPrompt(randomUUID()),
+      };
+    }
+    const runtimeId = source.runtimeId ?? "codex";
     fixture = await createUpgradeFixture(source);
     harness = await startUpgradeHarness(fixture.config);
     void harness.runController();
@@ -262,6 +317,18 @@ test("real user acceptance, durable installation and original VM/terminal contin
         .getByLabel("访问口令", { exact: true })
         .fill(fixture.config.authEnv.ACCESS_PASSCODE);
       await page.getByRole("button", { name: "解锁", exact: true }).click();
+    }
+    const initStatus = await json(request, origin, "/api/system/init-status");
+    if (!initStatus.initialized) {
+      await json(
+        request,
+        origin,
+        "/api/system/init",
+        "POST",
+        { acknowledgeOffline: true },
+        201,
+      );
+      await page.reload();
     }
     const initial = await json(request, origin, "/api/system/upgrade/status");
     await expect(page.getByTestId("upgrade-notice")).toBeVisible();
@@ -302,17 +369,16 @@ test("real user acceptance, durable installation and original VM/terminal contin
         downloads: beforeDownload.length,
       },
     );
-    const initStatus = await json(request, origin, "/api/system/init-status");
-    if (!initStatus.initialized)
-      await json(request, origin, "/api/system/init", "POST", {}, 201);
+    if (model)
+      modelImage = await configureQualificationImage(request, origin, model);
     expect(
       source.runtimeCredential,
-      "A dedicated, nonproduction credential/endpoint is required for the actual guest CLI",
+      "A dedicated external credential or explicit local protocol mode is required for the actual guest CLI",
     ).toBeDefined();
     await json(
       request,
       origin,
-      "/api/runtimes/codex/credentials/secret",
+      `/api/runtimes/${runtimeId}/credentials/secret`,
       "POST",
       source.runtimeCredential,
     );
@@ -338,7 +404,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
     await page.getByRole("button", { name: "新任务", exact: true }).click();
     await page
       .getByTestId("modal-new-task")
-      .getByRole("radio", { name: /Codex/ })
+      .getByRole("radio", {
+        name: runtimeId === "claude-code" ? /Claude Code/ : /Codex/,
+      })
       .check();
     const launchResponse = page.waitForResponse(
       (response) =>
@@ -391,7 +459,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       "POST",
       {
         projectId: project.id,
-        runtime: "codex",
+        runtime: runtimeId,
         headless: true,
         timeoutMinutes: 30,
       },
@@ -412,23 +480,74 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const run = await json(
       request,
       origin,
-      `/api/sandboxes/${headless.id}/runtimes/codex/tasks`,
+      `/api/sandboxes/${headless.id}/runtimes/${runtimeId}/tasks`,
       "POST",
       { prompt: source.headlessPrompt, timeoutMinutes: 30 },
       202,
     );
     expect(run.status).toBe("running");
+    let agentA;
+    const agentMarker = model
+      ? /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/.exec(source.headlessPrompt)[1]
+      : null;
+    const cli = await json(
+      request,
+      origin,
+      `/api/sandboxes/${headless.id}/exec`,
+      "POST",
+      {
+        command:
+          runtimeId === "claude-code" ? "claude --version" : "codex --version",
+      },
+    );
+    expect(cli.exitCode).toBe(0);
+    expect(cli.stdout.trim()).toMatch(/\d+\.\d+\.\d+/);
+    if (model) {
+      await expect
+        .poll(
+          async () => {
+            try {
+              agentA = await agentCounter(
+                request,
+                origin,
+                headless.id,
+                agentMarker,
+              );
+              return agentA.seq.length;
+            } catch {
+              return 0;
+            }
+          },
+          { timeout: 180000 },
+        )
+        .toBeGreaterThanOrEqual(2);
+      expect(agentA.launches).toHaveLength(1);
+      expect(
+        model
+          .evidence()
+          .requests.some(
+            (row) => row.taskId === agentMarker && row.phase === "tool-issued",
+          ),
+      ).toBe(true);
+    }
     // Schedule a real occurrence across the measured upgrade window.
     expect(
       source.automationInput,
       "The native load includes an actual due automation",
     ).toBeDefined();
+    if (model) {
+      source.automationInput.scheduleKind = "hourly";
+      source.automationInput.scheduleConfig = {
+        minute: (new Date().getUTCMinutes() + 2) % 60,
+      };
+      source.automationInput.timezone = "UTC";
+    }
     const automation = await json(
       request,
       origin,
-      "/api/automations",
+      `/api/projects/${project.id}/automations`,
       "POST",
-      { ...source.automationInput, projectId: project.id },
+      source.automationInput,
       201,
     );
     const upgradeAuthPage = await context.newPage();
@@ -456,15 +575,40 @@ test("real user acceptance, durable installation and original VM/terminal contin
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
     ).toHaveAttribute("aria-selected", "true");
+    const trafficRule = await json(
+      request,
+      origin,
+      `/api/projects/${project.id}/automations`,
+      "POST",
+      {
+        ...source.automationInput,
+        name: "UPG disabled business traffic fixture",
+        scheduleKind: "hourly",
+        scheduleConfig: { minute: (new Date().getUTCMinutes() + 30) % 60 },
+      },
+      201,
+    );
+    const disabledRule = await json(
+      request,
+      origin,
+      `/api/automations/${trafficRule.id}/disable`,
+      "POST",
+      {},
+      200,
+    );
+    expect(disabledRule.enabled).toBe(false);
     const mutationStart = evidence.mutations.length;
-    probe = sampling(request, origin, project.id);
+    probe = sampling(request, origin, trafficRule.id);
     const acceptedResponse = page.waitForResponse(
       (response) =>
         new URL(response.url()).pathname === "/api/system/upgrade/requests" &&
         response.request().method() === "POST",
     );
     await page.getByRole("button", { name: "版本与更新", exact: true }).click();
-    await page.getByRole("button", { name: "立即升级", exact: true }).click();
+    await page
+      .getByRole("dialog", { name: "版本与更新详情" })
+      .getByRole("button", { name: "立即升级", exact: true })
+      .click();
     const accepted = await (await acceptedResponse).json();
     expect(accepted.state).toBe("accepted");
     expect(accepted.percent).toBeLessThan(100);
@@ -543,6 +687,61 @@ test("real user acceptance, durable installation and original VM/terminal contin
       origin,
       `/api/sandboxes/${headless.id}/tasks/${run.id}`,
     );
+    await expect
+      .poll(
+        async () =>
+          (
+            await json(
+              request,
+              origin,
+              `/api/automations/${automation.id}/runs`,
+            )
+          ).items.filter((row) => row.status === "running").length,
+        { timeout: 180000 },
+      )
+      .toBe(1);
+    const automationAfter = await json(
+      request,
+      origin,
+      `/api/automations/${automation.id}`,
+    );
+    const automationRuns = (
+      await json(request, origin, `/api/automations/${automation.id}/runs`)
+    ).items;
+    expect(automationAfter.enabled).toBe(true);
+    expect(automationRuns).toHaveLength(1);
+    expect(automationRuns[0].sandboxId).toBeTruthy();
+    owned.push(automationRuns[0].sandboxId);
+    const agentB = model
+      ? await agentCounter(request, origin, headless.id, agentMarker)
+      : null;
+    const automatedMarker = model
+      ? /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/.exec(
+          source.automationInput.prompt,
+        )[1]
+      : null;
+    let automatedCounter;
+    if (model) {
+      await expect
+        .poll(
+          async () => {
+            try {
+              automatedCounter = await agentCounter(
+                request,
+                origin,
+                automationRuns[0].sandboxId,
+                automatedMarker,
+              );
+              return automatedCounter.seq.length;
+            } catch {
+              return 0;
+            }
+          },
+          { timeout: 180000 },
+        )
+        .toBeGreaterThanOrEqual(2);
+      expect(automatedCounter.launches).toHaveLength(1);
+    }
     probeResult = await probe.stop();
     probe = undefined;
     await check(
@@ -557,6 +756,15 @@ test("real user acceptance, durable installation and original VM/terminal contin
         expect(runAfter.id).toBe(run.id);
         expect(runAfter.status).toBe("running");
         expect(runAfter.lastSeq).toBeGreaterThanOrEqual(run.lastSeq ?? 0);
+        if (model) {
+          expect(agentB.pid).toBe(agentA.pid);
+          expect(agentB.birth).toBe(agentA.birth);
+          expect(agentB.launches).toEqual(agentA.launches);
+          expect(agentB.seq).toEqual(
+            Array.from({ length: agentB.seq.length }, (_, i) => i + 1),
+          );
+          expect(agentB.seq.length).toBeGreaterThan(agentA.seq.length);
+        }
         expect(attachMs).toBeLessThanOrEqual(5000);
         expect(
           evidence.mutations
@@ -580,6 +788,13 @@ test("real user acceptance, durable installation and original VM/terminal contin
         attachMs,
         counter: snapshotB,
         headlessRunId: run.id,
+        headlessCounter: agentB,
+        cliVersion: cli.stdout.trim(),
+        modelMode: source.modelMode ?? "external-model",
+        modelQualityQualified: false,
+        modelImage,
+        automationCounter: automatedCounter,
+        automationRunId: automationRuns[0].id,
         automationId: automation.id,
       },
     );
@@ -597,13 +812,21 @@ test("real user acceptance, durable installation and original VM/terminal contin
             .filter((row) => row.kind !== "dedup")
             .every(
               (row) =>
-                row.status >= 200 && row.status < 300 && row.latencyMs <= 2000,
+                row.status === 200 &&
+                row.latencyMs <= 2000 &&
+                (row.kind !== "write" || row.correctWrite),
             ),
         ).toBe(true);
         expect(
           probeResult.samples
             .filter((row) => row.kind === "dedup")
-            .every((row) => row.status === 202 && row.sameId),
+            .every(
+              (row) =>
+                row.status === 200 &&
+                row.latencyMs <= 2000 &&
+                row.sameId &&
+                row.sameResult,
+            ),
         ).toBe(true);
         expect(harness.roleContainers).toBeDefined();
         expect(
@@ -631,6 +854,14 @@ test("real user acceptance, durable installation and original VM/terminal contin
       },
     );
     // Explicit cleanup is outside the continuity window and independently audited.
+    await json(
+      request,
+      origin,
+      `/api/automations/${trafficRule.id}`,
+      "DELETE",
+      {},
+      204,
+    );
     await json(
       request,
       origin,
@@ -669,6 +900,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
           probes: probeResult,
           requests: evidence.traffic,
           cleanup: { resourcesCleaned },
+          model: model?.evidence() ?? {
+            modelMode: "external-model",
+            modelQualityQualified: false,
+          },
         },
         null,
         2,
@@ -681,5 +916,6 @@ test("real user acceptance, durable installation and original VM/terminal contin
     });
     if (harness) await harness.close({ resourcesCleaned });
     if (fixture) await fixture.close();
+    if (model) await model.close();
   }
 });

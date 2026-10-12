@@ -30,5 +30,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     ownerCandidate:(id,body)=>rpc(prefix(id)+'/owner-candidate',body),
     coordinatorRecovery:(id,body)=>rpc(prefix(id)+'/coordinator-recovery',body),
     processObserve:body=>rpc('/internal/upgrades/process-observe',body),
+    contractSnapshot:id=>rpc('/internal/contracts/'+encodeURIComponent(id)),
+    assertContractFence:(id,fence)=>rpc('/internal/contracts/'+encodeURIComponent(id)+'/check',{fence}),
   };
 }

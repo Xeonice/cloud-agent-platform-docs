@@ -19,7 +19,7 @@ export async function treeManifest(root) {
     for (const name of (await fs.readdir(folder)).sort()) {
       const path = join(folder, name), stat = await fs.lstat(path), rel = relative(root, path).split('\\').join('/');
       invariant(!/\.(?:pem|key|p12)$|(?:^|\/)\.env(?:\.|$)/.test(rel), 'PRIVATE_FILE_IN_PACKAGE');
-      if (stat.isSymbolicLink()) { const link = await fs.readlink(path); invariant(!isAbsolute(link) && inside(root, resolve(dirname(path), link)), 'PACKAGE_LINK_ESCAPE'); files.push({ path: rel, mode: stat.mode & 0o777, link }); }
+      if (stat.isSymbolicLink()) { const link = await fs.readlink(path); invariant(!isAbsolute(link) && inside(root, resolve(dirname(path), link)) && inside(root, await fs.realpath(path)), 'PACKAGE_LINK_ESCAPE'); files.push({ path: rel, mode: stat.mode & 0o777, link }); }
       else if (stat.isDirectory()) await visit(path);
       else { invariant(stat.isFile(), 'SPECIAL_FILE_IN_PACKAGE'); files.push({ path: rel, mode: stat.mode & 0o777, ...(await fileDigest(path)) }); }
     }

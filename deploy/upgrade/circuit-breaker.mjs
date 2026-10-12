@@ -14,6 +14,7 @@ export function inspectObservation(observation,policy,now=Date.now(),previous={}
   const worse=stats.errorRate-baseline.errorRate>policy.softErrorDelta||(stats.p95Ms>baseline.p95Ms*policy.p95Ratio&&stats.p95Ms>policy.p95FloorMs);
   const consecutive=worse?(previous.consecutive||0)+1:0;
   if(consecutive>=policy.consecutiveEvaluations)return {qualified:false,fault:'SOFT_TRAFFIC_DEGRADATION',consecutive};
+  if(observation.web?.qualified===false)return {qualified:false,fault:'WEB_UNHEALTHY',componentScope:['web'],consecutive};
   const enough=stats.requests>=policy.minRequests&&observation.windowMs>=policy.stageDurationMs&&p.samples>=policy.probeHz*policy.stageDurationMs/1000;
   return {qualified:enough&&!worse,pending:!enough||worse,consecutive,completedWork:Math.min(stats.requests,policy.minRequests),receiptDigest:digest(observation)};
 }
@@ -21,5 +22,10 @@ export function qualifiedFallback(value,{attempt,fence,now=Date.now()}) {
   if(!value||value.qualified!==true||value.fence!==fence||value.instanceId!==attempt.instanceId||value.migrationCommitKnown!==true||value.sharedStateHealthy!==true||value.observedAt===undefined||!Number.isFinite(Date.parse(value.observedAt))||Date.parse(value.observedAt)>now+1000||now-Date.parse(value.observedAt)>attempt.plan.policy.observationFreshnessMs)return false;
   const checks=['artifactImmutable','healthy','capacitySufficient','latestDatabaseCompatible','newWritesCompatible','loadedWebCompatible','allOwnersCompatible','coordinatorCompatible','authContinuous','originalResourcesAddressable','dedupCancellationCursorPreserved'];
   if(!checks.every(k=>value[k]===true))return false;
-  return attempt.plan.policy.fallbacks.some(f=>f.releaseId===value.releaseId&&f.apiDigest===value.apiDigest&&f.webDigest===value.webDigest)&&value.rehearsalDigest&&value.currentDataEpoch!==undefined;
+  const rehearsed=Boolean(value.rehearsalDigest)&&value.currentDataEpoch!==undefined;
+  if(canonical(value.componentScope||[])==='["web"]'){
+    const anchor=value.fallbackPolicyAnchor;
+    return Boolean(rehearsed&&anchor&&attempt.plan.policy.fallbacks.some(f=>f.releaseId===anchor.releaseId&&f.apiDigest===anchor.apiDigest&&f.webDigest===anchor.webDigest)&&value.apiDigest===attempt.manifest?.components.api.artifactDigest&&value.webDigest===anchor.webDigest&&value.api===null&&value.coordinator===null&&value.owner===null&&value.web?.digest===anchor.webDigest);
+  }
+  return attempt.plan.policy.fallbacks.some(f=>f.releaseId===value.releaseId&&f.apiDigest===value.apiDigest&&f.webDigest===value.webDigest)&&rehearsed;
 }

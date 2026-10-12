@@ -9,6 +9,9 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0,
+  // A failed physical scenario preserves its original resources for diagnosis.
+  // Stop before another installation exhausts the dedicated native host.
+  maxFailures: 1,
   forbidOnly: true,
   timeout: 1_800_000,
   reporter: [

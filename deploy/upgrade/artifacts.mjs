@@ -1,5 +1,5 @@
 import * as fs from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, posix } from 'node:path';
 import { spawn } from 'node:child_process';
 import { invariant, canonical, digest } from './trust.mjs';
 import { fileDigest, atomicJson, readJson, treeManifest, secureDirectory } from './io.mjs';
@@ -37,11 +37,16 @@ export async function unpackVerified(archive, pkg, root, expectedComponents) {
   const target = join(root, 'artifacts', pkg.digest.slice(7)), existing = await readJson(join(target, 'installed.json'), null);
   if (existing) { invariant(existing.packageDigest === pkg.digest, 'ARTIFACT_IDENTITY_CHANGED'); return { root: target, ...existing }; }
   const capacity=await fs.statfs(root);if(pkg.unpackedBytes!==undefined)invariant(capacity.bavail*capacity.bsize>pkg.unpackedBytes,'INSUFFICIENT_UNPACK_CAPACITY');
-  // Preflight every header. No absolute/traversal paths, devices or hardlinks; relative symlinks are checked again after extraction.
-  const names = (await command('tar', ['-tzf', archive])).split('\n').filter(Boolean);
-  invariant(names.length && names.every(n => !n.startsWith('/') && !n.includes('\\') && !n.split('/').some(x => x === '..') && !/^[A-Za-z]:/.test(n)), 'UNSAFE_ARCHIVE_PATH');
-  const types = (await command('tar', ['-tvzf', archive])).split('\n').filter(Boolean);
-  invariant(types.every(n => /^[-d]/.test(n)), 'UNSAFE_ARCHIVE_TYPE');
+  // Read actual headers rather than parsing human-readable tar output. pnpm's
+  // contained links preserve shared DI module identity; only those links are
+  // allowed. Validate every chain before extraction can follow any link.
+  const script="import tarfile,json,sys\nwith tarfile.open(sys.argv[1], 'r:gz') as archive:\n members=archive.getmembers()\n if len(members)>100000: raise ValueError('too many entries')\n print(json.dumps([{'name':m.name,'type':'file' if m.isfile() else 'dir' if m.isdir() else 'symlink' if m.issym() else 'other','target':m.linkname} for m in members]))";
+  const entries=JSON.parse(await command('python3',['-c',script,archive])),named=new Map();
+  const safe=n=>typeof n==='string'&&!n.startsWith('/')&&!/[\\\r\n\0]/.test(n)&&!n.split('/').some(x=>x==='..')&&!/^[A-Za-z]:/.test(n);
+  invariant(entries.length>0,'UNSAFE_ARCHIVE_PATH');
+  for(const entry of entries){invariant(safe(entry.name),'UNSAFE_ARCHIVE_PATH');const name=posix.normalize(entry.name).replace(/^\.\//,'').replace(/\/+$/,'');invariant(!named.has(name),'DUPLICATE_ARCHIVE_ENTRY');invariant(['file','dir','symlink'].includes(entry.type),'UNSAFE_ARCHIVE_TYPE');if(entry.type==='symlink')invariant(typeof entry.target==='string'&&!posix.isAbsolute(entry.target)&&!/[\\\r\n\0]/.test(entry.target)&&!/^[A-Za-z]:/.test(entry.target),'UNSAFE_ARCHIVE_TYPE');named.set(name,{...entry,name});}
+  function resolveLink(path,chain=new Set()){invariant(safe(path),'UNSAFE_ARCHIVE_TYPE');const parts=path.split('/');for(let i=1;i<=parts.length;i++){const prefix=parts.slice(0,i).join('/'),entry=named.get(prefix);if(entry?.type!=='symlink')continue;invariant(!chain.has(prefix),'UNSAFE_ARCHIVE_TYPE');const next=new Set(chain);next.add(prefix);return resolveLink(posix.normalize(posix.join(posix.dirname(prefix),entry.target,...parts.slice(i))),next);}invariant(named.has(path),'DANGLING_ARCHIVE_LINK');return path;}
+  for(const [name,entry] of named)if(entry.type==='symlink'){const target=posix.normalize(posix.join(posix.dirname(name),entry.target));resolveLink(target,new Set([name]));}
   const temp = target + '.unpack'; await fs.rm(temp, { recursive: true, force: true }); await secureDirectory(temp);
   try {
     await command('tar', ['-xzf', archive, '-C', temp, '--no-same-owner']);
