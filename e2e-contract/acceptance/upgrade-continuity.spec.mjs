@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { readFile, lstat, readdir, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID, createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { digest as upgradeDigest } from "../../deploy/upgrade/trust.mjs";
@@ -273,6 +274,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     model,
     modelImage,
     database,
+    upgradeObservation = null,
+    lastKnownProgress = null,
     resourcesCleaned = false;
   const owned = [];
   const check = async (id, description, verify, actual) => {
@@ -742,14 +745,66 @@ test("real user acceptance, durable installation and original VM/terminal contin
       admittedThroughRealBrowserPost: true,
     };
     const frozenTarget = accepted.targetDigest;
-    await expect
-      .poll(
-        async () =>
-          (await json(request, origin, "/api/system/upgrade/status")).attempt
-            ?.state,
-        { timeout: 900000, intervals: [500, 1000] },
+    const confirmationDeadline = performance.now() + 900000,
+      failedStates = new Set([
+        "failed",
+        "reverted",
+        "candidate-rejected",
+        "deferred",
+      ]);
+    let confirmationPolls = 0;
+    while (true) {
+      const status = await json(request, origin, "/api/system/upgrade/status"),
+        attempt = status.attempt;
+      if (
+        attempt?.attemptId === accepted.attemptId &&
+        typeof attempt.percent === "number" &&
+        Number.isFinite(attempt.percent)
+      ) {
+        lastKnownProgress = {
+          percent: attempt.percent,
+          stage: attempt.stage,
+          sequence: attempt.sequence,
+          observedAt: attempt.observedAt,
+        };
+      }
+      // Persist only public upgrade facts, never csrfToken/cookies or role keys.
+      upgradeObservation = {
+        instanceId: status.instanceId,
+        observedAt: status.observedAt,
+        activationGeneration: status.activationGeneration,
+        serviceState: status.serviceState,
+        attempt,
+        recovery: status.recovery,
+        lastKnownProgress,
+      };
+      if (
+        attempt?.attemptId === accepted.attemptId &&
+        failedStates.has(attempt.state)
+      ) {
+        throw new Error(
+          `N01_INSTANCE_UPGRADE_TERMINATED: ${JSON.stringify(upgradeObservation)}`,
+        );
+      }
+      const recovering =
+        status.recovery?.triggeringAttemptId === accepted.attemptId &&
+        status.recovery.state !== "recovery-confirmed";
+      if (
+        attempt?.attemptId === accepted.attemptId &&
+        attempt.state === "activation-confirmed" &&
+        attempt.percent === 100 &&
+        status.serviceState === "confirmed" &&
+        status.confirmedServiceRelease?.releaseId ===
+          accepted.targetReleaseId &&
+        !recovering
       )
-      .toBe("activation-confirmed");
+        break;
+      if (performance.now() >= confirmationDeadline)
+        throw new Error(
+          `N01_INSTANCE_UPGRADE_CONFIRMATION_TIMEOUT: ${JSON.stringify(upgradeObservation)}`,
+        );
+      await delay(++confirmationPolls === 1 ? 500 : 1000);
+    }
     const installed = await json(request, origin, "/api/system/upgrade/status");
     expect(installed.attempt.attemptId).toBe(accepted.attemptId);
     expect(installed.attempt.targetDigest).toBe(frozenTarget);
@@ -1105,6 +1160,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           assertions,
           probes: probeResult,
           requests: evidence.traffic,
+          upgradeObservation,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",
