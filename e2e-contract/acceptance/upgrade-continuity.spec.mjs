@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
 import { randomUUID, createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { digest as upgradeDigest } from "../../deploy/upgrade/trust.mjs";
 import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
 import {
@@ -684,9 +685,49 @@ test("real user acceptance, durable installation and original VM/terminal contin
       .getByRole("dialog", { name: "版本与更新详情" })
       .getByRole("button", { name: "立即升级", exact: true })
       .click();
-    const accepted = await (await acceptedResponse).json();
+    const admissionResponse = await acceptedResponse;
+    expect(admissionResponse.status()).toBe(202);
+    const submittedCommand = admissionResponse.request().postDataJSON(),
+      accepted = await admissionResponse.json(),
+      intent = database
+        .prepare(
+          "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
+        )
+        .get(fixture.config.instanceId, accepted.attemptId);
     expect(accepted.state).toBe("accepted");
     expect(accepted.percent).toBeLessThan(100);
+    expect(
+      Boolean(intent),
+      "Actual authorized command has a durable acceptance record",
+    ).toBe(true);
+    expect(
+      intent.actor_id === "instance-administrator",
+      "Only the actual instance upgrade grant accepts this intent",
+    ).toBe(true);
+    expect(intent.request_id).toBe(submittedCommand.requestId);
+    expect(intent.request_id).toBe(accepted.requestId);
+    expect(intent.target_release_id).toBe(submittedCommand.targetReleaseId);
+    expect(intent.target_digest).toBe(submittedCommand.targetDigest);
+    expect(intent.target_digest).toBe(accepted.targetDigest);
+    expect(intent.request_digest).toBe(upgradeDigest(submittedCommand));
+    expect(JSON.parse(intent.plan).sourceActivationGeneration).toBe(
+      submittedCommand.expectedActivationGeneration,
+    );
+    expect(submittedCommand.expectedActivationGeneration).toBe(
+      initial.activationGeneration,
+    );
+    expect(intent.accepted_at).toBe(Date.parse(accepted.acceptedAt));
+    const acceptedIntent = {
+      actorDigest: upgradeDigest(intent.actor_id),
+      requestId: intent.request_id,
+      requestDigest: intent.request_digest,
+      targetReleaseId: intent.target_release_id,
+      targetDigest: intent.target_digest,
+      expectedActivationGeneration:
+        submittedCommand.expectedActivationGeneration,
+      acceptedAt: accepted.acceptedAt,
+      admittedThroughRealBrowserPost: true,
+    };
     const frozenTarget = accepted.targetDigest;
     await expect
       .poll(
@@ -900,6 +941,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       },
       {
         attemptId: accepted.attemptId,
+        acceptedIntent,
         targetDigest: frozenTarget,
         activationGeneration: installed.activationGeneration,
         terminalIdentity: secondTerminal.terminalIdentity,

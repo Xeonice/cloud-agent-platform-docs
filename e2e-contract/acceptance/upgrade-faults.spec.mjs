@@ -695,6 +695,7 @@ async function installation(id, page, context) {
       }
       expect((await state()).capabilities.canUpgradeInstance).toBe(true);
     };
+    let acceptedIntent = null;
     const accept = async () => {
       await authorize();
       await page.reload();
@@ -715,6 +716,40 @@ async function installation(id, page, context) {
       const attempt = await response.json();
       expect(attempt.state).toBe("accepted");
       expect(attempt.instanceId).toBe(config.instanceId);
+      const command = response.request().postDataJSON(),
+        row = database
+          .prepare(
+            "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
+          )
+          .get(config.instanceId, attempt.attemptId);
+      expect(
+        Boolean(row),
+        "Real browser upgrade POST is durably accepted",
+      ).toBe(true);
+      expect(
+        row.actor_id === "instance-administrator",
+        "Actual instance upgrade permission owns the command",
+      ).toBe(true);
+      expect(row.request_id).toBe(command.requestId);
+      expect(row.request_id).toBe(attempt.requestId);
+      expect(row.target_release_id).toBe(command.targetReleaseId);
+      expect(row.target_digest).toBe(command.targetDigest);
+      expect(row.target_digest).toBe(attempt.targetDigest);
+      expect(row.request_digest).toBe(digest(command));
+      expect(JSON.parse(row.plan).sourceActivationGeneration).toBe(
+        command.expectedActivationGeneration,
+      );
+      expect(row.accepted_at).toBe(Date.parse(attempt.acceptedAt));
+      acceptedIntent = {
+        actorDigest: digest(row.actor_id),
+        requestId: row.request_id,
+        requestDigest: row.request_digest,
+        targetReleaseId: row.target_release_id,
+        targetDigest: row.target_digest,
+        expectedActivationGeneration: command.expectedActivationGeneration,
+        acceptedAt: attempt.acceptedAt,
+        admittedThroughRealBrowserPost: true,
+      };
       return attempt;
     };
     const until = async (predicate) => {
@@ -893,6 +928,9 @@ async function installation(id, page, context) {
       stopController,
       authorize,
       accept,
+      get acceptedIntent() {
+        return acceptedIntent;
+      },
       until,
       history,
       continuity,
@@ -1046,6 +1084,7 @@ async function recordCase(id, page, context, info, body) {
         ...actual,
         ...result,
         ...subsequent,
+        acceptedIntent: env.acceptedIntent,
         preserved,
         probes: probeResult,
         qualificationModel,
@@ -1471,7 +1510,7 @@ async function secondRecoveryFailure(browser) {
         instanceId: env.config.instanceId,
         inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
         attemptId: installed.attemptId,
-        acceptedActorId: installed.actorId,
+        acceptedIntent: env.acceptedIntent,
         requestId: installed.requestId,
         recoveryAttemptId,
         recoveryPlanDigest: recoveryPlan.planDigest,
@@ -1530,6 +1569,7 @@ async function independentFailure(browser, id, body) {
     return {
       ...actual,
       instanceId: env.config.instanceId,
+      acceptedIntent: env.acceptedIntent,
       inputFingerprint: env.fixture.envelope.manifest.runInputFingerprint,
       preserved,
       measurementWindow,
