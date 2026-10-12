@@ -6,6 +6,14 @@ import { atomicJson, readJson, secureDirectory, fileDigest } from './io.mjs';
 import { downloadVerified } from './artifacts.mjs';
 import { inspectObservation, qualifiedFallback } from './circuit-breaker.mjs';
 const TERMINAL=new Set(['deferred','candidate-rejected','failed','reverted','activation-confirmed']);
+// DOMException.code is a numeric legacy field, not an upgrade reason code.
+// Keep failure receipts within the Coordinator's text-code contract.
+function faultCode(error,fallback='UPGRADE_FAILED') {
+  if(typeof error?.code==='string'&&error.code.length>0)return error.code;
+  if(error?.name==='TimeoutError')return 'UPGRADE_RPC_TIMEOUT';
+  if(error?.name==='AbortError')return 'UPGRADE_RPC_ABORTED';
+  return fallback;
+}
 const sleep=(ms,signal)=>new Promise((ok,fail)=>{if(signal?.aborted){fail(signal.reason||Error('Stopped'));return;}const done=()=>{signal?.removeEventListener('abort',aborted);ok();};const timer=setTimeout(done,ms);const aborted=()=>{clearTimeout(timer);signal?.removeEventListener('abort',aborted);fail(signal.reason||Error('Stopped'));};signal?.addEventListener('abort',aborted,{once:true});});
 export function createInstanceController({root,instanceId,controllerId,startIdentity=controllerId,trustRootPath,coordinator,executor,fetcher=fetch,leaseMs=15000,signal,onEvent}) {
   invariant(controllerId&&instanceId&&coordinator&&executor&&leaseMs>=5000,'CONTROLLER_CONFIG_REQUIRED');
@@ -128,7 +136,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const session={...(claim.snapshot||snapshot),attempt:claim.snapshot?.attempt||claim.attempt||accepted,fence:claim.fence,generation:claim.generation??accepted.generation};
       const attempt={...accepted,instanceId,plan,manifest:snapshot.signedManifest?.manifest||snapshot.manifest,targetDigest:accepted.targetDigest};
       if(journal.circuitBroken){const result=await handleFault(session,Object.assign(Error(journal.faultCode),{code:journal.faultCode,faultEvidence:journal.detectedFault?.evidence,shared:journal.detectedFault?.shared===true,suppressRecovery:true}));const latest=await readJson(path);latest.faultRecordingComplete=true;latest.recoveryResult=result?.state||'fault-recorded-after-unknown';await atomicJson(path,latest);return {state:'ready-revoked',attemptId:accepted.attemptId,code:journal.faultCode};}
-      let evidence,inspection;try{evidence=await executor.observe({attempt,fence:session.fence,weight:100});inspection=inspectObservation(evidence,plan.policy,Date.now(),journal.previousObservation||{});}catch(e){evidence={observedAt:new Date().toISOString(),observationUnavailable:true};inspection={fault:e.code||'OBSERVATION_UNREACHABLE',shared:true};}
+      let evidence,inspection;try{evidence=await executor.observe({attempt,fence:session.fence,weight:100});inspection=inspectObservation(evidence,plan.policy,Date.now(),journal.previousObservation||{});}catch(e){evidence={observedAt:new Date().toISOString(),observationUnavailable:true};inspection={fault:faultCode(e,'OBSERVATION_UNREACHABLE'),shared:true};}
       journal.previousObservation={consecutive:inspection.consecutive||0};journal.lastObservationAt=evidence.observedAt;journal.nextObservationAt=new Date(Date.now()+plan.policy.evaluationIntervalMs).toISOString();
       if(inspection.fault){
         // Persist the tripped circuit before invoking recovery. Unknown recovery is never retried.
@@ -145,7 +153,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
     if(!plan)return;const actual=await executor.actual();const confirmed=attempt.state==='activation-confirmed';
     const base={fence:session.fence,generation:session.generation,expectedSequence:attempt.sequence,eventId:randomUUID()};
     const scope=error.componentScope||(session.currentStep?.kind==='web'?['web']:null);
-    const fault={code:error.code||'UPGRADE_FAILED',observedAt:new Date().toISOString(),actual,evidence:error.faultEvidence||null,currentStep:session.currentStep||null,...(scope?{componentScope:scope}:{})};
+    const fault={code:faultCode(error),observedAt:new Date().toISOString(),actual,evidence:error.faultEvidence||null,currentStep:session.currentStep||null,...(scope?{componentScope:scope}:{})};
     const journalPath=join(root,'journals',id+'.json'),faultJournal=await readJson(journalPath,{});
     faultJournal.faultCommit ||= {...base,kind:confirmed?'ready-revoked':'failed',payload:{reason:fault.code,evidence:fault}};await atomicJson(journalPath,faultJournal);let stopped;
     try{stopped=await coordinator.commit(id,faultJournal.faultCommit);}catch(e){if(['UPGRADE_FENCE_EXPIRED','STALE_FENCE','LEASE_EXPIRED'].includes(e.code)){faultJournal.faultCommit={...faultJournal.faultCommit,...base,eventId:randomUUID()};await atomicJson(journalPath,faultJournal);}throw e;}
