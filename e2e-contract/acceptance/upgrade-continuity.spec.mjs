@@ -279,6 +279,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     admissionRecovery,
     admissionDiagnostics = null,
     ongoingProgress,
+    ongoingProgressObservation = null,
+    ongoingProgressAbort = null,
     nativePhase = "setup",
     bodyErrorSummary = null,
     businessCleanup = null,
@@ -1095,6 +1097,81 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(restoredBrowserScope.attempt.requestId).toBe(
       submittedCommand.requestId,
     );
+    expect(restoredBrowserScope.attempt.targetDigest).toBe(
+      accepted.targetDigest,
+    );
+    const upgradeDetails = page.getByRole("dialog", {
+      name: "版本与更新详情",
+      exact: true,
+    });
+    const actualProgress = upgradeDetails.getByRole("progressbar", {
+      name: "本实例升级进度",
+      exact: true,
+    });
+    ongoingProgressAbort = new AbortController();
+    const observeOngoingProgress = async () => {
+      await expect(
+        page.getByRole("button", { name: "版本与更新", exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "版本与更新", exact: true })
+        .click();
+      const deadline = performance.now() + 120000;
+      const intervals = [250, 500, 1000];
+      let polls = 0;
+      while (true) {
+        ongoingProgressAbort.signal.throwIfAborted();
+        // Read both attributes in the same actual DOM observation. A checkpoint
+        // may become unknown during a long readiness window; never reread null
+        // later and convert it into an invented zero percent.
+        const sample = await actualProgress.evaluateAll((elements) => {
+          if (elements.length !== 1) return null;
+          return {
+            raw: elements[0].getAttribute("aria-valuenow"),
+            ariaText: elements[0].getAttribute("aria-valuetext"),
+          };
+        });
+        const observedAtMonotonicMs = performance.now();
+        expect(
+          observedAtMonotonicMs < deadline,
+          "Actual browser must show numeric progress greater than 0 and less than 100 within 120000ms",
+        ).toBe(true);
+        if (
+          sample?.raw !== null &&
+          sample?.raw !== undefined &&
+          Number.isFinite(Number(sample.raw)) &&
+          Number(sample.raw) > 0 &&
+          Number(sample.raw) < 100
+        ) {
+          ongoingProgress = {
+            percent: Number(sample.raw),
+            rawAriaValue: sample.raw,
+            ariaText: sample.ariaText,
+            actualBrowserProgress: true,
+            actualRequestId: restoredBrowserScope.attempt.requestId,
+            actualTargetDigest: restoredBrowserScope.attempt.targetDigest,
+            observedAtMonotonicMs,
+          };
+          return ongoingProgress;
+        }
+        await delay(
+          Math.min(
+            intervals[Math.min(polls++, 2)],
+            deadline - performance.now(),
+          ),
+          undefined,
+          { signal: ongoingProgressAbort.signal },
+        );
+      }
+    };
+    // This popover is nonmodal. Observe progress immediately after the real
+    // browser scope returns, alongside the original terminal's unchanged 5s gate.
+    // Keep failure as an explicit result until the mandatory observation await;
+    // the finally block also aborts and settles it if an earlier body check fails.
+    ongoingProgressObservation = observeOngoingProgress().then(
+      (value) => ({ value, error: null }),
+      (error) => ({ value: null, error }),
+    );
     nativePhase = "upgrade-admission:original-terminal-readonly-reconnect";
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
@@ -1209,39 +1286,16 @@ test("real user acceptance, durable installation and original VM/terminal contin
       admittedThroughRealBrowserPost: true,
     };
     nativePhase = "upgrade-confirmation";
-    await expect(
-      page.getByRole("button", { name: "版本与更新", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "版本与更新", exact: true }).click();
-    const upgradeDetails = page.getByRole("dialog", {
-      name: "版本与更新详情",
-      exact: true,
-    });
-    const actualProgress = upgradeDetails.getByRole("progressbar", {
-      name: "本实例升级进度",
-      exact: true,
-    });
-    await expect
-      .poll(
-        async () => {
-          const raw = await actualProgress.getAttribute("aria-valuenow");
-          return (
-            raw !== null &&
-            Number.isFinite(Number(raw)) &&
-            Number(raw) > 0 &&
-            Number(raw) < 100
-          );
-        },
-        { timeout: 120000, intervals: [250, 500, 1000] },
-      )
-      .toBe(true);
-    ongoingProgress = {
-      percent: Number(await actualProgress.getAttribute("aria-valuenow")),
-      ariaText: await actualProgress.getAttribute("aria-valuetext"),
-      actualBrowserProgress: true,
-      actualRequestId: accepted.requestId,
-      actualTargetDigest: accepted.targetDigest,
-    };
+    const progressObservationResult = await ongoingProgressObservation;
+    if (progressObservationResult.error) throw progressObservationResult.error;
+    expect(progressObservationResult.value).toBe(ongoingProgress);
+    expect(ongoingProgress.actualBrowserProgress).toBe(true);
+    expect(Number.isFinite(ongoingProgress.percent)).toBe(true);
+    expect(ongoingProgress.percent).toBeGreaterThan(0);
+    expect(ongoingProgress.percent).toBeLessThan(100);
+    expect(ongoingProgress.percent).toBe(Number(ongoingProgress.rawAriaValue));
+    expect(ongoingProgress.actualRequestId).toBe(accepted.requestId);
+    expect(ongoingProgress.actualTargetDigest).toBe(accepted.targetDigest);
     await expect(
       upgradeDetails.getByRole("button", { name: "刷新页面", exact: true }),
     ).toHaveCount(0);
@@ -1861,6 +1915,12 @@ test("real user acceptance, durable installation and original VM/terminal contin
     };
     throw error;
   } finally {
+    let progressObserverError = null;
+    if (ongoingProgressObservation !== null) {
+      ongoingProgressAbort.abort();
+      const settled = await ongoingProgressObservation;
+      progressObserverError = settled.error;
+    }
     // Keep this diagnostic independent from mandatory UPG assertion IDs. Persist
     // it before any teardown await can hide a body failure behind an open SSE.
     const attempt = upgradeObservation?.attempt,
@@ -1877,6 +1937,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         targetManifestDigest: fixture?.envelope?.manifestDigest ?? null,
         error: bodyErrorSummary,
         admissionDiagnostics,
+        ongoingProgress,
         publicObservation:
           upgradeObservation === null
             ? null
@@ -1998,6 +2059,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     if (model) await model.close();
     // The original body exception stays authoritative. Preserve cleanup failure
     // separately in the attachment; only a successful body can fail on teardown.
+    if (progressObserverError && bodyErrorSummary === null)
+      throw progressObserverError;
     if (cleanupError && bodyErrorSummary === null) throw cleanupError;
   }
 });
