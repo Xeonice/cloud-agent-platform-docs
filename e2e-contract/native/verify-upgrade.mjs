@@ -30,6 +30,7 @@ const REQUIRED = [
   "WebB-APIB",
   "WebB-APIA",
 ];
+const INTEGRATION_REQUIRED = ["I01", "I02"];
 const here = dirname(fileURLToPath(import.meta.url));
 const project = resolve(here, "../..");
 function argumentsOf(argv) {
@@ -344,6 +345,13 @@ export async function verifyNativeUpgrade(input) {
     const browser = JSON.parse(await fs.readFile(browserPath, "utf8"));
     const actual = await collectAssertions(browser, outputRoot);
     report.assertions = REQUIRED.map((id) => uniqueAssertion(actual, id));
+    const integration = INTEGRATION_REQUIRED.map((id) =>
+      uniqueAssertion(actual, id),
+    );
+    report.gates["user-integration"] = {
+      result: integration.every(checkedPassed) ? "passed" : "partial",
+      assertions: integration,
+    };
     for (const name of [
       "contracts",
       "four-combinations",

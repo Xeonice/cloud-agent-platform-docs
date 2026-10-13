@@ -275,6 +275,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
     model,
     modelImage,
     database,
+    admissionCdp,
+    admissionRecovery,
+    ongoingProgress,
     nativePhase = "setup",
     bodyErrorSummary = null,
     businessCleanup = null,
@@ -397,6 +400,80 @@ test("real user acceptance, durable installation and original VM/terminal contin
       .click();
     await page.reload();
     await expect(page.getByTestId("upgrade-notice")).toHaveCount(0);
+    // Only this administrator's browser Date changes; the instance and its
+    // scheduler retain real time. Crossing local midnight is not a 24h timeout.
+    const reminderDays = await page.evaluate(() => {
+      const now = new Date();
+      const date = (value) =>
+        `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+      const midnightBefore = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        30,
+      );
+      const midnightAfter = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0,
+        1,
+        0,
+      );
+      return {
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        firstDate: date(midnightBefore),
+        nextDate: date(midnightAfter),
+        before: midnightBefore.getTime(),
+        after: midnightAfter.getTime(),
+      };
+    });
+    const reminderKey = `ap.upgrade-reminder.v1:${encodeURIComponent(initial.instanceId)}:${encodeURIComponent(initial.userScope)}`;
+    await page.clock.setFixedTime(reminderDays.before);
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "版本与更新", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("upgrade-notice")).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key)).dismissedLocalDate,
+        reminderKey,
+      ),
+    ).toBe(reminderDays.firstDate);
+    const nextDayStatus = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).origin === origin &&
+        new URL(response.url()).pathname === "/api/system/upgrade/status" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+    );
+    await page.clock.setFixedTime(reminderDays.after);
+    await page.reload();
+    const nextDayObserved = await (await nextDayStatus).json();
+    await expect(page.getByTestId("upgrade-notice")).toBeVisible();
+    expect(nextDayObserved.instanceId).toBe(initial.instanceId);
+    expect(nextDayObserved.userScope).toBe(initial.userScope);
+    expect(nextDayObserved.attempt).toBeNull();
+    expect(nextDayObserved.confirmedServiceRelease.releaseId).toBe(
+      initial.confirmedServiceRelease.releaseId,
+    );
+    await page
+      .getByRole("button", { name: "今天不再提醒", exact: true })
+      .click();
+    await page.reload();
+    await expect(
+      page.getByRole("button", { name: "版本与更新", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("upgrade-notice")).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        (key) => JSON.parse(localStorage.getItem(key)).dismissedLocalDate,
+        reminderKey,
+      ),
+    ).toBe(reminderDays.nextDate);
     const beforeDownload = (await fixture.requestLog()).filter((item) =>
       /\.tgz$/.test(item.path),
     );
@@ -405,6 +482,15 @@ test("real user acceptance, durable installation and original VM/terminal contin
       "Opening/checking/reloading/snoozing never accepts or downloads an installation",
       async () => {
         expect(initial.attempt).toBeNull();
+        expect(nextDayObserved.attempt).toBeNull();
+        expect(reminderDays.after - reminderDays.before).toBe(90000);
+        expect(
+          database
+            .prepare(
+              "SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?",
+            )
+            .get(fixture.config.instanceId).n,
+        ).toBe(0);
         expect(initial.catalog.availableRelease).not.toBeNull();
         expect(initial.confirmedServiceRelease.releaseId).toBe(
           fixture.config.initialRelease.releaseId,
@@ -424,6 +510,18 @@ test("real user acceptance, durable installation and original VM/terminal contin
         target: initial.catalog.availableRelease?.releaseId,
         attempts: initial.attempt,
         downloads: beforeDownload.length,
+        reminder: {
+          browserTimezone: reminderDays.timezone,
+          sameInstanceAndAdministrator: true,
+          firstLocalDate: reminderDays.firstDate,
+          nextLocalDate: reminderDays.nextDate,
+          naturalMidnightAdvanceMs: reminderDays.after - reminderDays.before,
+          actualReloadStatus: 200,
+          sameDayReloadSuppressed: true,
+          nextDayReloadReminded: true,
+          nextDayDismissalRetained: true,
+          upgradePosts: 0,
+        },
       },
     );
     if (model)
@@ -684,25 +782,201 @@ test("real user acceptance, durable installation and original VM/terminal contin
     nativePhase = "upgrade-admission";
     const mutationStart = evidence.mutations.length;
     probe = sampling(request, origin, trafficRule.id);
-    const acceptedResponse = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/system/upgrade/requests" &&
-        response.request().method() === "POST",
-    );
+    admissionCdp = await context.newCDPSession(page);
+    let blockAdmissionReads = false,
+      interceptionError = null;
+    const admissionPosts = [],
+      readonlyResponsesLost = [],
+      uiLookups = [],
+      interceptionTasks = new Set();
+    const observeAdmission = (request) => {
+      const url = new URL(request.url());
+      if (url.origin !== origin) return;
+      if (
+        url.pathname === "/api/system/upgrade/requests" &&
+        request.method() === "POST"
+      ) {
+        blockAdmissionReads = true;
+        admissionPosts.push(request.postDataJSON());
+      }
+    };
+    page.on("request", observeAdmission);
+    let resolveAdmission, rejectAdmission;
+    const actualAdmission = new Promise((resolve, reject) => {
+      resolveAdmission = resolve;
+      rejectAdmission = reject;
+    });
+    // The response-stage interceptor loses actual bytes only after real server
+    // acceptance. It never fulfills an API request or manufactures a result.
+    actualAdmission.catch(() => {});
+    admissionCdp.on("Fetch.requestPaused", (event) => {
+      const work = (async () => {
+        const url = new URL(event.request.url);
+        if (
+          event.request.method === "POST" &&
+          url.pathname === "/api/system/upgrade/requests"
+        ) {
+          expect(event.responseStatusCode).toBe(202);
+          const bytes = await admissionCdp.send("Fetch.getResponseBody", {
+            requestId: event.requestId,
+          });
+          const body = JSON.parse(
+            bytes.base64Encoded
+              ? Buffer.from(bytes.body, "base64").toString("utf8")
+              : bytes.body,
+          );
+          const command = JSON.parse(event.request.postData);
+          expect(body.requestId).toBe(command.requestId);
+          expect(body.targetDigest).toBe(command.targetDigest);
+          await admissionCdp.send("Fetch.failRequest", {
+            requestId: event.requestId,
+            errorReason: "ConnectionClosed",
+          });
+          resolveAdmission({ submittedCommand: command, accepted: body });
+          return;
+        }
+        if (blockAdmissionReads && event.request.method === "GET") {
+          const row = {
+            path: url.pathname,
+            status: event.responseStatusCode ?? null,
+          };
+          readonlyResponsesLost.push(row);
+          if (url.pathname.startsWith("/api/system/upgrade/requests/"))
+            uiLookups.push(row);
+          await admissionCdp.send("Fetch.failRequest", {
+            requestId: event.requestId,
+            errorReason: "ConnectionClosed",
+          });
+          return;
+        }
+        await admissionCdp.send(
+          event.responseStatusCode
+            ? "Fetch.continueResponse"
+            : "Fetch.continueRequest",
+          { requestId: event.requestId },
+        );
+      })()
+        .catch((error) => {
+          interceptionError = error;
+          rejectAdmission(error);
+        })
+        .finally(() => interceptionTasks.delete(work));
+      interceptionTasks.add(work);
+    });
+    await admissionCdp.send("Fetch.enable", {
+      patterns: [
+        {
+          urlPattern: origin + "/api/system/upgrade/requests",
+          requestStage: "Response",
+        },
+        {
+          urlPattern: origin + "/api/system/upgrade/requests/*",
+          requestStage: "Response",
+        },
+        {
+          urlPattern: origin + "/api/system/upgrade/status",
+          requestStage: "Response",
+        },
+      ],
+    });
     await page.getByRole("button", { name: "版本与更新", exact: true }).click();
     await page
       .getByRole("dialog", { name: "版本与更新详情" })
       .getByRole("button", { name: "立即升级", exact: true })
       .click();
-    const admissionResponse = await acceptedResponse;
-    expect(admissionResponse.status()).toBe(202);
-    const submittedCommand = admissionResponse.request().postDataJSON(),
-      accepted = await admissionResponse.json(),
-      intent = database
-        .prepare(
-          "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
-        )
-        .get(fixture.config.instanceId, accepted.attemptId);
+    const { submittedCommand, accepted } = await Promise.race([
+      actualAdmission,
+      delay(30000).then(() => {
+        throw new Error("N01_REAL_ADMISSION_RESPONSE_MISSING");
+      }),
+    ]);
+    const intent = database
+      .prepare(
+        "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
+      )
+      .get(fixture.config.instanceId, accepted.attemptId);
+    const pendingRequestKey = `ap.upgrade-request.v1:${encodeURIComponent(initial.instanceId)}:${encodeURIComponent(initial.userScope)}`;
+    const readPending = () =>
+      page.evaluate((key) => localStorage.getItem(key), pendingRequestKey);
+    await expect
+      .poll(async () => JSON.parse(await readPending())?.requestId)
+      .toBe(submittedCommand.requestId);
+    await expect
+      .poll(() =>
+        uiLookups.some(
+          (row) =>
+            row.path ===
+            "/api/system/upgrade/requests/" + submittedCommand.requestId,
+        ),
+      )
+      .toBe(true);
+    expect(await readPending()).toBe(
+      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
+    );
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await expect(
+      page.getByRole("tab", { name: "终端 2", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(await readPending()).toBe(
+      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
+    );
+    // Let the actual UI's 2s retry interval run while the result stays unknown.
+    await delay(2500);
+    expect(admissionPosts).toHaveLength(1);
+    expect(
+      database
+        .prepare("SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?")
+        .get(fixture.config.instanceId).n,
+    ).toBe(1);
+    expect(interceptionError).toBeNull();
+    blockAdmissionReads = false;
+    const originalLookup = await json(
+      request,
+      origin,
+      "/api/system/upgrade/requests/" + submittedCommand.requestId,
+    );
+    expect(originalLookup.requestId).toBe(submittedCommand.requestId);
+    expect(originalLookup.attemptId).toBe(accepted.attemptId);
+    expect(originalLookup.targetDigest).toBe(accepted.targetDigest);
+    await expect
+      .poll(
+        async () =>
+          (await json(request, origin, "/api/system/upgrade/status")).attempt
+            ?.requestId,
+      )
+      .toBe(submittedCommand.requestId);
+    // A fresh real status may identify the same request directly; that is also
+    // readonly reconciliation and must not create another installation command.
+    await page.reload();
+    await expect.poll(readPending).toBeNull();
+    await Promise.all(interceptionTasks);
+    expect(interceptionError).toBeNull();
+    expect(admissionPosts).toHaveLength(1);
+    admissionRecovery = {
+      actualPostStatus: 202,
+      responseLostAfterActualAcceptance: true,
+      requestId: submittedCommand.requestId,
+      attemptId: accepted.attemptId,
+      browserPosts: admissionPosts.length,
+      actualUiOriginalIdLookups: uiLookups,
+      readonlyResponsesLost,
+      pendingReloadContainsOnlyOriginalRequestId: true,
+      readonlyOriginalLookup: {
+        requestId: originalLookup.requestId,
+        attemptId: originalLookup.attemptId,
+        targetDigest: originalLookup.targetDigest,
+      },
+      statusConfirmsOriginalRequest: true,
+      pendingClearedAfterReadonlyConfirmation: true,
+      extraPostsWhileUnknownAndReload: 0,
+      durableIntents: 1,
+    };
+    await admissionCdp.send("Fetch.disable");
+    await Promise.all(interceptionTasks);
+    expect(interceptionError).toBeNull();
+    await admissionCdp.detach();
+    admissionCdp = null;
+    page.off("request", observeAdmission);
     expect(accepted.state).toBe("accepted");
     expect(
       Boolean(intent),
@@ -750,6 +1024,42 @@ test("real user acceptance, durable installation and original VM/terminal contin
       admittedThroughRealBrowserPost: true,
     };
     nativePhase = "upgrade-confirmation";
+    await expect(
+      page.getByRole("button", { name: "版本与更新", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "版本与更新", exact: true }).click();
+    const upgradeDetails = page.getByRole("dialog", {
+      name: "版本与更新详情",
+      exact: true,
+    });
+    const actualProgress = upgradeDetails.getByRole("progressbar", {
+      name: "本实例升级进度",
+      exact: true,
+    });
+    await expect
+      .poll(
+        async () => {
+          const raw = await actualProgress.getAttribute("aria-valuenow");
+          return (
+            raw !== null &&
+            Number.isFinite(Number(raw)) &&
+            Number(raw) > 0 &&
+            Number(raw) < 100
+          );
+        },
+        { timeout: 120000, intervals: [250, 500, 1000] },
+      )
+      .toBe(true);
+    ongoingProgress = {
+      percent: Number(await actualProgress.getAttribute("aria-valuenow")),
+      ariaText: await actualProgress.getAttribute("aria-valuetext"),
+      actualBrowserProgress: true,
+      actualRequestId: accepted.requestId,
+      actualTargetDigest: accepted.targetDigest,
+    };
+    await expect(
+      upgradeDetails.getByRole("button", { name: "刷新页面", exact: true }),
+    ).toHaveCount(0);
     const frozenTarget = accepted.targetDigest;
     const confirmationDeadline = performance.now() + 900000,
       failedStates = new Set([
@@ -821,10 +1131,18 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(installed.activationGeneration).toBeGreaterThan(
       initial.activationGeneration,
     );
+    await expect(
+      page.getByRole("button", { name: "版本与更新", exact: true }),
+    ).toBeVisible();
+    if (!(await upgradeDetails.isVisible()))
+      await page
+        .getByRole("button", { name: "版本与更新", exact: true })
+        .click();
+    await expect(actualProgress).toHaveAttribute("aria-valuenow", "100");
     nativePhase = "page-refresh-and-terminal-attach";
     const beforeRefresh = evidence.ready.length,
       refreshStart = performance.now();
-    const refreshButton = page.getByRole("button", {
+    const refreshButton = upgradeDetails.getByRole("button", {
       name: "刷新页面",
       exact: true,
     });
@@ -966,6 +1284,25 @@ test("real user acceptance, durable installation and original VM/terminal contin
       "I02",
       "Actual accepted controller attempt reaches 100 and refresh attaches the same second terminal without replay",
       async () => {
+        expect(
+          evidence.mutations.filter(
+            (row) =>
+              row.path === "/api/system/upgrade/requests" &&
+              row.method === "POST",
+          ),
+        ).toHaveLength(1);
+        expect(
+          database
+            .prepare(
+              "SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?",
+            )
+            .get(fixture.config.instanceId).n,
+        ).toBe(1);
+        expect(admissionRecovery.browserPosts).toBe(1);
+        expect(admissionRecovery.durableIntents).toBe(1);
+        expect(admissionRecovery.extraPostsWhileUnknownAndReload).toBe(0);
+        expect(ongoingProgress.percent).toBeGreaterThan(0);
+        expect(ongoingProgress.percent).toBeLessThan(100);
         expect(originalAfter.id).toBe(original.id);
         expect(originalAfter.status).toBe("running");
         expect(snapshotB.pid).toBe(snapshotA.pid);
@@ -1027,6 +1364,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
       {
         attemptId: accepted.attemptId,
         acceptedIntent,
+        admissionRecovery,
+        ongoingProgress,
         targetDigest: frozenTarget,
         activationGeneration: installed.activationGeneration,
         terminalIdentity: secondTerminal.terminalIdentity,
@@ -1403,6 +1742,14 @@ test("real user acceptance, durable installation and original VM/terminal contin
       // A diagnostic write must not replace the original acceptance failure.
       console.error("N01_BEFORE_TEARDOWN_DIAGNOSTIC_UNAVAILABLE");
     }
+    if (admissionCdp) {
+      try {
+        await admissionCdp.send("Fetch.disable");
+        await admissionCdp.detach();
+      } catch {
+        /* The browser may already be closing. */
+      }
+    }
     if (probe) probeResult = await probe.stop();
     database?.close();
     let cleanup, cleanupError;
@@ -1431,6 +1778,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
           requests: evidence.traffic,
           upgradeObservation,
           businessCleanup,
+          admissionRecovery,
+          ongoingProgress,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",

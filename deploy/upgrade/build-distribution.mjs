@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { digest, canonical, signManifest, signQualificationManifest, runInputFingerprint, validateManifest, invariant } from './trust.mjs';
 import { treeManifest, fileDigest, atomicJson, secureDirectory, readJson } from './io.mjs';
 import { command } from './artifacts.mjs';
+import { nativeBuildEnvironment } from './native-build-environment.mjs';
 const ENTRY_FILES=['apps/api/dist/roles/coordinator-main.js','apps/api/dist/roles/coordinator-prepared-main.js','apps/api/dist/roles/control-api-main.js','apps/api/dist/roles/runtime-owner-main.js'];
 export async function probeProductionControlDependencies(apiRoot,{run=command,node=process.execPath}={}) {
   // The transport main is guarded by require.main===module. Loading it in a
@@ -28,6 +29,7 @@ export async function probeProductionWebDependencies(webRoot,{run=command,node=p
   const result=await run(node,['-e',script],{cwd:resolve(webRoot),env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});invariant(result.trim()==='production-web-dependencies-passed','PRODUCTION_WEB_DEPENDENCIES_FAILED');return {kind:'production-web-dependencies',result:'passed',startsListeners:false};
 }
 export async function buildNativeBundle({builtRoot,outputRoot,platform,arch,components,releaseId,distributionOrigin,run=command}) {
+  nativeBuildEnvironment();
   invariant(/^v?\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/.test(releaseId),'INVALID_PACKAGE_RELEASE');
   invariant(platform===process.platform&&arch===process.arch&&Number(process.versions.node.split('.')[0])===22,'NATIVE_BUILD_ARCHITECTURE_MISMATCH');
   builtRoot=resolve(builtRoot);outputRoot=await secureDirectory(outputRoot);await treeManifest(builtRoot);
@@ -45,7 +47,7 @@ export async function buildNativeBundle({builtRoot,outputRoot,platform,arch,comp
     const apiRoot=join(stage,'api');
     await probeProductionControlDependencies(apiRoot,{run});
     await probeProductionWebDependencies(join(stage,'web'),{run});
-    const probe="const{createRequire}=require('node:module');const r=createRequire(process.cwd()+'/package.json');const D=r('better-sqlite3');const db=new D(':memory:');if(db.prepare('select 1 as ok').get().ok!==1)throw Error('SQLite');db.close();if(process.platform!==process.env.EXPECT_PLATFORM||process.arch!==process.env.EXPECT_ARCH)throw Error('Native ABI');process.stdout.write('native-abi-passed')";
+    const probe="const{createRequire}=require('node:module');const r=createRequire(process.cwd()+'/package.json');const D=r('better-sqlite3');const db=new D(':memory:');if(db.prepare('select 1 as ok').get().ok!==1)throw Error('SQLite');db.close();if(process.platform!==process.env.EXPECT_PLATFORM||process.arch!==process.env.EXPECT_ARCH)throw Error('Native ABI');const sdk=r('./packages/modules/sandbox/dist/infrastructure/providers/boxlite/boxlite-runtime.js');sdk.assertBoxliteSdkAvailable().then(()=>process.stdout.write('native-abi-passed'),()=>{process.exitCode=1})";
     const result=await run(process.execPath,['-e',probe],{cwd:apiRoot,env:{...process.env,EXPECT_PLATFORM:platform,EXPECT_ARCH:arch}});invariant(result.trim()==='native-abi-passed','NATIVE_ABI_PROBE_FAILED');
     const bundle={schemaVersion:1,releaseId,platform,arch,nodeMajor:22,nodeABI:process.versions.modules,components,treeDigest:digest(files),files};await atomicJson(join(stage,'upgrade-artifact.json'),bundle);
     const name=`agent-platform-${releaseId}-${platform}-${arch}.tgz`,path=join(outputRoot,name);invariant(!(await fs.lstat(path).catch(()=>null)),'IMMUTABLE_PACKAGE_EXISTS');

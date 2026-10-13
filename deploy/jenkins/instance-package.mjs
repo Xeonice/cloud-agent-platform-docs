@@ -7,6 +7,7 @@ import { buildNativeBundle, runtimeFingerprint,probeCoordinatorDataFormats } fro
 import { treeManifest, atomicJson, readJson, secureDirectory,fileDigest } from '../upgrade/io.mjs';
 import { digest, invariant,canonical,loadTrustRoot,verifySignedManifest } from '../upgrade/trust.mjs';
 import { validateMigrationPlan } from '../upgrade/migration-plan.mjs';
+import { nativeBuildEnvironment } from '../upgrade/native-build-environment.mjs';
 const SHA=/^[a-f0-9]{40}$/;
 const REPOS={project:'cloud-agent-platform-docs',api:'agent-platform-api',web:'agent-platform-web'};
 // ssh2 publishes upstream test-only TLS private keys. They are never runtime
@@ -15,7 +16,7 @@ const runtimeCopyAllowed=path=>!/(?:^|\/)node_modules\/ssh2\/test(?:\/|$)/.test(
 export async function packagePinnedInstance({workspace,commits,releaseId,channel,distributionOrigin,protocols,previousBundle=null,migrationPlan=null,purpose='release',sourceRepositories=null,sourceBundles=null,run=command}) {
   invariant(['project','api','web'].every(k=>SHA.test(commits[k])),'PINNED_COMMITS_REQUIRED');
   invariant(['release','qualification'].includes(purpose)&&(!(sourceRepositories||sourceBundles)||purpose==='qualification')&&!(sourceRepositories&&sourceBundles),'PRODUCTION_SOURCE_OVERRIDE_FORBIDDEN');
-  invariant(Number(process.versions.node.split('.')[0])===22,'NODE22_REQUIRED');const root=await secureDirectory(workspace),source=join(root,'source');await fs.mkdir(source,{mode:0o700});
+  const builtOn=nativeBuildEnvironment();const root=await secureDirectory(workspace),source=join(root,'source');await fs.mkdir(source,{mode:0o700});
   const sourceWitness={};
   for(const [kind,name]of Object.entries(REPOS)){const cwd=join(source,kind);await fs.mkdir(cwd,{mode:0o700});await run('git',['init'],{cwd});const repository=sourceRepositories?.[kind],bundle=sourceBundles?.[kind];let bundleDigest=null;
     if(bundle){invariant(typeof bundle==='string'&&bundle.startsWith('/'),'QUALIFICATION_GIT_BUNDLE_REQUIRED');const stat=await fs.lstat(bundle);invariant(stat.isFile()&&!stat.isSymbolicLink(),'QUALIFICATION_GIT_BUNDLE_REQUIRED');await run('git',['bundle','verify',bundle],{cwd});const heads=(await run('git',['bundle','list-heads',bundle],{cwd})).trim().split('\n').map(line=>line.split(' '));const advertised=heads.find(([sha,ref])=>sha===commits[kind]&&/^refs\/[a-zA-Z0-9._\/-]+$/.test(ref));invariant(advertised,'QUALIFICATION_COMMIT_NOT_ADVERTISED');await run('git',['fetch',bundle,advertised[1]],{cwd});bundleDigest=(await fileDigest(bundle)).digest;
@@ -25,11 +26,12 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   const webInputs = [];
   for (const name of (await run('git',['ls-files','-z'],{cwd:web})).split('\0').filter(Boolean).sort()) { const file = await fs.readFile(join(web,name)); const mode=(await fs.lstat(join(web,name))).mode&0o777; webInputs.push({path:name,mode,sha256:createHash('sha256').update(file).digest('hex')}); }
   const webFingerprint = digest({platform:process.platform,arch:process.arch,nodeMajor:22,publicApiBase:'',publicWsBase:'',files:webInputs});
-  const apiFingerprint=await runtimeFingerprint(api,project,{behavior:{protocols:{api:protocols.api,coordinator:protocols.coordinator||protocols.api,owner:protocols.owner||protocols.api}}});
+  const apiFingerprint=await runtimeFingerprint(api,project,{builderVersion:process.platform==='linux'?'node22-pnpm9-rocky8-glibc228-source':'node22-pnpm9',behavior:{protocols:{api:protocols.api,coordinator:protocols.coordinator||protocols.api,owner:protocols.owner||protocols.api}}});
   let prior=null,reuseApi=false,reuseWeb=false;
   if(previousBundle){const roots=await loadTrustRoot(previousBundle.trustRootPath),envelope=await readJson(previousBundle.manifestPath);if(purpose==='release')invariant((roots.purpose||'release')==='release'&&(envelope.manifest.purpose||'release')==='release','PRODUCTION_QUALIFICATION_REUSE_FORBIDDEN');verifySignedManifest(envelope,roots);const bundle=await readJson(join(previousBundle.root,'upgrade-artifact.json'));const priorFiles=(await treeManifest(previousBundle.root)).filter(f=>!['upgrade-artifact.json','installed.json'].includes(f.path));invariant(bundle.platform===process.platform&&bundle.arch===process.arch&&canonical(bundle.components)===canonical(envelope.manifest.components)&&canonical(priorFiles)===canonical(bundle.files)&&digest(priorFiles)===bundle.treeDigest,'REUSE_ARTIFACT_NOT_VERIFIED');prior={...envelope,root:previousBundle.root};reuseApi=prior.manifest.components.api.inputFingerprint===apiFingerprint;reuseWeb=prior.manifest.components.web.inputFingerprint===webFingerprint;}
   const webRevision = webFingerprint.slice(7,47), builtAt = new Date().toISOString();
   const cleanEnv={...process.env,NEXT_PUBLIC_WEB_REVISION:webRevision,WEB_RELEASE_ID:releaseId,WEB_BUILT_AT:builtAt,NEXT_PUBLIC_API_BASE_URL:'',NEXT_PUBLIC_WS_BASE_URL:'',API_ORIGIN:'http://127.0.0.1:3001'};
+  if(process.platform==='linux')cleanEnv.npm_config_build_from_source='true';
   for(const name of ['VIRTUAL_ENV','DATABASE_URL','BOXLITE_HOME','ACCESS_PASSCODE','ACCESS_COOKIE_SECRET','PASSCODE_COOKIE_SECRET','UPGRADE_ACCESS_KEY','PLATFORM_UPGRADE_RPC_KEY','PLATFORM_CONTROLLER_RPC_KEY','PLATFORM_COORDINATOR_RPC_KEY','PLATFORM_CONTROL_RPC_KEY'])delete cleanEnv[name];
   for(const cwd of [...(reuseApi?[]:[api]),...(reuseWeb?[]:[web])]){await run('corepack',['pnpm','install','--frozen-lockfile'],{cwd,env:cleanEnv});await run('corepack',['pnpm','run','build'],{cwd,env:cleanEnv});}
   for(const cwd of [project,api,web])await run('git',['diff','--exit-code','HEAD','--'],{cwd});
@@ -65,6 +67,6 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   // No role is considered reused on a source-tag comparison alone.
   const coordinatorDataFormats=await probeCoordinatorDataFormats(join(built,'api'),{run});components.coordinator={...components.api,protocol:protocols.coordinator||protocols.api,...(coordinatorDataFormats.length?{dataFormats:coordinatorDataFormats}:{})};components.owner={...components.api,protocol:protocols.owner||protocols.api};
   const outputRoot=join(root,'distribution'),pkg=await buildNativeBundle({builtRoot:built,outputRoot,platform:process.platform,arch:process.arch,components,releaseId,distributionOrigin,run});
-  const result={purpose,sourceWitness,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn:{platform:process.platform,arch:process.arch,nodeMajor:22,nodeABI:process.versions.modules},outputRoot};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
+  const result={purpose,sourceWitness,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn,outputRoot};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){readJson(process.argv[2]).then(packagePinnedInstance).then(r=>process.stdout.write(JSON.stringify(r)+'\n'),e=>{process.stderr.write((e.code||'INSTANCE_PACKAGE_FAILED')+'\n');process.exitCode=1;});}

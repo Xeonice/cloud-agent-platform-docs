@@ -1386,6 +1386,352 @@ async function signalOwnedNode(env, record, signal) {
   };
 }
 
+async function controlMutationState(env, attemptId) {
+  const audit = await ownerAudit(env);
+  return {
+    binding: await env.binding(),
+    attempt: env.database
+      .prepare(
+        "SELECT attempt_id,generation,sequence,state,stage,reason,controller_id,fence FROM upgrade_attempts WHERE attempt_id=?",
+      )
+      .get(attemptId),
+    events: env.database
+      .prepare(
+        "SELECT event_id,generation,sequence,fence,kind,payload FROM upgrade_events WHERE attempt_id=? ORDER BY sequence",
+      )
+      .all(attemptId),
+    steps: env.database
+      .prepare(
+        "SELECT step_id,applied,receipt_digest,completed_work,evidence FROM upgrade_steps WHERE attempt_id=? ORDER BY step_id",
+      )
+      .all(attemptId),
+    migration: env.database
+      .prepare(
+        "SELECT plan_digest,stage,checkpoint,completed_work,read_epoch,degraded FROM upgrade_online_migrations WHERE attempt_id=? ORDER BY plan_digest",
+      )
+      .all(attemptId),
+    migrationOperations: env.database
+      .prepare(
+        "SELECT operation_id,request_digest,result FROM upgrade_migration_operations ORDER BY operation_id",
+      )
+      .all(),
+    roleStarts: env
+      .roleRecords()
+      .map((row) => ({
+        kind: row.kind ?? row.name,
+        containerId: row.containerId,
+        startIdentity: row.startIdentity,
+        artifactDigest: row.artifactDigest,
+      }))
+      .sort((a, b) => a.startIdentity.localeCompare(b.startIdentity)),
+    ownerMutations: audit.operations.filter((row) =>
+      [
+        "create",
+        "start",
+        "stop",
+        "destroy",
+        "jobs.startJob",
+        "jobs.killJob",
+        "jobs.releaseJob",
+      ].includes(row.method),
+    ),
+  };
+}
+
+async function competingInstaller(env, attemptId) {
+  const primary = env.role("installer"),
+    startIdentity = randomUUID(),
+    root = join(
+      env.config.root,
+      "installer/journals",
+      "competing-" + startIdentity,
+    ),
+    path = join(
+      env.config.root,
+      "installer/journals",
+      "competing-config-" + startIdentity + ".json",
+    ),
+    reservation = createServer();
+  await new Promise((ok, fail) => {
+    reservation.once("error", fail);
+    reservation.listen(0, "127.0.0.1", ok);
+  });
+  const port = reservation.address().port;
+  await new Promise((ok) => reservation.close(ok));
+  const original = await readJson(
+    join(
+      env.config.root,
+      "installer/processes",
+      attemptId + "-installer-config.json",
+    ),
+  );
+  await atomicJson(path, {
+    ...original,
+    root,
+    controllerId: "native-competing-controller",
+    handoffMode: false,
+    startIdentity,
+    controllerMetadataPort: port,
+  });
+  invariant(
+    primary.artifactRoot,
+    "ACTUAL_INSTALLED_CONTROLLER_ARTIFACT_REQUIRED",
+  );
+  const entry = join(primary.artifactRoot, "installer/controller-main.mjs"),
+    record = await env.adapter.launch({
+      kind: "installer",
+      entry,
+      args: [entry, path],
+      cwd: join(primary.artifactRoot, "installer"),
+      artifactRoot: primary.artifactRoot,
+      processRoot: primary.artifactRoot,
+      env: {
+        NODE_ENV: "production",
+        PATH: process.env.PATH || "/usr/bin:/bin",
+        ...env.config.runtimeEnv,
+      },
+      record: { kind: "installer", startIdentity },
+    });
+  return {
+    ...record,
+    origin: "http://127.0.0.1:" + port,
+    root,
+    artifactDigest: primary.artifactDigest,
+    inputFingerprint: primary.inputFingerprint,
+  };
+}
+
+async function awaitActualSharedFreeze(env, accepted, before, faultStartedAt) {
+  invariant(
+    Number.isFinite(Date.parse(faultStartedAt)),
+    "ACTUAL_SHARED_FAULT_START_REQUIRED",
+  );
+  const controller = env.role("installer");
+  expect((await env.adapter.inspect(controller.containerId)).running).toBe(
+    true,
+  );
+  const routeObservations = [],
+    phases = [],
+    observeRoute = async () => {
+      const binding = await env.binding();
+      routeObservations.push({
+        observedAt: new Date().toISOString(),
+        routeGeneration: binding.routeGeneration,
+        weight: binding.weight,
+        bindingDigest: digest(binding),
+      });
+      expect(binding).toEqual(before);
+    };
+  let frozen;
+  await expect
+    .poll(
+      async () => {
+        await observeRoute();
+        frozen = await env.harness.coordinator.snapshot(accepted.attemptId);
+        phases.push({
+          observedAt: new Date().toISOString(),
+          state: frozen.attempt.state,
+          stage: frozen.attempt.stage,
+          sequence: frozen.attempt.sequence,
+        });
+        return frozen.attempt.state;
+      },
+      { timeout: 45000, intervals: [100, 250] },
+    )
+    .toBe("failed");
+  expect(frozen.attempt.reason).toBeTruthy();
+  expect(frozen.attempt.percent).not.toBe(100);
+  let journal, errors;
+  await expect
+    .poll(
+      async () => {
+        await observeRoute();
+        journal = await readJson(
+          join(
+            env.config.root,
+            "installer/journals",
+            accepted.attemptId + ".json",
+          ),
+        );
+        const logs = await actualCommand(env.config.docker.cli || "docker", [
+          ...env.config.docker.args,
+          "logs",
+          "--since",
+          faultStartedAt,
+          controller.containerId,
+        ]);
+        errors = logs.split("\n").flatMap((line) => {
+          try {
+            const row = JSON.parse(line);
+            return row.kind === "controller-error" ? [row] : [];
+          } catch {
+            return [];
+          }
+        });
+        return (
+          journal.faultCommitApplied === true &&
+          errors.some(
+            (row) =>
+              row.code === frozen.attempt.reason ||
+              (frozen.attempt.reason === "UPGRADE_RPC_TIMEOUT" &&
+                row.code === 23) ||
+              (frozen.attempt.reason === "UPGRADE_FAILED" &&
+                row.code === "UNKNOWN"),
+          )
+        );
+      },
+      { timeout: 15000, intervals: [100, 250] },
+    )
+    .toBe(true);
+  expect(journal.faultCommit.kind).toBe("failed");
+  expect(journal.faultCommit.payload.reason).toBe(frozen.attempt.reason);
+  expect(journal.faultCommit.payload.evidence.currentStep.kind).toBe("observe");
+  expect(
+    Date.parse(journal.faultCommit.payload.evidence.observedAt),
+  ).toBeGreaterThanOrEqual(Date.parse(faultStartedAt));
+  const { inFlight, activeWS, httpByDigest, wsByDigest, ...actualBinding } =
+    journal.faultCommit.payload.evidence.actual;
+  expect(actualBinding).toEqual(before);
+  // The real Controller has completed its error path while the physical fault
+  // remains present. A later dependency resume cannot qualify that old turn.
+  await delay(1000);
+  const after = await env.harness.coordinator.snapshot(accepted.attemptId);
+  expect(after.attempt.state).toBe("failed");
+  expect(after.recovery).toBeNull();
+  await observeRoute();
+  expect((await env.adapter.inspect(controller.containerId)).running).toBe(
+    true,
+  );
+  const faults = env
+    .history(accepted.attemptId)
+    .filter((row) => row.kind === "failed");
+  expect(faults).toHaveLength(1);
+  return {
+    attemptId: accepted.attemptId,
+    reason: after.attempt.reason,
+    controller: {
+      containerId: controller.containerId,
+      startIdentity: controller.startIdentity,
+    },
+    actualBinding: before,
+    faultStartedAt,
+    actualControllerErrors: errors,
+    faultJournal: journal,
+    faultEvent: faults[0],
+    routeObservations,
+    phases,
+    freezeConfirmedAt: new Date().toISOString(),
+    recovery: after.recovery,
+  };
+}
+
+async function x10OwnerWithActualController(browser) {
+  return {
+    actualOwnerControllerFreeze: await independentFailure(
+      browser,
+      "X10",
+      async (env) => {
+        const accepted = await env.accept();
+        await env.until(
+          (s, b) =>
+            s.attempt?.state === "observing" && b.weight > 0 && b.weight < 100,
+        );
+        const before = await env.binding(),
+          owner = env.harness.roleContainers.owner,
+          resourcesBefore = await readOwnerResources(env, [
+            env.original.id,
+            env.headless.id,
+          ]),
+          counterBefore = await hostCounter(env, env.original.id),
+          headlessBefore = env.model
+            ? await hostCounter(env, env.headless.id, true)
+            : null,
+          auditBefore = await ownerAudit(env);
+        let stopped = false,
+          fault,
+          freeze;
+        try {
+          const faultStartedAt = new Date().toISOString();
+          fault = await signalOwnedNode(env, owner, "SIGSTOP");
+          stopped = true;
+          await expect(
+            fetch(
+              `http://127.0.0.1:${env.harness.ports.owner}/runtime/metadata`,
+              {
+                headers: {
+                  "x-platform-internal-key": env.config.keys.owner,
+                  "x-platform-instance-id": env.config.instanceId,
+                },
+                signal: AbortSignal.timeout(1500),
+              },
+            ),
+          ).rejects.toThrow();
+          freeze = await awaitActualSharedFreeze(
+            env,
+            accepted,
+            before,
+            faultStartedAt,
+          );
+          expect(
+            await readOwnerResources(env, [env.original.id, env.headless.id]),
+          ).toEqual(resourcesBefore);
+          const during = await hostCounter(env, env.original.id);
+          expect(during.slice(0, counterBefore.length)).toEqual(counterBefore);
+          expect(during.length).toBeGreaterThan(counterBefore.length);
+          if (headlessBefore) {
+            const counter = await hostCounter(env, env.headless.id, true);
+            expect(counter.slice(0, headlessBefore.length)).toEqual(
+              headlessBefore,
+            );
+            expect(counter.length).toBeGreaterThan(headlessBefore.length);
+          }
+        } finally {
+          if (stopped) await signalOwnedNode(env, owner, "SIGCONT");
+        }
+        await delay(3000);
+        const settled = await env.harness.coordinator.snapshot(
+            accepted.attemptId,
+          ),
+          auditAfter = await ownerAudit(env);
+        expect(settled.attempt.state).toBe("failed");
+        expect(settled.recovery).toBeNull();
+        expect(await env.binding()).toEqual(before);
+        expect(auditAfter.assignments).toEqual(auditBefore.assignments);
+        const old = new Set(auditBefore.operations.map((row) => row.id));
+        expect(
+          auditAfter.operations.filter(
+            (row) =>
+              !old.has(row.id) &&
+              [env.original.id, env.headless.id].includes(row.sandboxId) &&
+              [
+                "create",
+                "start",
+                "stop",
+                "destroy",
+                "jobs.startJob",
+                "jobs.killJob",
+                "jobs.releaseJob",
+              ].includes(row.method),
+          ),
+        ).toEqual([]);
+        return {
+          attemptId: accepted.attemptId,
+          ownerFault: fault,
+          actualControllerFreeze: freeze,
+          ownerHealthDuringFault: "unknown",
+          originalGuestLifecyclePreserved: true,
+          resourcesBefore,
+          resourcesAfter: await readOwnerResources(env, [
+            env.original.id,
+            env.headless.id,
+          ]),
+          noAutomaticRecoveryAfterOwnerResumes: true,
+        };
+      },
+    ),
+  };
+}
+
 async function absentGitRemote() {
   // A real local HTTP Git remote with no repository, reachable from the isolated
   // host-network Coordinator. Never bypass the production loopback-host policy.
@@ -3292,12 +3638,118 @@ test("actual controller loss and competing lease recover one accepted attempt an
     const accepted = await env.accept();
     await env.until((s) => s.attempt?.state === "observing");
     const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId);
-    await expect(
-      env.harness.coordinator.claim(accepted.attemptId, {
-        controllerId: "competing-native-controller",
-        leaseMs: 15000,
-      }),
-    ).rejects.toThrow();
+    const primary = env.role("installer"),
+      pausedPrimary = await signalOwnedNode(env, primary, "SIGSTOP");
+    let competitor, competition, leaseTimer, leaseError;
+    const pendingRenewals = new Set();
+    try {
+      const held = await env.harness.coordinator.snapshot(accepted.attemptId);
+      expect(held.leaseExpiresAt - Date.now()).toBeGreaterThan(8000);
+      // Preserve the actual holder's durable lease while its Node is parked;
+      // renewal uses the already-held exact identity, never a second claim.
+      leaseTimer = setInterval(() => {
+        const renewal = env.harness.coordinator
+          .renew(accepted.attemptId, {
+            fence: held.fence,
+            controllerId: held.controllerId,
+          })
+          .catch((error) => {
+            leaseError = error;
+          })
+          .finally(() => pendingRenewals.delete(renewal));
+        pendingRenewals.add(renewal);
+      }, 1000);
+      const beforeCompetition = await controlMutationState(
+        env,
+        accepted.attemptId,
+      );
+      competitor = await competingInstaller(env, accepted.attemptId);
+      let logs = "";
+      await expect
+        .poll(
+          async () => {
+            logs = await actualCommand(env.config.docker.cli || "docker", [
+              ...env.config.docker.args,
+              "logs",
+              competitor.containerId,
+            ]);
+            return logs.split("\n").filter((line) => {
+              try {
+                const row = JSON.parse(line);
+                return (
+                  row.kind === "controller-error" &&
+                  row.code === "UPGRADE_CONTROLLER_BUSY"
+                );
+              } catch {
+                return false;
+              }
+            }).length;
+          },
+          { timeout: 6000, intervals: [100, 250] },
+        )
+        .toBeGreaterThanOrEqual(2);
+      const actualIdentity = await fetch(competitor.origin + "/metadata", {
+        headers: { "x-platform-internal-key": env.config.keys.controller },
+        signal: AbortSignal.timeout(1500),
+      });
+      expect(actualIdentity.ok).toBe(true);
+      const identity = await actualIdentity.json(),
+        physical = await env.adapter.inspect(competitor.containerId);
+      expect(identity.startIdentity).toBe(competitor.startIdentity);
+      expect(identity.startIdentity).not.toBe(primary.startIdentity);
+      expect(identity.artifactDigest).toBe(primary.artifactDigest);
+      expect(physical.running).toBe(true);
+      expect(physical.role).toBe("installer");
+      for (const authority of [
+        "DATABASE_URL",
+        "DATA_ROOT",
+        "RUNTIME_OWNER_HOME",
+        "BOXLITE_HOME",
+      ])
+        expect(physical.environmentNames).not.toContain(authority);
+      expect(await controlMutationState(env, accepted.attemptId)).toEqual(
+        beforeCompetition,
+      );
+      expect(
+        (await env.harness.coordinator.snapshot(accepted.attemptId))
+          .controllerId,
+      ).toBe(held.controllerId);
+      if (leaseError) throw leaseError;
+      competition = {
+        primary: pausedPrimary,
+        competitor: physical,
+        actualIdentity: identity,
+        rejectedClaims: logs
+          .split("\n")
+          .filter((line) => line.includes("UPGRADE_CONTROLLER_BUSY")).length,
+        controllingFence: held.fence,
+        controllingIdentity: held.controllerId,
+        noAppliedActionByCompetitor: true,
+        unchangedControlStateDigest: digest(beforeCompetition),
+        actualActionCounts: {
+          events: beforeCompetition.events.length,
+          steps: beforeCompetition.steps.filter((row) => row.applied === 1)
+            .length,
+          migrationOperations: beforeCompetition.migrationOperations.length,
+          roleStarts: beforeCompetition.roleStarts.length,
+          ownerMutations: beforeCompetition.ownerMutations.length,
+        },
+      };
+    } finally {
+      if (leaseTimer) clearInterval(leaseTimer);
+      await Promise.allSettled(pendingRenewals);
+      try {
+        if (competitor) {
+          await env.adapter.signal(competitor.containerId, "SIGTERM");
+          expect(
+            (await env.adapter.inspect(competitor.containerId)).running,
+          ).toBe(false);
+        }
+      } finally {
+        await signalOwnedNode(env, primary, "SIGCONT");
+      }
+    }
+    if (leaseError) throw leaseError;
     await env.stopController();
     await env.harness.restartController();
     await env.until((s) => s.attempt?.state === "activation-confirmed");
@@ -3307,6 +3759,80 @@ test("actual controller loss and competing lease recover one accepted attempt an
     await expect(
       env.harness.coordinator.assertFence(accepted.attemptId, snapshot.fence),
     ).rejects.toThrow();
+    // Park the current writer only after its completed application. The old
+    // incarnation now attempts actual writes against the new durable fence.
+    await env.stopController();
+    const beforeLate = await controlMutationState(env, accepted.attemptId),
+      planDigest = current.plan.migrationPath.migrationPlanDigest,
+      migration = env.database
+        .prepare(
+          "SELECT checkpoint FROM upgrade_online_migrations WHERE plan_digest=?",
+        )
+        .get(planDigest);
+    invariant(
+      planDigest && migration,
+      "REAL_X07_MIGRATION_FENCE_BOUNDARY_REQUIRED",
+    );
+    let lateMigration, lateCommit;
+    try {
+      await env.harness.coordinator.migration(accepted.attemptId, {
+        fence: snapshot.fence,
+        operationId: randomUUID(),
+        action: "repair",
+        checkpoint: JSON.parse(migration.checkpoint),
+        planDigest,
+      });
+      throw new Error("OLD_CONTROLLER_MIGRATION_WRITE_ACCEPTED");
+    } catch (error) {
+      expect(error.code).toMatch(/FENCE|LEASE|AUTHORITY|CONTROLLER/);
+      lateMigration = error.code;
+    }
+    try {
+      const step = current.plan.steps.find((row) => row.kind === "observe");
+      await env.harness.coordinator.commit(accepted.attemptId, {
+        eventId: randomUUID(),
+        fence: snapshot.fence,
+        generation: current.attempt.generation,
+        expectedSequence: current.attempt.sequence,
+        kind: "progress",
+        payload: {
+          stepId: step.stepId,
+          completedWork: 1,
+          totalWork: step.totalWork,
+          stage: "observing",
+          evidence: {},
+        },
+      });
+      throw new Error("OLD_CONTROLLER_LEDGER_WRITE_ACCEPTED");
+    } catch (error) {
+      expect(error.code).toMatch(/FENCE|LEASE|AUTHORITY|CONTROLLER/);
+      lateCommit = error.code;
+    }
+    const lateBinding = {
+        ...beforeLate.binding,
+        attemptId: accepted.attemptId,
+        fence: snapshot.fence,
+        routeGeneration: beforeLate.binding.routeGeneration + 1,
+        weight: 0,
+      },
+      routeResponse = await fetch(
+        env.harness.entry.controlOrigin + "/binding",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-platform-internal-key": env.config.keys.entry,
+          },
+          body: canonical(lateBinding),
+          signal: AbortSignal.timeout(2000),
+        },
+      );
+    expect(routeResponse.status).toBe(409);
+    const lateRoute = await routeResponse.json();
+    expect(lateRoute.code).toBe("STALE_ENTRY_FENCE");
+    expect(await controlMutationState(env, accepted.attemptId)).toEqual(
+      beforeLate,
+    );
     expect(
       env.database.prepare("SELECT count(*) n FROM upgrade_attempts").get().n,
     ).toBe(1);
@@ -3314,6 +3840,13 @@ test("actual controller loss and competing lease recover one accepted attempt an
       attemptId: accepted.attemptId,
       oldFence: snapshot.fence,
       currentFence: current.fence,
+      actualCompetition: competition,
+      rejectedLateWrites: {
+        migration: lateMigration,
+        commit: lateCommit,
+        route: lateRoute.code,
+        unchangedControlStateDigest: digest(beforeLate),
+      },
     };
   }));
 
@@ -3664,6 +4197,123 @@ test("independent actual semantic contraction retires legacy readers, preserves 
     } finally {
       await remote.close();
     }
+    const authorityTable = retired.plan.targetTable,
+      savedAuthorityTable = "native_fault_saved_retired_name_authority",
+      authoritySchema = () => ({
+        columns: env.database.pragma(
+          "table_info(" + identifier(authorityTable) + ")",
+        ),
+        indexes: env.database.pragma(
+          "index_list(" + identifier(authorityTable) + ")",
+        ),
+        foreignKeys: env.database.pragma(
+          "foreign_key_list(" + identifier(authorityTable) + ")",
+        ),
+      }),
+      authorityRows = () =>
+        env.database
+          .prepare(
+            "SELECT * FROM " + identifier(authorityTable) + " ORDER BY row_key",
+          )
+          .all(),
+      readEpoch = () =>
+        env.database
+          .prepare(
+            "SELECT plan_digest,stage,read_epoch,degraded,reason,checkpoint FROM upgrade_online_migrations WHERE plan_digest=?",
+          )
+          .get(plan.expandPlanDigest),
+      schemaBeforeLoss = authoritySchema(),
+      rowsBeforeLossDigest = digest(authorityRows()),
+      epochBeforeLoss = readEpoch();
+    expect(epochBeforeLoss.read_epoch).toBe(2);
+    expect(epochBeforeLoss.degraded).toBe(0);
+    expect(
+      env.database
+        .prepare("SELECT 1 FROM sqlite_schema WHERE name=?")
+        .get(savedAuthorityTable),
+    ).toBeUndefined();
+    let authorityLoss;
+    // Once contract has retired the original names, their internal slots are
+    // never a fallback authority. Remove only the real new representation's
+    // table name, preserve its rows, and restore that same table in finally.
+    env.database.exec(
+      "ALTER TABLE " +
+        identifier(authorityTable) +
+        " RENAME TO " +
+        identifier(savedAuthorityTable),
+    );
+    try {
+      const failedRead = await env.request.get(
+          env.origin + "/api/projects/" + env.project.id,
+        ),
+        failedBody = await failedRead.text(),
+        epochDuringLoss = readEpoch(),
+        originalSlotDuringLoss = env.database
+          .prepare("SELECT name FROM projects WHERE id=?")
+          .get(env.project.id).name;
+      expect(failedRead.status()).toBeGreaterThanOrEqual(400);
+      expect(failedBody.includes(originalSlotDuringLoss)).toBe(false);
+      expect(originalSlotDuringLoss).toBe(originalSlot);
+      expect(digest(epochDuringLoss)).toBe(digest(epochBeforeLoss));
+      expect(
+        env.database
+          .prepare("SELECT 1 FROM sqlite_schema WHERE name=?")
+          .get(authorityTable),
+      ).toBeUndefined();
+      expect(
+        env.database
+          .prepare("SELECT 1 FROM sqlite_schema WHERE name=? AND type='table'")
+          .get(savedAuthorityTable),
+      ).toBeTruthy();
+      authorityLoss = {
+        fault: "real-authority-table-renamed",
+        tableNameDigest: digest(authorityTable),
+        schemaBeforeDigest: digest(schemaBeforeLoss),
+        rowsBeforeDigest: rowsBeforeLossDigest,
+        readEpochBefore: epochBeforeLoss.read_epoch,
+        readEpochDuring: epochDuringLoss.read_epoch,
+        httpStatus: failedRead.status(),
+        responseDigest: digest(failedBody),
+        originalSlotReturned: false,
+        originalAuthorityRetired: true,
+      };
+    } finally {
+      env.database.exec(
+        "ALTER TABLE " +
+          identifier(savedAuthorityTable) +
+          " RENAME TO " +
+          identifier(authorityTable),
+      );
+    }
+    expect(authoritySchema()).toEqual(schemaBeforeLoss);
+    expect(digest(authorityRows())).toBe(rowsBeforeLossDigest);
+    expect(digest(readEpoch())).toBe(digest(epochBeforeLoss));
+    expect(
+      (
+        await responseJson(
+          env.request,
+          env.origin,
+          "/api/projects/" + env.project.id,
+        )
+      ).name,
+    ).toBe(originalName);
+    expect(
+      (await responseJson(env.request, env.origin, "/api/projects/" + newer.id))
+        .name,
+    ).toBe(newer.name);
+    expect(
+      (
+        await responseJson(
+          env.request,
+          env.origin,
+          "/api/projects/" + converted.id,
+        )
+      ).name,
+    ).toBe(converted.name);
+    authorityLoss.schemaRestored = true;
+    authorityLoss.rowsPreserved = true;
+    authorityLoss.readEpochAfterRestore = readEpoch().read_epoch;
+    authorityLoss.latestNameDigest = digest(converted.name);
     await responseJson(
       env.request,
       env.origin,
@@ -3730,6 +4380,7 @@ test("independent actual semantic contraction retires legacy readers, preserves 
         (receipt) => digest(receipt),
       ),
       originalProjectNameDigest: digest(originalName),
+      authorityLoss,
       newWritesPreserved: true,
       oldControllerFenced: true,
       semanticContractEvidence: {
@@ -3767,6 +4418,7 @@ test("independent actual semantic contraction retires legacy readers, preserves 
           duplicateNameRejected: true,
         },
         authority: "new",
+        authorityLoss,
         oldControllerFenced: true,
         globalSchemaUnchanged: journalCount,
         oldFenceRejection,
@@ -3835,36 +4487,33 @@ test("shared DB and actual Owner Node loss retain original running jobs, stopped
       shimPid: null,
     });
     const accepted = await env.accept();
-    await env.until((_s, b) => b.weight > 0);
-    await env.stopController();
-    let lease;
-    await expect
-      .poll(
-        async () => {
-          try {
-            lease = await env.harness.coordinator.claim(accepted.attemptId, {
-              controllerId: "native-owner-observation-fault",
-              leaseMs: 120000,
-            });
-            return true;
-          } catch {
-            return false;
-          }
-        },
-        { timeout: 45000, intervals: [100, 250] },
-      )
-      .toBe(true);
-    const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId),
-      before = await env.binding();
+    await env.until(
+      (s, b) =>
+        s.attempt?.state === "observing" && b.weight > 0 && b.weight < 100,
+    );
+    const before = await env.binding(),
+      preservedData = {
+        projects: env.database
+          .prepare("SELECT id,name FROM projects ORDER BY id")
+          .all(),
+        tasks: env.database
+          .prepare(
+            "SELECT id,sandbox_id,status,job_handle,cancel_requested_at FROM agent_tasks ORDER BY id",
+          )
+          .all(),
+      };
+    let sharedDatabaseControllerFreeze;
+    const faultStartedAt = new Date().toISOString();
     env.database.exec(
       "ALTER TABLE agent_tasks RENAME TO native_fault_saved_tasks",
     );
     try {
-      await expect(
-        env.harness.coordinator.continuity(accepted.attemptId, {
-          fence: snapshot.fence,
-        }),
-      ).rejects.toThrow();
+      sharedDatabaseControllerFreeze = await awaitActualSharedFreeze(
+        env,
+        accepted,
+        before,
+        faultStartedAt,
+      );
       const after = await env.binding();
       expect(after.routeGeneration).toBe(before.routeGeneration);
       expect(after.weight).toBe(before.weight);
@@ -3873,6 +4522,16 @@ test("shared DB and actual Owner Node loss retain original running jobs, stopped
         "ALTER TABLE native_fault_saved_tasks RENAME TO agent_tasks",
       );
     }
+    expect(
+      env.database.prepare("SELECT id,name FROM projects ORDER BY id").all(),
+    ).toEqual(preservedData.projects);
+    expect(
+      env.database
+        .prepare(
+          "SELECT id,sandbox_id,status,job_handle,cancel_requested_at FROM agent_tasks ORDER BY id",
+        )
+        .all(),
+    ).toEqual(preservedData.tasks);
     const originalOwner = env.harness.roleContainers.owner,
       auditBefore = await ownerAudit(env),
       counterBefore = await hostCounter(env, env.original.id),
@@ -4048,6 +4707,9 @@ test("shared DB and actual Owner Node loss retain original running jobs, stopped
       resourcesAfter,
       stoppedResourceId: stopped.id,
       originalAssignmentDigest: digest(auditAfter.assignments),
+      sharedDatabaseControllerFreeze,
+      preservedDataDigest: digest(preservedData),
+      afterContinuity: () => x10OwnerWithActualController(context.browser()),
     };
   }));
 
@@ -4104,14 +4766,197 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
     // epoch even if the small initial dataset already completed before the ACK.
     await m.call(randomUUID(), "repair", JSON.parse(m.row().checkpoint));
     const checkpoint = JSON.parse(m.row().checkpoint);
-    const committed = await m.call(operationId, "batch", checkpoint),
-      after = m.row();
-    const replay = await m.call(operationId, "batch", checkpoint);
-    expect(replay).toEqual(committed);
-    expect(m.row().completed_work).toBe(after.completed_work);
+    const command = {
+        fence: m.lease.fence,
+        operationId,
+        action: "batch",
+        checkpoint,
+        planDigest: m.planDigest,
+      },
+      requestDigest = digest({
+        attemptId: m.accepted.attemptId,
+        action: "batch",
+        planDigest: m.planDigest,
+        checkpoint,
+      }),
+      path = "/internal/upgrades/" + m.accepted.attemptId + "/migration",
+      writer = await readJson(env.harness.bindingPath),
+      Database = createRequire(
+        join(env.config.initialRoot, "api/package.json"),
+      )("better-sqlite3");
+    expect(writer.instanceId).toBe(env.config.instanceId);
+    expect(writer.state).toBe("ready");
+    const writerUrl = new URL(writer.origin);
+    invariant(
+      writerUrl.protocol === "http:" &&
+        ["127.0.0.1", "localhost", "[::1]"].includes(writerUrl.hostname) &&
+        writerUrl.pathname === "/" &&
+        !writerUrl.search &&
+        !writerUrl.hash &&
+        !writerUrl.username &&
+        !writerUrl.password,
+      "EXACT_LOOPBACK_COORDINATOR_REQUIRED_FOR_ACK_FAULT",
+    );
+    const receiptReader = new Database(env.database.name, {
+        readonly: true,
+        fileMustExist: true,
+      }),
+      originalReceipt = () =>
+        receiptReader
+          .prepare(
+            "SELECT operation_id,request_digest,result FROM upgrade_migration_operations WHERE operation_id=?",
+          )
+          .get(operationId);
+    let forwarded = 0,
+      droppedAcknowledgements = 0,
+      upstreamCompletedAt,
+      droppedAt,
+      proxyFailure = null,
+      unknownResult,
+      committed,
+      reconciliation,
+      persistedReceipt;
+    // This is a real transport fault, confined to one authenticated migration
+    // request. The actual Coordinator commits and responds; the TCP proxy then
+    // drops that ACK before writing headers or bytes to the original caller.
+    const ackProxy = createServer((req, res) => {
+      void (async () => {
+        invariant(
+          req.method === "POST" && req.url === path && forwarded === 0,
+          "EXACT_SINGLE_MIGRATION_ACK_FAULT_REQUIRED",
+        );
+        let body = "";
+        for await (const bytes of req) {
+          body += bytes;
+          invariant(
+            Buffer.byteLength(body) <= 1024 * 1024,
+            "MIGRATION_ACK_FAULT_BODY_TOO_LARGE",
+          );
+        }
+        invariant(
+          canonical(JSON.parse(body)) === canonical(command),
+          "MIGRATION_ACK_FAULT_COMMAND_CHANGED",
+        );
+        ++forwarded;
+        const response = await fetch(writer.origin + path, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-platform-internal-key": env.config.keys.controller,
+            "x-platform-instance-id": env.config.instanceId,
+          },
+          body,
+          signal: AbortSignal.timeout(5000),
+        });
+        invariant(
+          response.status === 200,
+          "ACTUAL_MIGRATION_COMMIT_HTTP_REQUIRED",
+        );
+        const envelope = await response.json(),
+          actual = envelope.data ?? envelope,
+          receipt = originalReceipt();
+        invariant(
+          actual.commitKnown === true &&
+            receipt?.request_digest === requestDigest &&
+            canonical(JSON.parse(receipt.result)) === canonical(actual),
+          "ACTUAL_DURABLE_MIGRATION_RECEIPT_REQUIRED_BEFORE_ACK_DROP",
+        );
+        invariant(!res.headersSent, "NO_ACK_BYTES_SENT_BEFORE_TRANSPORT_DROP");
+        upstreamCompletedAt = new Date().toISOString();
+        ++droppedAcknowledgements;
+        droppedAt = new Date().toISOString();
+        res.destroy();
+      })().catch((error) => {
+        proxyFailure = error.code ?? "MIGRATION_ACK_PROXY_FAILED";
+        res.destroy();
+      });
+    });
+    try {
+      receiptReader.pragma("query_only=ON");
+      expect(originalReceipt()).toBeUndefined();
+      await new Promise((ok, fail) => {
+        ackProxy.once("error", fail);
+        ackProxy.listen(0, "127.0.0.1", ok);
+      });
+      try {
+        await fetch("http://127.0.0.1:" + ackProxy.address().port + path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: canonical(command),
+          signal: AbortSignal.timeout(10000),
+        });
+      } catch (error) {
+        unknownResult = { name: error.name, code: error.cause?.code ?? null };
+      }
+      expect(proxyFailure).toBeNull();
+      expect(
+        unknownResult,
+        "Original caller has no successful acknowledgement",
+      ).toBeTruthy();
+      expect(forwarded).toBe(1);
+      expect(droppedAcknowledgements).toBe(1);
+      persistedReceipt = originalReceipt();
+      expect(persistedReceipt.operation_id).toBe(operationId);
+      expect(persistedReceipt.request_digest).toBe(requestDigest);
+      committed = JSON.parse(persistedReceipt.result);
+      expect(committed.commitKnown).toBe(true);
+      expect(committed.integrityValid).toBe(true);
+      expect(committed.budgetExceeded).toBe(false);
+      const afterCommit = m.row(),
+        statusOperationId = randomUUID();
+      // status is read-only and has its own operation ID. Reusing the original
+      // batch ID with another action would conflict; resending batch is not a
+      // substitute for resolving an unknown committed result.
+      reconciliation = await env.harness.coordinator.migration(
+        m.accepted.attemptId,
+        {
+          fence: m.lease.fence,
+          operationId: statusOperationId,
+          action: "status",
+          checkpoint: committed.checkpoint,
+          planDigest: m.planDigest,
+        },
+      );
+      expect(reconciliation.commitKnown).toBe(true);
+      expect(reconciliation.integrityValid).toBe(true);
+      expect(reconciliation.budgetExceeded).toBe(false);
+      expect(reconciliation.checkpoint).toEqual(committed.checkpoint);
+      expect(reconciliation.completedWork).toBe(committed.completedWork);
+      expect(reconciliation.complete).toBe(committed.complete);
+      expect(
+        digest(originalReceipt()) === digest(persistedReceipt),
+        "Original private migration receipt is unchanged by read-only status",
+      ).toBe(true);
+      expect(
+        receiptReader
+          .prepare(
+            "SELECT 1 FROM upgrade_migration_operations WHERE operation_id=?",
+          )
+          .get(statusOperationId),
+      ).toBeUndefined();
+      expect(
+        digest(m.row()) === digest(afterCommit),
+        "Read-only status preserves the original committed migration row",
+      ).toBe(true);
+    } finally {
+      ackProxy.closeAllConnections();
+      await new Promise((ok) => ackProxy.close(ok));
+      receiptReader.close();
+    }
+    const beforeConflict = m.row();
     await expect(
       m.call(operationId, "batch", { phase: "different" }),
     ).rejects.toThrow();
+    expect(digest(m.row())).toBe(digest(beforeConflict));
+    expect(
+      digest(
+        env.database
+          .prepare(
+            "SELECT operation_id,request_digest,result FROM upgrade_migration_operations WHERE operation_id=?",
+          )
+          .get(operationId),
+      ),
+    ).toBe(digest(persistedReceipt));
     const projection = m.plan.projections.find(
         (p) => p.sourceTable === "automations",
       ),
@@ -4251,6 +5096,22 @@ test("real online batches retain checkpoints and newer writes/deletions under lo
       attemptId: m.accepted.attemptId,
       checkpoint: JSON.parse(m.row().checkpoint),
       completedWork: m.row().completed_work,
+      lostAcknowledgement: {
+        operationIdDigest: digest(operationId),
+        requestDigest,
+        upstreamCompletedAt,
+        droppedAt,
+        unknownResult,
+        forwarded,
+        droppedAcknowledgements,
+        acknowledgementBytesSent: 0,
+        originalReceiptDigest: digest(persistedReceipt),
+        committedCheckpoint: committed.checkpoint,
+        completedWork: committed.completedWork,
+        reconciledCheckpoint: reconciliation.checkpoint,
+        readOnlyStatus: true,
+        originalBatchResent: false,
+      },
       deletedRowDigest: digest(newer.id),
       concurrentRevision: {
         count: operations.length,
@@ -4277,9 +5138,51 @@ test("isolated shadow loss preserves original write/outbox; actual outbox failur
   context,
 }, info) =>
   recordCase("X12", page, context, info, async (env) => {
-    const m = await acquiredMigration(env),
+    const accepted = await env.accept();
+    await env.until(
+      (s, b) =>
+        s.attempt?.state === "observing" && b.weight > 0 && b.weight < 100,
+    );
+    const m = await acquiredMigration(env, "projects", accepted),
       projection = m.plan.projections.find((p) => p.sourceTable === "projects");
+    await advanceMigration(m);
+    const beforeFault = m.row(),
+      writer = await readJson(env.harness.bindingPath);
+    expect(writer.artifactDigest).toBe(
+      env.fixture.envelope.manifest.components.coordinator.artifactDigest,
+    );
+    expect(beforeFault.stage).toBe("complete");
+    expect(beforeFault.read_epoch).toBe(1);
+    expect(beforeFault.degraded).toBe(0);
+    const originalProject = await responseJson(
+        env.request,
+        env.origin,
+        "/api/projects/" + env.project.id,
+      ),
+      newReadReceipt = env.database
+        .prepare(
+          "SELECT request_digest,result FROM upgrade_migration_operations WHERE operation_id=?",
+        )
+        .get("projection-read:" + m.planDigest + ":" + writer.artifactDigest);
+    expect(
+      newReadReceipt,
+      "Actual business GET has read the enabled new representation",
+    ).toBeTruthy();
+    const actualNewRead = JSON.parse(newReadReceipt.result);
+    expect(actualNewRead.planDigest).toBe(m.planDigest);
+    expect(actualNewRead.coordinatorArtifactDigest).toBe(writer.artifactDigest);
+    expect(actualNewRead.count).toBeGreaterThan(0);
     env.database.exec("DROP TABLE " + identifier(projection.targetTable));
+    const oldRead = await responseJson(
+        env.request,
+        env.origin,
+        "/api/projects/" + env.project.id,
+      ),
+      revokedRead = m.row();
+    expect(oldRead.name).toBe(originalProject.name);
+    expect(revokedRead.read_epoch).toBe(0);
+    expect(revokedRead.degraded).toBe(1);
+    expect(revokedRead.reason).toBe("SHADOW_READ_UNAVAILABLE");
     const original = await responseJson(
       env.request,
       env.origin,
@@ -4301,8 +5204,33 @@ test("isolated shadow loss preserves original write/outbox; actual outbox failur
         .get(m.planDigest, original.id).n,
     ).toBeGreaterThan(0);
     expect(m.row().read_epoch).toBe(0);
+    const originalWrite = env.database
+        .prepare("SELECT id,name,version FROM projects WHERE id=?")
+        .get(original.id),
+      projectsBeforeRepair = env.database
+        .prepare("SELECT count(*) n FROM projects")
+        .get().n;
     await m.call(randomUUID(), "repair", JSON.parse(m.row().checkpoint));
     await advanceMigration(m);
+    expect(m.row().read_epoch).toBe(1);
+    expect(m.row().degraded).toBe(0);
+    expect(
+      env.database.prepare("SELECT count(*) n FROM projects").get().n,
+    ).toBe(projectsBeforeRepair);
+    expect(
+      env.database
+        .prepare("SELECT id,name,version FROM projects WHERE id=?")
+        .get(original.id),
+    ).toEqual(originalWrite);
+    expect(
+      (
+        await responseJson(
+          env.request,
+          env.origin,
+          "/api/projects/" + original.id,
+        )
+      ).name,
+    ).toBe(originalWrite.name);
     expect(
       env.database
         .prepare(
@@ -4334,6 +5262,18 @@ test("isolated shadow loss preserves original write/outbox; actual outbox failur
     }
     return {
       attemptId: m.accepted.attemptId,
+      newReadWithdrawal: {
+        readEpochBeforeFault: beforeFault.read_epoch,
+        readReceiptDigest: digest(newReadReceipt),
+        businessReadNameDigest: digest(originalProject.name),
+        readEpochAfterFault: revokedRead.read_epoch,
+        degradedAfterFault: revokedRead.degraded,
+        reason: revokedRead.reason,
+        readEpochAfterRepair: m.row().read_epoch,
+        originalWriteDigest: digest(originalWrite),
+        projectsBeforeRepair,
+        originalWriteNotReplayed: true,
+      },
       isolatedShadowRecovered: true,
       outboxFailureBusinessRollback: true,
     };
