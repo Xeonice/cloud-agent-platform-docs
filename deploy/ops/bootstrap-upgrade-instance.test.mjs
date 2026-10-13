@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { generateKeyPairSync } from "node:crypto";
 import { createRequire } from "node:module";
+import { createServer } from "node:http";
 import {
   assertBootstrapConfig,
   assertCloneReceipt,
@@ -24,6 +25,7 @@ import {
   assertOwnedResumeRole,
   assertBridgeConfig,
   assertBridgeTarget,
+  createFoundation,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -123,6 +125,157 @@ const receipt = (c) => ({
   masterKeyDigest: image,
 });
 const fails = (fn, code) => assert.throws(fn, (error) => error.code === code);
+
+test("fresh and resumed foundations start their real HTTP transports without launching any business role", async (t) => {
+  const root = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "bootstrap-foundation-")),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const c = { ...config(), root };
+  const keys = Object.fromEntries(
+    [
+      "owner",
+      "control",
+      "controller",
+      "entry",
+      "sticky",
+      "upgrade",
+      "supervisor",
+      "upgradeSession",
+    ].map((name) => [name, name.padEnd(64, "x")]),
+  );
+  const backend = createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    if (req.url === "/metadata") {
+      assert.equal(req.headers["x-platform-internal-key"], keys.controller);
+      res.end(
+        JSON.stringify({
+          instanceId: c.instanceId,
+          role: "installer",
+          startIdentity: "existing-installer",
+          artifactDigest: image,
+        }),
+      );
+    } else res.end(JSON.stringify({ path: req.url, backend: true }));
+  });
+  await new Promise((ok, fail) => {
+    backend.once("error", fail);
+    backend.listen(0, "127.0.0.1", ok);
+  });
+  t.after(() => new Promise((ok) => backend.close(ok)));
+  c.ports = Object.fromEntries(
+    Object.keys(c.ports).map((name) => [name, backend.address().port]),
+  );
+  c.ports.entry = c.ports.entryControl = c.ports.supervisor = 0;
+  const origin = (name) => `http://127.0.0.1:${c.ports[name]}`;
+  const paths = Object.fromEntries(
+    [
+      "owner",
+      "futureOwners",
+      "installer",
+      "bindings",
+      "logs",
+      "web",
+      "entry",
+    ].map((name) => [name, join(root, name)]),
+  );
+  await Promise.all(
+    Object.values(paths).map((path) =>
+      fs.mkdir(path, { recursive: true, mode: 0o700 }),
+    ),
+  );
+  // The CLI contract fixture allows only immutable image inspection. Any launch,
+  // restart or signal fails, while Entry and Supervisor below are actual servers.
+  const dockerCli = join(root, "docker-contract-fixture"),
+    commands = join(root, "docker-commands.jsonl");
+  await fs.writeFile(
+    dockerCli,
+    `#!${process.execPath}\nimport fs from 'node:fs';\nconst args=process.argv.slice(2);\nfs.appendFileSync(${JSON.stringify(commands)},JSON.stringify(args)+'\\n',{mode:0o600});\nif(JSON.stringify(args)!==${JSON.stringify(JSON.stringify(["image", "inspect", image]))})process.exit(71);\nprocess.stdout.write(${JSON.stringify(JSON.stringify([{ Id: image, Os: "linux", Architecture: "arm64", Config: { Env: [] } }]))});\n`,
+    { mode: 0o700 },
+  );
+  c.docker = { dedicated: true, cli: dockerCli, args: [] };
+  const bindingPath = join(paths.bindings, "coordinator.json"),
+    ownerBindingPath = join(paths.bindings, "owners.json"),
+    installedReleasePath = join(paths.bindings, "installed-release.json");
+  await fs.writeFile(
+    bindingPath,
+    JSON.stringify({
+      instanceId: c.instanceId,
+      generation: 1,
+      state: "ready",
+      origin: origin("coordinator"),
+    }),
+    { mode: 0o600 },
+  );
+  const release = {
+    components: {
+      api: { artifactDigest: image },
+      web: { artifactDigest: image },
+    },
+  };
+  let initialBinding = null;
+  for (const mode of ["fresh", "resume"]) {
+    const foundation = await createFoundation(c, {
+      paths,
+      keys,
+      verified:
+        mode === "fresh"
+          ? { authEnv: {}, bundle: { treeDigest: image } }
+          : { authEnv: {} },
+      origin,
+      bindingPath,
+      ownerBindingPath,
+      installedReleasePath,
+      release,
+      initialBinding,
+    });
+    try {
+      assert.equal(
+        foundation.controllerConfig.controllerMetadataPort,
+        c.ports.controllerMetadata,
+      );
+      assert.equal(
+        foundation.ownerEnv.PLATFORM_COORDINATOR_RPC_KEY,
+        keys.owner,
+      );
+      assert.equal(foundation.coordinatorEnv.DATABASE_URL, "/data/platform.db");
+      assert.equal(
+        foundation.controlEnv.PLATFORM_CONTROL_RPC_KEY,
+        keys.control,
+      );
+      const response = await fetch(
+        foundation.entry.controlOrigin + "/binding",
+        { headers: { "x-platform-internal-key": keys.entry } },
+      );
+      assert.equal(response.status, 200);
+      const binding = await response.json();
+      assert.equal(binding.instanceId, c.instanceId);
+      assert.equal(binding.web.treeDigest, image);
+      assert.equal(binding.oldApi.origin, origin("apiA"));
+      const api = await fetch(foundation.entry.origin + "/api/health");
+      assert.deepEqual(await api.json(), {
+        path: "/api/health",
+        backend: true,
+      });
+      const metadata = await fetch(foundation.supervisor.origin + "/metadata", {
+        headers: { "x-platform-internal-key": keys.supervisor },
+      });
+      assert.equal(metadata.status, 200);
+      assert.equal((await metadata.json()).startIdentity, "existing-installer");
+      initialBinding = foundation.entry.observe();
+    } finally {
+      await foundation.entry.close();
+      await foundation.supervisor.close();
+    }
+  }
+  assert.deepEqual(
+    (await fs.readFile(commands, "utf8")).trim().split("\n").map(JSON.parse),
+    [
+      ["image", "inspect", image],
+      ["image", "inspect", image],
+    ],
+  );
+});
 
 test("a bridge is newly enabled only for confirmed instance; existing admitted bridge can resume its live accepted upgrade", () => {
   const c = { ...config(), bridgePort: 3101 },

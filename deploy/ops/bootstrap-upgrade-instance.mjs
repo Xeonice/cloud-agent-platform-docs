@@ -953,15 +953,15 @@ async function startBootstrap(c, { mode }) {
     supervisor,
     entry,
   } = await createFoundation(c, {
-      paths,
-      keys,
-      verified,
-      origin,
-      bindingPath,
-      ownerBindingPath,
-      installedReleasePath,
-      release,
-    });
+    paths,
+    keys,
+    verified,
+    origin,
+    bindingPath,
+    ownerBindingPath,
+    installedReleasePath,
+    release,
+  });
   const containers = {},
     apiRoot = join(c.artifactRoot, "api"),
     roles = join(apiRoot, "apps/api/dist/roles");
