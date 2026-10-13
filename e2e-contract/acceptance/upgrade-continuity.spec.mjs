@@ -1002,11 +1002,36 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(await readPending()).toBe(
       JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
     );
+    const originalTaskUrl = page.url();
+    const terminalBookmarkKey = `ap.terminal-bookmark.v1:${encodeURIComponent(browserAdmissionSnapshot.instanceId)}:${encodeURIComponent(browserAdmissionSnapshot.userScope)}:${encodeURIComponent(original.id)}`;
+    const readTerminalBookmark = () =>
+      page.evaluate((key) => localStorage.getItem(key), terminalBookmarkKey);
+    await expect
+      .poll(async () => JSON.parse(await readTerminalBookmark()))
+      .toEqual({
+        version: 1,
+        terminalIdentity: secondTerminal.terminalIdentity,
+        kind: "shell",
+        ordinal: 2,
+      });
+    const originalTerminalBookmark = await readTerminalBookmark();
     nativePhase = "upgrade-admission:unknown-result-reload";
     await page.reload({ waitUntil: "domcontentloaded" });
+    expect(page.url()).toBe(originalTaskUrl);
+    // Every real status response is deliberately lost, so this fresh page cannot
+    // authenticate the bookmark's instance/viewer scope yet. The production gate
+    // must hold restoration and avoid mounting a replacement terminal.
+    await expect(
+      page.getByText("正在确认原终端的恢复范围…", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('[data-testid^="terminal-pane-"]')).toHaveCount(
+      0,
+    );
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
-    ).toHaveAttribute("aria-selected", "true");
+    ).toHaveCount(0);
+    expect(await readTerminalBookmark()).toBe(originalTerminalBookmark);
+    const readyWhileScopeUnknown = evidence.ready.length;
     expect(await readPending()).toBe(
       JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
     );
@@ -1014,6 +1039,14 @@ test("real user acceptance, durable installation and original VM/terminal contin
     nativePhase = "upgrade-admission:unknown-readonly-retry-window";
     // Let the actual UI's 2s retry interval run while the result stays unknown.
     await delay(2500);
+    await expect(page.locator('[data-testid^="terminal-pane-"]')).toHaveCount(
+      0,
+    );
+    expect(evidence.ready.length).toBe(readyWhileScopeUnknown);
+    expect(await readTerminalBookmark()).toBe(originalTerminalBookmark);
+    expect(await readPending()).toBe(
+      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
+    );
     expect(admissionPosts).toHaveLength(1);
     expect(
       database
@@ -1041,7 +1074,49 @@ test("real user acceptance, durable installation and original VM/terminal contin
     nativePhase = "upgrade-admission:readonly-confirmed-reload";
     // A fresh real status may identify the same request directly; that is also
     // readonly reconciliation and must not create another installation command.
+    const readonlyBrowserStatus = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).origin === origin &&
+        new URL(response.url()).pathname === "/api/system/upgrade/status" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+    );
+    const beforeReadonlyRefresh = evidence.ready.length;
+    const readonlyRefreshStart = performance.now();
     await page.reload();
+    expect(page.url()).toBe(originalTaskUrl);
+    const restoredBrowserScope = await (await readonlyBrowserStatus).json();
+    expect(restoredBrowserScope.instanceId).toBe(
+      browserAdmissionSnapshot.instanceId,
+    );
+    expect(restoredBrowserScope.userScope).toBe(
+      browserAdmissionSnapshot.userScope,
+    );
+    expect(restoredBrowserScope.attempt.requestId).toBe(
+      submittedCommand.requestId,
+    );
+    nativePhase = "upgrade-admission:original-terminal-readonly-reconnect";
+    await expect(
+      page.getByRole("tab", { name: "终端 2", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await expect
+      .poll(
+        () =>
+          evidence.ready
+            .slice(beforeReadonlyRefresh)
+            .some(
+              (row) =>
+                row.sandboxId === original.id &&
+                row.terminalIdentity === secondTerminal.terminalIdentity &&
+                row.runtimeIdentity === secondTerminal.runtimeIdentity &&
+                row.existingSession,
+            ),
+        { timeout: 5000, intervals: [25, 50, 100] },
+      )
+      .toBe(true);
+    const readonlyReconnectMs = performance.now() - readonlyRefreshStart;
+    expect(readonlyReconnectMs).toBeLessThanOrEqual(5000);
+    expect(await readTerminalBookmark()).toBe(originalTerminalBookmark);
     nativePhase = "upgrade-admission:clear-reconciled-original-id";
     await expect.poll(readPending).toBeNull();
     admissionDiagnostics.pendingClearedAfterReadonlyConfirmation = true;
@@ -1066,6 +1141,16 @@ test("real user acceptance, durable installation and original VM/terminal contin
         targetDigest: originalLookup.targetDigest,
       },
       statusConfirmsOriginalRequest: true,
+      unknownTerminalRestorationHeldWithoutReplacement: true,
+      originalTerminalBookmarkPreservedWhileScopeUnknown: true,
+      readonlyTerminalReconnection: {
+        terminalIdentity: secondTerminal.terminalIdentity,
+        runtimeIdentity: secondTerminal.runtimeIdentity,
+        existingSession: true,
+        sameTaskPage: true,
+        sameBrowserScope: true,
+        elapsedMs: readonlyReconnectMs,
+      },
       pendingClearedAfterReadonlyConfirmation: true,
       extraPostsWhileUnknownAndReload: 0,
       durableIntents: 1,
