@@ -222,6 +222,19 @@ async function sourceBoundary(t, { transform, revokeAfterObservation = false, ap
         result = { current: true };
       } else if (path === "/internal/upgrades/" + attemptId) {
         result = { sourceActivation: { components: { api: { artifactDigest: sourceDigest } } } };
+      } else if (path.endsWith('/validate-switch')) {
+        assert.equal(body.fence, fence);
+        assert.equal(body.actual.instanceId, binding.instanceId);
+        assert.equal(body.actual.attemptId, attemptId);
+        assert.equal(body.actual.oldApi.digest, sourceDigest);
+        assert.equal(body.actual.weight, 0);
+        result = { qualified: true, controlOnly: true, authContinuity: true, originalResourceAddressable: true, baselineSamples: 100 };
+      } else if (path === '/internal/upgrades/continuity') {
+        result = { qualified: true, originalResourcesPreserved: true };
+      } else if (path === '/current-installer') {
+        assert.equal(body.kind, 'installer');
+        assert.equal(body.fence, fence);
+        result = { instanceId: binding.instanceId, artifactDigest: targetDigest, inputFingerprint: targetDigest, startIdentity: 'new-installer' };
       } else if (path === "/start" || path === "/observe") {
         const record = { origin: "http://127.0.0.1:2", artifactDigest: targetDigest, startIdentity: "new-coordinator" };
         result = path === "/start" ? record : { qualified: true, record };
@@ -245,7 +258,7 @@ async function sourceBoundary(t, { transform, revokeAfterObservation = false, ap
           fenceValid: true, ownerGenerationsValid: true, routeGenerationValid: true,
           sharedStateHealthy: true, continuity: { qualified: true },
           invariants: Object.fromEntries(["unauthorizedStops", "resourceRebuilds", "duplicateCommands", "duplicateOccurrences", "writerConflicts", "migrationDifferences", "integrityFailures"].map(name => [name, 0])),
-          probes: { hz: 10, samples: 600, failures: 0, maxLatencyMs: 1, attachMaxMs: 1 },
+          probes: { known: true, hz: 10, samples: 600, failures: 0, maxLatencyMs: 1, attachMaxMs: 1 },
           baseline: {
             known: true, qualified: true, requests: 100, errorRate: 0,
             p95Ms: 1, windowMs: 60000,
@@ -444,4 +457,51 @@ test("production Entry rejects a metadata stamp that loses the route-generation 
   const current = await response.json();
   assert.equal(current.weight, 0);
   assert.equal(current.routeGeneration, 3);
+});
+
+test('Installer-only activation admits actual Controller fence and waits for empty, partial and complete source receipts without changing serving roles', async t => {
+  const f = await sourceBoundary(t, { productionEntry: true, transform: (receipt, { observations }) => {
+    if (observations === 1) {
+      receipt.baseline = { ...receipt.baseline, known: false, qualified: false, source: null, requests: 0, windowMs: 0 };
+      receipt.probes = { known: false, hz: 0, samples: 0, failures: 0, maxLatencyMs: null, attachMaxMs: null };
+    } else if (observations === 2) {
+      receipt.baseline.requests = 99;
+      receipt.baseline.windowMs = 59999;
+    }
+    return receipt;
+  } });
+  f.input.attempt.plan.apiReused = true;
+  f.input.attempt.manifest.components.api.artifactDigest = f.binding.oldApi.digest;
+  const before = structuredClone(f.binding);
+  const result = await f.executor.activationEvidence(f.input);
+  assert.equal(f.observations(), 3);
+  assert.equal(result.compatibility.qualified, true);
+  assert.equal(result.actualInstaller.startIdentity, 'new-installer');
+  assert.equal(result.actual.attemptId, f.input.attempt.attemptId);
+  assert.equal(result.actual.fence, f.input.fence);
+  assert.equal(result.actual.routeGeneration, before.routeGeneration + 1);
+  assert.equal(result.actual.weight, 0);
+  for (const key of ['oldApi', 'candidateApi', 'web', 'retainedWeb']) assert.deepEqual(result.actual[key], before[key]);
+  const writes = f.requests.filter(r => r.method === 'POST');
+  assert.equal(writes.some(r => r.path === '/start' || r.path === '/coordinator-handoff'), false);
+  const validation = f.requests.find(r => r.path.endsWith('/validate-switch'));
+  const samples = f.requests.filter(r => r.path === '/internal/upgrades/observation');
+  assert.ok(validation.at >= samples.at(-1).at);
+});
+
+test('Installer-only activation refuses actual failures and stale Controller authority before final validation', async t => {
+  for (const [name, options, code] of [
+    ['empty scope with failure', { transform: r => { r.baseline.known = false; r.probes = { known: false, hz: 0, samples: 0, failures: 1, maxLatencyMs: null, attachMaxMs: null }; return r; } }, 'COORDINATOR_SOURCE_BASELINE_UNSAFE'],
+    ['measured latency breach', { transform: r => { r.probes.maxLatencyMs = 2001; return r; } }, 'COORDINATOR_SOURCE_BASELINE_UNSAFE'],
+    ['wrong source scope', { transform: r => { r.baseline.source.fence--; return r; } }, 'COORDINATOR_SOURCE_BASELINE_PROOF_MISMATCH'],
+    ['lost Controller fence', { transform: r => r, revokeAfterObservation: true }, 'UPGRADE_FENCE_EXPIRED'],
+    ['Entry compare-and-swap race', { raceStamp: true }, 'ENTRY_RPC_FAILED'],
+  ]) await t.test(name, async t => {
+    const f = await sourceBoundary(t, { productionEntry: true, ...options });
+    f.input.attempt.plan.apiReused = true;
+    f.input.attempt.manifest.components.api.artifactDigest = f.binding.oldApi.digest;
+    await assert.rejects(f.executor.activationEvidence(f.input), { code });
+    assert.equal(f.requests.some(r => r.path.endsWith('/validate-switch')), false);
+    assert.equal(f.requests.some(r => r.path === '/start'), false);
+  });
 });
