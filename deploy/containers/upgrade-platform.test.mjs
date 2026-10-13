@@ -67,7 +67,7 @@ test('B04 actual download resumes durable bytes, verifies SHA256, rejects corrup
 // A real slow HTTP body crosses the production controller's periodic renewal.
 // The contract receiver is a boundary double; this is not native qualification.
 test('controller sends renewal authority without claim-only options during a download longer than one second',async t=>{
-  const root=await folder(t),f=fixture(),bytes=Buffer.alloc(4096,0x5a),id='11111111-1111-4111-8111-111111111112';let sequence=0,verifiedDownload=false;const renewals=[];
+  const root=await folder(t),f=fixture(),bytes=Buffer.alloc(4096,0x5a),id='11111111-1111-4111-8111-111111111112';let sequence=0,verifiedDownload=false,currentControllerId;const renewals=[];
   const upstream=await listen(t,async(req,res)=>{
     if(req.url==='/package'){res.writeHead(200,{'content-length':bytes.length});res.write(bytes.subarray(0,2048));setTimeout(()=>res.end(bytes.subarray(2048)),1400);return;}
     let text='';for await(const chunk of req)text+=chunk;const body=JSON.parse(text);res.setHeader('content-type','application/json');
@@ -81,7 +81,8 @@ test('controller sends renewal authority without claim-only options during a dow
   const record={attempt,actorId:'operator',signedManifest:envelope,plan,sourceActivation:{releaseId:f.current.releaseId,schema:1,channel:'stable',activationGeneration:1,components:{api:artifact(B),coordinator:artifact(B),web:{...artifact(W),webRevision:'c'.repeat(40)},installer:artifact(H)}}};
   await atomicJson(join(root,'trust.json'),f.roots);
   const actualClient=createCoordinatorClient({origin:upstream.origin,instanceId:'instance',key:'k'.repeat(32)});
-  const coordinator={pending:async()=>record,claim:async(_id,body)=>{assert.equal(body.leaseMs,15000);return {fence:3,generation:2,snapshot:record};},renew:actualClient.renew,assertFence:async()=>{},step:async()=>null,
+  const coordinator={pending:async()=>record,claim:async(_id,body)=>{assert.equal(body.leaseMs,15000);currentControllerId=body.controllerId;return {fence:3,generation:2,snapshot:record};},renew:actualClient.renew,assertFence:async()=>{},step:async()=>null,
+    snapshot:async()=>({...record,attempt:{...attempt,sequence},controllerId:currentControllerId,fence:3,leaseExpiresAt:Date.now()+15000}),
     commit:async(_id,event)=>{assert.equal(event.expectedSequence,sequence);sequence++;return {attempt:{...attempt,sequence}};}};
   const executor={prepare:async()=>{verifiedDownload=true;throw Object.assign(Error('Intentional unit-test verification boundary'),{code:'VERIFICATION_BOUNDARY'});},actual:async()=>({weight:0}),fallbackEligibility:async()=>({qualified:false})};
   const controller=createInstanceController({root,instanceId:'instance',controllerId:'controller',trustRootPath:join(root,'trust.json'),coordinator,executor,fetcher:(_url,options)=>fetch(upstream.origin+'/package',options)});

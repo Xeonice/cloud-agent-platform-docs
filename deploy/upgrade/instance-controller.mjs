@@ -18,9 +18,17 @@ const sleep=(ms,signal)=>new Promise((ok,fail)=>{if(signal?.aborted){fail(signal
 export function createInstanceController({root,instanceId,controllerId,startIdentity=controllerId,trustRootPath,coordinator,executor,fetcher=fetch,leaseMs=15000,signal,onEvent}) {
   invariant(controllerId&&instanceId&&coordinator&&executor&&leaseMs>=5000,'CONTROLLER_CONFIG_REQUIRED');
   controllerId = controllerId.slice(0,140) + '-' + randomUUID(); // Restart is a new control incarnation; never reuse a still-live fence.
-  let busy=false;
+  let busy=false,mutationTail=Promise.resolve();
+  function serializeMutation(work) {
+    const next=mutationTail.then(work);mutationTail=next.catch(()=>{});return next;
+  }
+  const commitMutation=(id,command)=>serializeMutation(()=>coordinator.commit(id,command));
   async function runOnce() {
-    if(busy)return {state:'busy'};busy=true;let timer,session;
+    if(busy)return {state:'busy'};busy=true;let timer,session,renewalTask,observationsStopped=false;
+    async function stopObservations() {
+      observationsStopped=true;if(timer)clearInterval(timer);
+      await renewalTask?.catch(()=>{});await mutationTail;
+    }
     try {
       await secureDirectory(root);const authority=await readJson(join(root,'controller-authority.json'),null);if(authority?.instanceId===instanceId&&authority.attemptId&&authority.startIdentity!==startIdentity)return {state:'controller-handoff',attemptId:authority.attemptId};const pending=await coordinator.pending();const record=pending?.attempt?pending:pending?.attempts?.[0]||pending?.pending;
       if(!record)return monitorOnce();const accepted=record.attempt;
@@ -40,11 +48,34 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const journalPath=join(root,'journals',accepted.attemptId+'.json');let journal=await readJson(journalPath,{attemptId:accepted.attemptId,planDigest:plan.planDigest,steps:{}});
       invariant(journal.planDigest===plan.planDigest,'JOURNAL_PLAN_CHANGED');
       const assertFence=async()=>{if(leaseLost)throw leaseLost;invariant(!signal?.aborted,'CONTROLLER_STOPPED');await coordinator.assertFence(attempt.attemptId,session.fence);};
-      timer=setInterval(()=>{coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence}).catch(e=>{leaseLost=e;});},Math.min(1000,Math.floor(leaseMs/3)));timer.unref();
-      async function commit(kind,payload,eventId=randomUUID()) {
+      async function commitObserved(kind,payload,eventId) {
         await assertFence();const next=await coordinator.commit(attempt.attemptId,{fence:session.fence,generation:session.generation,expectedSequence:sequence,eventId,kind,payload});
         sequence=next.attempt?.sequence??next.snapshot?.attempt?.sequence??next.sequence;invariant(Number.isSafeInteger(sequence),'COMMIT_SNAPSHOT_REQUIRED');onEvent?.({kind,attemptId:attempt.attemptId,sequence});return next;
       }
+      const commit=(kind,payload,eventId=randomUUID())=>serializeMutation(()=>commitObserved(kind,payload,eventId));
+      async function observeDurableProgress() {
+        if(observationsStopped||leaseLost||signal?.aborted||session.recovering)return;
+        const fresh=await coordinator.snapshot(attempt.attemptId),observed=fresh.attempt;
+        if(observationsStopped||leaseLost||signal?.aborted)return;
+        invariant(observed?.instanceId===instanceId&&observed.attemptId===attempt.attemptId&&observed.targetReleaseId===attempt.targetReleaseId&&observed.targetDigest===attempt.targetDigest&&observed.planDigest===plan.planDigest&&fresh.plan?.planDigest===plan.planDigest,'PROGRESS_OBSERVATION_SCOPE_CHANGED');
+        if(TERMINAL.has(observed.state)||fresh.recovery?.state==='recovering')return;
+        invariant(fresh.fence===session.fence&&observed.generation===session.generation&&fresh.controllerId===controllerId&&Number.isFinite(fresh.leaseExpiresAt)&&fresh.leaseExpiresAt>Date.now(),'PROGRESS_OBSERVATION_AUTHORITY_CHANGED');
+        invariant(observed.sequence===sequence,'UPGRADE_SEQUENCE_CONFLICT');
+        // Reobserve the last durable checkpoint, never the future step whose
+        // executor is still running or the sum of work across other steps.
+        const step=plan.steps.find(s=>s.stepId===observed.stage);if(!step)return;
+        const durable=await coordinator.step(attempt.attemptId,step.stepId);
+        if(observationsStopped||leaseLost||signal?.aborted)return;
+        invariant(durable?.stepId===step.stepId&&Number.isFinite(durable.completedWork)&&durable.completedWork>=0&&(step.totalWork===null||durable.completedWork<=step.totalWork),'PROGRESS_OBSERVATION_WORK_INVALID');
+        await commitObserved('progress',{stepId:step.stepId,completedWork:durable.completedWork,totalWork:step.totalWork,evidence:durable.evidence,stage:observed.state},randomUUID());
+      }
+      timer=setInterval(()=>{
+        if(observationsStopped||renewalTask)return;
+        renewalTask=(async()=>{
+          await coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence});
+          await serializeMutation(observeDurableProgress);
+        })().catch(e=>{if(!observationsStopped)leaseLost=e;}).finally(()=>{renewalTask=null;});
+      },Math.min(1000,Math.floor(leaseMs/3)));timer.unref();
       async function applied(step,evidence,completedWork) {
         const receiptDigest=digest(evidence);const next=await commit('step-applied',{stepId:step.stepId,receiptDigest,completedWork,evidence});journal.steps[step.stepId]={state:'applied',receiptDigest,evidence,completedWork};await atomicJson(journalPath,journal);return next;
       }
@@ -61,7 +92,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       for(const step of plan.steps) {
         session.currentStep={stepId:step.stepId,kind:step.kind};
         await assertFence();const prior=await coordinator.step(attempt.attemptId,step.stepId);
-        if(prior?.state==='applied'||prior?.applied===true){if(step.kind==='installer-handoff'&&!await executor.installerIsCurrent({attempt,fence:session.fence})){const candidateInstaller=prior.evidence;await executor.installerHandoff({attempt,fence:session.fence,operationId:candidateInstaller.operationId,candidate:candidateInstaller});return {state:'controller-handoff',attemptId:attempt.attemptId};}journal.steps[step.stepId]={state:'applied',...prior};if(step.kind==='download')download=prior.evidence;if(step.kind==='verify')artifact=prior.evidence;if(step.kind==='candidate')candidate=prior.evidence;continue;}
+        if(prior?.state==='applied'||prior?.applied===true){if(step.kind==='installer-handoff'&&!await executor.installerIsCurrent({attempt,fence:session.fence})){const candidateInstaller=prior.evidence;await stopObservations();await executor.installerHandoff({attempt,fence:session.fence,operationId:candidateInstaller.operationId,candidate:candidateInstaller});return {state:'controller-handoff',attemptId:attempt.attemptId};}journal.steps[step.stepId]={state:'applied',...prior};if(step.kind==='download')download=prior.evidence;if(step.kind==='verify')artifact=prior.evidence;if(step.kind==='candidate')candidate=prior.evidence;continue;}
         const local=journal.steps[step.stepId];
         if(local?.state==='applying') {
           const reconciled=await executor.reconcile?.({step,attempt,fence:session.fence,local});
@@ -69,7 +100,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
           invariant(reconciled?.definitelyNotApplied===true||['download','verify','observe','activation','migration'].includes(step.kind),'APPLICATION_RESULT_UNKNOWN');
         }
         const operationId=local?.operationId||randomUUID();journal.steps[step.stepId]={state:'applying',operationId,fence:session.fence};await atomicJson(journalPath,journal);
-        if(step.kind==='installer-handoff'){artifact ||= journal.steps['package-verify']?.evidence;const candidateInstaller=await executor.installerCandidate({artifact,attempt,fence:session.fence,operationId});invariant(candidateInstaller.artifactDigest===attempt.manifest.components.installer.artifactDigest&&candidateInstaller.inputFingerprint===attempt.manifest.components.installer.inputFingerprint,'INSTALLER_CANDIDATE_IDENTITY_MISMATCH');await applied(step,candidateInstaller,1);await executor.installerHandoff({attempt,fence:session.fence,operationId,candidate:candidateInstaller});journal.controllerTransferred=true;await atomicJson(journalPath,journal);return {state:'controller-handoff',attemptId:attempt.attemptId};}
+        if(step.kind==='installer-handoff'){artifact ||= journal.steps['package-verify']?.evidence;const candidateInstaller=await executor.installerCandidate({artifact,attempt,fence:session.fence,operationId});invariant(candidateInstaller.artifactDigest===attempt.manifest.components.installer.artifactDigest&&candidateInstaller.inputFingerprint===attempt.manifest.components.installer.inputFingerprint,'INSTALLER_CANDIDATE_IDENTITY_MISMATCH');await applied(step,candidateInstaller,1);await stopObservations();await executor.installerHandoff({attempt,fence:session.fence,operationId,candidate:candidateInstaller});journal.controllerTransferred=true;await atomicJson(journalPath,journal);return {state:'controller-handoff',attemptId:attempt.attemptId};}
         if(step.kind==='download') {
           download=await downloadVerified(plan.package,root,{fetcher,signal,assertFence,allowedRedirectOrigins:roots.distributionOrigins,onProgress:(completed,total,evidence)=>commit('progress',{stepId:step.stepId,completedWork:completed,totalWork:total,evidence,stage:'downloading'})});await applied(step,download,plan.package.bytes);
         }else if(step.kind==='verify') {
@@ -111,12 +142,13 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       }
       return {state:'activation-confirmed',attemptId:attempt.attemptId};
     }catch(error){
+      await stopObservations();
       if(session&&error.code!=='STALE_FENCE'&&error.code!=='LEASE_EXPIRED'&&error.code!=='UPGRADE_FENCE_EXPIRED'&&error.code!=='CONTROLLER_STOPPED'){
-        if(session.recovering){try{const fresh=await coordinator.snapshot(session.attempt.attemptId);if(fresh.recovery?.state==='recovering'){await coordinator.commit(session.attempt.attemptId,{fence:session.fence,generation:session.generation,expectedSequence:fresh.attempt.sequence,eventId:randomUUID(),kind:'recovery-failed',payload:{reason:faultCode(error,'RECOVERY_UNKNOWN'),actual:await executor.actual()}});const path=join(root,'journals',session.attempt.attemptId+'.json'),journal=await readJson(path,{});journal.monitorStopped='recovery-unknown';await atomicJson(path,journal);}}catch{}}
+        if(session.recovering){try{const fresh=await coordinator.snapshot(session.attempt.attemptId);if(fresh.recovery?.state==='recovering'){await commitMutation(session.attempt.attemptId,{fence:session.fence,generation:session.generation,expectedSequence:fresh.attempt.sequence,eventId:randomUUID(),kind:'recovery-failed',payload:{reason:faultCode(error,'RECOVERY_UNKNOWN'),actual:await executor.actual()}});const path=join(root,'journals',session.attempt.attemptId+'.json'),journal=await readJson(path,{});journal.monitorStopped='recovery-unknown';await atomicJson(path,journal);}}catch{}}
         else await handleFault(session,error).catch(()=>{});
       }
       throw error;
-    }finally{if(timer)clearInterval(timer);busy=false;}
+    }finally{await stopObservations();busy=false;}
   }
 
   async function monitorOnce() {
@@ -156,7 +188,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
     const fault={code:faultCode(error),observedAt:new Date().toISOString(),actual,evidence:error.faultEvidence||null,currentStep:session.currentStep||null,...(scope?{componentScope:scope}:{})};
     const journalPath=join(root,'journals',id+'.json'),faultJournal=await readJson(journalPath,{});
     faultJournal.faultCommit ||= {...base,kind:confirmed?'ready-revoked':'failed',payload:{reason:fault.code,evidence:fault}};await atomicJson(journalPath,faultJournal);let stopped;
-    try{stopped=await coordinator.commit(id,faultJournal.faultCommit);}catch(e){if(['UPGRADE_FENCE_EXPIRED','STALE_FENCE','LEASE_EXPIRED'].includes(e.code)){faultJournal.faultCommit={...faultJournal.faultCommit,...base,eventId:randomUUID()};await atomicJson(journalPath,faultJournal);}throw e;}
+    try{stopped=await commitMutation(id,faultJournal.faultCommit);}catch(e){if(['UPGRADE_FENCE_EXPIRED','STALE_FENCE','LEASE_EXPIRED'].includes(e.code)){faultJournal.faultCommit={...faultJournal.faultCommit,...base,eventId:randomUUID()};await atomicJson(journalPath,faultJournal);}throw e;}
     faultJournal.faultCommitApplied=true;await atomicJson(journalPath,faultJournal);
     const envelopeAttempt={...attempt,plan,manifest:fresh.signedManifest?.manifest||fresh.manifest};
     if(error.suppressRecovery)return {state:'frozen-after-unknown-outcome'};
@@ -167,9 +199,9 @@ export function createInstanceController({root,instanceId,controllerId,startIden
     if(!qualifiedFallback(eligibility,{attempt:envelopeAttempt,fence:session.fence}))return {state:'frozen-no-qualified-fallback'};
     const recoveryPlan={schemaVersion:1,triggeringAttemptId:id,eligibilityDigest:digest(eligibility),api:eligibility.api||null,web:eligibility.web||null,coordinator:eligibility.coordinator||null,owner:eligibility.owner||null,componentScope:eligibility.componentScope,faultDigest:digest(fault)};
     recoveryPlan.planDigest=digest(recoveryPlan);
-    const sequence=stopped.attempt?.sequence??stopped.sequence;const recovery=await coordinator.commit(id,{...base,expectedSequence:sequence,eventId:randomUUID(),kind:'recovery-started',payload:{recoveryAttemptId:randomUUID(),recoveryPlan,eligibility,reason:fault.code}});
+    const sequence=stopped.attempt?.sequence??stopped.sequence;const recovery=await commitMutation(id,{...base,expectedSequence:sequence,eventId:randomUUID(),kind:'recovery-started',payload:{recoveryAttemptId:randomUUID(),recoveryPlan,eligibility,reason:fault.code}});
     const recoveryFence=recovery.fence??recovery.snapshot?.fence??session.fence, generation=recovery.attempt?.generation??recovery.generation??session.generation;
-    try {const applied=await executor.recover({attempt:envelopeAttempt,fence:recoveryFence,recoveryPlan});const continuity=await executor.observe({attempt:envelopeAttempt,fence:recoveryFence,weight:applied.weight});invariant(continuity.continuity?.qualified,'RECOVERY_UNCONFIRMED');return coordinator.commit(id,{fence:recoveryFence,generation,expectedSequence:recovery.attempt?.sequence??recovery.sequence,eventId:randomUUID(),kind:'recovery-confirmed',payload:{recoveryAttemptId:recovery.recovery?.recoveryAttemptId,actual:applied,continuity,eligibility}});}catch(recoveryError){await coordinator.commit(id,{fence:recoveryFence,generation,expectedSequence:recovery.attempt?.sequence??recovery.sequence,eventId:randomUUID(),kind:'recovery-failed',payload:{reason:faultCode(recoveryError,'RECOVERY_UNKNOWN'),actual:await executor.actual()}});return {state:'recovery-unknown'};}
+    try {const applied=await executor.recover({attempt:envelopeAttempt,fence:recoveryFence,recoveryPlan});const continuity=await executor.observe({attempt:envelopeAttempt,fence:recoveryFence,weight:applied.weight});invariant(continuity.continuity?.qualified,'RECOVERY_UNCONFIRMED');return commitMutation(id,{fence:recoveryFence,generation,expectedSequence:recovery.attempt?.sequence??recovery.sequence,eventId:randomUUID(),kind:'recovery-confirmed',payload:{recoveryAttemptId:recovery.recovery?.recoveryAttemptId,actual:applied,continuity,eligibility}});}catch(recoveryError){await commitMutation(id,{fence:recoveryFence,generation,expectedSequence:recovery.attempt?.sequence??recovery.sequence,eventId:randomUUID(),kind:'recovery-failed',payload:{reason:faultCode(recoveryError,'RECOVERY_UNKNOWN'),actual:await executor.actual()}});return {state:'recovery-unknown'};}
   }
   return {runOnce,monitorOnce,async run(){while(!signal?.aborted){try{const result=await runOnce();if(result.state==='controller-handoff')return result;}catch(e){onEvent?.({kind:'controller-error',code:e.code||'UNKNOWN'});}await sleep(1000,signal).catch(()=>{});}},handleFault};
 }
