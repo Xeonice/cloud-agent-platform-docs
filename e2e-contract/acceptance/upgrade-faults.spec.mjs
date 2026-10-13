@@ -222,7 +222,13 @@ async function actualGuest(request, origin, id) {
     tmuxDigest: digest(found[4].trim().split("\n").sort()),
   };
 }
-async function actualHeadlessCounter(request, origin, sandboxId, proofId) {
+async function actualHeadlessCounter(
+  request,
+  origin,
+  sandboxId,
+  proofId,
+  { allowPending = false } = {},
+) {
   invariant(
     /^[a-f0-9-]{36}$/.test(proofId),
     "FIXED_HEADLESS_PROOF_ID_REQUIRED",
@@ -237,11 +243,14 @@ async function actualHeadlessCounter(request, origin, sandboxId, proofId) {
       command: `printf 'PID '; cat ${folder}/pid; printf 'BIRTH '; cat ${folder}/birth; printf 'LAUNCHES\\n'; cat ${folder}/launches; printf 'COUNTER\\n'; cat ${folder}/counter; printf 'LIVE '; p=$(cat ${folder}/pid); awk '{print $22}' /proc/$p/stat`,
     },
   );
-  expect(result.exitCode).toBe(0);
   const actual =
     /^PID (\d+)\s+BIRTH (\d+)\s+LAUNCHES\n([\d\n]+)COUNTER\n([\d\n]+)LIVE (\d+)\s*$/.exec(
       result.stdout,
     );
+  // The model response precedes the real CLI's Bash-tool execution. Only its
+  // bounded startup poll may wait for marker files and the first counter tick.
+  if (allowPending && (result.exitCode !== 0 || !actual)) return null;
+  expect(result.exitCode).toBe(0);
   expect(
     actual,
     "Real CLI Bash-tool PID, live /proc birth and original durable seconds",
@@ -631,8 +640,9 @@ async function installation(id, page, context) {
               origin,
               headless.id,
               input.headlessProofId,
+              { allowPending: true },
             );
-            return originalHeadless.counter.length;
+            return originalHeadless?.counter.length ?? 0;
           },
           { timeout: 30000 },
         )
