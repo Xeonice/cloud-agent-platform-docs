@@ -23,6 +23,7 @@ import {
   assertWebRepairPhysical,
   assertOwnedResumeRole,
   assertBridgeConfig,
+  assertBridgeTarget,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -122,6 +123,46 @@ const receipt = (c) => ({
   masterKeyDigest: image,
 });
 const fails = (fn, code) => assert.throws(fn, (error) => error.code === code);
+
+test("a bridge is newly enabled only for confirmed instance; existing admitted bridge can resume its live accepted upgrade", () => {
+  const c = { ...config(), bridgePort: 3101 },
+    ready = { instanceId: c.instanceId, serviceState: "confirmed" };
+  assertBridgeTarget(c, ready);
+  const status = {
+    instanceId: c.instanceId,
+    serviceState: "unknown",
+    lastConfirmedServiceRelease: { releaseId: "v1.0.0" },
+    attempt: { instanceId: c.instanceId, state: "prepared" },
+  };
+  const restoreReceipt = {
+    state: "active",
+    instanceId: c.instanceId,
+    host: "127.0.0.1",
+    port: c.bridgePort,
+    targetPort: c.ports.entry,
+  };
+  fails(
+    () => assertBridgeTarget(c, status),
+    "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+  );
+  assertBridgeTarget(c, status, { restoreReceipt });
+  fails(
+    () =>
+      assertBridgeTarget(
+        c,
+        { ...status, attempt: { ...status.attempt, state: "failed" } },
+        { restoreReceipt },
+      ),
+    "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+  );
+  fails(
+    () =>
+      assertBridgeTarget(c, status, {
+        restoreReceipt: { ...restoreReceipt, targetPort: 9999 },
+      }),
+    "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+  );
+});
 
 test("foundation resume only accepts the existing private owned role incarnation and never treats stopped Owner as recoverable startup", () => {
   const c = config(),

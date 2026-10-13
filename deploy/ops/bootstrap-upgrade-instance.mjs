@@ -1611,7 +1611,7 @@ export async function resumeBootstrapFoundation(c) {
   const bridgeReceipt = await readJson(join(c.root, "tcp-bridge.json"), null);
   const bridge =
     bridgeReceipt?.state === "active"
-      ? await createBootstrapTcpBridge(c)
+      ? await createBootstrapTcpBridge(c, { restoreReceipt: bridgeReceipt })
       : null;
   return {
     ...foundationRuntime,
@@ -1638,7 +1638,40 @@ export function assertBridgeConfig(c) {
   return c;
 }
 
-export async function createBootstrapTcpBridge(c) {
+export function assertBridgeTarget(c, status, { restoreReceipt = null } = {}) {
+  invariant(
+    status.instanceId === c.instanceId,
+    "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+  );
+  if (status.serviceState === "confirmed") return;
+  const active = [
+    "accepted",
+    "downloading",
+    "package-verified",
+    "migrating",
+    "prepared",
+    "candidate-ready",
+    "routing-switched",
+    "observing",
+    "api-activated",
+  ];
+  invariant(
+    restoreReceipt?.state === "active" &&
+      restoreReceipt.instanceId === c.instanceId &&
+      restoreReceipt.host === "127.0.0.1" &&
+      restoreReceipt.port === c.bridgePort &&
+      restoreReceipt.targetPort === c.ports.entry &&
+      status.lastConfirmedServiceRelease &&
+      status.attempt?.instanceId === c.instanceId &&
+      active.includes(status.attempt.state),
+    "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+  );
+}
+
+export async function createBootstrapTcpBridge(
+  c,
+  { restoreReceipt = null } = {},
+) {
   assertBridgeConfig(c);
   const old = JSON.parse(
     await execute(c.docker.cli || "docker", [
@@ -1662,10 +1695,7 @@ export async function createBootstrapTcpBridge(c) {
     invariant(response.ok, "BRIDGE_TARGET_UNAVAILABLE");
     const body = await response.json(),
       status = body.data || body;
-    invariant(
-      status.instanceId === c.instanceId && status.serviceState === "confirmed",
-      "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
-    );
+    assertBridgeTarget(c, status, { restoreReceipt });
   }
   const sockets = new Set();
   const server = createTcpServer((socket) => {
