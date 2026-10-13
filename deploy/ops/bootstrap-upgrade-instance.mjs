@@ -694,7 +694,7 @@ async function waitFor(origin, path, headers = {}, timeout = 120000) {
 /** First installation only. The operator supplies a stopped, backed-up, verified clone.
  * This never drains/stops/removes the original container or writes its volume. Failed
  * startup retains the new containers and its journal for explicit operator recovery. */
-async function createFoundation(
+export async function createFoundation(
   c,
   {
     paths,
@@ -708,6 +708,8 @@ async function createFoundation(
     initialBinding = null,
   },
 ) {
+  const root = c.root,
+    ports = c.ports;
   const common = {
     NODE_ENV: "production",
     PATH: "/usr/local/bin:/usr/bin:/bin",
@@ -838,7 +840,17 @@ async function createFoundation(
       retainedWeb: [],
     },
   });
-  return { common, coordinator, controllerConfig, adapter, supervisor, entry };
+  return {
+    common,
+    controlEnv,
+    ownerEnv,
+    coordinatorEnv,
+    coordinator,
+    controllerConfig,
+    adapter,
+    supervisor,
+    entry,
+  };
 }
 
 async function startBootstrap(c, { mode }) {
@@ -930,8 +942,17 @@ async function startBootstrap(c, { mode }) {
     release,
     artifactRoot: c.artifactRoot,
   });
-  const { common, coordinator, controllerConfig, adapter, supervisor, entry } =
-    await createFoundation(c, {
+  const {
+    common,
+    controlEnv,
+    ownerEnv,
+    coordinatorEnv,
+    coordinator,
+    controllerConfig,
+    adapter,
+    supervisor,
+    entry,
+  } = await createFoundation(c, {
       paths,
       keys,
       verified,
