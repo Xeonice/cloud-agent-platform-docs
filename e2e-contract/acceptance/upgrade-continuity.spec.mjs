@@ -390,7 +390,38 @@ test("real user acceptance, durable installation and original VM/terminal contin
       );
       await page.reload();
     }
-    const initial = await json(request, origin, "/api/system/upgrade/status");
+    const initialApiObservation = await json(
+      request,
+      origin,
+      "/api/system/upgrade/status",
+    );
+    await expect(page.getByTestId("upgrade-notice")).toBeVisible();
+    // The first APIRequestContext read may race the browser's initial viewer
+    // cookie. Use the real UI's completed refresh as the page identity authority.
+    await page.getByRole("button", { name: "版本与更新", exact: true }).click();
+    const initialDetails = page.getByRole("dialog", {
+      name: "版本与更新详情",
+      exact: true,
+    });
+    const browserInitialResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).origin === origin &&
+        new URL(response.url()).pathname === "/api/system/upgrade/status" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+    );
+    await initialDetails
+      .getByRole("button", { name: "检查更新", exact: true })
+      .click();
+    const initial = await (await browserInitialResponse).json();
+    await expect(
+      initialDetails.getByRole("button", { name: "检查更新", exact: true }),
+    ).toBeEnabled();
+    expect(initial.instanceId).toBe(fixture.config.instanceId);
+    expect(typeof initial.userScope).toBe("string");
+    expect(initial.userScope.length).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
+    await expect(initialDetails).toHaveCount(0);
     await expect(page.getByTestId("upgrade-notice")).toBeVisible();
     await expect(
       page.getByRole("progressbar", { name: "本实例升级进度" }),
@@ -438,11 +469,13 @@ test("real user acceptance, durable installation and original VM/terminal contin
     ).toBeVisible();
     await expect(page.getByTestId("upgrade-notice")).toHaveCount(0);
     expect(
-      await page.evaluate(
-        (key) => JSON.parse(localStorage.getItem(key)).dismissedLocalDate,
-        reminderKey,
-      ),
-    ).toBe(reminderDays.firstDate);
+      await page.evaluate((key) => localStorage.getItem(key), reminderKey),
+    ).toBe(
+      JSON.stringify({
+        version: 1,
+        dismissedLocalDate: reminderDays.firstDate,
+      }),
+    );
     const nextDayStatus = page.waitForResponse(
       (response) =>
         new URL(response.url()).origin === origin &&
@@ -469,11 +502,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
     ).toBeVisible();
     await expect(page.getByTestId("upgrade-notice")).toHaveCount(0);
     expect(
-      await page.evaluate(
-        (key) => JSON.parse(localStorage.getItem(key)).dismissedLocalDate,
-        reminderKey,
-      ),
-    ).toBe(reminderDays.nextDate);
+      await page.evaluate((key) => localStorage.getItem(key), reminderKey),
+    ).toBe(
+      JSON.stringify({ version: 1, dismissedLocalDate: reminderDays.nextDate }),
+    );
     const beforeDownload = (await fixture.requestLog()).filter((item) =>
       /\.tgz$/.test(item.path),
     );
@@ -513,6 +545,12 @@ test("real user acceptance, durable installation and original VM/terminal contin
         reminder: {
           browserTimezone: reminderDays.timezone,
           sameInstanceAndAdministrator: true,
+          identitySource:
+            "actual loaded browser UI status after explicit readonly check",
+          initialApiContextScopeMatchedBrowser:
+            initialApiObservation.userScope === initial.userScope,
+          productionPreferenceFormat:
+            "version1 scoped JSON, exact complete value verified",
           firstLocalDate: reminderDays.firstDate,
           nextLocalDate: reminderDays.nextDate,
           naturalMidnightAdvanceMs: reminderDays.after - reminderDays.before,
@@ -880,8 +918,30 @@ test("real user acceptance, durable installation and original VM/terminal contin
       ],
     });
     await page.getByRole("button", { name: "版本与更新", exact: true }).click();
-    await page
-      .getByRole("dialog", { name: "版本与更新详情" })
+    const admissionDetails = page.getByRole("dialog", {
+      name: "版本与更新详情",
+      exact: true,
+    });
+    const browserAdmissionResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).origin === origin &&
+        new URL(response.url()).pathname === "/api/system/upgrade/status" &&
+        response.request().method() === "GET" &&
+        response.status() === 200,
+    );
+    await admissionDetails
+      .getByRole("button", { name: "检查更新", exact: true })
+      .click();
+    const browserAdmissionSnapshot = await (
+      await browserAdmissionResponse
+    ).json();
+    await expect(
+      admissionDetails.getByRole("button", { name: "检查更新", exact: true }),
+    ).toBeEnabled();
+    expect(browserAdmissionSnapshot.instanceId).toBe(fixture.config.instanceId);
+    expect(browserAdmissionSnapshot.userScope).toBe(initial.userScope);
+    expect(browserAdmissionSnapshot.capabilities.canUpgradeInstance).toBe(true);
+    await admissionDetails
       .getByRole("button", { name: "立即升级", exact: true })
       .click();
     const { submittedCommand, accepted } = await Promise.race([
@@ -895,7 +955,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
       )
       .get(fixture.config.instanceId, accepted.attemptId);
-    const pendingRequestKey = `ap.upgrade-request.v1:${encodeURIComponent(initial.instanceId)}:${encodeURIComponent(initial.userScope)}`;
+    const pendingRequestKey = `ap.upgrade-request.v1:${encodeURIComponent(browserAdmissionSnapshot.instanceId)}:${encodeURIComponent(browserAdmissionSnapshot.userScope)}`;
     const readPending = () =>
       page.evaluate((key) => localStorage.getItem(key), pendingRequestKey);
     await expect
@@ -961,6 +1021,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
       actualUiOriginalIdLookups: uiLookups,
       readonlyResponsesLost,
       pendingReloadContainsOnlyOriginalRequestId: true,
+      pendingIdentitySource:
+        "actual loaded browser UI status after readonly check immediately before POST",
+      productionPendingFormat: "exact version1/requestId scoped JSON",
       readonlyOriginalLookup: {
         requestId: originalLookup.requestId,
         attemptId: originalLookup.attemptId,
