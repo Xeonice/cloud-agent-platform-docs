@@ -165,6 +165,26 @@ export function assertBootstrapConfig(c) {
       !publicUrl.hash,
     "PUBLIC_BOOTSTRAP_ORIGIN_REQUIRED",
   );
+  if (c.allowedOrigins !== undefined) {
+    invariant(
+      Array.isArray(c.allowedOrigins) &&
+        c.allowedOrigins.includes(c.publicOrigin),
+      "BOOTSTRAP_ALLOWED_ORIGINS_REQUIRED",
+    );
+    for (const value of c.allowedOrigins) {
+      const parsed = new URL(value);
+      invariant(
+        typeof value === "string" &&
+          ["http:", "https:"].includes(parsed.protocol) &&
+          parsed.origin === value &&
+          !parsed.username &&
+          !parsed.password &&
+          !parsed.search &&
+          !parsed.hash,
+        "BOOTSTRAP_ALLOWED_ORIGINS_REQUIRED",
+      );
+    }
+  }
   invariant(
     Object.keys(c.runtimeEnv || {}).every((k) => RUNTIME_ENV.includes(k)),
     "FORBIDDEN_BOOTSTRAP_RUNTIME_AUTHORITY",
@@ -753,7 +773,9 @@ async function startBootstrap(c, { mode }) {
     HOST: "127.0.0.1",
     ...c.runtimeEnv,
   };
-  const network = { API_ALLOWED_ORIGINS: c.publicOrigin };
+  const network = {
+    API_ALLOWED_ORIGINS: (c.allowedOrigins || [c.publicOrigin]).join(","),
+  };
   const controlEnv = {
     ...network,
     PLATFORM_INSTANCE_ID: c.instanceId,
