@@ -168,7 +168,14 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const session={...(claim.snapshot||snapshot),attempt:claim.snapshot?.attempt||claim.attempt||accepted,fence:claim.fence,generation:claim.generation??accepted.generation};
       const attempt={...accepted,instanceId,plan,manifest:snapshot.signedManifest?.manifest||snapshot.manifest,targetDigest:accepted.targetDigest};
       if(journal.circuitBroken){const result=await handleFault(session,Object.assign(Error(journal.faultCode),{code:journal.faultCode,faultEvidence:journal.detectedFault?.evidence,shared:journal.detectedFault?.shared===true,suppressRecovery:true}));const latest=await readJson(path);latest.faultRecordingComplete=true;latest.recoveryResult=result?.state||'fault-recorded-after-unknown';await atomicJson(path,latest);return {state:'ready-revoked',attemptId:accepted.attemptId,code:journal.faultCode};}
-      let evidence,inspection;try{evidence=await executor.observe({attempt,fence:session.fence,weight:100});inspection=inspectObservation(evidence,plan.policy,Date.now(),journal.previousObservation||{});}catch(e){evidence={observedAt:new Date().toISOString(),observationUnavailable:true};inspection={fault:faultCode(e,'OBSERVATION_UNREACHABLE'),shared:true};}
+      let evidence,inspection;try{
+        // A reused API keeps its confirmed source route. Observe that physical
+        // endpoint without claiming an absent candidate or changing the binding.
+        const actual=await executor.actual(),weight=actual.weight;
+        const servingApi=weight===100?actual.candidateApi:actual.oldApi;
+        invariant((weight===0||weight===100)&&(plan.apiReused===true||weight===100)&&servingApi?.digest===attempt.manifest.components.api.artifactDigest,'CONFIRMED_ROUTE_UNCONFIRMED');
+        evidence=await executor.observe({attempt,fence:session.fence,weight});inspection=inspectObservation(evidence,plan.policy,Date.now(),journal.previousObservation||{});
+      }catch(e){evidence={observedAt:new Date().toISOString(),observationUnavailable:true};inspection={fault:faultCode(e,'OBSERVATION_UNREACHABLE'),shared:true};}
       journal.previousObservation={consecutive:inspection.consecutive||0};journal.lastObservationAt=evidence.observedAt;journal.nextObservationAt=new Date(Date.now()+plan.policy.evaluationIntervalMs).toISOString();
       if(inspection.fault){
         // Persist the tripped circuit before invoking recovery. Unknown recovery is never retried.
