@@ -124,6 +124,7 @@ docs/
 | 28 | [前端类型详细设计](./frontend/28-前端类型详细设计.md) | 生成类型（`openapi.d.ts`）怎么消费 + store / query key / props / 纯函数的类型契约 | ✅ 可评审 |
 | 29 | [测试策略与测试 Agent](./shared/29-测试策略与测试Agent.md) | 跨仓验收的通用策略：分层职责、隔离环境、替身边界、真实联调及证据口径。25/12各管一个仓，具体功能的前后端联合用例与门禁独立维护在testing文档中 |
 | UPG验证 | [升级实现验证记录](./testing/results/2026-10-12-升级实现验证记录.md) | 实际源码、局部检查与同构交付阻断；不以原型／测试数量冒充上线 | ⏳ 验证中 |
+| UPG环境恢复 | [原生升级验收环境恢复记录](./testing/results/2026-10-13-原生升级验收环境恢复记录.md) | 冻结包身份、r7失败、专属QA磁盘保护与离线恢复；必需Native场景仍待通过 | ⏳ 恢复中 |
 | ADR | [沙箱运行时架构决策](./SANDBOX-RUNTIME-DECISIONS.md) | S1 定基线：控制面 / 数据面分离（沙箱内 API 暴露 fs/process/pty）与 provider 选型，据此回改 04/06/03/13/P19 | ✅ 已决策 |
 | ADR | [Task 发起链路决策存档](./TASK-LAUNCH-DECISIONS.md) | S5 开工前 6 条：`initialPrompt` 落库 / 「启动即执行」由 provision 触发 / install 编排与事务归属 / 无头 Task 出 S5 / 占位版 auth.json 的类型分家 / `$HOME` 展开点，据此回改 13/23/24/26/03/04/05/02/27/10/25/P20/P22 | ✅ 已决策 |
 

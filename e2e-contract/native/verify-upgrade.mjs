@@ -223,23 +223,24 @@ export async function verifyNativeUpgrade(input) {
       "ACTUAL_NATIVE_SQLITE_FAILED",
     );
     db.close();
-    const sdkRequire = createRequire(
-      join(packageRoot, "api/packages/modules/sandbox/package.json"),
-    );
+    const sandboxEntry = require.resolve("@platform/sandbox");
+    const sdkRequire = createRequire(sandboxEntry);
+    const sdkEntry = sdkRequire.resolve("@boxlite-ai/boxlite");
+    const sdkPackagePath = sdkRequire.resolve("@boxlite-ai/boxlite/package.json");
+    for (const path of [sandboxEntry, sdkEntry, sdkPackagePath]) {
+      invariant(
+        inside(packageRoot, await fs.realpath(path)),
+        "ACTUAL_BOXLITE_PACKAGE_OUTSIDE_VERIFIED_ARTIFACT",
+      );
+    }
     const sdkPackage = JSON.parse(
-      await fs.readFile(
-        join(
-          packageRoot,
-          "api/packages/modules/sandbox/node_modules/@boxlite-ai/boxlite/package.json",
-        ),
-        "utf8",
-      ),
+      await fs.readFile(sdkPackagePath, "utf8"),
     );
     invariant(
-      sdkPackage.version === "0.9.7",
+      sdkPackage.name === "@boxlite-ai/boxlite" && sdkPackage.version === "0.9.7",
       "ACTUAL_BOXLITE_VERSION_REQUIRED",
     );
-    await import(pathToFileURL(sdkRequire.resolve("@boxlite-ai/boxlite")).href);
+    await import(pathToFileURL(sdkEntry).href);
     report.native = true;
     const configPath =
       input.configPath ?? process.env.UPGRADE_ACCEPTANCE_CONFIG;

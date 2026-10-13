@@ -16,7 +16,9 @@ export const qualificationExitPrompt = (id) => {
 // in its original BoxLite VM through the normal AgentTask/job path.
 function command(id, finite = false) {
   const folder = "/workspace/.upg-agent-proof/" + id;
-  return `mkdir -p ${folder}; printf '%s\\n' $$ >> ${folder}/launches; printf '%s\\n' $$ > ${folder}/pid; awk '{print $22}' /proc/$$/stat > ${folder}/birth; i=0; while ${finite ? '[ "$i" -lt 3 ]' : ":"}; do i=$((i+1)); printf '%s\\n' $i >> ${folder}/counter; sleep 1; done`;
+  // Bash tools may execute in a subshell: $$ still names its parent shell,
+  // while BASHPID identifies the process that actually runs this counter.
+  return `mkdir -p ${folder}; pid=\${BASHPID:-$$}; printf '%s\\n' "$pid" >> ${folder}/launches; printf '%s\\n' "$pid" > ${folder}/pid; awk '{print $22}' /proc/$pid/stat > ${folder}/birth; i=0; while ${finite ? '[ "$i" -lt 3 ]' : ":"}; do i=$((i+1)); printf '%s\\n' $i >> ${folder}/counter; sleep 1; done`;
 }
 function finishMessage(res) {
   send(res, {
@@ -185,6 +187,7 @@ export async function startQualificationModel({
               input: {
                 command: command(id, finite),
                 timeout: 600000,
+                ...(!finite ? { run_in_background: true } : {}),
                 description: "Run original upgrade continuity counter",
               },
             },
