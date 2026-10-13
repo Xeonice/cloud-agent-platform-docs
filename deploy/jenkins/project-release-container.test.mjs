@@ -491,7 +491,8 @@ test("trusted Linux runner accepts actual public Jenkins metadata at the gateway
     tools = join(root, "tools");
   await fs.mkdir(tools, { mode: 0o700 });
   await writeJson(join(tools, "publication-reader.json"), {
-    origin:"http://artifact-reader:8020",key:"fixture-readonly-token".padEnd(32,"x"),
+    origin: "http://artifact-reader:8020",
+    key: "fixture-readonly-token".padEnd(32, "x"),
   });
   const commits = {
     project: "a".repeat(40),
@@ -781,14 +782,63 @@ test("trusted publication waits release executors and leaves monitoring in its i
       new URL(`./${name}.groovy`, import.meta.url),
       "utf8",
     );
-    assert.match(source, ["release","web"].includes(name) ? /agent-platform-linux-publisher/ : /agent-platform-linux-deploy/);
+    assert.match(
+      source,
+      ["release", "web"].includes(name)
+        ? /agent-platform-linux-publisher/
+        : /agent-platform-linux-deploy/,
+    );
     assert.doesNotMatch(
       source,
       /agent-platform-deploy'|@NODE22@|@JENKINS_SOURCE@|@DEPLOY_CONFIG@|@DEPLOY_TOOLS@|\/Library\/Application Support/,
     );
-    if(name==="web")assert.doesNotMatch(source,/TRUSTED_WEB_TOOL|prepare-env|agent-platform-linux-deploy/);
-    if (name === "monitor") assert.match(source, /\$MONITOR_TOOL" monitor/);
-    if (name === "release") assert.doesNotMatch(source, /MONITOR_TOOL|\bpromote\b|API_TOOL/);
+    if (name === "web")
+      assert.doesNotMatch(
+        source,
+        /TRUSTED_WEB_TOOL|prepare-env|agent-platform-linux-deploy/,
+      );
+    if (name === "monitor") {
+      // The independently scheduled monitor observes the public StableEntry.
+      // Its old Docker container cannot determine the split instance's health.
+      assert.match(source, /triggers\s*\{\s*cron\('H\/5 \* \* \* \*'\)/);
+      const embedded = /--input-type=module <<'NODE'\n([\s\S]+)\nNODE/.exec(
+        source,
+      )?.[1];
+      assert.ok(embedded, "Monitor must use the reviewed public HTTP probe");
+      assert.match(embedded, /https:\/\/agent-api\.douglasdong\.com/);
+      assert.match(embedded, /method:\s*'GET'/);
+      assert.match(embedded, /scope:\s*'public-http-only'/);
+      assert.deepEqual(
+        [...embedded.matchAll(/\bprobe\('([^']+)',/g)].map((match) => match[1]),
+        ["/api/health", "/web-build", "/"],
+      );
+      assert.deepEqual(
+        [...embedded.matchAll(/process\.env\.([A-Z0-9_]+)/g)].map(
+          (match) => match[1],
+        ),
+        ["BUILD_NUMBER"],
+      );
+      assert.doesNotMatch(embedded, /process\.env\s*\[|\bimport\s*\(/);
+      assert.deepEqual(
+        [...embedded.matchAll(/\bfrom\s+'([^']+)'/g)].map((match) => match[1]),
+        ["node:fs/promises"],
+      );
+      assert.doesNotMatch(
+        embedded,
+        /\bfs\.(?:readFile|read|open|readdir|createReadStream)\s*\(/,
+      );
+      assert.doesNotMatch(
+        source,
+        /MONITOR_TOOL|api-container\.mjs|withCredentials|authorization|Bearer |\/run\/secrets|\/run\/agent-platform\/jenkins-tools|node:child_process|\bspawn\s*\(|\bexec(?:File|Sync)?\s*\(|\bdocker\b|\bcolima\b|\bpromote\b|method:\s*'(?:POST|PUT|PATCH|DELETE)'/i,
+      );
+      assert.doesNotMatch(source, /\b(?:stop|start|restart|kill|deploy)\s*\(/);
+      assert.match(
+        source,
+        /archiveArtifacts artifacts:.*report\.json.*report\.html/,
+      );
+    }
+    if (name === "release")
+      assert.doesNotMatch(source, /MONITOR_TOOL|\bpromote\b|API_TOOL/);
     if (name === "release") {
       assert.match(source, /agent none/);
       assert.match(source, /record-build "\$PLAN_PATH" web "\$WEB_BUILD"/);
