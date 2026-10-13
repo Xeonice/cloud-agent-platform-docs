@@ -5,7 +5,14 @@ import { createHash } from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
 export async function prepareDeployContext(root, temporary = tmpdir()) {
   root = await fs.realpath(root);
-  const inputs = [["deploy/containers/deploy.Dockerfile", "deploy.Dockerfile"],["deploy/containers/publication.Dockerfile","publication.Dockerfile"]];
+  const inputs = [
+    ["deploy/containers/deploy.Dockerfile", "deploy.Dockerfile"],
+    ["deploy/containers/publication.Dockerfile", "publication.Dockerfile"],
+    [
+      "deploy/containers/publication-package.Dockerfile",
+      "publication-package.Dockerfile",
+    ],
+  ];
   for (const name of (await fs.readdir(join(root, "deploy/jenkins"))).sort())
     if (name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
       { inputs.push(["deploy/jenkins/" + name, "tools/" + name]); inputs.push(["deploy/jenkins/" + name, "tools/deploy/jenkins/" + name]); }

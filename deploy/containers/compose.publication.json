@@ -125,7 +125,7 @@
       "mem_limit": "4g",
       "cpus": 2,
       "pids_limit": 2048,
-      "image": "${PUBLICATION_IMAGE:?Provide immutable Node22 publication image}",
+      "image": "${PUBLICATION_PACKAGE_IMAGE:?Provide immutable Rocky8 Node22 ARM64 package worker image}",
       "environment": {
         "JENKINS_URL": "${JENKINS_URL:?Provide publication controller URL}",
         "JENKINS_AGENT_NAME": "linux-arm64-package",

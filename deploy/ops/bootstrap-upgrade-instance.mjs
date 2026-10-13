@@ -1,0 +1,1139 @@
+import * as fs from "node:fs/promises";
+import { join, resolve, isAbsolute } from "node:path";
+import { randomBytes, randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
+import {
+  invariant,
+  digest,
+  canonical,
+  verifySignedManifest,
+  runInputFingerprint,
+} from "../upgrade/trust.mjs";
+import {
+  atomicJson,
+  readJson,
+  secureDirectory,
+  treeManifest,
+  inside,
+  fileDigest,
+} from "../upgrade/io.mjs";
+import { createStableEntry } from "../upgrade/stable-entry.mjs";
+import { createCandidateSupervisor } from "../upgrade/candidate-supervisor.mjs";
+import { createCoordinatorClient } from "../upgrade/coordinator-client.mjs";
+import {
+  bootstrapDataRoot,
+  roleMounts,
+  createProductionRoleAdapter,
+  execute,
+  providerEnvironment,
+} from "../upgrade/production-role-adapter.mjs";
+export {
+  bootstrapDataRoot,
+  roleMounts,
+  createProductionRoleAdapter,
+} from "../upgrade/production-role-adapter.mjs";
+
+const CID = /^[a-f0-9]{64}$/;
+const IMAGE = /^sha256:[a-f0-9]{64}$/;
+const BLOCKERS = [
+  "sandboxes",
+  "agentTasks",
+  "automationRuns",
+  "enabledAutomations",
+  "resourceAllocations",
+  "cloningProjects",
+  "projectCleanupJobs",
+];
+const PORTS = [
+  "owner",
+  "coordinator",
+  "apiA",
+  "webA",
+  "apiB",
+  "webB",
+  "coordinatorB",
+  "coordinatorAppB",
+  "ownerB",
+  "installerB",
+  "controllerMetadata",
+  "supervisor",
+  "entry",
+  "entryControl",
+];
+const RUNTIME_ENV = [
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "NO_PROXY",
+  "ALL_PROXY",
+  "NODE_USE_ENV_PROXY",
+  "NODE_EXTRA_CA_CERTS",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+  "LANG",
+  "TZ",
+];
+const AUTH_ENV = [
+  "ACCESS_PASSCODE",
+  "PASSCODE_COOKIE_SECRET",
+  "PASSCODE_COOKIE_SECURE",
+  "ACCESS_PASSCODE_AUTO_GENERATE",
+  "ACCESS_PASSCODE_ALLOW_LOOPBACK",
+  "SESSION_SECRET",
+  "AUTH_SECRET",
+];
+
+export function assertBootstrapConfig(c) {
+  providerEnvironment(c);
+  invariant(
+    c?.schemaVersion === 1 &&
+      ["idle-first-bootstrap", "idle-first-bootstrap-experiment"].includes(
+        c.kind,
+      ) &&
+      /^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$/.test(c.instanceId) &&
+      !c.instanceId.startsWith("upgrade-acceptance-"),
+    "PRODUCTION_BOOTSTRAP_CONFIG_REQUIRED",
+  );
+  invariant(
+    [
+      "root",
+      "artifactRoot",
+      "businessHostPath",
+      "trustRootPath",
+      "catalogFile",
+      "authEnvPath",
+      "cloneReceiptPath",
+    ].every((k) => isAbsolute(c[k] || "") && !/[\r\n,]/.test(c[k])),
+    "ABSOLUTE_BOOTSTRAP_PATHS_REQUIRED",
+  );
+  if (c.kind === "idle-first-bootstrap-experiment")
+    invariant(
+      isAbsolute(c.qualificationInstallationPath || "") &&
+        inside(c.root, c.qualificationInstallationPath) &&
+        !inside(join(c.root, "business"), c.qualificationInstallationPath) &&
+        !inside(join(c.root, "installer"), c.qualificationInstallationPath),
+      "EXPERIMENT_QUALIFICATION_PROOF_PATH_REQUIRED",
+    );
+  invariant(
+    c.root !== "/data" &&
+      !inside("/data", c.root) &&
+      !inside(c.artifactRoot, c.root) &&
+      !inside(c.root, c.artifactRoot),
+    "BOOTSTRAP_AUTHORITY_PATHS_OVERLAP",
+  );
+  invariant(
+    !inside(c.businessHostPath, c.root) && !inside(c.root, c.businessHostPath),
+    "BOOTSTRAP_BUSINESS_PATHS_OVERLAP",
+  );
+  invariant(
+    c.original &&
+      CID.test(c.original.containerId) &&
+      IMAGE.test(c.original.image) &&
+      typeof c.original.startedAt === "string",
+    "PINNED_LEGACY_CONTAINER_REQUIRED",
+  );
+  invariant(
+    CID.test(c.foundationContainerId),
+    "PINNED_BOOTSTRAP_FOUNDATION_REQUIRED",
+  );
+  invariant(
+    IMAGE.test(c.runtimeImage) &&
+      c.docker?.dedicated === true &&
+      Array.isArray(c.docker.args) &&
+      c.docker.args.every((a) => typeof a === "string" && !/[\r\n]/.test(a)),
+    "FIXED_BOOTSTRAP_DOCKER_REQUIRED",
+  );
+  invariant(
+    c.ports &&
+      PORTS.every(
+        (k) =>
+          Number.isInteger(c.ports[k]) && c.ports[k] > 0 && c.ports[k] < 65536,
+      ) &&
+      new Set(PORTS.map((k) => c.ports[k])).size === PORTS.length,
+    "DISTINCT_BOOTSTRAP_PORTS_REQUIRED",
+  );
+  invariant(
+    typeof c.publicOrigin === "string" && /^https?:\/\//.test(c.publicOrigin),
+    "PUBLIC_BOOTSTRAP_ORIGIN_REQUIRED",
+  );
+  const publicUrl = new URL(c.publicOrigin);
+  invariant(
+    !publicUrl.username &&
+      !publicUrl.password &&
+      publicUrl.pathname === "/" &&
+      !publicUrl.search &&
+      !publicUrl.hash,
+    "PUBLIC_BOOTSTRAP_ORIGIN_REQUIRED",
+  );
+  invariant(
+    Object.keys(c.runtimeEnv || {}).every((k) => RUNTIME_ENV.includes(k)),
+    "FORBIDDEN_BOOTSTRAP_RUNTIME_AUTHORITY",
+  );
+  invariant(
+    Number.isSafeInteger(c.uid) &&
+      c.uid >= 0 &&
+      Number.isSafeInteger(c.gid) &&
+      c.gid >= 0,
+    "FIXED_BOOTSTRAP_USER_REQUIRED",
+  );
+  return c;
+}
+
+export function legacyIdle(value) {
+  return (
+    value?.ready === true &&
+    value.idle === true &&
+    value.inFlightHTTP === 0 &&
+    value.activeWS === 0 &&
+    value.credentialAuth === 0 &&
+    BLOCKERS.every((k) => value.blockers?.[k] === 0)
+  );
+}
+
+export function assertCloneReceipt(c, receipt, { requireStopped = true } = {}) {
+  invariant(
+    receipt?.kind === "idle-first-bootstrap-clone" &&
+      receipt.instanceId === c.instanceId &&
+      receipt.businessHostPath === c.businessHostPath &&
+      canonical(receipt.original) === canonical(c.original),
+    "EXACT_BOOTSTRAP_CLONE_REQUIRED",
+  );
+  invariant(
+    receipt.originalVolumePreserved === true &&
+      receipt.originalContainerPreserved === true &&
+      receipt.databaseBackupVerified === true &&
+      receipt.completeVolumeBackupVerified === true &&
+      typeof receipt.backupPath === "string" &&
+      isAbsolute(receipt.backupPath),
+    "BOOTSTRAP_ROLLBACK_COPY_REQUIRED",
+  );
+  invariant(
+    legacyIdle(receipt.before) &&
+      (!requireStopped ||
+        (legacyIdle(receipt.beforeStop) &&
+          receipt.admissionHeld === true &&
+          receipt.oldProcessAbsent === true)),
+    "LEGACY_BOOTSTRAP_NOT_IDLE",
+  );
+  // Destroyed business history is retained. Any extant runtime handle needs a real adoption implementation.
+  invariant(
+    Number.isSafeInteger(receipt.retainedDestroyedSandboxes) &&
+      receipt.retainedDestroyedSandboxes >= 0 &&
+      receipt.extantUserRuntimeHandles === 0 &&
+      receipt.activeAgentTasks === 0,
+    "LEGACY_RUNTIME_ADOPTION_REQUIRED",
+  );
+  invariant(
+    receipt.databaseMigration?.from === 25 &&
+      receipt.databaseMigration.to === 28 &&
+      receipt.databaseMigration.integrity === "ok" &&
+      receipt.databaseMigration.foreignKeyViolations === 0 &&
+      receipt.businessRowsPreserved === true &&
+      receipt.masterKeyPreserved === true,
+    "BOOTSTRAP_DATABASE_MIGRATION_UNVERIFIED",
+  );
+  invariant(
+    IMAGE.test(receipt.cloneDatabaseDigest) &&
+      IMAGE.test(receipt.masterKeyDigest),
+    "BOOTSTRAP_CLONE_DIGESTS_REQUIRED",
+  );
+  return receipt;
+}
+
+async function privateJson(path) {
+  const s = await fs.lstat(path);
+  invariant(
+    s.isFile() &&
+      !s.isSymbolicLink() &&
+      (s.mode & 0o077) === 0 &&
+      (!process.getuid || s.uid === process.getuid() || s.uid === 0),
+    "PRIVATE_BOOTSTRAP_INPUT_REQUIRED",
+  );
+  return readJson(path);
+}
+
+export function verifyReleaseCatalog(roots, catalog) {
+  invariant(
+    (roots?.purpose || "release") === "release" &&
+      roots.schemaVersion === 1 &&
+      Array.isArray(roots.keys) &&
+      roots.keys.length > 0 &&
+      Array.isArray(roots.distributionOrigins) &&
+      roots.distributionOrigins.length > 0,
+    "PRODUCTION_BOOTSTRAP_TRUST_REQUIRED",
+  );
+  invariant(
+    catalog?.schemaVersion === 1 &&
+      catalog.channel === roots.channel &&
+      Array.isArray(catalog.releases),
+    "PRODUCTION_BOOTSTRAP_CATALOG_REQUIRED",
+  );
+  for (const row of catalog.releases) {
+    const verified = verifySignedManifest(row.envelope, roots);
+    invariant(
+      verified.purpose === "release" &&
+        row.releaseId === verified.manifest.releaseId &&
+        row.manifestDigest === verified.manifestDigest,
+      "BOOTSTRAP_CATALOG_ROW_MISMATCH",
+    );
+  }
+  return catalog;
+}
+
+export function verifyBootstrapCatalog(c, roots, catalog, proof = null) {
+  if (c.kind !== "idle-first-bootstrap-experiment")
+    return verifyReleaseCatalog(roots, catalog);
+  invariant(
+    roots?.purpose === "qualification" &&
+      roots.schemaVersion === 1 &&
+      roots.qualificationInstanceId === c.instanceId &&
+      Array.isArray(roots.keys) &&
+      roots.keys.length > 0 &&
+      Array.isArray(roots.distributionOrigins) &&
+      roots.distributionOrigins.length > 0,
+    "EXPERIMENT_QUALIFICATION_TRUST_REQUIRED",
+  );
+  invariant(
+    proof?.purpose === "qualification" &&
+      proof.instanceId === c.instanceId &&
+      proof.trustRootDigest === digest(roots) &&
+      proof.isolatedRoot === c.root &&
+      bootstrapDataRoot(c) === join(proof.isolatedRoot, "business"),
+    "EXPERIMENT_QUALIFICATION_PROOF_MISMATCH",
+  );
+  invariant(
+    catalog?.schemaVersion === 1 &&
+      catalog.channel === roots.channel &&
+      Array.isArray(catalog.releases),
+    "EXPERIMENT_QUALIFICATION_CATALOG_REQUIRED",
+  );
+  for (const row of catalog.releases) {
+    const verified = verifySignedManifest(row.envelope, roots);
+    invariant(
+      verified.purpose === "qualification" &&
+        verified.manifest.qualification.instanceId === c.instanceId &&
+        verified.manifest.qualification.inputFingerprint ===
+          runInputFingerprint(verified.manifest) &&
+        row.releaseId === verified.manifest.releaseId &&
+        row.manifestDigest === verified.manifestDigest,
+      "EXPERIMENT_QUALIFICATION_CATALOG_MISMATCH",
+    );
+  }
+  return catalog;
+}
+
+export function assertFoundationCloneMounts(c, foundation, old) {
+  const has = (destination) =>
+    foundation.Mounts.some(
+      (m) =>
+        m.Source === c.businessHostPath &&
+        m.Destination === destination &&
+        m.RW === true,
+    );
+  invariant(
+    foundation.Id === c.foundationContainerId &&
+      foundation.State.Running === true &&
+      has("/data") &&
+      !foundation.Mounts.some((m) =>
+        old.Mounts.some(
+          (o) => o.Destination === "/data" && m.Source === o.Source && m.RW,
+        ),
+      ),
+    "BOOTSTRAP_FOUNDATION_CLONE_MOUNT_REQUIRED",
+  );
+  if (c.kind === "idle-first-bootstrap-experiment")
+    invariant(
+      has(bootstrapDataRoot(c)),
+      "EXPERIMENT_DUAL_CLONE_ALIAS_REQUIRED",
+    );
+  return foundation;
+}
+
+export async function assertExperimentalAliases(c, { stat = fs.lstat } = {}) {
+  if (c.kind !== "idle-first-bootstrap-experiment") return;
+  for (const name of ["platform.db", ".master.key"]) {
+    const [legacy, isolated] = await Promise.all([
+      stat(join("/data", name)),
+      stat(join(bootstrapDataRoot(c), name)),
+    ]);
+    invariant(
+      legacy.isFile() &&
+        isolated.isFile() &&
+        !legacy.isSymbolicLink() &&
+        !isolated.isSymbolicLink() &&
+        legacy.dev === isolated.dev &&
+        legacy.ino === isolated.ino &&
+        legacy.size === isolated.size,
+      "EXPERIMENT_CLONE_ALIAS_PHYSICAL_MISMATCH",
+    );
+  }
+}
+
+export function assertLegacyPhysical(c, old, { requireStopped = false } = {}) {
+  invariant(
+    old?.Id === c.original.containerId &&
+      old.Image === c.original.image &&
+      old.State.StartedAt === c.original.startedAt &&
+      typeof old.State.Running === "boolean" &&
+      Number.isSafeInteger(old.State.Pid) &&
+      (old.State.Running ? old.State.Pid > 0 : old.State.Pid === 0),
+    "LEGACY_BOOTSTRAP_IDENTITY_CHANGED",
+  );
+  if (requireStopped)
+    invariant(
+      old.State.Running === false && old.State.Pid === 0,
+      "LEGACY_BOOTSTRAP_PROCESS_STILL_PRESENT",
+    );
+  invariant(
+    !old.Mounts.some((m) => m.Source === c.businessHostPath && m.RW),
+    "BOOTSTRAP_WOULD_REUSE_ORIGINAL_VOLUME",
+  );
+  return old;
+}
+
+export function previewProbeOrigin(c) {
+  invariant(
+    c.kind === "idle-first-bootstrap-experiment",
+    "PREVIEW_REQUIRES_EXPLICIT_EXPERIMENT",
+  );
+  const origin = new URL(
+    c.legacyProbeOrigin || c.original.origin || "http://invalid",
+  );
+  invariant(
+    origin.protocol === "http:" &&
+      ["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname) &&
+      origin.port &&
+      origin.pathname === "/" &&
+      !origin.username &&
+      !origin.password &&
+      !origin.search &&
+      !origin.hash &&
+      !Object.values(c.ports).includes(Number(origin.port)),
+    "PREVIEW_LEGACY_LOOPBACK_ORIGIN_REQUIRED",
+  );
+  return origin.origin;
+}
+
+export function assertPreviewSource(c, old, status, receipt) {
+  previewProbeOrigin(c);
+  assertLegacyPhysical(c, old);
+  invariant(
+    old.State.Running === true &&
+      old.State.Pid > 0 &&
+      legacyIdle(status) &&
+      status.draining === false &&
+      receipt.admissionHeld === false &&
+      receipt.oldProcessAbsent === false &&
+      receipt.extantUserRuntimeHandles === 0,
+    "PREVIEW_SOURCE_NOT_LIVE_IDLE",
+  );
+  return {
+    containerId: old.Id,
+    image: old.Image,
+    pid: old.State.Pid,
+    startedAt: old.State.StartedAt,
+    status,
+  };
+}
+
+async function observePreviewSource(c, verified) {
+  const origin = previewProbeOrigin(c);
+  const old = JSON.parse(
+    await execute(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.original.containerId,
+    ]),
+  )[0];
+  const response = await fetch(origin + "/api/deployment/status", {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer " + verified.authEnv.ACCESS_PASSCODE,
+      Origin: c.publicOrigin,
+    },
+    redirect: "error",
+    signal: AbortSignal.timeout(20000),
+  });
+  invariant(response.ok, "PREVIEW_SOURCE_READ_FAILED");
+  const body = await response.json();
+  return {
+    ...assertPreviewSource(c, old, body.data || body, verified.receipt),
+    observedAt: new Date().toISOString(),
+    method: "GET",
+    path: "/api/deployment/status",
+    lifecycleActions: [],
+  };
+}
+
+export async function verifyBootstrapInputs(
+  c,
+  { run = execute, requireStopped = false } = {},
+) {
+  assertBootstrapConfig(c);
+  invariant(
+    process.platform === "linux" &&
+      process.arch === "arm64" &&
+      Number(process.versions.node.split(".")[0]) === 22,
+    "BOOTSTRAP_LINUX_ARM64_NODE22_REQUIRED",
+  );
+  const roots = await privateJson(c.trustRootPath);
+  const catalog = await privateJson(c.catalogFile);
+  let proof = null;
+  if (c.kind === "idle-first-bootstrap-experiment") {
+    const stat = await fs.lstat(c.qualificationInstallationPath);
+    invariant(
+      stat.uid === c.uid,
+      "EXPERIMENT_QUALIFICATION_PROOF_OWNER_MISMATCH",
+    );
+    proof = await privateJson(c.qualificationInstallationPath);
+  }
+  verifyBootstrapCatalog(c, roots, catalog, proof);
+  const authEnv = await privateJson(c.authEnvPath);
+  invariant(
+    Object.keys(authEnv).every((k) => AUTH_ENV.includes(k)) &&
+      typeof authEnv.ACCESS_PASSCODE === "string" &&
+      authEnv.ACCESS_PASSCODE.length >= 1 &&
+      typeof authEnv.PASSCODE_COOKIE_SECRET === "string" &&
+      authEnv.PASSCODE_COOKIE_SECRET.length >= 32,
+    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
+  );
+  const receipt = assertCloneReceipt(c, await privateJson(c.cloneReceiptPath), {
+    requireStopped,
+  });
+  invariant(
+    !receipt.channel || receipt.channel === roots.channel,
+    "BOOTSTRAP_CHANNEL_MISMATCH",
+  );
+  const old = JSON.parse(
+    await run(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.original.containerId,
+    ]),
+  )[0];
+  assertLegacyPhysical(c, old, { requireStopped });
+  const image = JSON.parse(
+    await run(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "image",
+      "inspect",
+      c.runtimeImage,
+    ]),
+  )[0];
+  invariant(
+    image.Id === c.runtimeImage &&
+      image.Os === "linux" &&
+      image.Architecture === "arm64" &&
+      !(image.Config.Env || []).some((v) =>
+        /KEY|SECRET|TOKEN|PASSWORD|PASSCODE|DATABASE|DATA_ROOT|RUNTIME_OWNER_HOME|PLATFORM_/.test(
+          v.split("=", 1)[0],
+        ),
+      ),
+    "BOOTSTRAP_RUNTIME_IMAGE_INVALID",
+  );
+  const foundation = JSON.parse(
+    await run(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.foundationContainerId,
+    ]),
+  )[0];
+  assertFoundationCloneMounts(c, foundation, old);
+  await assertExperimentalAliases(c);
+  const bundle = await readJson(join(c.artifactRoot, "upgrade-artifact.json"));
+  const installed = await readJson(join(c.artifactRoot, "installed.json"));
+  const files = (await treeManifest(c.artifactRoot)).filter(
+    (f) => !["upgrade-artifact.json", "installed.json"].includes(f.path),
+  );
+  invariant(
+    bundle.platform === "linux" &&
+      bundle.arch === "arm64" &&
+      bundle.nodeMajor === 22 &&
+      bundle.treeDigest === digest(files) &&
+      canonical(files) === canonical(bundle.files) &&
+      canonical(installed.components) === canonical(bundle.components),
+    "BOOTSTRAP_PACKAGE_CHANGED",
+  );
+  invariant(
+    ["project", "api", "web"].every((k) =>
+      /^[a-f0-9]{40}$/.test(receipt.commits?.[k]),
+    ) &&
+      bundle.components.api.sourceRevision === receipt.commits.api &&
+      bundle.components.web.sourceRevision === receipt.commits.web &&
+      bundle.components.installer.sourceRevision === receipt.commits.project,
+    "BOOTSTRAP_PINNED_COMMITS_REQUIRED",
+  );
+  const journal = await readJson(
+    join(c.artifactRoot, "api/drizzle/meta/_journal.json"),
+  );
+  invariant(
+    journal.entries.length === receipt.databaseMigration.to,
+    "BOOTSTRAP_SCHEMA_MISMATCH",
+  );
+  invariant(
+    !(await fs.lstat("/data/platform.db-wal").catch((error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    })) &&
+      (await fileDigest("/data/platform.db")).digest ===
+        receipt.cloneDatabaseDigest &&
+      (await fileDigest("/data/.master.key")).digest ===
+        receipt.masterKeyDigest,
+    "BOOTSTRAP_CLONE_CHANGED",
+  );
+  const D = createRequire(join(c.artifactRoot, "api/package.json"))(
+    "better-sqlite3",
+  );
+  const db = new D("/data/platform.db", {
+    readonly: true,
+    fileMustExist: true,
+  });
+  try {
+    db.exec("PRAGMA query_only=ON");
+    invariant(
+      db.pragma("quick_check", { simple: true }) === "ok" &&
+        db.pragma("foreign_key_check").length === 0 &&
+        db.prepare("SELECT count(*) n FROM __drizzle_migrations").get().n ===
+          journal.entries.length,
+      "BOOTSTRAP_CLONE_DATABASE_INVALID",
+    );
+    invariant(
+      db
+        .prepare(
+          "SELECT count(*) n FROM sandboxes WHERE status NOT IN ('destroyed','failed')",
+        )
+        .get().n === 0 &&
+        db
+          .prepare(
+            "SELECT count(*) n FROM sandboxes WHERE status != 'destroyed' AND provider_handle IS NOT NULL",
+          )
+          .get().n === 0,
+      "LEGACY_RUNTIME_ADOPTION_REQUIRED",
+    );
+    for (const query of [
+      "SELECT count(*) n FROM agent_tasks WHERE status='running'",
+      "SELECT count(*) n FROM automation_runs WHERE status IN ('pending','running')",
+      "SELECT count(*) n FROM automations WHERE enabled=1",
+      "SELECT count(*) n FROM resource_allocations WHERE released_at IS NULL",
+      "SELECT count(*) n FROM projects WHERE clone_status='cloning'",
+      "SELECT count(*) n FROM sandbox_project_cleanup_jobs",
+    ])
+      invariant(
+        db.prepare(query).get().n === 0,
+        "BOOTSTRAP_CLONE_HAS_LIVE_WORK",
+      );
+    for (const row of db.prepare("SELECT baseline_path FROM projects").all())
+      if (row.baseline_path !== null)
+        invariant(
+          typeof row.baseline_path === "string" &&
+            inside("/data", row.baseline_path) &&
+            (await fs.realpath(row.baseline_path)) === row.baseline_path &&
+            (await fs.stat(row.baseline_path)).isDirectory(),
+          "BOOTSTRAP_PROJECT_PATH_CHANGED",
+        );
+  } finally {
+    db.close();
+  }
+  return { bundle, authEnv, receipt, roots };
+}
+
+async function waitFor(origin, path, headers = {}, timeout = 120000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(origin + path, {
+        headers,
+        signal: AbortSignal.timeout(2000),
+      });
+      if (response.ok) return response;
+    } catch {
+      /* Preserve actual startup failure in each owned container's logs. */
+    }
+    await new Promise((ok) => setTimeout(ok, 100));
+  }
+  invariant(false, "BOOTSTRAP_ROLE_NOT_READY");
+}
+
+/** First installation only. The operator supplies a stopped, backed-up, verified clone.
+ * This never drains/stops/removes the original container or writes its volume. Failed
+ * startup retains the new containers and its journal for explicit operator recovery. */
+async function startBootstrap(c, { mode }) {
+  invariant(["start", "preview"].includes(mode), "BOOTSTRAP_MODE_REQUIRED");
+  if (mode === "preview") previewProbeOrigin(c);
+  const verified = await verifyBootstrapInputs(c, {
+    requireStopped: mode !== "preview",
+  });
+  const previewBefore =
+    mode === "preview" ? await observePreviewSource(c, verified) : null;
+  const root = await secureDirectory(c.root);
+  await fs.writeFile(
+    join(root, "startup-intent.json"),
+    JSON.stringify({
+      instanceId: c.instanceId,
+      original: c.original,
+      artifactTreeDigest: verified.bundle.treeDigest,
+      mode,
+      startedAt: new Date().toISOString(),
+    }) + "\n",
+    { flag: "wx", mode: 0o600 },
+  );
+  const paths = {};
+  for (const [name, folder] of Object.entries({
+    owner: "original-owner",
+    futureOwners: "future-owners",
+    installer: "installer",
+    bindings: "bindings",
+    logs: "logs",
+    web: "initial-web-code",
+    entry: "entry",
+  }))
+    paths[name] = await secureDirectory(join(root, folder));
+  for (const folder of ["artifacts", "journals", "downloads"])
+    await secureDirectory(join(paths.installer, folder));
+  await secureDirectory("/data/workspaces");
+  const keys = Object.fromEntries(
+    [
+      "owner",
+      "control",
+      "controller",
+      "entry",
+      "sticky",
+      "upgrade",
+      "supervisor",
+      "upgradeSession",
+    ].map((k) => [k, randomBytes(32).toString("hex")]),
+  );
+  await atomicJson(join(root, "installation-keys.json"), keys);
+  const ports = c.ports,
+    origin = (k) => `http://127.0.0.1:${ports[k]}`;
+  const bindingPath = join(paths.bindings, "coordinator.json"),
+    ownerBindingPath = join(paths.bindings, "owners.json");
+  const release = {
+    releaseId: verified.bundle.releaseId,
+    channel: verified.roots.channel,
+    activationGeneration: 1,
+    activatedAt: new Date().toISOString(),
+    schema: verified.receipt.databaseMigration.to,
+    components: verified.bundle.components,
+    commits: verified.receipt.commits,
+    productionWebBinding: c.publicOrigin,
+  };
+  invariant(
+    release.commits &&
+      Object.values(release.commits).every((v) => /^[a-f0-9]{40}$/.test(v)),
+    "BOOTSTRAP_PINNED_COMMITS_REQUIRED",
+  );
+  await atomicJson(bindingPath, {
+    instanceId: c.instanceId,
+    state: "ready",
+    origin: origin("coordinator"),
+    generation: 1,
+    artifactDigest: release.components.coordinator.artifactDigest,
+  });
+  await atomicJson(ownerBindingPath, {
+    instanceId: c.instanceId,
+    activeOwnerId: "original-owner",
+    owners: [
+      {
+        ownerId: "original-owner",
+        endpoint: origin("owner"),
+        ...release.components.owner,
+      },
+    ],
+  });
+  const installedReleasePath = join(paths.bindings, "installed-release.json");
+  await atomicJson(installedReleasePath, {
+    release,
+    artifactRoot: c.artifactRoot,
+  });
+  const common = {
+    NODE_ENV: "production",
+    PATH: "/usr/local/bin:/usr/bin:/bin",
+    PLATFORM_INSTANCE_ID: c.instanceId,
+    HOST: "127.0.0.1",
+    ...c.runtimeEnv,
+  };
+  const network = { API_ALLOWED_ORIGINS: c.publicOrigin };
+  const controlEnv = {
+    ...network,
+    PLATFORM_INSTANCE_ID: c.instanceId,
+    PLATFORM_CONTROL_RPC_KEY: keys.control,
+    COORDINATOR_RPC_URL: origin("coordinator"),
+    PLATFORM_COORDINATOR_BINDING_PATH: bindingPath,
+  };
+  const ownerEnv = {
+    PLATFORM_INSTANCE_ID: c.instanceId,
+    PLATFORM_COORDINATOR_RPC_KEY: keys.owner,
+    SANDBOX_DEFAULT_PROVIDER: "boxlite",
+  };
+  const coordinatorEnv = {
+    ...verified.authEnv,
+    ...network,
+    PLATFORM_INSTANCE_ID: c.instanceId,
+    PLATFORM_CONTROL_RPC_KEY: keys.control,
+    PLATFORM_CONTROLLER_RPC_KEY: keys.controller,
+    PLATFORM_COORDINATOR_RPC_KEY: keys.owner,
+    PLATFORM_COORDINATOR_BINDING_PATH: bindingPath,
+    PLATFORM_RUNTIME_OWNER_BINDING_PATH: ownerBindingPath,
+    COORDINATOR_RPC_URL: origin("coordinator"),
+    RUNTIME_OWNER_RPC_URL: origin("owner"),
+    DATA_ROOT: bootstrapDataRoot(c),
+    DATABASE_URL: "/data/platform.db",
+    MIGRATIONS_DIR: join(c.artifactRoot, "api/drizzle"),
+    UPGRADE_ADMIN_KEY: keys.upgrade,
+    UPGRADE_SESSION_SECRET: keys.upgradeSession,
+    UPGRADE_TRUST_ROOT_PATH: c.trustRootPath,
+    UPGRADE_CATALOG_FILE: c.catalogFile,
+    UPGRADE_INITIAL_RELEASE_PATH: installedReleasePath,
+    UPGRADE_INITIAL_ARTIFACT_ROOT: c.artifactRoot,
+    UPGRADE_INSTALLER_ROOT: paths.installer,
+    PLATFORM_ENTRY_ORIGIN: origin("entry"),
+    PLATFORM_ENTRY_CONTROL_ORIGIN: origin("entryControl"),
+    PLATFORM_ENTRY_CONTROL_KEY: keys.entry,
+    PLATFORM_INSTALLER_SUPERVISOR_ORIGIN: origin("supervisor"),
+    PLATFORM_INSTALLER_SUPERVISOR_KEY: keys.supervisor,
+    SANDBOX_DEFAULT_PROVIDER: "boxlite",
+    ...(c.kind === "idle-first-bootstrap-experiment"
+      ? {
+          UPGRADE_QUALIFICATION_INSTALLATION_PATH:
+            c.qualificationInstallationPath,
+        }
+      : {}),
+  };
+  const coordinator = createCoordinatorClient({
+    origin: origin("coordinator"),
+    instanceId: c.instanceId,
+    key: keys.controller,
+    bindingPath,
+  });
+  const controllerConfig = {
+    root: paths.installer,
+    instanceId: c.instanceId,
+    controllerId: "instance-controller",
+    trustRootPath: c.trustRootPath,
+    coordinatorOrigin: origin("coordinator"),
+    coordinatorBindingPath: bindingPath,
+    controllerKey: keys.controller,
+    entryOrigin: origin("entryControl"),
+    entryKey: keys.entry,
+    supervisorOrigin: origin("supervisor"),
+    supervisorKey: keys.supervisor,
+    controllerMetadataPort: ports.controllerMetadata,
+  };
+  const adapter = await createProductionRoleAdapter(c);
+  const supervisor = await createCandidateSupervisor({
+    root: paths.installer,
+    instanceId: c.instanceId,
+    key: keys.supervisor,
+    coordinator,
+    controlEnv,
+    coordinatorEnv,
+    ownerEnv,
+    runtimeEnv: c.runtimeEnv || {},
+    runtimeOwnerRoot: paths.futureOwners,
+    publicationRoot: join(root, "supervisor-publication"),
+    apiPort: ports.apiB,
+    webPort: ports.webB,
+    coordinatorPort: ports.coordinatorB,
+    coordinatorAppPort: ports.coordinatorAppB,
+    ownerPort: ports.ownerB,
+    installerPort: ports.installerB,
+    installerConfig: controllerConfig,
+    initialInstallerOrigin: origin("controllerMetadata"),
+    port: ports.supervisor,
+    launchAdapter: adapter,
+  });
+  const entry = await createStableEntry({
+    root: paths.entry,
+    instanceId: c.instanceId,
+    controlKey: keys.entry,
+    stickyKey: keys.sticky,
+    port: ports.entry,
+    controlPort: ports.entryControl,
+    verifyFence: ({ attemptId, fence }) =>
+      coordinator.assertFence(attemptId, fence),
+    verifyContractFence: ({ contractAttemptId, fence }) =>
+      coordinator.assertContractFence(contractAttemptId, fence),
+    initialBinding: {
+      instanceId: c.instanceId,
+      fence: 1,
+      routeGeneration: 1,
+      attemptId: "initial",
+      weight: 0,
+      oldApi: {
+        origin: origin("apiA"),
+        digest: release.components.api.artifactDigest,
+      },
+      candidateApi: null,
+      web: {
+        origin: origin("webA"),
+        root: paths.web,
+        digest: release.components.web.artifactDigest,
+        treeDigest: verified.bundle.treeDigest,
+      },
+      retainedWeb: [],
+    },
+  });
+  const containers = {},
+    apiRoot = join(c.artifactRoot, "api"),
+    roles = join(apiRoot, "apps/api/dist/roles");
+  async function launch(name, kind, entryPath, env, cwd = apiRoot, extra = {}) {
+    const startIdentity = randomUUID();
+    const record = {
+      kind,
+      instanceId: c.instanceId,
+      startIdentity,
+      artifactRoot: c.artifactRoot,
+      ...extra.record,
+    };
+    containers[name] = await adapter.launch({
+      kind,
+      entry: entryPath,
+      args: [entryPath, ...(extra.args || [])],
+      env: {
+        ...common,
+        ...env,
+        PLATFORM_PROCESS_START_IDENTITY: startIdentity,
+      },
+      cwd,
+      artifactRoot: c.artifactRoot,
+      ownerHome: extra.ownerHome,
+      record,
+    });
+    await atomicJson(
+      join(paths.logs, name + ".identity.json"),
+      containers[name],
+    );
+    return { ...containers[name], ...record, pid: 1 };
+  }
+  const owner = await launch(
+    "owner",
+    "owner",
+    join(roles, "runtime-owner-main.js"),
+    {
+      ...ownerEnv,
+      PLATFORM_PROCESS_ROLE: "runtime-owner",
+      PLATFORM_ARTIFACT_DIGEST: release.components.owner.artifactDigest,
+      RUNTIME_OWNER_ID: "original-owner",
+      RUNTIME_OWNER_PORT: String(ports.owner),
+      RUNTIME_OWNER_HOME: paths.owner,
+      BOXLITE_HOME: join(paths.owner, "boxlite"),
+      HOME: paths.owner,
+    },
+    apiRoot,
+    { ownerHome: paths.owner },
+  );
+  await waitFor(origin("owner"), "/runtime/metadata", {
+    "x-platform-internal-key": keys.owner,
+    "x-platform-instance-id": c.instanceId,
+  });
+  await supervisor.registerInstalledRole({
+    ...owner,
+    origin: origin("owner"),
+    ownerId: "original-owner",
+    ownerHome: paths.owner,
+    ...release.components.owner,
+  });
+  const coor = await launch(
+    "coordinator",
+    "coordinator",
+    join(roles, "coordinator-main.js"),
+    {
+      ...coordinatorEnv,
+      PLATFORM_PROCESS_ROLE: "coordinator",
+      PORT: String(ports.coordinator),
+      PLATFORM_ARTIFACT_DIGEST: release.components.coordinator.artifactDigest,
+    },
+  );
+  await waitFor(origin("coordinator"), "/api/health");
+  await supervisor.registerInstalledRole({
+    ...coor,
+    origin: origin("coordinator"),
+    metadataPath: "/internal/application/identity",
+    ...release.components.coordinator,
+  });
+  await launch("apiA", "api", join(roles, "control-api-main.js"), {
+    ...controlEnv,
+    PLATFORM_PROCESS_ROLE: "control",
+    PORT: String(ports.apiA),
+    PLATFORM_ARTIFACT_DIGEST: release.components.api.artifactDigest,
+  });
+  await waitFor(origin("apiA"), "/api/health");
+  await fs.cp(join(c.artifactRoot, "web"), paths.web, {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+  });
+  await secureDirectory(join(paths.web, ".next/cache"));
+  await launch(
+    "webA",
+    "web",
+    join(paths.web, "server.js"),
+    { PORT: String(ports.webA), HOSTNAME: "127.0.0.1" },
+    paths.web,
+  );
+  await waitFor(origin("webA"), "/web-build");
+  const startIdentity = randomUUID(),
+    controllerPath = join(paths.installer, "controller-config.json");
+  await atomicJson(controllerPath, { ...controllerConfig, startIdentity });
+  containers.installer = await adapter.launch({
+    kind: "installer",
+    entry: join(c.artifactRoot, "installer/controller-main.mjs"),
+    args: [
+      join(c.artifactRoot, "installer/controller-main.mjs"),
+      controllerPath,
+    ],
+    env: { NODE_ENV: "production", PATH: common.PATH, ...c.runtimeEnv },
+    cwd: join(c.artifactRoot, "installer"),
+    artifactRoot: c.artifactRoot,
+    record: { startIdentity },
+  });
+  const installer = await (
+    await waitFor(origin("controllerMetadata"), "/metadata", {
+      "x-platform-internal-key": keys.controller,
+    })
+  ).json();
+  invariant(
+    installer.instanceId === c.instanceId &&
+      installer.startIdentity === startIdentity &&
+      installer.artifactDigest ===
+        release.components.installer.artifactDigest &&
+      installer.inputFingerprint ===
+        release.components.installer.inputFingerprint,
+    "BOOTSTRAP_INSTALLER_IDENTITY_MISMATCH",
+  );
+  const bootstrapped = await fetch(
+    origin("coordinator") + "/internal/upgrades/bootstrap",
+    {
+      method: "POST",
+      headers: {
+        "x-platform-internal-key": keys.controller,
+        "x-platform-instance-id": c.instanceId,
+      },
+      signal: AbortSignal.timeout(120000),
+    },
+  );
+  invariant(bootstrapped.ok, "BOOTSTRAP_PHYSICAL_ACTIVATION_FAILED");
+  const confirmed = await bootstrapped.json();
+  invariant(
+    confirmed.releaseId === release.releaseId &&
+      confirmed.activationGeneration === 1,
+    "BOOTSTRAP_ACTIVATION_RECEIPT_UNKNOWN",
+  );
+  const previewAfter =
+    mode === "preview" ? await observePreviewSource(c, verified) : null;
+  if (previewBefore)
+    invariant(
+      previewAfter.containerId === previewBefore.containerId &&
+        previewAfter.image === previewBefore.image &&
+        previewAfter.pid === previewBefore.pid &&
+        previewAfter.startedAt === previewBefore.startedAt,
+      "PREVIEW_ORIGINAL_PROCESS_CHANGED",
+    );
+  const upgradeStatusResponse = await fetch(
+    origin("apiA") + "/api/system/upgrade/status",
+    {
+      method: "GET",
+      headers: {
+        Authorization: "Bearer " + verified.authEnv.ACCESS_PASSCODE,
+        Origin: c.publicOrigin,
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(20000),
+    },
+  );
+  invariant(upgradeStatusResponse.ok, "BOOTSTRAP_UPGRADE_STATUS_UNAVAILABLE");
+  const statusBody = await upgradeStatusResponse.json(),
+    upgradeStatus = statusBody.data || statusBody;
+  invariant(
+    upgradeStatus.instanceId === c.instanceId &&
+      upgradeStatus.serviceState === "confirmed" &&
+      upgradeStatus.confirmedServiceRelease?.releaseId === release.releaseId,
+    "BOOTSTRAP_UPGRADE_STATUS_UNCONFIRMED",
+  );
+  const result = {
+    schemaVersion: 1,
+    state: mode === "preview" ? "preview-ready" : "confirmed",
+    mode,
+    qualified: false,
+    productionRouteSwitched: false,
+    instanceId: c.instanceId,
+    root,
+    initialArtifactRoot: c.artifactRoot,
+    businessHostPath: c.businessHostPath,
+    original: c.original,
+    originalContainerPreserved: true,
+    originalVolumePreserved: true,
+    bootstrapMaintenanceRequired: mode !== "preview",
+    installationPurpose:
+      c.kind === "idle-first-bootstrap-experiment"
+        ? "qualification"
+        : "release",
+    qualificationOnly: c.kind === "idle-first-bootstrap-experiment",
+    modelQualityQualified: false,
+    ...(previewBefore
+      ? {
+          previewSource: { before: previewBefore, after: previewAfter },
+          sourceAdmissionHeld: false,
+          originalProcessPreserved: true,
+        }
+      : {}),
+    subsequentUpgradeTrigger: "user",
+    entryOrigin: entry.origin,
+    publicOrigin: c.publicOrigin,
+    ports,
+    containers,
+    release: confirmed,
+    recordedAt: new Date().toISOString(),
+  };
+  await atomicJson(join(root, "bootstrap-result.json"), result);
+  return { result, entry, supervisor, adapter };
+}
+
+export const startProductionBootstrap = (c) =>
+  startBootstrap(c, { mode: "start" });
+export const previewExperimentalBootstrap = (c) =>
+  startBootstrap(c, { mode: "preview" });
+
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+) {
+  const action = process.argv[2],
+    config = await privateJson(resolve(process.argv[3] || ""));
+  if (action === "verify" || action === "preflight") {
+    const r = await verifyBootstrapInputs(config);
+    process.stdout.write(
+      JSON.stringify({
+        state: "inputs-verified",
+        instanceId: config.instanceId,
+        artifactTreeDigest: r.bundle.treeDigest,
+        maintenanceRequired: true,
+        originalStopRequiredForStart: true,
+      }) + "\n",
+    );
+  } else if (action === "start" || action === "preview") {
+    const started = await (action === "preview"
+      ? previewExperimentalBootstrap(config)
+      : startProductionBootstrap(config));
+    process.stdout.write(
+      JSON.stringify({
+        state: started.result.state,
+        mode: started.result.mode,
+        qualified: false,
+        productionRouteSwitched: false,
+        instanceId: config.instanceId,
+        entryOrigin: started.result.entryOrigin,
+        resultPath: join(config.root, "bootstrap-result.json"),
+      }) + "\n",
+    );
+    // Closing the foundation detaches transports only. Never signal business roles or the original mono.
+    for (const signal of ["SIGTERM", "SIGINT"])
+      process.once(signal, () => {
+        void Promise.all([
+          started.entry.close(),
+          started.supervisor.close(),
+        ]).then(() => process.exit(0));
+      });
+  } else invariant(false, "USE_BOOTSTRAP_VERIFY_START_OR_PREVIEW");
+}
