@@ -277,6 +277,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     database,
     admissionCdp,
     admissionRecovery,
+    admissionDiagnostics = null,
     ongoingProgress,
     nativePhase = "setup",
     bodyErrorSummary = null,
@@ -820,7 +821,18 @@ test("real user acceptance, durable installation and original VM/terminal contin
     nativePhase = "upgrade-admission";
     const mutationStart = evidence.mutations.length;
     probe = sampling(request, origin, trafficRule.id);
+    nativePhase = "upgrade-admission:cdp-session";
     admissionCdp = await context.newCDPSession(page);
+    admissionDiagnostics = {
+      browserPosts: 0,
+      actualPostResponseStatus: null,
+      actual202ResponseLost: false,
+      readonlyLookupResponsesLost: 0,
+      readonlyStatusResponsesLost: 0,
+      pendingOriginalIdSeen: false,
+      pendingOriginalIdRetainedAfterReload: false,
+      pendingClearedAfterReadonlyConfirmation: false,
+    };
     let blockAdmissionReads = false,
       interceptionError = null;
     const admissionPosts = [],
@@ -836,6 +848,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       ) {
         blockAdmissionReads = true;
         admissionPosts.push(request.postDataJSON());
+        admissionDiagnostics.browserPosts = admissionPosts.length;
       }
     };
     page.on("request", observeAdmission);
@@ -854,6 +867,12 @@ test("real user acceptance, durable installation and original VM/terminal contin
           event.request.method === "POST" &&
           url.pathname === "/api/system/upgrade/requests"
         ) {
+          // Gate the recovery reads before the actual 202 is lost; this cannot
+          // depend on ordering of the separate Playwright request event.
+          blockAdmissionReads = true;
+          admissionDiagnostics.actualPostResponseStatus =
+            event.responseStatusCode ?? null;
+          nativePhase = "upgrade-admission:actual-202-body";
           expect(event.responseStatusCode).toBe(202);
           const bytes = await admissionCdp.send("Fetch.getResponseBody", {
             requestId: event.requestId,
@@ -866,10 +885,12 @@ test("real user acceptance, durable installation and original VM/terminal contin
           const command = JSON.parse(event.request.postData);
           expect(body.requestId).toBe(command.requestId);
           expect(body.targetDigest).toBe(command.targetDigest);
+          nativePhase = "upgrade-admission:lose-actual-202";
           await admissionCdp.send("Fetch.failRequest", {
             requestId: event.requestId,
             errorReason: "ConnectionClosed",
           });
+          admissionDiagnostics.actual202ResponseLost = true;
           resolveAdmission({ submittedCommand: command, accepted: body });
           return;
         }
@@ -879,8 +900,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
             status: event.responseStatusCode ?? null,
           };
           readonlyResponsesLost.push(row);
-          if (url.pathname.startsWith("/api/system/upgrade/requests/"))
+          if (url.pathname.startsWith("/api/system/upgrade/requests/")) {
             uiLookups.push(row);
+            admissionDiagnostics.readonlyLookupResponsesLost++;
+          } else admissionDiagnostics.readonlyStatusResponsesLost++;
           await admissionCdp.send("Fetch.failRequest", {
             requestId: event.requestId,
             errorReason: "ConnectionClosed",
@@ -901,6 +924,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         .finally(() => interceptionTasks.delete(work));
       interceptionTasks.add(work);
     });
+    nativePhase = "upgrade-admission:enable-response-loss";
     await admissionCdp.send("Fetch.enable", {
       patterns: [
         {
@@ -922,6 +946,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       name: "版本与更新详情",
       exact: true,
     });
+    nativePhase = "upgrade-admission:browser-readonly-check";
     const browserAdmissionResponse = page.waitForResponse(
       (response) =>
         new URL(response.url()).origin === origin &&
@@ -941,6 +966,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(browserAdmissionSnapshot.instanceId).toBe(fixture.config.instanceId);
     expect(browserAdmissionSnapshot.userScope).toBe(initial.userScope);
     expect(browserAdmissionSnapshot.capabilities.canUpgradeInstance).toBe(true);
+    nativePhase = "upgrade-admission:single-user-post";
     await admissionDetails
       .getByRole("button", { name: "立即升级", exact: true })
       .click();
@@ -958,9 +984,12 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const pendingRequestKey = `ap.upgrade-request.v1:${encodeURIComponent(browserAdmissionSnapshot.instanceId)}:${encodeURIComponent(browserAdmissionSnapshot.userScope)}`;
     const readPending = () =>
       page.evaluate((key) => localStorage.getItem(key), pendingRequestKey);
+    nativePhase = "upgrade-admission:pending-original-id";
     await expect
       .poll(async () => JSON.parse(await readPending())?.requestId)
       .toBe(submittedCommand.requestId);
+    admissionDiagnostics.pendingOriginalIdSeen = true;
+    nativePhase = "upgrade-admission:ui-original-id-lookup";
     await expect
       .poll(() =>
         uiLookups.some(
@@ -973,6 +1002,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(await readPending()).toBe(
       JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
     );
+    nativePhase = "upgrade-admission:unknown-result-reload";
     await page.reload({ waitUntil: "domcontentloaded" });
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
@@ -980,6 +1010,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(await readPending()).toBe(
       JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
     );
+    admissionDiagnostics.pendingOriginalIdRetainedAfterReload = true;
+    nativePhase = "upgrade-admission:unknown-readonly-retry-window";
     // Let the actual UI's 2s retry interval run while the result stays unknown.
     await delay(2500);
     expect(admissionPosts).toHaveLength(1);
@@ -989,6 +1021,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         .get(fixture.config.instanceId).n,
     ).toBe(1);
     expect(interceptionError).toBeNull();
+    nativePhase = "upgrade-admission:restore-readonly-responses";
     blockAdmissionReads = false;
     const originalLookup = await json(
       request,
@@ -1005,10 +1038,13 @@ test("real user acceptance, durable installation and original VM/terminal contin
             ?.requestId,
       )
       .toBe(submittedCommand.requestId);
+    nativePhase = "upgrade-admission:readonly-confirmed-reload";
     // A fresh real status may identify the same request directly; that is also
     // readonly reconciliation and must not create another installation command.
     await page.reload();
+    nativePhase = "upgrade-admission:clear-reconciled-original-id";
     await expect.poll(readPending).toBeNull();
+    admissionDiagnostics.pendingClearedAfterReadonlyConfirmation = true;
     await Promise.all(interceptionTasks);
     expect(interceptionError).toBeNull();
     expect(admissionPosts).toHaveLength(1);
@@ -1034,6 +1070,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       extraPostsWhileUnknownAndReload: 0,
       durableIntents: 1,
     };
+    nativePhase = "upgrade-admission:finish-loss-observation";
     await admissionCdp.send("Fetch.disable");
     await Promise.all(interceptionTasks);
     expect(interceptionError).toBeNull();
@@ -1712,16 +1749,29 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const category = [
       "N01_INSTANCE_UPGRADE_TERMINATED",
       "N01_INSTANCE_UPGRADE_CONFIRMATION_TIMEOUT",
+      "N01_REAL_ADMISSION_RESPONSE_MISSING",
     ].find(
       (code) =>
         typeof error?.message === "string" &&
-        error.message.startsWith(code + ":"),
+        (error.message === code || error.message.startsWith(code + ":")),
     );
     bodyErrorSummary = {
       category: category ?? "N01_BODY_FAILED",
       name: ["Error", "AssertionError", "TimeoutError"].includes(error?.name)
         ? error.name
         : "Error",
+      matcherName:
+        typeof error?.matcherResult?.name === "string" &&
+        /^to[A-Z][A-Za-z]+$/.test(error.matcherResult.name)
+          ? error.matcherResult.name
+          : null,
+      sourceLocations: [
+        ...new Set(
+          String(error?.stack ?? "").match(
+            /(?:e2e-contract\/(?:acceptance|native|server)|deploy\/(?:upgrade|jenkins))\/[A-Za-z0-9_.-]+\.(?:mjs|ts):\d+:\d+/g,
+          ) ?? [],
+        ),
+      ].slice(0, 12),
       rawMessageOmitted: true,
     };
     throw error;
@@ -1741,6 +1791,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           fixture?.config?.qualification?.inputFingerprint ?? null,
         targetManifestDigest: fixture?.envelope?.manifestDigest ?? null,
         error: bodyErrorSummary,
+        admissionDiagnostics,
         publicObservation:
           upgradeObservation === null
             ? null
@@ -1842,6 +1893,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           upgradeObservation,
           businessCleanup,
           admissionRecovery,
+          admissionDiagnostics,
           ongoingProgress,
           cleanup,
           model: model?.evidence() ?? {
@@ -1859,6 +1911,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
       contentType: "application/json",
     });
     if (model) await model.close();
-    if (cleanupError) throw cleanupError;
+    // The original body exception stays authoritative. Preserve cleanup failure
+    // separately in the attachment; only a successful body can fail on teardown.
+    if (cleanupError && bodyErrorSummary === null) throw cleanupError;
   }
 });
