@@ -21,6 +21,8 @@ import {
   assertPreviewSource,
   verifySealedCloneFiles,
   assertWebRepairPhysical,
+  assertOwnedResumeRole,
+  assertBridgeConfig,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -120,6 +122,69 @@ const receipt = (c) => ({
   masterKeyDigest: image,
 });
 const fails = (fn, code) => assert.throws(fn, (error) => error.code === code);
+
+test("foundation resume only accepts the existing private owned role incarnation and never treats stopped Owner as recoverable startup", () => {
+  const c = config(),
+    metadata = {
+      instanceId: c.instanceId,
+      role: "runtime-owner",
+      pid: 1,
+      startIdentity: "existing-owner",
+      artifactDigest: image,
+    };
+  const physical = {
+    containerId: cid,
+    startIdentity: metadata.startIdentity,
+    startedAt: "2026-10-14T03:00:00Z",
+    running: true,
+    hostPid: 123,
+    imageDigest: c.runtimeImage,
+    role: "owner",
+    pidNamespace: "private",
+    network: "host",
+    entrypoint: ["/usr/local/bin/node"],
+    command: [
+      c.artifactRoot + "/api/apps/api/dist/roles/runtime-owner-main.js",
+    ],
+    mounts: [
+      {
+        source: c.root + "/original-owner",
+        destination: c.root + "/original-owner",
+        rw: true,
+      },
+    ],
+  };
+  const record = { ...physical, instanceId: c.instanceId, kind: "owner" };
+  assertOwnedResumeRole(c, "owner", metadata, record, physical);
+  for (const changed of [
+    { ...physical, running: false, hostPid: 0 },
+    { ...physical, startedAt: "new-incarnation" },
+    { ...physical, pidNamespace: "host" },
+    { ...physical, containerId: "f".repeat(64) },
+  ])
+    fails(
+      () => assertOwnedResumeRole(c, "owner", metadata, record, changed),
+      "RESUME_OWNED_ROLE_CHANGED",
+    );
+  fails(
+    () =>
+      assertOwnedResumeRole(c, "owner", metadata, record, {
+        ...physical,
+        command: ["/arbitrary.js"],
+      }),
+    "RESUME_PHYSICAL_PROCESS_CHANGED",
+  );
+});
+
+test("TCP bridge requires an explicit unoccupied dedicated listener distinct from every serving role", () => {
+  const c = { ...config(), bridgePort: 3101 };
+  assert.equal(assertBridgeConfig(c), c);
+  for (const bridgePort of [undefined, 0, 65536, c.ports.entry, c.ports.owner])
+    fails(
+      () => assertBridgeConfig({ ...c, bridgePort }),
+      "FIXED_BOOTSTRAP_BRIDGE_PORT_REQUIRED",
+    );
+});
 
 test("bootstrap Web repair only targets its unchanged physical preview Web before any upgrade", () => {
   const c = { ...config(), kind: "idle-first-bootstrap-experiment" },

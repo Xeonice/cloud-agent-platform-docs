@@ -4,6 +4,10 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import {
+  createServer as createTcpServer,
+  connect as connectTcp,
+} from "node:net";
+import {
   invariant,
   digest,
   canonical,
@@ -19,6 +23,7 @@ import {
   fileDigest,
 } from "../upgrade/io.mjs";
 import { createStableEntry } from "../upgrade/stable-entry.mjs";
+import { validateBinding } from "../upgrade/stable-entry.mjs";
 import { createCandidateSupervisor } from "../upgrade/candidate-supervisor.mjs";
 import { createCoordinatorClient } from "../upgrade/coordinator-client.mjs";
 import {
@@ -689,95 +694,20 @@ async function waitFor(origin, path, headers = {}, timeout = 120000) {
 /** First installation only. The operator supplies a stopped, backed-up, verified clone.
  * This never drains/stops/removes the original container or writes its volume. Failed
  * startup retains the new containers and its journal for explicit operator recovery. */
-async function startBootstrap(c, { mode }) {
-  invariant(["start", "preview"].includes(mode), "BOOTSTRAP_MODE_REQUIRED");
-  if (mode === "preview") previewProbeOrigin(c);
-  const verified = await verifyBootstrapInputs(c, {
-    requireStopped: mode !== "preview",
-  });
-  const previewBefore =
-    mode === "preview" ? await observePreviewSource(c, verified) : null;
-  const root = await secureDirectory(c.root);
-  await fs.writeFile(
-    join(root, "startup-intent.json"),
-    JSON.stringify({
-      instanceId: c.instanceId,
-      original: c.original,
-      artifactTreeDigest: verified.bundle.treeDigest,
-      mode,
-      startedAt: new Date().toISOString(),
-    }) + "\n",
-    { flag: "wx", mode: 0o600 },
-  );
-  const paths = {};
-  for (const [name, folder] of Object.entries({
-    owner: "original-owner",
-    futureOwners: "future-owners",
-    installer: "installer",
-    bindings: "bindings",
-    logs: "logs",
-    web: "initial-web-code",
-    entry: "entry",
-  }))
-    paths[name] = await secureDirectory(join(root, folder));
-  for (const folder of ["artifacts", "journals", "downloads"])
-    await secureDirectory(join(paths.installer, folder));
-  await secureDirectory("/data/workspaces");
-  const keys = Object.fromEntries(
-    [
-      "owner",
-      "control",
-      "controller",
-      "entry",
-      "sticky",
-      "upgrade",
-      "supervisor",
-      "upgradeSession",
-    ].map((k) => [k, randomBytes(32).toString("hex")]),
-  );
-  await atomicJson(join(root, "installation-keys.json"), keys);
-  const ports = c.ports,
-    origin = (k) => `http://127.0.0.1:${ports[k]}`;
-  const bindingPath = join(paths.bindings, "coordinator.json"),
-    ownerBindingPath = join(paths.bindings, "owners.json");
-  const release = {
-    releaseId: verified.bundle.releaseId,
-    channel: verified.roots.channel,
-    activationGeneration: 1,
-    activatedAt: new Date().toISOString(),
-    schema: verified.receipt.databaseMigration.to,
-    components: verified.bundle.components,
-    commits: verified.receipt.commits,
-    productionWebBinding: c.publicOrigin,
-  };
-  invariant(
-    release.commits &&
-      Object.values(release.commits).every((v) => /^[a-f0-9]{40}$/.test(v)),
-    "BOOTSTRAP_PINNED_COMMITS_REQUIRED",
-  );
-  await atomicJson(bindingPath, {
-    instanceId: c.instanceId,
-    state: "ready",
-    origin: origin("coordinator"),
-    generation: 1,
-    artifactDigest: release.components.coordinator.artifactDigest,
-  });
-  await atomicJson(ownerBindingPath, {
-    instanceId: c.instanceId,
-    activeOwnerId: "original-owner",
-    owners: [
-      {
-        ownerId: "original-owner",
-        endpoint: origin("owner"),
-        ...release.components.owner,
-      },
-    ],
-  });
-  const installedReleasePath = join(paths.bindings, "installed-release.json");
-  await atomicJson(installedReleasePath, {
+async function createFoundation(
+  c,
+  {
+    paths,
+    keys,
+    verified,
+    origin,
+    bindingPath,
+    ownerBindingPath,
+    installedReleasePath,
     release,
-    artifactRoot: c.artifactRoot,
-  });
+    initialBinding = null,
+  },
+) {
   const common = {
     NODE_ENV: "production",
     PATH: "/usr/local/bin:/usr/bin:/bin",
@@ -888,7 +818,7 @@ async function startBootstrap(c, { mode }) {
       coordinator.assertFence(attemptId, fence),
     verifyContractFence: ({ contractAttemptId, fence }) =>
       coordinator.assertContractFence(contractAttemptId, fence),
-    initialBinding: {
+    initialBinding: initialBinding || {
       instanceId: c.instanceId,
       fence: 1,
       routeGeneration: 1,
@@ -908,6 +838,109 @@ async function startBootstrap(c, { mode }) {
       retainedWeb: [],
     },
   });
+  return { common, coordinator, controllerConfig, adapter, supervisor, entry };
+}
+
+async function startBootstrap(c, { mode }) {
+  invariant(["start", "preview"].includes(mode), "BOOTSTRAP_MODE_REQUIRED");
+  if (mode === "preview") previewProbeOrigin(c);
+  const verified = await verifyBootstrapInputs(c, {
+    requireStopped: mode !== "preview",
+  });
+  const previewBefore =
+    mode === "preview" ? await observePreviewSource(c, verified) : null;
+  const root = await secureDirectory(c.root);
+  await fs.writeFile(
+    join(root, "startup-intent.json"),
+    JSON.stringify({
+      instanceId: c.instanceId,
+      original: c.original,
+      artifactTreeDigest: verified.bundle.treeDigest,
+      mode,
+      startedAt: new Date().toISOString(),
+    }) + "\n",
+    { flag: "wx", mode: 0o600 },
+  );
+  const paths = {};
+  for (const [name, folder] of Object.entries({
+    owner: "original-owner",
+    futureOwners: "future-owners",
+    installer: "installer",
+    bindings: "bindings",
+    logs: "logs",
+    web: "initial-web-code",
+    entry: "entry",
+  }))
+    paths[name] = await secureDirectory(join(root, folder));
+  for (const folder of ["artifacts", "journals", "downloads"])
+    await secureDirectory(join(paths.installer, folder));
+  await secureDirectory("/data/workspaces");
+  const keys = Object.fromEntries(
+    [
+      "owner",
+      "control",
+      "controller",
+      "entry",
+      "sticky",
+      "upgrade",
+      "supervisor",
+      "upgradeSession",
+    ].map((k) => [k, randomBytes(32).toString("hex")]),
+  );
+  await atomicJson(join(root, "installation-keys.json"), keys);
+  const ports = c.ports,
+    origin = (k) => `http://127.0.0.1:${ports[k]}`;
+  const bindingPath = join(paths.bindings, "coordinator.json"),
+    ownerBindingPath = join(paths.bindings, "owners.json");
+  const release = {
+    releaseId: verified.bundle.releaseId,
+    channel: verified.roots.channel,
+    activationGeneration: 1,
+    activatedAt: new Date().toISOString(),
+    schema: verified.receipt.databaseMigration.to,
+    components: verified.bundle.components,
+    commits: verified.receipt.commits,
+    productionWebBinding: c.publicOrigin,
+  };
+  invariant(
+    release.commits &&
+      Object.values(release.commits).every((v) => /^[a-f0-9]{40}$/.test(v)),
+    "BOOTSTRAP_PINNED_COMMITS_REQUIRED",
+  );
+  await atomicJson(bindingPath, {
+    instanceId: c.instanceId,
+    state: "ready",
+    origin: origin("coordinator"),
+    generation: 1,
+    artifactDigest: release.components.coordinator.artifactDigest,
+  });
+  await atomicJson(ownerBindingPath, {
+    instanceId: c.instanceId,
+    activeOwnerId: "original-owner",
+    owners: [
+      {
+        ownerId: "original-owner",
+        endpoint: origin("owner"),
+        ...release.components.owner,
+      },
+    ],
+  });
+  const installedReleasePath = join(paths.bindings, "installed-release.json");
+  await atomicJson(installedReleasePath, {
+    release,
+    artifactRoot: c.artifactRoot,
+  });
+  const { common, coordinator, controllerConfig, adapter, supervisor, entry } =
+    await createFoundation(c, {
+      paths,
+      keys,
+      verified,
+      origin,
+      bindingPath,
+      ownerBindingPath,
+      installedReleasePath,
+      release,
+    });
   const containers = {},
     apiRoot = join(c.artifactRoot, "api"),
     roles = join(apiRoot, "apps/api/dist/roles");
@@ -1288,6 +1321,397 @@ export async function repairBootstrapWeb(c) {
   return result;
 }
 
+export function assertOwnedResumeRole(c, kind, metadata, record, physical) {
+  invariant(
+    record?.instanceId === c.instanceId &&
+      record.kind === kind &&
+      record.containerId === physical.containerId &&
+      record.startIdentity === metadata.startIdentity &&
+      record.startIdentity === physical.startIdentity &&
+      record.startedAt === physical.startedAt &&
+      physical.running === true &&
+      physical.hostPid > 0 &&
+      physical.imageDigest === c.runtimeImage &&
+      physical.role === kind &&
+      physical.pidNamespace === "private" &&
+      physical.network === "host" &&
+      metadata.instanceId === c.instanceId &&
+      metadata.pid === 1 &&
+      typeof metadata.artifactDigest === "string",
+    "RESUME_OWNED_ROLE_CHANGED",
+  );
+  invariant(
+    canonical(record.entrypoint) === canonical(physical.entrypoint) &&
+      canonical(record.command) === canonical(physical.command) &&
+      canonical(
+        [...record.mounts].sort(
+          (a, b) =>
+            a.destination.localeCompare(b.destination) ||
+            a.source.localeCompare(b.source),
+        ),
+      ) ===
+        canonical(
+          [...physical.mounts].sort(
+            (a, b) =>
+              a.destination.localeCompare(b.destination) ||
+              a.source.localeCompare(b.source),
+          ),
+        ),
+    "RESUME_PHYSICAL_PROCESS_CHANGED",
+  );
+  const role = {
+    owner: "runtime-owner",
+    api: "control",
+    installer: "installer",
+    web: undefined,
+  }[kind];
+  if (role) invariant(metadata.role === role, "RESUME_ROLE_METADATA_MISMATCH");
+  if (kind === "coordinator")
+    invariant(
+      ["coordinator", "coordinator-prepared"].includes(metadata.role) &&
+        metadata.writerFenceValid === true,
+      "RESUME_UNIQUE_WRITER_UNKNOWN",
+    );
+  if (kind === "api")
+    invariant(
+      metadata.controlOnly === true &&
+        metadata.noRuntimeSideEffects === true &&
+        metadata.writerFenceValid === true,
+      "RESUME_CONTROL_AUTHORITY_UNKNOWN",
+    );
+}
+
+async function observeOwnedResumeRoles(
+  c,
+  { binding, keys, adapter, ownerBinding, coordinatorBinding },
+) {
+  const directory = join(c.root, "supervisor-container-records"),
+    records = [];
+  for (const name of await fs.readdir(directory))
+    if (/^[a-f0-9]{64}\.json$/.test(name))
+      records.push(await privateJson(join(directory, name)));
+  async function observe(kind, origin, path, key, expectedDigest = null) {
+    const response = await fetch(origin + path, {
+      headers: key
+        ? {
+            "x-platform-internal-key": key,
+            "x-platform-instance-id": c.instanceId,
+          }
+        : {},
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+    invariant(response.ok, "RESUME_ROLE_METADATA_UNAVAILABLE");
+    const metadata = await response.json(),
+      record = records.find(
+        (r) => r.kind === kind && r.startIdentity === metadata.startIdentity,
+      );
+    invariant(record, "RESUME_ROLE_NOT_REGISTERED");
+    const physical = await adapter.inspect(record.containerId);
+    assertOwnedResumeRole(c, kind, metadata, record, physical);
+    if (expectedDigest)
+      invariant(
+        metadata.artifactDigest === expectedDigest,
+        "RESUME_ARTIFACT_IDENTITY_CHANGED",
+      );
+    return { kind, metadata, physical };
+  }
+  invariant(
+    ownerBinding.instanceId === c.instanceId &&
+      ownerBinding.owners?.length > 0 &&
+      coordinatorBinding.instanceId === c.instanceId &&
+      coordinatorBinding.state === "ready",
+    "RESUME_DURABLE_ROLE_BINDING_INVALID",
+  );
+  const roles = [];
+  for (const owner of ownerBinding.owners)
+    roles.push(
+      await observe(
+        "owner",
+        owner.endpoint,
+        "/runtime/metadata",
+        keys.owner,
+        owner.artifactDigest,
+      ),
+    );
+  roles.push(
+    await observe(
+      "coordinator",
+      coordinatorBinding.origin,
+      "/internal/application/identity",
+      keys.control,
+      coordinatorBinding.artifactDigest,
+    ),
+  );
+  const api = binding.weight === 100 ? binding.candidateApi : binding.oldApi;
+  roles.push(
+    await observe(
+      "api",
+      api.origin,
+      "/internal/control/identity",
+      keys.control,
+      api.digest,
+    ),
+  );
+  roles.push(
+    await observe(
+      "web",
+      binding.web.origin,
+      "/web-process",
+      null,
+      binding.web.digest,
+    ),
+  );
+  const authority = await privateJson(
+    join(c.root, "installer/controller-authority.json"),
+  );
+  roles.push(
+    await observe(
+      "installer",
+      authority.origin,
+      "/metadata",
+      keys.controller,
+      authority.artifactDigest,
+    ),
+  );
+  return roles;
+}
+
+export async function resumeBootstrapFoundation(c) {
+  assertBootstrapConfig(c);
+  invariant(
+    process.platform === "linux" &&
+      process.arch === "arm64" &&
+      Number(process.versions.node.split(".")[0]) === 22,
+    "BOOTSTRAP_LINUX_ARM64_NODE22_REQUIRED",
+  );
+  const result = await privateJson(join(c.root, "bootstrap-result.json")),
+    intent = await privateJson(join(c.root, "startup-intent.json"));
+  invariant(
+    result.instanceId === c.instanceId &&
+      result.root === c.root &&
+      intent.instanceId === c.instanceId &&
+      ["preview-ready", "confirmed"].includes(result.state),
+    "RESUME_BOOTSTRAP_RECEIPT_INVALID",
+  );
+  const roots = await privateJson(c.trustRootPath),
+    catalog = await privateJson(c.catalogFile),
+    proof =
+      c.kind === "idle-first-bootstrap-experiment"
+        ? await privateJson(c.qualificationInstallationPath)
+        : null;
+  verifyBootstrapCatalog(c, roots, catalog, proof);
+  const old = JSON.parse(
+    await execute(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.original.containerId,
+    ]),
+  )[0];
+  assertLegacyPhysical(c, old);
+  const foundation = JSON.parse(
+    await execute(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.foundationContainerId,
+    ]),
+  )[0];
+  assertFoundationCloneMounts(c, foundation, old);
+  await assertExperimentalAliases(c);
+  const keys = await privateJson(join(c.root, "installation-keys.json"));
+  invariant(
+    [
+      "owner",
+      "control",
+      "controller",
+      "entry",
+      "sticky",
+      "upgrade",
+      "supervisor",
+      "upgradeSession",
+    ].every((k) => typeof keys[k] === "string" && keys[k].length >= 32),
+    "RESUME_INSTALLATION_KEYS_INVALID",
+  );
+  const paths = Object.fromEntries(
+    Object.entries({
+      owner: "original-owner",
+      futureOwners: "future-owners",
+      installer: "installer",
+      bindings: "bindings",
+      logs: "logs",
+      web: "initial-web-code",
+      entry: "entry",
+    }).map(([name, folder]) => [name, join(c.root, folder)]),
+  );
+  const bindingPath = join(paths.bindings, "coordinator.json"),
+    ownerBindingPath = join(paths.bindings, "owners.json"),
+    installedReleasePath = join(paths.bindings, "installed-release.json");
+  const binding = validateBinding(
+      await privateJson(join(paths.entry, "entry-binding.json")),
+    ),
+    ownerBinding = await privateJson(ownerBindingPath),
+    coordinatorBinding = await privateJson(bindingPath);
+  invariant(
+    binding.instanceId === c.instanceId && [0, 100].includes(binding.weight),
+    "RESUME_PARTIAL_ROUTE_UNSUPPORTED",
+  );
+  const adapter = await createProductionRoleAdapter(c);
+  const rolesBefore = await observeOwnedResumeRoles(c, {
+    binding,
+    keys,
+    adapter,
+    ownerBinding,
+    coordinatorBinding,
+  });
+  const installed = await privateJson(installedReleasePath),
+    authEnv = await privateJson(c.authEnvPath),
+    origin = (name) => `http://127.0.0.1:${c.ports[name]}`;
+  const foundationRuntime = await createFoundation(c, {
+    paths,
+    keys,
+    verified: { authEnv },
+    origin,
+    bindingPath,
+    ownerBindingPath,
+    installedReleasePath,
+    release: installed.release,
+    initialBinding: binding,
+  });
+  const rolesAfter = await observeOwnedResumeRoles(c, {
+    binding,
+    keys,
+    adapter,
+    ownerBinding,
+    coordinatorBinding,
+  });
+  const observedIncarnations = (roles) =>
+    roles.map((r) => ({
+      kind: r.kind,
+      containerId: r.physical.containerId,
+      hostPid: r.physical.hostPid,
+      startIdentity: r.physical.startIdentity,
+      startedAt: r.physical.startedAt,
+      imageDigest: r.physical.imageDigest,
+    }));
+  invariant(
+    canonical(observedIncarnations(rolesBefore)) ===
+      canonical(observedIncarnations(rolesAfter)),
+    "RESUME_BUSINESS_ROLE_CHANGED",
+  );
+  const receipt = {
+    state: "foundation-resumed",
+    instanceId: c.instanceId,
+    roleStarts: 0,
+    roleStops: 0,
+    sdkHomesOpened: 0,
+    roles: rolesAfter.map((r) => ({ kind: r.kind, ...r.physical })),
+    recordedAt: new Date().toISOString(),
+  };
+  await atomicJson(join(c.root, "foundation-resume.json"), receipt);
+  const bridgeReceipt = await readJson(join(c.root, "tcp-bridge.json"), null);
+  const bridge =
+    bridgeReceipt?.state === "active"
+      ? await createBootstrapTcpBridge(c)
+      : null;
+  return {
+    ...foundationRuntime,
+    result: receipt,
+    close: async () => {
+      if (bridge) await bridge.close();
+      await Promise.all([
+        foundationRuntime.entry.close(),
+        foundationRuntime.supervisor.close(),
+      ]);
+    },
+  };
+}
+
+export function assertBridgeConfig(c) {
+  assertBootstrapConfig(c);
+  invariant(
+    Number.isInteger(c.bridgePort) &&
+      c.bridgePort > 0 &&
+      c.bridgePort < 65536 &&
+      !Object.values(c.ports).includes(c.bridgePort),
+    "FIXED_BOOTSTRAP_BRIDGE_PORT_REQUIRED",
+  );
+  return c;
+}
+
+export async function createBootstrapTcpBridge(c) {
+  assertBridgeConfig(c);
+  const old = JSON.parse(
+    await execute(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.original.containerId,
+    ]),
+  )[0];
+  assertLegacyPhysical(c, old, { requireStopped: true });
+  const authEnv = await privateJson(c.authEnvPath),
+    origin = `http://127.0.0.1:${c.ports.entry}`;
+  {
+    const response = await fetch(origin + "/api/system/upgrade/status", {
+      headers: {
+        Authorization: "Bearer " + authEnv.ACCESS_PASSCODE,
+        Origin: c.publicOrigin,
+      },
+      redirect: "error",
+      signal: AbortSignal.timeout(5000),
+    });
+    invariant(response.ok, "BRIDGE_TARGET_UNAVAILABLE");
+    const body = await response.json(),
+      status = body.data || body;
+    invariant(
+      status.instanceId === c.instanceId && status.serviceState === "confirmed",
+      "BRIDGE_TARGET_INSTANCE_UNCONFIRMED",
+    );
+  }
+  const sockets = new Set();
+  const server = createTcpServer((socket) => {
+    const target = connectTcp({ host: "127.0.0.1", port: c.ports.entry });
+    sockets.add(socket);
+    sockets.add(target);
+    const clear = () => {
+      sockets.delete(socket);
+      sockets.delete(target);
+    };
+    socket.once("error", () => target.destroy());
+    target.once("error", () => socket.destroy());
+    socket.once("close", () => {
+      target.destroy();
+      clear();
+    });
+    target.once("close", () => {
+      socket.destroy();
+      clear();
+    });
+    socket.pipe(target).pipe(socket);
+  });
+  await new Promise((ok, fail) => {
+    server.once("error", fail);
+    server.listen(c.bridgePort, "127.0.0.1", ok);
+  });
+  const result = {
+    state: "active",
+    instanceId: c.instanceId,
+    host: "127.0.0.1",
+    port: c.bridgePort,
+    targetPort: c.ports.entry,
+    originalStopped: true,
+    byteForwardingOnly: true,
+    recordedAt: new Date().toISOString(),
+  };
+  await atomicJson(join(c.root, "tcp-bridge.json"), result);
+  return {
+    result,
+    close: async () => {
+      for (const socket of sockets) socket.destroy();
+      await new Promise((ok) => server.close(ok));
+    },
+  };
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -1305,6 +1729,20 @@ if (
         originalStopRequiredForStart: true,
       }) + "\n",
     );
+  } else if (action === "resume" || action === "bridge") {
+    const service =
+      action === "resume"
+        ? await resumeBootstrapFoundation(config)
+        : await createBootstrapTcpBridge(config);
+    process.stdout.write(JSON.stringify(service.result) + "\n");
+    for (const signal of ["SIGTERM", "SIGINT"])
+      process.once(signal, () => {
+        void (
+          service.close
+            ? service.close()
+            : Promise.all([service.entry.close(), service.supervisor.close()])
+        ).then(() => process.exit(0));
+      });
   } else if (action === "repair-bootstrap-web") {
     const result = await repairBootstrapWeb(config);
     process.stdout.write(
