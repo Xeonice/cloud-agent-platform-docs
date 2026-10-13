@@ -12,7 +12,7 @@ const id = "77777777-7777-4777-8777-777777777777";
 
 // Real HTTP and the production Controller/Client/journal, with the ledger at
 // a contract boundary. These checks do not claim native qualification.
-async function fixture(t, { loseFirstAck = false } = {}) {
+async function fixture(t, { loseFirstAck = false, activated = false } = {}) {
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "upg-controller-fault-")),
   );
@@ -22,7 +22,10 @@ async function fixture(t, { loseFirstAck = false } = {}) {
     instanceId: "fault-instance",
     sequence: 7,
     generation: 2,
-    state: "observing",
+    state: activated ? "activation-confirmed" : "observing",
+    ...(activated
+      ? { percent: 100, observedAt: new Date().toISOString() }
+      : {}),
     targetDigest: digest("target"),
   };
   const plan = { policy: { retentionMs: 60000 }, steps: [] };
@@ -59,7 +62,7 @@ async function fixture(t, { loseFirstAck = false } = {}) {
     assert.equal(command.expectedSequence, attempt.sequence);
     events.set(command.eventId, digest(command));
     attempt.sequence++;
-    attempt.state = "failed";
+    if (command.kind !== "ready-revoked") attempt.state = "failed";
     attempt.reason = command.payload.reason;
     if (loseFirstAck && !lost) {
       lost = true;
@@ -80,8 +83,9 @@ async function fixture(t, { loseFirstAck = false } = {}) {
     key: "synthetic-fault-key-32-characters-long",
   });
   let recoveries = 0;
+  const binding = { weight: activated ? 100 : 1, routeGeneration: 2 };
   const executor = {
-    actual: async () => ({ weight: 1, routeGeneration: 2 }),
+    actual: async () => binding,
     fallbackEligibility: async () => ({ qualified: false }),
     recover: async () => {
       recoveries++;
@@ -107,10 +111,35 @@ async function fixture(t, { loseFirstAck = false } = {}) {
     requests,
     events,
     recoveries: () => recoveries,
+    binding: () => ({ ...binding }),
     journal: async () =>
       JSON.parse(await readFile(join(root, "journals", id + ".json"), "utf8")),
   };
 }
+
+test("a Web fault over real control HTTP preserves historical activation and the B route when fallback is unqualified", async (t) => {
+  const f = await fixture(t, { activated: true });
+  const binding = f.binding();
+  const fault = Object.assign(new Error("Web process is unreachable"), {
+    code: "WEB_UNHEALTHY",
+    componentScope: ["web"],
+  });
+  assert.equal(
+    (await f.controller.handleFault(f.session, fault)).state,
+    "frozen-no-qualified-fallback",
+  );
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.requests[0].kind, "ready-revoked");
+  assert.deepEqual(f.requests[0].payload.evidence.componentScope, ["web"]);
+  assert.equal(f.attempts().state, "activation-confirmed");
+  assert.equal(f.attempts().percent, 100);
+  assert.deepEqual(f.binding(), binding);
+  assert.equal(f.recoveries(), 0);
+  const journal = await f.journal();
+  assert.equal(journal.faultCommitApplied, true);
+  assert.equal(journal.faultCommit.kind, "ready-revoked");
+  assert.equal(journal.faultCommit.payload.reason, "WEB_UNHEALTHY");
+});
 
 for (const [name, error, code] of [
   [

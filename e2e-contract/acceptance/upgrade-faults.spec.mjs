@@ -1199,6 +1199,15 @@ function observedTaskWindow(env) {
   };
 }
 async function recordCase(id, page, context, info, body) {
+  if (id === "X09") {
+    // The two cold installations are serial: the first continuity window and
+    // cleanup finish before secondRecoveryFailure creates its own original task.
+    // Measured N01 is 10.6 min, plus 60 s for each fresh source baseline:
+    // 2 * 11.6 min + the real 600000 ms retention window = 33.2 min,
+    // before semantic CRUD, fault recovery and cleanup. Bound this case at 45 min;
+    // each distinct qualification task keeps its existing 30 min timeout.
+    info.setTimeout(45 * 60 * 1000);
+  }
   let env,
     sampler,
     probeResult,
@@ -1206,7 +1215,23 @@ async function recordCase(id, page, context, info, body) {
     succeeded = false;
   const assertions = [],
     started = performance.now(),
-    measurementWindow = { startedAt: new Date().toISOString() };
+    measurementWindow = {
+      startedAt: new Date().toISOString(),
+      ...(id === "X09"
+        ? {
+            playwrightBudgetMs: 45 * 60 * 1000,
+            budgetBasis: {
+              serialColdInstallations: 2,
+              measuredColdInstallationMinutes: 10.6,
+              freshSourceBaselineMsPerInstallation: 60000,
+              retentionWindowMsUsedForBudget: 600000,
+              serialInstallationAndRetentionMinutes: 33.2,
+              marginForSemanticCrudRecoveryAndCleanupMinutes: 11.8,
+              separateQualificationTaskTimeoutMinutes: 30,
+            },
+          }
+        : {}),
+    };
   let actual = { stage: "native-input-preflight", measurementWindow };
   try {
     env = await installation(id, page, context);
@@ -2876,12 +2901,15 @@ test("download failure after genuine UI acceptance keeps the old binding and ori
   recordCase("X02", page, context, info, async (env) => {
     // Keep live Installer identity available to the genuine authorization/UI
     // flow; fail only the real HTTPS package route once its download is requested.
-    const downloadFault = env.fixture.helpers.setPackageDownloadFault("http-503"),
+    const downloadFault =
+        env.fixture.helpers.setPackageDownloadFault("http-503"),
       before = await env.binding(),
       accepted = await env.accept();
     const status = await stoppedAttempt(env, accepted),
       after = await env.binding(),
-      downloads = env.fixture.requestLog().filter((row) => row.path.endsWith(".tgz"));
+      downloads = env.fixture
+        .requestLog()
+        .filter((row) => row.path.endsWith(".tgz"));
     expect(status.attempt.reason).toBe("PACKAGE_DOWNLOAD_FAILED");
     expect(downloads.length).toBeGreaterThan(0);
     for (const download of downloads) {
@@ -2915,17 +2943,27 @@ test("candidate failure after real API routing freezes progress and uses only a 
     await env.until((_s, b) => b.weight > 0 && b.weight < 100);
     const before = await env.binding();
     await env.signal(env.role("api"), "SIGKILL");
-    const status = await stoppedAttempt(env, accepted),
+    // The failure event precedes the actual fallback switch and its receipt.
+    // This fixture retains a healthy source, so its original jobs are checked
+    // only after the Controller has confirmed that exact recovery.
+    const status = await env.until(
+        (s) =>
+          s.attempt?.attemptId === accepted.attemptId &&
+          terminalStates.has(s.attempt.state) &&
+          s.recovery?.triggeringAttemptId === accepted.attemptId &&
+          s.recovery.state === "recovery-confirmed",
+      ),
       after = await env.binding();
+    expect(status.attempt.percent).not.toBe(100);
     expect(after.web.digest).toBe(
       env.initial.confirmedServiceRelease.components.web.artifactDigest,
     );
     expect(status.confirmedServiceRelease?.releaseId).not.toBe(
       env.fixture.envelope.manifest.releaseId,
     );
-    if (after.weight === 0)
-      expect(status.recovery?.state).toBe("recovery-confirmed");
-    else expect(after.candidateApi.digest).toBe(before.candidateApi.digest);
+    expect(after.weight).toBe(0);
+    expect(after.oldApi.digest).toBe(before.oldApi.digest);
+    expect(status.recovery.state).toBe("recovery-confirmed");
     return {
       attemptId: accepted.attemptId,
       actualBinding: after,
@@ -2977,7 +3015,10 @@ test("failure after activation preserves historical success and creates independ
     expect(successful).toHaveLength(1);
     await env.signal(env.role("api"), "SIGKILL");
     const status = await env.until(
-      (s) => s.availableWeb?.ready !== true && s.recovery !== null,
+      (s) =>
+        s.availableWeb?.ready !== true &&
+        s.recovery?.triggeringAttemptId === accepted.attemptId &&
+        s.recovery.state === "recovery-confirmed",
     );
     expect(status.attempt.state).toBe("activation-confirmed");
     expect(status.attempt.percent).toBe(100);
@@ -3132,7 +3173,15 @@ test("real insufficient samples, lost observations and measured consecutive soft
     let paused = false,
       pulses = 0,
       softStatus;
-    const deadline = performance.now() + 60000;
+    // A soft fault is eligible only after the full real sample window and the
+    // required evaluation ticks. This is a bounded test-control budget; frozen
+    // stage duration, HTTP deadlines and production retention stay unchanged.
+    const softMeasurementBudgetMs =
+      current.plan.policy.stageDurationMs +
+      (current.plan.policy.consecutiveEvaluations + 1) *
+        current.plan.policy.evaluationIntervalMs +
+      15000;
+    const deadline = performance.now() + softMeasurementBudgetMs;
     try {
       while (performance.now() < deadline) {
         // Pause ONLY this known isolated ControlAPI process. Its real HTTP
@@ -3181,6 +3230,12 @@ test("real insufficient samples, lost observations and measured consecutive soft
     for (const evaluated of evaluations.slice(
       -current.plan.policy.consecutiveEvaluations,
     )) {
+      expect(evaluated.candidate.requests).toBeGreaterThanOrEqual(
+        current.plan.policy.minRequests,
+      );
+      expect(evaluated.windowMs).toBeGreaterThanOrEqual(
+        current.plan.policy.stageDurationMs,
+      );
       expect(evaluated.probes.failures).toBe(0);
       expect(evaluated.probes.maxLatencyMs).toBeLessThanOrEqual(
         current.plan.policy.requestDeadlineMs,
@@ -3213,6 +3268,7 @@ test("real insufficient samples, lost observations and measured consecutive soft
       softFault: {
         pulses,
         pauseMs,
+        measurementBudgetMs: softMeasurementBudgetMs,
         actualInputFingerprint:
           env.fixture.envelope.manifest.runInputFingerprint,
         reason: softStatus.attempt.reason,
@@ -3221,6 +3277,7 @@ test("real insufficient samples, lost observations and measured consecutive soft
           candidate: value.candidate,
           baseline: value.baseline,
           probes: value.probes,
+          windowMs: value.windowMs,
           evidenceDigest: digest(value),
         })),
       },
@@ -3266,28 +3323,108 @@ test("no healthy fallback never clears the only actually healthy B route [X08]",
 }, info) =>
   recordCase("X08", page, context, info, async (env) => {
     const accepted = await env.accept();
-    await env.until((_s, b) => b.weight === 100);
+    await env.until((s) => s.attempt?.state === "activation-confirmed");
     await env.stopController();
-    const before = await env.binding();
+    const before = await env.binding(),
+      activeWeb = env.role("web"),
+      successful = env
+        .history(accepted.attemptId)
+        .filter((row) => row.kind === "activation-confirmed");
+    expect(before.weight).toBe(100);
+    expect(successful).toHaveLength(1);
+    expect(activeWeb.artifactDigest).toBe(before.web.digest);
+    // Both retained fallbacks are physically unavailable. The installed B API
+    // remains live; pausing only B's Web Node gives the real retention monitor a
+    // Web health fault without killing any original Guest, task or SDK parent.
     await env.signal(env.harness.roleContainers.apiA, "SIGKILL");
-    const snapshot = await env.harness.coordinator.snapshot(accepted.attemptId);
-    const eligibility = await env.harness.coordinator.fallbackEligibility(
-      accepted.attemptId,
-      {
-        fence: snapshot.fence,
-        fault: { code: "NATIVE_FALLBACK_HEALTH_FAILURE" },
-        actual: before,
-      },
-    );
+    await env.signal(env.harness.roleContainers.webA, "SIGKILL");
+    let paused = false,
+      faultProcess,
+      monitor,
+      status,
+      eligibility;
+    try {
+      faultProcess = await signalOwnedNode(env, activeWeb, "SIGSTOP");
+      paused = true;
+      expect(
+        (
+          await responseJson(
+            env.request,
+            env.origin,
+            "/api/projects/" + env.project.id,
+          )
+        ).id,
+      ).toBe(env.project.id);
+      await env.harness.restartController();
+      await expect
+        .poll(
+          async () => {
+            monitor = await readJson(
+              join(
+                env.config.root,
+                "installer/journals",
+                accepted.attemptId + ".json",
+              ),
+              null,
+            );
+            return monitor?.faultRecordingComplete === true;
+          },
+          { timeout: 60000, intervals: [100, 250] },
+        )
+        .toBe(true);
+      expect(monitor.faultCode).toBe("WEB_UNHEALTHY");
+      expect(monitor.recoveryResult).toBe("frozen-no-qualified-fallback");
+      status = await env.state();
+      expect(status.attempt.state).toBe("activation-confirmed");
+      expect(status.attempt.percent).toBe(100);
+      expect(status.recovery).toBeNull();
+      const revocations = env
+        .history(accepted.attemptId)
+        .filter((row) => row.kind === "ready-revoked");
+      expect(revocations).toHaveLength(1);
+      expect(JSON.parse(revocations[0].payload).reason).toBe("WEB_UNHEALTHY");
+      expect(
+        env
+          .history(accepted.attemptId)
+          .filter((row) => row.kind === "recovery-started"),
+      ).toHaveLength(0);
+      const snapshot = await env.harness.coordinator.snapshot(
+        accepted.attemptId,
+      );
+      eligibility = await env.harness.coordinator.fallbackEligibility(
+        accepted.attemptId,
+        {
+          fence: snapshot.fence,
+          actual: await env.binding(),
+        },
+      );
+    } finally {
+      if (paused) await signalOwnedNode(env, activeWeb, "SIGCONT");
+    }
     expect(eligibility.qualified).toBe(false);
-    expect((await env.binding()).weight).toBe(100);
-    expect((await env.binding()).candidateApi.digest).toBe(
-      before.candidateApi.digest,
+    const after = await env.binding();
+    expect(after.weight).toBe(100);
+    expect(after.routeGeneration).toBe(before.routeGeneration);
+    expect(after.web).toEqual(before.web);
+    expect(after.candidateApi.digest).toBe(before.candidateApi.digest);
+    expect(
+      env
+        .history(accepted.attemptId)
+        .filter((row) => row.kind === "activation-confirmed"),
+    ).toEqual(successful);
+    const resumedWeb = await fetch(before.web.origin + "/web-process", {
+      signal: AbortSignal.timeout(2000),
+    });
+    expect(resumedWeb.ok).toBe(true);
+    expect((await resumedWeb.json()).startIdentity).toBe(
+      activeWeb.startIdentity,
     );
     return {
       attemptId: accepted.attemptId,
       eligibility,
-      actualBinding: await env.binding(),
+      faultProcess,
+      durableFault: { code: monitor.faultCode, result: monitor.recoveryResult },
+      actualBinding: after,
     };
   }));
 
@@ -4412,6 +4549,130 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
       automationInput,
       201,
     );
+    const automationProofId = /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/.exec(
+      automationInput.prompt,
+    )?.[1];
+    invariant(automationProofId, "ORIGINAL_AUTOMATION_MODEL_PROOF_REQUIRED");
+    const automationSnapshot = () => ({
+      occurrences: env.database
+        .prepare(
+          "SELECT automation_id,due_at,run_id FROM automation_cron_occurrences WHERE automation_id=? ORDER BY due_at",
+        )
+        .all(automation.id),
+      runs: env.database
+        .prepare(
+          "SELECT id,sandbox_id,status FROM automation_runs WHERE automation_id=? ORDER BY id",
+        )
+        .all(automation.id),
+      intents: env.database
+        .prepare(
+          "SELECT run_id,retry_count,sandbox_id,task_id,input_digest FROM automation_launch_intents WHERE run_id IN (SELECT run_id FROM automation_cron_occurrences WHERE automation_id=?) ORDER BY run_id,retry_count",
+        )
+        .all(automation.id),
+      tasks: env.database
+        .prepare(
+          "SELECT id,sandbox_id,job_handle,cursor,status,last_seq,stdout_bytes,log_path FROM agent_tasks WHERE id IN (SELECT task_id FROM automation_launch_intents WHERE run_id IN (SELECT run_id FROM automation_cron_occurrences WHERE automation_id=?)) ORDER BY id",
+        )
+        .all(automation.id),
+    });
+    // Let the real hourly timer create its original occurrence and durable job
+    // before migration/Coordinator replacement. A post-upgrade row alone could
+    // not distinguish a preserved occurrence from a replacement run.
+    await expect
+      .poll(
+        () => {
+          const current = automationSnapshot();
+          return (
+            current.occurrences.length === 1 &&
+            current.runs.length === 1 &&
+            current.runs[0]?.status === "running" &&
+            current.intents.length === 1 &&
+            current.tasks.length === 1 &&
+            current.tasks[0]?.status === "running"
+          );
+        },
+        { timeout: 360000, intervals: [100, 250] },
+      )
+      .toBe(true);
+    await expect
+      .poll(
+        () =>
+          env.model
+            .evidence()
+            .requests.filter(
+              (row) =>
+                row.taskId === automationProofId && row.phase === "tool-issued",
+            ).length,
+        { timeout: 180000 },
+      )
+      .toBe(1);
+    let automationBefore = automationSnapshot();
+    expect(automationBefore.occurrences).toHaveLength(1);
+    expect(automationBefore.runs).toHaveLength(1);
+    expect(automationBefore.intents).toHaveLength(1);
+    expect(automationBefore.tasks).toHaveLength(1);
+    const occurrenceBefore = automationBefore.occurrences[0],
+      intentBefore = automationBefore.intents[0];
+    let automatedTaskBefore = automationBefore.tasks[0];
+    expect(intentBefore.retry_count).toBe(0);
+    expect(intentBefore.run_id).toBe(occurrenceBefore.run_id);
+    expect(automatedTaskBefore.id).toBe(intentBefore.task_id);
+    expect(automatedTaskBefore.sandbox_id).toBe(intentBefore.sandbox_id);
+    expect(automationBefore.runs[0].id).toBe(occurrenceBefore.run_id);
+    expect(automationBefore.runs[0].sandbox_id).toBe(intentBefore.sandbox_id);
+    env.owned.push(intentBefore.sandbox_id);
+    let automatedCounterBefore;
+    await expect
+      .poll(
+        async () => {
+          automatedCounterBefore = await actualHeadlessCounter(
+            env.request,
+            env.origin,
+            intentBefore.sandbox_id,
+            automationProofId,
+            { allowPending: true },
+          );
+          return automatedCounterBefore?.counter.length ?? 0;
+        },
+        { timeout: 30000 },
+      )
+      .toBeGreaterThanOrEqual(2);
+    await expect
+      .poll(
+        () => {
+          const task = automationSnapshot().tasks[0];
+          return (
+            task?.id === intentBefore.task_id &&
+            task.stdout_bytes > 0 &&
+            task.last_seq > 0 &&
+            task.cursor !== null
+          );
+        },
+        { timeout: 30000 },
+      )
+      .toBe(true);
+    automationBefore = automationSnapshot();
+    expect(automationBefore.occurrences).toEqual([occurrenceBefore]);
+    expect(automationBefore.intents).toEqual([intentBefore]);
+    expect(automationBefore.tasks).toHaveLength(1);
+    automatedTaskBefore = automationBefore.tasks[0];
+    invariant(
+      resolve(automatedTaskBefore.log_path).startsWith(
+        join(env.config.root, "business") + "/",
+      ),
+      "OWNED_AUTOMATION_LOG_PATH_REQUIRED",
+    );
+    const automatedLogBefore = await fs.readFile(
+      join(automatedTaskBefore.log_path, "stdout.jsonl"),
+    );
+    expect(automatedTaskBefore.stdout_bytes).toBeGreaterThan(0);
+    expect(automatedLogBefore.length).toBeGreaterThanOrEqual(
+      automatedTaskBefore.stdout_bytes,
+    );
+    const originalLogPrefix = automatedLogBefore.subarray(
+      0,
+      automatedTaskBefore.stdout_bytes,
+    );
     const accepted = await env.accept(),
       operationId = randomUUID(),
       body = { name: "one accepted business operation", sourceType: "empty" };
@@ -4579,41 +4840,54 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
     );
     await env.harness.restartController();
     await env.until((s) => s.attempt?.state === "activation-confirmed");
-    await expect
-      .poll(
-        () =>
-          env.database
-            .prepare(
-              "SELECT count(*) n FROM automation_cron_occurrences WHERE automation_id=?",
-            )
-            .get(automation.id).n,
-        { timeout: 180000 },
-      )
-      .toBeGreaterThan(0);
-    const occurrences = env.database
-      .prepare(
-        "SELECT run_id FROM automation_cron_occurrences WHERE automation_id=?",
-      )
-      .all(automation.id);
-    env.owned.push(
-      ...env.database
-        .prepare("SELECT id FROM sandboxes WHERE source_automation_id=?")
-        .all(automation.id)
-        .map((row) => row.id),
+    const automationAfter = automationSnapshot();
+    expect(automationAfter.occurrences).toEqual(automationBefore.occurrences);
+    expect(automationAfter.runs).toHaveLength(1);
+    expect(automationAfter.runs[0]).toEqual(automationBefore.runs[0]);
+    expect(automationAfter.intents).toEqual(automationBefore.intents);
+    expect(automationAfter.tasks).toHaveLength(1);
+    const automatedTaskAfter = automationAfter.tasks[0];
+    expect(automatedTaskAfter.id).toBe(automatedTaskBefore.id);
+    expect(automatedTaskAfter.sandbox_id).toBe(automatedTaskBefore.sandbox_id);
+    expect(automatedTaskAfter.job_handle).toBe(automatedTaskBefore.job_handle);
+    expect(automatedTaskAfter.status).toBe("running");
+    expect(automatedTaskAfter.last_seq).toBeGreaterThanOrEqual(
+      automatedTaskBefore.last_seq,
     );
-    for (const occurrence of occurrences) {
-      const intent = env.database
-        .prepare(
-          "SELECT * FROM automation_launch_intents WHERE run_id=? AND retry_count=0",
-        )
-        .get(occurrence.run_id);
-      expect(intent).toBeTruthy();
-      expect(
-        env.database
-          .prepare("SELECT count(*) n FROM agent_tasks WHERE id=?")
-          .get(intent.task_id).n,
-      ).toBe(1);
-    }
+    expect(automatedTaskAfter.stdout_bytes).toBeGreaterThanOrEqual(
+      automatedTaskBefore.stdout_bytes,
+    );
+    expect(automatedTaskAfter.log_path).toBe(automatedTaskBefore.log_path);
+    if (automatedTaskBefore.cursor !== null)
+      expect(automatedTaskAfter.cursor).not.toBeNull();
+    if (automatedTaskAfter.stdout_bytes === automatedTaskBefore.stdout_bytes)
+      expect(automatedTaskAfter.cursor).toBe(automatedTaskBefore.cursor);
+    const automatedLogAfter = await fs.readFile(
+      join(automatedTaskAfter.log_path, "stdout.jsonl"),
+    );
+    expect(automatedLogAfter.length).toBeGreaterThanOrEqual(
+      automatedTaskAfter.stdout_bytes,
+    );
+    expect(automatedLogAfter.subarray(0, originalLogPrefix.length)).toEqual(
+      originalLogPrefix,
+    );
+    const automatedCounterAfter = await actualHeadlessCounter(
+      env.request,
+      env.origin,
+      intentBefore.sandbox_id,
+      automationProofId,
+    );
+    expect(automatedCounterAfter.pid).toBe(automatedCounterBefore.pid);
+    expect(automatedCounterAfter.birth).toBe(automatedCounterBefore.birth);
+    expect(
+      automatedCounterAfter.counter.slice(
+        0,
+        automatedCounterBefore.counter.length,
+      ),
+    ).toEqual(automatedCounterBefore.counter);
+    expect(automatedCounterAfter.counter.length).toBeGreaterThan(
+      automatedCounterBefore.counter.length,
+    );
     await responseJson(
       env.request,
       env.origin,
@@ -4625,7 +4899,28 @@ test("parallel real business/CAS/operation lookup and timer automation preserve 
     return {
       attemptId: accepted.attemptId,
       operationDigest: digest(operationId),
-      occurrences: occurrences.map((row) => ({ runId: row.run_id })),
+      originalOccurrence: {
+        dueAt: occurrenceBefore.due_at,
+        runId: occurrenceBefore.run_id,
+        sandboxId: intentBefore.sandbox_id,
+        taskId: intentBefore.task_id,
+        jobHandleDigest: digest(automatedTaskBefore.job_handle),
+        cursorBefore: automatedTaskBefore.cursor,
+        cursorAfter: automatedTaskAfter.cursor,
+        lastSeqBefore: automatedTaskBefore.last_seq,
+        lastSeqAfter: automatedTaskAfter.last_seq,
+        stdoutBytesBefore: automatedTaskBefore.stdout_bytes,
+        stdoutBytesAfter: automatedTaskAfter.stdout_bytes,
+        originalLogPrefixDigest: digest(originalLogPrefix.toString("utf8")),
+        originalCounter: {
+          pid: automatedCounterBefore.pid,
+          birth: automatedCounterBefore.birth,
+          before: automatedCounterBefore.counter.length,
+          after: automatedCounterAfter.counter.length,
+        },
+        occurrencesBefore: automationBefore.occurrences,
+        occurrencesAfter: automationAfter.occurrences,
+      },
       naturalExit: {
         taskId: natural.id,
         sandboxId: exitSandbox.id,

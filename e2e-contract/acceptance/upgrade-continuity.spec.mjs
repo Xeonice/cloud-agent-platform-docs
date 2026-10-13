@@ -855,6 +855,15 @@ test("real user acceptance, durable installation and original VM/terminal contin
         { timeout: 5000, intervals: [25, 50, 100] },
       )
       .toBe(true);
+    const restoredTerminalTabs = page
+      .getByRole("tablist", { name: "终端标签", exact: true })
+      .getByRole("tab");
+    await expect(restoredTerminalTabs).toHaveText([
+      "Agent",
+      "终端 1",
+      "终端 2",
+    ]);
+    const restoredTerminalLabels = await restoredTerminalTabs.allTextContents();
     const attachMs = performance.now() - refreshStart;
     const marker = "UPG_INPUT_" + randomUUID().replaceAll("-", "");
     await input(
@@ -1022,6 +1031,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         activationGeneration: installed.activationGeneration,
         terminalIdentity: secondTerminal.terminalIdentity,
         attachMs,
+        restoredTerminalLabels,
         counter: snapshotB,
         headlessRunId: run.id,
         headlessJobHandleDigest: digest(persistedBefore.task.job_handle),

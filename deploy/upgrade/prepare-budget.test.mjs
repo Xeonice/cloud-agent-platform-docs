@@ -62,10 +62,16 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
     pid: process.pid,
   };
   let binding = {
+    instanceId: "http-budget-case",
+    attemptId,
+    fence,
+    weight: 0,
     routeGeneration: 1,
+    oldApi: { origin: record.origin, digest },
     web: { origin: "http://127.0.0.1:2", digest: "sha256:" + "c".repeat(64) },
     retainedWeb: [],
   };
+  let generation = 1;
   const oldBinding = structuredClone(binding);
   const origin = await listener(t, async (request, body) => {
     const path = new URL(request.url, "http://127.0.0.1").pathname;
@@ -79,13 +85,32 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
     if (path === "/start") return record;
     if (path === "/observe") return { qualified: true, record };
     if (path.endsWith("/renew")) return { current: true };
+    if (path === "/internal/upgrades/" + attemptId)
+      return { sourceActivation: { components: { api: { artifactDigest: digest } } } };
     if (path === "/internal/upgrades/observation")
       return {
-        baseline: { requests: 10, errorRate: 0 },
+        coordinatorGeneration: generation,
+        observerEpoch: "budget-observer-" + generation,
+        fenceValid: true,
+        ownerGenerationsValid: true,
+        routeGenerationValid: true,
+        baseline: {
+          known: true, qualified: true, requests: 100, errorRate: 0,
+          p95Ms: 1, windowMs: 60000,
+          source: {
+            instanceId: "http-budget-case", attemptId, fence,
+            routeGeneration: binding.routeGeneration,
+            coordinatorGeneration: generation,
+            observerEpoch: "budget-observer-" + generation,
+            artifactDigest: digest, startIdentity: "source-control",
+            origin: binding.oldApi.origin, weight: 0, routeWeight: 0,
+            observedAt: new Date().toISOString(),
+          },
+        },
         sharedStateHealthy: true,
         continuity: { qualified: true },
         invariants: hardInvariants,
-        probes: { hz: 10, failures: 0, maxLatencyMs: 1, attachMaxMs: 1 },
+        probes: { hz: 10, samples: 600, failures: 0, maxLatencyMs: 1, attachMaxMs: 1 },
       };
     if (
       path.endsWith("/owner-candidate") ||
@@ -103,7 +128,8 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
       assert.equal(body.planDigest, digest);
       if (body.action === "status")
         return { definitelyNotApplied: true, stage: "absent" };
-      if (body.action === "adopt")
+      if (body.action === "adopt") {
+        generation = 2;
         return {
           commitKnown: true,
           evidence: {
@@ -111,8 +137,10 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
             originalResourcesPreserved: true,
             singleWriter: true,
             maxControlPauseMs: 1,
+            generation,
           },
         };
+      }
       return { commitKnown: true, stage: body.action };
     }
     if (path === "/binding") {
@@ -148,6 +176,8 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
         probeHz: 10,
         requestDeadlineMs: 2000,
         attachDeadlineMs: 5000,
+        stageDurationMs: 60000,
+        observationFreshnessMs: 5000,
       },
     },
   };
