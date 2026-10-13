@@ -20,6 +20,7 @@ import {
   previewProbeOrigin,
   assertPreviewSource,
   verifySealedCloneFiles,
+  assertWebRepairPhysical,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -119,6 +120,59 @@ const receipt = (c) => ({
   masterKeyDigest: image,
 });
 const fails = (fn, code) => assert.throws(fn, (error) => error.code === code);
+
+test("bootstrap Web repair only targets its unchanged physical preview Web before any upgrade", () => {
+  const c = { ...config(), kind: "idle-first-bootstrap-experiment" },
+    startedAt = "2026-10-14T03:00:00Z",
+    startIdentity = "preview-web";
+  const web = { containerId: cid, startIdentity, startedAt };
+  const bootstrap = {
+    instanceId: c.instanceId,
+    state: "preview-ready",
+    qualificationOnly: true,
+    containers: { webA: web },
+    release: { components: { web: { artifactDigest: image } } },
+  };
+  const binding = {
+    instanceId: c.instanceId,
+    attemptId: "initial",
+    weight: 0,
+    web: {
+      root: join(c.root, "initial-web-code"),
+      digest: image,
+      origin: `http://127.0.0.1:${c.ports.webA}`,
+    },
+  };
+  const before = {
+    ...web,
+    role: "web",
+    imageDigest: c.runtimeImage,
+    running: true,
+    entrypoint: ["/usr/local/bin/node"],
+    command: [join(binding.web.root, "server.js")],
+  };
+  assertWebRepairPhysical(c, bootstrap, binding, before);
+  for (const changed of [
+    { ...before, role: "owner" },
+    { ...before, startedAt: "replaced" },
+    { ...before, containerId: "f".repeat(64) },
+    { ...before, command: ["/arbitrary.js"] },
+  ])
+    fails(
+      () => assertWebRepairPhysical(c, bootstrap, binding, changed),
+      "REPAIR_WEB_PHYSICAL_IDENTITY_CHANGED",
+    );
+  fails(
+    () =>
+      assertWebRepairPhysical(
+        c,
+        bootstrap,
+        { ...binding, attemptId: "accepted-upgrade" },
+        before,
+      ),
+    "REPAIR_REQUIRES_UNUPGRADED_PREVIEW_WEB",
+  );
+});
 
 test("repeatable readonly SQLite preflight permits its actual empty WAL while sealed DB/key hashes stay intact", async (t) => {
   const root = await fs.realpath(

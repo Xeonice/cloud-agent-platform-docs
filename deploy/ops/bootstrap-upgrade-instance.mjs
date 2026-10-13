@@ -1003,10 +1003,25 @@ async function startBootstrap(c, { mode }) {
     "webA",
     "web",
     join(paths.web, "server.js"),
-    { PORT: String(ports.webA), HOSTNAME: "127.0.0.1" },
+    {
+      PORT: String(ports.webA),
+      HOSTNAME: "127.0.0.1",
+      PLATFORM_ARTIFACT_DIGEST: release.components.web.artifactDigest,
+    },
     paths.web,
   );
   await waitFor(origin("webA"), "/web-build");
+  const initialWebProcess = await (
+    await waitFor(origin("webA"), "/web-process")
+  ).json();
+  invariant(
+    initialWebProcess.instanceId === c.instanceId &&
+      initialWebProcess.artifactDigest ===
+        release.components.web.artifactDigest &&
+      initialWebProcess.startIdentity === containers.webA.startIdentity &&
+      initialWebProcess.webRevision === release.components.web.webRevision,
+    "BOOTSTRAP_WEB_PROCESS_IDENTITY_MISMATCH",
+  );
   const startIdentity = randomUUID(),
     controllerPath = join(paths.installer, "controller-config.json");
   await atomicJson(controllerPath, { ...controllerConfig, startIdentity });
@@ -1129,6 +1144,150 @@ export const startProductionBootstrap = (c) =>
 export const previewExperimentalBootstrap = (c) =>
   startBootstrap(c, { mode: "preview" });
 
+export function assertWebRepairPhysical(c, bootstrap, binding, before) {
+  invariant(
+    bootstrap.instanceId === c.instanceId &&
+      bootstrap.state === "preview-ready" &&
+      bootstrap.qualificationOnly === true &&
+      binding.instanceId === c.instanceId &&
+      binding.attemptId === "initial" &&
+      binding.weight === 0 &&
+      binding.web.root === join(c.root, "initial-web-code") &&
+      binding.web.digest === bootstrap.release.components.web.artifactDigest &&
+      binding.web.origin === `http://127.0.0.1:${c.ports.webA}`,
+    "REPAIR_REQUIRES_UNUPGRADED_PREVIEW_WEB",
+  );
+  invariant(
+    before.containerId === bootstrap.containers.webA.containerId &&
+      before.role === "web" &&
+      before.imageDigest === c.runtimeImage &&
+      before.startIdentity === bootstrap.containers.webA.startIdentity &&
+      before.startedAt === bootstrap.containers.webA.startedAt &&
+      before.running === true &&
+      before.entrypoint.length === 1 &&
+      before.entrypoint[0] === "/usr/local/bin/node" &&
+      before.command.length === 1 &&
+      before.command[0] === join(binding.web.root, "server.js"),
+    "REPAIR_WEB_PHYSICAL_IDENTITY_CHANGED",
+  );
+}
+
+export async function repairBootstrapWeb(c) {
+  assertBootstrapConfig(c);
+  invariant(
+    c.kind === "idle-first-bootstrap-experiment",
+    "REPAIR_REQUIRES_EXPLICIT_EXPERIMENT",
+  );
+  const root = c.root,
+    bootstrap = await privateJson(join(root, "bootstrap-result.json"));
+  const binding = await privateJson(join(root, "entry/entry-binding.json"));
+  const adapter = await createProductionRoleAdapter(c);
+  const before = await adapter.inspect(bootstrap.containers.webA.containerId);
+  assertWebRepairPhysical(c, bootstrap, binding, before);
+  const artifact = await readJson(
+    join(c.artifactRoot, "upgrade-artifact.json"),
+  );
+  invariant(
+    canonical(artifact.components.web) ===
+      canonical(bootstrap.release.components.web),
+    "REPAIR_WEB_ARTIFACT_CHANGED",
+  );
+  const expected = artifact.files
+    .filter(
+      (f) =>
+        f.path.startsWith("web/") && !f.path.startsWith("web/.next/cache/"),
+    )
+    .map((f) => ({ ...f, path: f.path.slice(4) }));
+  const actual = (await treeManifest(binding.web.root)).filter(
+    (f) => !f.path.startsWith(".next/cache/"),
+  );
+  invariant(
+    canonical(expected) === canonical(actual),
+    "REPAIR_WEB_CODE_CHANGED",
+  );
+  const origin = binding.web.origin,
+    observed = await (await waitFor(origin, "/web-process")).json();
+  invariant(
+    observed.instanceId === c.instanceId &&
+      observed.startIdentity === before.startIdentity &&
+      observed.webRevision === bootstrap.release.components.web.webRevision &&
+      observed.artifactDigest === null,
+    "REPAIR_WEB_MISSING_DIGEST_NOT_OBSERVED",
+  );
+  const recordPath = join(root, "web-identity-repair.json");
+  await fs.writeFile(
+    recordPath,
+    JSON.stringify({
+      state: "intent",
+      instanceId: c.instanceId,
+      before,
+      createdAt: new Date().toISOString(),
+    }) + "\n",
+    { flag: "wx", mode: 0o600 },
+  );
+  const stopped = await adapter.signal(before.containerId, "SIGTERM");
+  invariant(
+    stopped.running === false && stopped.hostPid === 0,
+    "REPAIR_WEB_STOP_UNCONFIRMED",
+  );
+  const startIdentity = randomUUID(),
+    entry = join(binding.web.root, "server.js");
+  const env = {
+    NODE_ENV: "production",
+    PATH: "/usr/local/bin:/usr/bin:/bin",
+    ...c.runtimeEnv,
+    PLATFORM_INSTANCE_ID: c.instanceId,
+    PLATFORM_ARTIFACT_DIGEST: bootstrap.release.components.web.artifactDigest,
+    PLATFORM_PROCESS_START_IDENTITY: startIdentity,
+    PORT: String(c.ports.webA),
+    HOSTNAME: "127.0.0.1",
+  };
+  const after = await adapter.launch({
+    kind: "web",
+    args: [entry],
+    entry,
+    cwd: binding.web.root,
+    artifactRoot: c.artifactRoot,
+    record: { startIdentity },
+    env,
+  });
+  const identity = await (await waitFor(origin, "/web-process")).json();
+  invariant(
+    identity.instanceId === c.instanceId &&
+      identity.startIdentity === startIdentity &&
+      identity.artifactDigest ===
+        bootstrap.release.components.web.artifactDigest &&
+      identity.webRevision === bootstrap.release.components.web.webRevision,
+    "REPAIR_WEB_NEW_IDENTITY_UNCONFIRMED",
+  );
+  invariant(
+    canonical(binding) ===
+      canonical(await privateJson(join(root, "entry/entry-binding.json"))),
+    "REPAIR_WEB_BINDING_CHANGED",
+  );
+  const retained = {
+    ...bootstrap,
+    containers: { ...bootstrap.containers, webA: after },
+    webIdentityRepairedAt: new Date().toISOString(),
+  };
+  await atomicJson(join(root, "bootstrap-result.json"), retained);
+  await atomicJson(join(root, "logs/webA.identity.json"), after);
+  const result = {
+    state: "repaired",
+    instanceId: c.instanceId,
+    artifactDigest: bootstrap.release.components.web.artifactDigest,
+    codeUnchanged: true,
+    before,
+    stopped,
+    after,
+    originalProcessesPreserved: true,
+    ownerRestarted: false,
+    recordedAt: new Date().toISOString(),
+  };
+  await atomicJson(recordPath, result);
+  return result;
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
@@ -1144,6 +1303,16 @@ if (
         artifactTreeDigest: r.bundle.treeDigest,
         maintenanceRequired: true,
         originalStopRequiredForStart: true,
+      }) + "\n",
+    );
+  } else if (action === "repair-bootstrap-web") {
+    const result = await repairBootstrapWeb(config);
+    process.stdout.write(
+      JSON.stringify({
+        state: result.state,
+        instanceId: result.instanceId,
+        ownerRestarted: false,
+        resultPath: join(config.root, "web-identity-repair.json"),
       }) + "\n",
     );
   } else if (action === "start" || action === "preview") {
