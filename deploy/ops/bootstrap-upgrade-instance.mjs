@@ -389,6 +389,25 @@ export async function assertExperimentalAliases(c, { stat = fs.lstat } = {}) {
   }
 }
 
+export async function verifySealedCloneFiles({
+  databasePath = "/data/platform.db",
+  masterKeyPath = "/data/.master.key",
+  databaseDigest,
+  masterKeyDigest,
+}) {
+  const wal = await fs.lstat(databasePath + "-wal").catch((error) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  invariant(
+    (wal === null ||
+      (wal.isFile() && !wal.isSymbolicLink() && wal.size === 0)) &&
+      (await fileDigest(databasePath)).digest === databaseDigest &&
+      (await fileDigest(masterKeyPath)).digest === masterKeyDigest,
+    "BOOTSTRAP_CLONE_CHANGED",
+  );
+}
+
 export function assertLegacyPhysical(c, old, { requireStopped = false } = {}) {
   invariant(
     old?.Id === c.original.containerId &&
@@ -590,17 +609,10 @@ export async function verifyBootstrapInputs(
     journal.entries.length === receipt.databaseMigration.to,
     "BOOTSTRAP_SCHEMA_MISMATCH",
   );
-  invariant(
-    !(await fs.lstat("/data/platform.db-wal").catch((error) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    })) &&
-      (await fileDigest("/data/platform.db")).digest ===
-        receipt.cloneDatabaseDigest &&
-      (await fileDigest("/data/.master.key")).digest ===
-        receipt.masterKeyDigest,
-    "BOOTSTRAP_CLONE_CHANGED",
-  );
+  await verifySealedCloneFiles({
+    databaseDigest: receipt.cloneDatabaseDigest,
+    masterKeyDigest: receipt.masterKeyDigest,
+  });
   const D = createRequire(join(c.artifactRoot, "api/package.json"))(
     "better-sqlite3",
   );

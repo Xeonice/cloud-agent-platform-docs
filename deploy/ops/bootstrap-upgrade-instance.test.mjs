@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { generateKeyPairSync } from "node:crypto";
+import { createRequire } from "node:module";
 import {
   assertBootstrapConfig,
   assertCloneReceipt,
@@ -18,6 +19,7 @@ import {
   bootstrapDataRoot,
   previewProbeOrigin,
   assertPreviewSource,
+  verifySealedCloneFiles,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -117,6 +119,64 @@ const receipt = (c) => ({
   masterKeyDigest: image,
 });
 const fails = (fn, code) => assert.throws(fn, (error) => error.code === code);
+
+test("repeatable readonly SQLite preflight permits its actual empty WAL while sealed DB/key hashes stay intact", async (t) => {
+  const root = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "bootstrap-empty-wal-")),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const D = createRequire(new URL("../../api/package.json", import.meta.url))(
+    "better-sqlite3",
+  );
+  const databasePath = join(root, "platform.db"),
+    masterKeyPath = join(root, ".master.key");
+  await fs.writeFile(masterKeyPath, "unit-only-private-master-key", {
+    mode: 0o600,
+  });
+  const writer = new D(databasePath);
+  writer.pragma("journal_mode = WAL");
+  writer.exec(
+    "CREATE TABLE proof(value TEXT); INSERT INTO proof VALUES('before')",
+  );
+  writer.pragma("wal_checkpoint(TRUNCATE)");
+  writer.close();
+  const fixed = {
+    databasePath,
+    masterKeyPath,
+    databaseDigest: digest(await fs.readFile(databasePath)),
+    masterKeyDigest: digest(await fs.readFile(masterKeyPath)),
+  };
+  await verifySealedCloneFiles(fixed);
+  const reader = new D(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    reader.exec("PRAGMA query_only=ON");
+    assert.equal(
+      reader.prepare("SELECT value FROM proof").get().value,
+      "before",
+    );
+    assert.equal((await fs.stat(databasePath + "-wal")).size, 0);
+    await verifySealedCloneFiles(fixed);
+    await verifySealedCloneFiles(fixed);
+    const activeWriter = new D(databasePath);
+    try {
+      activeWriter.exec("INSERT INTO proof VALUES('uncheckpointed')");
+      assert.ok((await fs.stat(databasePath + "-wal")).size > 0);
+      await assert.rejects(
+        verifySealedCloneFiles(fixed),
+        (error) => error.code === "BOOTSTRAP_CLONE_CHANGED",
+      );
+    } finally {
+      activeWriter.close();
+    }
+    await fs.writeFile(masterKeyPath, "changed");
+    await assert.rejects(
+      verifySealedCloneFiles(fixed),
+      (error) => error.code === "BOOTSTRAP_CLONE_CHANGED",
+    );
+  } finally {
+    reader.close();
+  }
+});
 
 test("fixed provider images survive Owner/Coordinator launches while transport and installer get no provider config", () => {
   const providerEnv = {
