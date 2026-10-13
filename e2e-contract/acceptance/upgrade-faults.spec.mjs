@@ -1830,22 +1830,21 @@ async function x02RemainingFailures(browser) {
       expect(digest(plan)).toBe(fixedPath.migrationPlanDigest);
       const target = plan.projections[0].targetTable;
       expect(target).toMatch(/^upg_shadow_[a-zA-Z0-9_]+$/);
-      await env.stopController();
-      const accepted = await env.accept(),
-        before = await env.binding();
       expect(
         env.database
           .prepare("SELECT type FROM sqlite_master WHERE name=?")
           .get(target),
       ).toBeUndefined();
-      // A genuine isolated SQLite namespace collision is a preparation fault.
+      // Arm the isolated namespace collision before genuine UI acceptance,
+      // keeping live Installer identity available throughout authorization.
       // It touches no authoritative rows, signed plan, verified code or source table.
       env.database.exec(
         "CREATE INDEX " + identifier(target) + " ON projects(id)",
       );
       try {
-        await env.harness.restartController();
-        const failed = await stoppedAttempt(env, accepted);
+        const before = await env.binding(),
+          accepted = await env.accept(),
+          failed = await stoppedAttempt(env, accepted);
         expect(
           env
             .history(accepted.attemptId)
@@ -2875,14 +2874,25 @@ test("download failure after genuine UI acceptance keeps the old binding and ori
   context,
 }, info) =>
   recordCase("X02", page, context, info, async (env) => {
-    await env.stopController();
-    const accepted = await env.accept(),
-      before = await env.binding();
-    await env.fixture.close();
-    await env.harness.restartController();
+    // Keep live Installer identity available to the genuine authorization/UI
+    // flow; fail only the real HTTPS package route once its download is requested.
+    const downloadFault = env.fixture.helpers.setPackageDownloadFault("http-503"),
+      before = await env.binding(),
+      accepted = await env.accept();
     const status = await stoppedAttempt(env, accepted),
-      after = await env.binding();
-    expect(after.web.digest).toBe(before.web.digest);
+      after = await env.binding(),
+      downloads = env.fixture.requestLog().filter((row) => row.path.endsWith(".tgz"));
+    expect(status.attempt.reason).toBe("PACKAGE_DOWNLOAD_FAILED");
+    expect(downloads.length).toBeGreaterThan(0);
+    for (const download of downloads) {
+      expect(download.status).toBe(503);
+      expect(download.bytesSent).toBe(0);
+      expect(download.completed).toBe(true);
+      expect(Date.parse(download.startedAt)).toBeGreaterThanOrEqual(
+        Date.parse(accepted.acceptedAt),
+      );
+    }
+    expect(after).toEqual(before);
     expect(after.weight).toBe(0);
     expect(status.lastConfirmedServiceRelease.releaseId).toBe(
       env.initial.confirmedServiceRelease.releaseId,
@@ -2891,6 +2901,7 @@ test("download failure after genuine UI acceptance keeps the old binding and ori
       attemptId: accepted.attemptId,
       reason: status.attempt.reason,
       binding: after,
+      downloadFault: { ...downloadFault, requests: downloads },
       afterContinuity: () => x02RemainingFailures(context.browser()),
     };
   }));
