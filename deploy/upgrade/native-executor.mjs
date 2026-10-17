@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { invariant, canonical } from './trust.mjs';
+import { inspectObservation } from './circuit-breaker.mjs';
 export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,entryKey,supervisorOrigin,supervisorKey,fetcher=fetch}) {
   invariant(supervisorOrigin&&supervisorKey?.length>=32,'SEPARATE_SUPERVISOR_REQUIRED');
   async function entry(path,body) { const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':entryKey},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5000)});invariant(r.ok,'ENTRY_RPC_FAILED');return r.json(); }
@@ -62,6 +63,87 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       await new Promise(ok=>setTimeout(ok,Math.min(100,Math.max(1,deadline-Date.now()))));
     }
   }
+  // A Web binding commit changes the probe scope even at an unchanged 100% API
+  // weight. Keep that exact serving binding while the independent Observer
+  // gathers its new window; a prior route's counts cannot authorize activation.
+  async function changedApiActivation(attempt,fence) {
+    const policy=attempt.plan.policy,windowMs=Math.max(60000,policy.stageDurationMs),budget=policy.candidateStartupMs||120000;
+    invariant(Number.isFinite(budget)&&budget>0&&Number.isFinite(policy.evaluationIntervalMs)&&policy.evaluationIntervalMs>0,'ACTIVATION_SCOPE_BUDGET_INVALID');
+    const deadline=Date.now()+budget;
+    const read=async work=>{const remaining=deadline-Date.now();invariant(remaining>0,'ACTIVATION_SCOPE_COLLECTION_EXCEEDED');let timer;try{return await Promise.race([work(),new Promise((_,fail)=>{timer=setTimeout(()=>fail(Object.assign(Error('Activation observation budget exceeded'),{code:'ACTIVATION_SCOPE_COLLECTION_EXCEEDED'})),remaining);})]);}finally{clearTimeout(timer);}};
+    const fixed=value=>{const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;};
+    const fenceCheck=()=>read(()=>coordinator.assertFence(attempt.attemptId,fence));
+    await fenceCheck();
+    const actual=await read(()=>entry('/binding')),frozen=canonical(fixed(actual)),target=attempt.manifest.components;
+    invariant(actual.instanceId===instanceId&&actual.attemptId===attempt.attemptId&&actual.fence===fence&&Number.isSafeInteger(actual.routeGeneration)&&actual.routeGeneration>0&&actual.weight===100&&actual.candidateApi?.digest===target.api.artifactDigest&&actual.web?.digest===target.web.artifactDigest,'ACTIVATION_BINDING_UNKNOWN');
+    const snapshot=await read(()=>coordinator.snapshot(attempt.attemptId)),source=(snapshot.sourceActual?.components||snapshot.sourceActivation?.components)?.api;
+    invariant(source?.artifactDigest===actual.oldApi?.digest,'ACTIVATION_SOURCE_IDENTITY_UNKNOWN');
+    const candidate=snapshot.appliedSteps?.find(step=>step.stepId==='candidate')?.evidence;
+    invariant(candidate?.artifactDigest===target.api.artifactDigest&&candidate.origin===actual.candidateApi.origin&&typeof candidate.startIdentity==='string'&&candidate.startIdentity.length>0,'ACTIVATION_CANDIDATE_RECEIPT_UNKNOWN');
+    const handoff=snapshot.appliedSteps?.find(step=>step.stepId==='coordinator-handoff')?.evidence;
+    if(handoff)invariant(Number.isSafeInteger(handoff.generation)&&handoff.generation>0,'ACTIVATION_COORDINATOR_RECEIPT_UNKNOWN');
+    const priorObservation=snapshot.appliedSteps?.findLast(step=>step.stepId==='observe-100')?.evidence;
+    const sourceAnchor=priorObservation?.baseline||handoff?.sourceBaseline,anchor=sourceAnchor?.source;
+    invariant(sourceAnchor?.known===true&&sourceAnchor.qualified===true&&anchor?.instanceId===instanceId&&anchor.attemptId===attempt.attemptId&&anchor.fence===fence&&Number.isSafeInteger(anchor.routeGeneration)&&(priorObservation?anchor.routeGeneration+(attempt.plan.webReused===true?0:1)===actual.routeGeneration:anchor.routeGeneration<actual.routeGeneration)&&anchor.weight===0&&anchor.routeWeight===(priorObservation?100:0)&&anchor.origin===actual.oldApi.origin&&anchor.artifactDigest===source.artifactDigest&&typeof anchor.startIdentity==='string'&&anchor.startIdentity.length>0&&Number.isSafeInteger(anchor.coordinatorGeneration)&&anchor.coordinatorGeneration>0&&typeof anchor.observerEpoch==='string'&&anchor.observerEpoch.length>0,'ACTIVATION_SOURCE_ANCHOR_UNKNOWN');
+    invariant(!handoff||(handoff.generation===anchor.coordinatorGeneration&&handoff.sourceBaseline?.source?.observerEpoch===anchor.observerEpoch),'ACTIVATION_COORDINATOR_RECEIPT_UNKNOWN');
+    const generation=anchor.coordinatorGeneration,epoch=anchor.observerEpoch,sourceStart=anchor.startIdentity;
+    let previous={},nextEvaluation=0;
+    const unchanged=async()=>{const current=await read(()=>entry('/binding'));invariant(canonical(fixed(current))===frozen,'ACTIVATION_BINDING_CHANGED');return current;};
+    while(true) {
+      await fenceCheck();await unchanged();
+      const measured=await read(()=>coordinator.observation(attempt.attemptId,{fence,weight:100}));
+      invariant(Number.isSafeInteger(measured.coordinatorGeneration)&&measured.coordinatorGeneration>0&&typeof measured.observerEpoch==='string'&&measured.observerEpoch.length>0,'ACTIVATION_OBSERVATION_PROTOCOL_REQUIRED');
+      invariant(measured.coordinatorGeneration===generation&&measured.observerEpoch===epoch,'ACTIVATION_OBSERVER_SCOPE_CHANGED');
+      const at=Date.parse(measured.observedAt),now=Date.now();
+      invariant(Number.isFinite(at)&&at<=now+1000&&now-at<=policy.observationFreshnessMs,'OBSERVATION_STALE');
+      invariant(measured.fenceValid===true&&measured.ownerGenerationsValid===true&&measured.routeGenerationValid===true,'CONTROL_OR_OWNERSHIP_UNKNOWN');
+      const hard=measured.invariants;
+      invariant(hard&&['unauthorizedStops','resourceRebuilds','duplicateCommands','duplicateOccurrences','writerConflicts','migrationDifferences','integrityFailures'].every(k=>typeof hard[k]==='number'),'INVARIANT_EVIDENCE_MISSING');
+      invariant(Object.values(hard).every(value=>value===0),'HARD_INVARIANT_VIOLATION');
+      invariant(measured.sharedStateHealthy===true&&measured.continuity?.qualified===true,'SHARED_STATE_OR_CONTINUITY_UNKNOWN');
+      const web=measured.webHealth,baseline=measured.baseline,p=measured.probes,cp=measured.candidateProbes;
+      if(!(web?.known===true&&web.healthy===true&&web.artifactDigest===actual.web.digest))throw Object.assign(Error('Web unhealthy during activation collection'),{code:'WEB_UNHEALTHY',faultEvidence:measured,componentScope:['web']});
+      invariant(baseline&&typeof baseline.known==='boolean'&&typeof baseline.qualified==='boolean'&&Number.isFinite(baseline.requests)&&baseline.requests>=0&&Number.isFinite(baseline.windowMs)&&baseline.windowMs>=0,'ACTIVATION_OBSERVATION_PROTOCOL_REQUIRED');
+      invariant(baseline.failures===0,'ACTIVATION_SOURCE_BASELINE_UNSAFE');
+      const proof=baseline.source;
+      if(proof) {
+        invariant(proof.instanceId===instanceId&&proof.attemptId===attempt.attemptId&&proof.fence===fence&&proof.routeGeneration===actual.routeGeneration&&proof.routeWeight===100&&proof.weight===0&&proof.coordinatorGeneration===generation&&proof.observerEpoch===epoch&&proof.origin===actual.oldApi.origin&&proof.artifactDigest===source.artifactDigest&&typeof proof.startIdentity==='string'&&proof.startIdentity.length>0,'ACTIVATION_SOURCE_SCOPE_CHANGED');
+        invariant(proof.startIdentity===sourceStart,'ACTIVATION_SOURCE_SCOPE_CHANGED');
+        // begin() can expose the exact cohort identity before its first sample.
+        // Only that empty state may lack a source timestamp.
+        const emptySource=baseline.known===false&&baseline.qualified===false&&baseline.requests===0&&baseline.windowMs===0&&proof.observedAt===null,age=Date.now()-Date.parse(proof.observedAt);
+        invariant(emptySource||(Number.isFinite(age)&&age>=-1000&&age<=policy.observationFreshnessMs),'OBSERVATION_STALE');
+      } else invariant(baseline.known===false&&baseline.requests===0&&baseline.windowMs===0,'ACTIVATION_SOURCE_SCOPE_CHANGED');
+      const empty=lane=>lane?.known===false&&lane.samples===0&&lane.failures===0;
+      for(const lane of [p,cp])invariant(lane&&typeof lane.known==='boolean'&&Number.isFinite(lane.samples)&&lane.samples>=0&&lane.failures===0&&((empty(lane)&&lane.maxLatencyMs===null)||(Number.isFinite(lane.maxLatencyMs)&&lane.maxLatencyMs<=policy.requestDeadlineMs)),'SLO_PROBE_FAILED');
+      invariant((empty(p)&&p.attachMaxMs===null)||(Number.isFinite(p.attachMaxMs)&&p.attachMaxMs<=policy.attachDeadlineMs),'SLO_PROBE_FAILED');
+      // An exactly empty new cohort has no measured attach latency yet. Keep
+      // its nulls, but continue every physical/shared-state guard above/below.
+      const emptyAttach=empty(p)&&p.attachMaxMs===null;
+      const observed={...measured,web:{qualified:true,artifactDigest:web.artifactDigest}};
+      const hardInspection=emptyAttach?null:inspectObservation(observed,policy,now,{consecutive:0});
+      if(hardInspection?.fault&&hardInspection.fault!=='SOFT_TRAFFIC_DEGRADATION')throw Object.assign(Error(hardInspection.fault),{code:hardInspection.fault,faultEvidence:measured,shared:hardInspection.shared,componentScope:hardInspection.componentScope});
+      const compatibility=await read(()=>coordinator.validateSwitch(attempt.attemptId,{fence,actual,manifestDigest:attempt.targetDigest}));
+      invariant(['controlOnly','noRuntimeSideEffects','authContinuity','originalResourceAddressable','businessMatches','webMatches'].every(k=>compatibility[k]===true)&&compatibility.identity?.artifactDigest===target.api.artifactDigest&&compatibility.identity.startIdentity===candidate.startIdentity,'ACTIVATION_PHYSICAL_IDENTITY_CHANGED');
+      await unchanged();await fenceCheck();
+      const complete=!emptyAttach&&baseline.known===true&&baseline.qualified===true&&baseline.windowMs>=windowMs&&baseline.requests>=policy.minRequests&&Number.isFinite(baseline.errorRate)&&baseline.errorRate===0&&Number.isFinite(baseline.p95Ms)&&p.known===true&&cp.known===true&&p.windowMs>=windowMs&&cp.windowMs>=windowMs&&measured.windowMs>=windowMs&&p.samples>=policy.probeHz*windowMs/1000&&cp.samples>=policy.probeHz*windowMs/1000;
+      if(!complete){previous={};nextEvaluation=0;}
+      if(complete&&Date.now()>=nextEvaluation) {
+        const inspection=inspectObservation(observed,policy,Date.now(),previous);previous=inspection;nextEvaluation=Date.now()+policy.evaluationIntervalMs;
+        if(inspection.fault)throw Object.assign(Error(inspection.fault),{code:inspection.fault,faultEvidence:measured,shared:inspection.shared,componentScope:inspection.componentScope});
+        if(inspection.qualified&&compatibility.qualified===true) {
+          const continuity=await read(()=>coordinator.continuity(attempt.attemptId,{fence}));invariant(continuity.qualified===true,'SHARED_STATE_OR_CONTINUITY_UNKNOWN');
+          const actualInstaller=await read(()=>supervise('/current-installer',attempt,fence,'installer'));
+          await unchanged();await fenceCheck();invariant(Date.now()<deadline,'ACTIVATION_SCOPE_COLLECTION_EXCEEDED');
+          const completedAt=Date.now();
+          invariant([measured.observedAt,proof.observedAt].every(value=>{const age=completedAt-Date.parse(value);return Number.isFinite(age)&&age>=-1000&&age<=policy.observationFreshnessMs;}),'OBSERVATION_STALE');
+          return {actual,actualInstaller,compatibility,continuity,activationObservation:measured,activationScope:{routeGeneration:actual.routeGeneration,weight:100,fence,coordinatorGeneration:generation,observerEpoch:epoch},observedAt:new Date().toISOString(),manifestDigest:attempt.targetDigest,instanceId};
+        }
+      }
+      invariant(Date.now()<deadline,'ACTIVATION_SCOPE_COLLECTION_EXCEEDED');
+      await read(()=>new Promise(ok=>setTimeout(ok,Math.min(1000,Math.max(1,deadline-Date.now())))));
+    }
+  }
   async function roleTransition(kind,{artifact,attempt,fence,operationId},statusOnly=false) {
     const deadline=statusOnly?0:Date.now()+(attempt.plan.policy.candidateStartupMs||120000);
     await coordinator.assertFence(attempt.attemptId,fence);const rpc=kind==='owner'?coordinator.ownerCandidate:coordinator.coordinatorHandoff;invariant(typeof rpc==='function','ROLE_TRANSITION_RPC_REQUIRED');
@@ -116,7 +198,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     async bindWeb({attempt,fence,artifact}) {const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000);await coordinator.assertFence(attempt.attemptId,fence);const process=await start('web',artifact,attempt,fence,remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED')),observed=await waitProcess('web',attempt,fence,deadline);const web={origin:process.origin,root:join(artifact.root,'web'),digest:attempt.manifest.components.web.artifactDigest,treeDigest:artifact.treeDigest},health=await webHealth({web},Math.min(2000,remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED')));remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED');invariant(health.qualified===true&&health.webRevision===attempt.manifest.components.web.webRevision&&health.startIdentity===process.startIdentity&&health.pid===observed.pid,'WEB_CANDIDATE_NOT_READY');await coordinator.assertFence(attempt.attemptId,fence);const current=await entry('/binding');remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED');const next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{fence,attemptId:attempt.attemptId,routeGeneration:current.routeGeneration+1,web,retainedWeb:current.web.digest===web.digest?current.retainedWeb:[current.web,...current.retainedWeb].filter((w,i,a)=>a.findIndex(x=>x.digest===w.digest)===i)});return entry('/binding',next);},
     async actual() {return entry('/binding');},
     async migration({attempt,fence,operationId,action,checkpoint}) {return coordinator.migration(attempt.attemptId,{fence,operationId,action,planDigest:attempt.plan.migrationPath.migrationPlanDigest,checkpoint,policy:attempt.plan.policy});},
-    async activationEvidence({attempt,fence}) {if(attempt.plan.apiReused===true)await sourceBaseline(attempt,fence);const actual=await entry('/binding'),compatibility=await coordinator.validateSwitch(attempt.attemptId,{fence,actual,manifestDigest:attempt.targetDigest}),continuity=await coordinator.continuity(attempt.attemptId,{fence});const actualInstaller=await supervise('/current-installer',attempt,fence,'installer');return {actual,actualInstaller,compatibility,continuity,observedAt:new Date().toISOString(),manifestDigest:attempt.targetDigest,instanceId};},
+    async activationEvidence({attempt,fence}) {if(attempt.plan.apiReused!==true)return changedApiActivation(attempt,fence);await sourceBaseline(attempt,fence);const actual=await entry('/binding'),compatibility=await coordinator.validateSwitch(attempt.attemptId,{fence,actual,manifestDigest:attempt.targetDigest}),continuity=await coordinator.continuity(attempt.attemptId,{fence});const actualInstaller=await supervise('/current-installer',attempt,fence,'installer');return {actual,actualInstaller,compatibility,continuity,observedAt:new Date().toISOString(),manifestDigest:attempt.targetDigest,instanceId};},
     async fallbackEligibility({attempt,fence,fault}) {return coordinator.fallbackEligibility(attempt.attemptId,{fence,fault,actual:await entry('/binding')});},
     async recover({attempt,fence,recoveryPlan}) {await coordinator.assertFence(attempt.attemptId,fence);if(recoveryPlan.coordinator||recoveryPlan.owner){const transitioned=await coordinator.coordinatorRecovery(attempt.attemptId,{fence,recoveryPlanDigest:recoveryPlan.planDigest});invariant(transitioned.commitKnown===true&&transitioned.qualified===true&&transitioned.originalResourcesPreserved===true,'COORDINATOR_RECOVERY_UNCONFIRMED');}const current=await entry('/binding'),next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{fence,attemptId:attempt.attemptId,routeGeneration:current.routeGeneration+1});if(recoveryPlan.api) {next.oldApi=recoveryPlan.api;next.weight=0;}if(recoveryPlan.web){next.retainedWeb=[current.web,...current.retainedWeb];next.web=recoveryPlan.web;}return entry('/binding',next);},
     // Deliberately no VM lifecycle, whole-volume restore, shell or scheduler method.
