@@ -2,14 +2,16 @@
 //
 // docs:check —— 文档一致性门禁（权威定义见 docs/shared/09-工程化规范.md §2.4）
 //
-// 纯静态、零依赖（只用 Node 内置模块），秒级返回；干净环境下 `node scripts/docs-check.mjs`
+// 静态读取与纯配置校验、零依赖（只用 Node 内置模块），秒级返回；干净环境下 `node scripts/docs-check.mjs`
 // 即可运行，不需要 npm install。
 //
-// 检查分两类：
+// 检查分三类：
 //   A 类 —— 文档内部检查，只读 docs/**，始终跑。
 //   B 类 —— 依赖 api submodule 的检查（B1 读 api/openapi.json，B2 扫 api 源码里的
 //           @Tool 注册）；submodule 未 checkout 时 **大声 skip 而不失败**，
 //           让 A 类照常把关。
+//   C 类 —— 读取主仓部署源码，对文档执行纯配置函数一致性校验；不运行角色或访问网络，
+//           必需源码缺失直接失败。
 //
 // 用法：
 //   node scripts/docs-check.mjs             # 跑全部检查
@@ -20,7 +22,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = path.join(ROOT, 'docs');
@@ -44,14 +46,11 @@ const WEB_RESERVED_ENV = path.join(WEB_ROOT, 'src', 'lib', 'image', 'validateEnv
 const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
 const WEB_SSE_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'sse-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
-/**
- * 自托管 compose 形态的两份 compose：主仓根那份是入口，api 那份被它 include。
- * 本项目 Mac mini 生产不用这两份起服务（见 docs/ops/README.md），C1 只对账自托管形态。
- */
-const ROOT_COMPOSE = path.join(ROOT, 'docker-compose.yml');
-const API_COMPOSE = path.join(API_ROOT, 'docker-compose.yml');
-/** 文档里那份 compose 骨架所在的篇目（§1） */
+// C1 只读取部署源码，并调用无文件／网络／生命周期操作的纯配置函数。
 const DEPLOY_DOC = path.join(DOCS, 'shared', '11-部署与扩展预留.md');
+const ROLE_ADAPTER = path.join(ROOT, 'deploy', 'upgrade', 'production-role-adapter.mjs');
+const BOOTSTRAP = path.join(ROOT, 'deploy', 'ops', 'bootstrap-upgrade-instance.mjs');
+const IP_BRIDGE = path.join(ROOT, 'deploy', 'host', 'ip-entry-bridge.mjs');
 
 const VERBOSE = process.argv.includes('--verbose');
 
@@ -1181,7 +1180,7 @@ checkOpenapiCrossRepo();
 checkWsProtocolCrossRepo();
 checkSseProtocolCrossRepo();
 checkReservedEnvCrossRepo();
-checkComposeSkeletonParity();
+await checkDeploymentRoleContract();
 
 // ---------------------------------------------------------------------------
 // B3 openapi 跨仓一致：api/openapi.json 与 web/openapi.json 必须逐字节相同
@@ -1321,7 +1320,7 @@ const padName = (s) => s + ' '.repeat(Math.max(0, NAME_COL - width(s)));
 const GROUPS = [
   ['A', 'A. 文档内部检查（不依赖 submodule，始终跑）'],
   ['B', 'B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）'],
-  ['C', 'C. 文档 ↔ 部署产物对账（compose；缺失即 skip，不判失败）'],
+  ['C', 'C. 文档 ↔ 现行部署契约对账（必需源码缺失即失败）'],
   // ⚠️ A5 的编号是 A，分组却在 B —— 编号按「加进来的顺序」，分组按「依赖什么」。
   //    它的对账基准（10 §6.8 码表）确实只读 docs，但另一半要扫 api 源码，
   //    submodule 缺席时只能 skip。挂在「始终跑」那组下会让读输出的人以为它把过关了。
@@ -1443,152 +1442,71 @@ function checkReservedEnvCrossRepo() {
 }
 
 // ---------------------------------------------------------------------------
-// C1 compose 骨架对账：docs/shared/11 §1 的骨架 ↔ 仓库里真的那两份 compose
-//
-// ── 它修的是什么 ────────────────────────────────────────────────────────────
-// v0.1.0 打出去之后做换机部署审查，发现三条阻塞里有两条的根因是同一件事：
-// **「文档 ↔ 部署产物」这一层从来没有门守着**。骨架里写着 `web:` 服务、写着
-// `SANDBOX_DEFAULT_IMAGE` 的一个兜底坐标，而真 compose 里前者不存在、后者被
-// 刻意留空（留空才能让 `builtinImageRefFor` 按宿主档位自动选，填死就永久失效）。
-// 两条都活到了 tag 上，而 `docs:check` 那时 12 项全绿 —— 因为它一眼都不看 compose。
-//
-// ⚠️ 这不是「文档不准」那类小事：骨架是新人照着理解部署形态的唯一一张图。它多画一个
-// `web:` 服务，读的人就以为 `docker compose up` 会给他一个界面 —— 而那正是本轮 R2。
-//
-// ── 判据（两条，都按既有 idiom）────────────────────────────────────────────
-// ① 服务集合相等，⏳ 除外 —— 与 B6「未实现端点已标注」同款：骨架里标了 ⏳ 的服务
-//    **必须不在**真 compose 里（实现了就把 ⏳ 摘掉），没标 ⏳ 的**必须在**。
-//    于是「文档先行」是允许的，但必须显式声明"这条还没做"，而不是默默画上去。
-// ② `${VAR:-default}` 的默认值必须一致 —— 骨架里给 VAR 写的兜底，真 compose 里必须
-//    是同一个。抓的正是 `SANDBOX_DEFAULT_IMAGE` 那种「文档给了个已被推翻的兜底」。
-//
-// ── ⛔ 为什么解析不到要判 fail 而不是 pass ────────────────────────────────
-// 这是本仓踩过两次的形状（零尺寸 a11y 探针、装了但一条都不判的 addon）：
-// **一个什么都没找到的检查看起来和一个全部通过的检查一模一样。**
-// 所以下面每一步「找不到」都显式 fail 并说清是门坏了，而不是安静地放行。
-// ⛔ 谁把这些 fail 改成 return / skip，这道门就回到假绿状态。
-// ---------------------------------------------------------------------------
-
-/** 从一份 compose YAML 里取顶层 `services:` 下的服务名（窄解析：这两份文件是我们自己的） */
-function composeServiceNames(text) {
-  const lines = text.split('\n');
-  const start = lines.findIndex((l) => /^services:\s*$/.test(l));
-  if (start === -1) return null; // ⇒ 调用方判 fail，不是空集
-  const names = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^\S/.test(line)) break; // 回到顶层缩进 ⇒ services 块结束
-    const m = /^ {2}([A-Za-z0-9][A-Za-z0-9_.-]*):\s*(?:#.*)?$/.exec(line);
-    if (m) names.push(m[1]);
+// C1 当前 Foundation／五角色与 IP 入口契约对账。
+// 不运行角色、Docker、SDK 或网络；仅 import 纯 roleMounts / validateConfig。
+// 来源文件、标记块或闭集解析失败均 fail，不能用空集或 skip 伪装通过。
+async function checkDeploymentRoleContract() {
+  const NAME = '统一部署角色契约';
+  const fail = (summary, details = []) => record('C', 'C1', NAME, 'fail', summary, details);
+  for (const f of [DEPLOY_DOC, ROLE_ADAPTER, BOOTSTRAP, IP_BRIDGE]) {
+    if (!fs.existsSync(f)) return fail(`缺少现行部署依据 ${rel(f)}`);
   }
-  return names;
-}
-
-/** 收集 `${VAR:-default}` → default（同名多处必须同值，不同值即刻算冲突） */
-function interpolationDefaults(text) {
-  const out = new Map();
-  const conflicts = [];
-  for (const m of text.matchAll(/\$\{([A-Z0-9_]+):-([^}]*)\}/g)) {
-    const [, key, val] = m;
-    if (out.has(key) && out.get(key) !== val) conflicts.push(`${key}（${out.get(key)} ≠ ${val}）`);
-    else out.set(key, val);
-  }
-  return { defaults: out, conflicts };
-}
-
-function checkComposeSkeletonParity() {
-  const NAME = 'compose 骨架对账';
-  const fail = (summary, details) => record('C', 'C1', NAME, 'fail', summary, details);
-
-  const composeFiles = [ROOT_COMPOSE, API_COMPOSE].filter((f) => fs.existsSync(f));
-  if (composeFiles.length === 0) {
-    record('C', 'C1', NAME, 'skip', `SKIP —— 找不到 ${rel(ROOT_COMPOSE)} 与 ${rel(API_COMPOSE)}`,
-      ['submodule 未 checkout ⇒ 本轮没有人在把关「文档画的部署形态与真 compose 对不上」这条漂移',
-       '  本地：git submodule update --init api web']);
-    return;
-  }
-  if (!fs.existsSync(DEPLOY_DOC)) {
-    fail(`找不到 ${rel(DEPLOY_DOC)}`, ['骨架所在的篇目被改名或删除了 ⇒ 这道门失去了比对基准，先把常量 DEPLOY_DOC 指对。']);
-    return;
-  }
-
-  // ── 真 compose 侧 ────────────────────────────────────────────────────────
-  const real = new Set();
-  const realDefaults = new Map();
-  for (const f of composeFiles) {
-    const text = read(f);
-    const names = composeServiceNames(text);
-    if (names === null) {
-      fail(`${rel(f)} 里找不到顶层 services: 块`,
-        ['⛔ 这是「门本身坏了」，不是「没有不一致」—— compose 换了写法（比如全用 include），解析器就得跟着改。']);
-      return;
+  const doc = read(DEPLOY_DOC), adapter = read(ROLE_ADAPTER), bootstrap = read(BOOTSTRAP), bridge = read(IP_BRIDGE);
+  const block = (name) => {
+    const matches = [...doc.matchAll(new RegExp(`<!-- ${name}:start -->([\\s\\S]*?)<!-- ${name}:end -->`, 'g'))];
+    if (matches.length !== 1) throw Error(`${name} 必须有唯一且非空的契约块`);
+    return matches[0][1];
+  };
+  try {
+    const launch = /async function launch\(spec\) \{([\s\S]*?)const name =/.exec(adapter)?.[1];
+    const guard = launch && /(\[[^\]]+\])\s*\.includes\(kind\)/.exec(launch)?.[1];
+    const roles = guard ? [...guard.matchAll(/["']([a-z]+)["']/g)].map((m) => m[1]) : [];
+    if (roles.length !== 5 || new Set(roles).size !== 5) throw Error('无法解析 adapter 的真实五角色闭集');
+    const rows = new Map();
+    for (const m of block('deployment-roles').matchAll(/^\|\s*`([a-z][a-z-]*)`\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|/gm)) {
+      if (rows.has(m[1])) throw Error(`文档角色重复：${m[1]}`);
+      rows.set(m[1], { name: m[2].trim(), database: m[3].trim(), sdk: m[4].trim() });
     }
-    for (const n of names) real.add(n);
-    const { defaults, conflicts } = interpolationDefaults(text);
-    if (conflicts.length > 0) {
-      fail(`${rel(f)} 内部同名插值给了两个不同默认值：${conflicts.join('、')}`,
-        ['同一个变量在同一份 compose 里有两个兜底 ⇒ 取哪个取决于哪一行先被用到，这本身就是缺陷。']);
-      return;
+    const expected = [...roles, 'foundation'].sort();
+    if (JSON.stringify([...rows.keys()].sort()) !== JSON.stringify(expected)) throw Error('文档部件集合必须等于真实五角色加 Foundation');
+    if (!['Foundation', 'StableEntry', 'CandidateSupervisor'].every((n) => rows.get('foundation').name.includes(n)) ||
+        !/await createStableEntry\(/.test(bootstrap) || !/await createCandidateSupervisor\(/.test(bootstrap))
+      throw Error('文档 Foundation 与 bootstrap 入口／Supervisor 不一致');
+    const { roleMounts, bootstrapDataRoot } = await import(pathToFileURL(ROLE_ADAPTER).href);
+    const root = '/docs-check/foundation/instance', owner = `${root}/original-owner`;
+    const c = { kind: 'idle-first-bootstrap-experiment', root, businessHostPath: '/docs-check/business/business',
+      trustRootPath: `${root}/trust-root.json`, catalogFile: `${root}/catalog.json`, qualificationInstallationPath: `${root}/qualification-installation.json` };
+    for (const kind of roles) {
+      const mounts = roleMounts(c, { kind, artifactRoot: '/docs-check/artifacts/installed',
+        cwd: kind === 'web' ? `${root}/initial-web-code` : '/docs-check/artifacts/installed/api',
+        ownerHome: kind === 'owner' ? owner : undefined, env: {} });
+      const db = mounts.filter((m) => ['/data', bootstrapDataRoot(c)].includes(m.destination));
+      const sdk = mounts.filter((m) => m.source === owner || m.source.startsWith(owner + '/'));
+      const database = db.length ? (db.some((m) => m.rw) ? '读写' : '只读') : '无';
+      const sdkAccess = sdk.length ? (sdk.some((m) => m.rw) ? '独占' : '只读') : '无';
+      if (rows.get(kind).database !== database || rows.get(kind).sdk !== sdkAccess)
+        throw Error(`${kind} 文档权限与 roleMounts 不符：业务库=${database}，Owner SDK home=${sdkAccess}`);
+      if ((kind !== 'coordinator' && db.length) || (kind !== 'owner' && sdk.length) ||
+          mounts.some((m) => m.source === '/var/run/docker.sock'))
+        throw Error(`${kind} 违反五角色的业务库／SDK／socket 隔离边界`);
+      if (kind === 'owner' && !mounts.some((m) => m.source === `${c.businessHostPath}/workspaces` && m.rw))
+        throw Error('Owner 必须挂实际业务工作区');
     }
-    for (const [k, v] of defaults) if (!realDefaults.has(k)) realDefaults.set(k, v);
-  }
-
-  // ── 文档骨架侧：§1 那个围栏块里以 `docker-compose:` 起头的一段 ──────────
-  const doc = read(DEPLOY_DOC);
-  const skeleton = /\n\s*docker-compose:\s*\n([\s\S]*?)\n\s*```/.exec(doc);
-  if (skeleton === null) {
-    fail(`${rel(DEPLOY_DOC)} 里找不到 \`docker-compose:\` 骨架块`,
-      ['⛔ 同上，是门坏了不是没问题 —— 骨架被挪走或改了写法，这道门就没有基准可比。']);
-    return;
-  }
-  const body = skeleton[1];
-  //  骨架比真 compose 浅一层（顶层直接是服务名，没有 services:），故匹配 2 空格缩进
-  const documented = new Map(); // name → 是否标了 ⏳
-  for (const line of body.split('\n')) {
-    if (/^\S/.test(line)) break;
-    const m = /^ {2}([a-z0-9][a-z0-9_.-]*):\s*(?:#(.*))?$/.exec(line);
-    if (m) documented.set(m[1], /⏳/.test(m[2] ?? ''));
-  }
-  if (documented.size === 0) {
-    fail(`${rel(DEPLOY_DOC)} 的骨架里一个服务都没解析到`,
-      ['⛔ 找不到 ≠ 没问题。骨架的缩进或写法变了 ⇒ 先修解析，别把这条改成 skip。']);
-    return;
-  }
-
-  // ── 判据 ① 服务集合 ──────────────────────────────────────────────────────
-  const problems = [];
-  const planned = [...documented].filter(([, p]) => p).map(([n]) => n);
-  const promised = [...documented].filter(([, p]) => !p).map(([n]) => n);
-
-  const missing = promised.filter((n) => !real.has(n));
-  if (missing.length > 0)
-    problems.push(`骨架画了但真 compose 没有：${missing.join('、')} —— 读的人会以为 \`docker compose up\` 就能得到它。` +
-      `真没做就在骨架里给它标 ⏳（与 B6「未实现端点已标注」同款），别默默画上去`);
-
-  const shipped = planned.filter((n) => real.has(n));
-  if (shipped.length > 0)
-    problems.push(`骨架还标着 ⏳ 但真 compose 里已经有了：${shipped.join('、')} —— 摘掉 ⏳`);
-
-  const undocumented = [...real].filter((n) => !documented.has(n));
-  if (undocumented.length > 0)
-    problems.push(`真 compose 有但骨架没画：${undocumented.join('、')} —— 骨架是新人理解部署形态的唯一一张图，漏一个服务就是漏一块拓扑`);
-
-  // ── 判据 ② 插值默认值 ────────────────────────────────────────────────────
-  const { defaults: docDefaults, conflicts: docConflicts } = interpolationDefaults(body);
-  if (docConflicts.length > 0)
-    problems.push(`骨架内部同名插值给了两个不同默认值：${docConflicts.join('、')}`);
-  for (const [k, v] of docDefaults) {
-    if (!realDefaults.has(k)) {
-      problems.push(`骨架给 \`${k}\` 写了兜底 \`${v}\`，但真 compose 里这个变量没有插值默认值`);
-    } else if (realDefaults.get(k) !== v) {
-      problems.push(`\`${k}\` 的兜底对不上：骨架 \`${v}\` ≠ 真 compose \`${realDefaults.get(k)}\` —— ` +
-        `⚠️ 这正是 v0.1.0 审查抓到的形状（骨架给了个已被推翻的 SANDBOX_DEFAULT_IMAGE 坐标）`);
+    const documentedPorts = [...block('deployment-entry').matchAll(/^\|[^|\n]+\|\s*`(\d+)`\s*\|\s*`(\d+)`\s*\|/gm)].map((m) => `${m[1]}:${m[2]}`);
+    const realPorts = [...bridge.matchAll(/config\.listenPort\s*===\s*(\d+)\s*&&\s*config\.targetPort\s*===\s*(\d+)/g)].map((m) => `${m[1]}:${m[2]}`);
+    if (!realPorts.length || new Set(documentedPorts).size !== documentedPorts.length ||
+        JSON.stringify(documentedPorts.sort()) !== JSON.stringify(realPorts.sort()))
+      throw Error('文档 IP 入口端口对与实际 bridge 配置闭集不一致');
+    const { validateConfig } = await import(pathToFileURL(IP_BRIDGE).href);
+    for (const pair of documentedPorts) {
+      const [listenPort, targetPort] = pair.split(':').map(Number);
+      validateConfig({ schemaVersion: 1, listenHost: '0.0.0.0', listenPort,
+        targetHost: '127.0.0.1', targetPort, expectedInstanceId: 'docs-check' });
     }
+    if (/docker(?:\s+compose|-compose)\s+(?:up|down)|^\s*docker-compose:/m.test(doc))
+      throw Error('现行部署文档仍包含退役的启动命令或拓扑');
+    record('C', 'C1', NAME, 'ok', `Foundation＋${roles.length} 角色、业务库／SDK／socket 边界及 ${realPorts.length} 对 IP 入口一致（仅纯函数）`);
+  } catch (error) {
+    fail('文档与现行部署契约不一致', [`→ ${error.message}；修正文档或真实部署契约，不可跳过检查`]);
   }
-
-  const scope = `骨架 ${documented.size} 个服务（${planned.length} 个 ⏳）/ 真 compose ${real.size} 个，插值默认值 ${docDefaults.size} 条`;
-  if (problems.length > 0) {
-    fail(`骨架与真 compose 对不上（${problems.length} 处）`, problems);
-    return;
-  }
-  record('C', 'C1', NAME, 'ok', `${scope}，服务集合与插值默认值均一致`);
 }

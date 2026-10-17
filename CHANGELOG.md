@@ -1,16 +1,15 @@
 # CHANGELOG
 
-本文件记录**平台整体**（主仓 + `api` + `web`）的版本。发布机制如下，完整规则见 [发版手册](./docs/ops/发版手册.md)：
+本文件记录平台整体（主仓与 API／Web）的变更。每份安装包记录固定三仓提交、目标平台、组件与完整摘要；实际激活版本以本实例持久确认记录为准，不能从分支、tag 或 Release 推断。
 
-- **发布单位**：发布作业读取三仓 `main` 当时的 head，组成一个组合发布。实际部署的组合以 GitHub Release 正文里的三个 SHA 和 `release-manifest.json` 为准。
-- **子模块指针**：主仓的 `api`、`web` 指针不参与发布，也不被校验。tag 时刻指针与三仓 `main` 一致，靠合并纪律维持。
-- **版本号**：发布作业自动取 `v0.3.<当前最大 patch + 1>`，feat 与 fix 都只升 patch。升 minor 要手动传 `TAG`，而自动规则目前只认 `v0.3` 前缀。
-- **tag 位置**：只有主仓打版本 tag。`api`、`web` 的 `package.json` version 是包版本，根 `package.json` 的 `0.3.0` 也与发布版本号无关。
-- **谁来写**：合并主仓 PR 的人在同一个 PR 里补条目；不要为补 CHANGELOG 单独再合一个主仓 PR，那会多发一版。
+CD 只发布不可变产物，实例管理员决定升级时机。子模块指针用于冻结和复现跨仓输入，具体构建输入策略须在收据中明示；文档提交和补记历史条目不触发服务替换。完整规则见 [发版手册](./docs/ops/发版手册.md)。
 
-格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。0.2.x 及更早的条目保留当时的写法。
+## [Unreleased]
 
----
+- 本机与 `100.73.71.22` 统一采用 Colima VZ／Linux arm64、Foundation 与五角色部署；远端 `.3` 基线完成数据迁移、原 Cookie 刷新、真实 Guest／终端重连和来源服务退役。
+- 旧部署目录和自启动项私有归档；移除旧部署报告，统一架构、发包、运维与灾备文档入口。
+- Owner 未知 RPC 结果不再触发破坏性补偿，封存 SQLite 导入避免只读 WAL 循环，恢复路径保持可用凭据筛选。
+- 后续 CLI 新包与管理员触发的跨升级实验尚未执行，基础迁移验收不授予完整升级或模型 Agent 连续性资格。
 
 ## [0.3.8] - 2026-10-10
 
@@ -21,16 +20,16 @@
 - PRD、原 v2 设计稿增量、前后端设计与验收映射同步。API 376 条、Web 149 条、Storybook 557 条与真实跨仓 3 个场景通过。
 - 发布工具补齐受控数据库迁移审阅：只读复制 SQLite，在副本运行候选版本迁移并验证数据；放行许可绑定旧容器、镜像、API 与主仓来源及精确 CI 构建，部署保留空闲检查、维护屏障、完整备份和失败恢复。
 - 修复停库后 WAL 模式数据库在只读卷上无法打开的最终预检：完整备份验证后复制封存主库，拒绝侧车、源文件漂移、原容器重启或维护屏障变化；运行中审阅继续使用 SQLite backup API。回归使用真实封存 WAL 数据库执行 alias 迁移，并区分原容器重启与完整备份恢复的回滚原因。
-- 运维注意：含迁移版本先停用统一发布；主仓合并后升级 Jenkins agent，再按[发版手册](./docs/ops/发版手册.md) §8 完成指定构建的迁移审阅与部署，随后恢复统一发布。
+- 该版完成了受控数据库迁移审阅工具验证；当前迁移执行时机由实例管理员决定，发包不直接迁移实例，见[发版手册](./docs/ops/发版手册.md)。
 
 ## [0.3.7] - 2026-10-09
 
 主仓改动：[#65](https://github.com/Xeonice/cloud-agent-platform-docs/pull/65)。
 
-- 部署文档整合：新增运维目录 `docs/ops/`（运维入口、生产架构、发版手册、运维手册、灾备与重建、参考表、运维记录）与根目录 `CONTRIBUTING.md`；`docs/macmini-deployment.md` 改为跳转页，`deploy/jenkins/web.md` 与 `github-status-app.md` 并入后删除，`docs/shared/11` 瘦身为自托管 compose 形态与扩展预留。
+- 部署文档整合：新增运维目录 `docs/ops/`（运维入口、生产架构、发版手册、运维手册、灾备与重建、参考表、运维记录）与根目录 `CONTRIBUTING.md`；`docs/macmini-deployment.md` 改为跳转页，`deploy/jenkins/web.md` 与 `github-status-app.md` 并入后删除，`docs/shared/11` 集中部署边界与扩展预留。
 - 工具：`manage.mjs` 新增 `quiet-down`、`cancel-quiet-down`、`queue`、`wait-idle`；三 agent 升级脚本收入 `deploy/ops/upgrade-agents.mjs`，`pnpm deploy:test` 覆盖它；新增 compose 与 `runtime.env` 的键模板和 Lima override 仓库副本；根 `package.json` 的 `engines` 收紧为 Node 22.x，与已有的 `.nvmrc` 一致。
 - 宿主值不再写死：新增 `deploy/containers/host-layout.mjs`，Mac 上的运维工具（升级脚本、`manage.mjs`、`bootstrap-host.mjs`、`controller.mjs`、`verify-controller.mjs`、`ci-smoke.mjs`、`setup-github-app.mjs`、`import-ghcr-token.mjs`）的账号、HOME、私有路径与 socket 都从系统账户库推导，不读环境变量；只有 docker CLI、Homebrew 前缀与 LaunchDaemon Label 前缀可在私有目录的 `host-layout.json` 覆盖。新增只读自检 `host-layout.mjs print|doctor --stage host|engines|launchd|images|full`。升级脚本的 `plan.json` 升到 schemaVersion 2，绑定宿主布局与 docker 可执行文件，apply 只认 `$SRC` 里的脚本，失败时输出原因码与脱敏摘要；bootstrap 审阅包升到 schema 2；`manage.mjs`、升级脚本与 `verify-controller.mjs` 发 Jenkins 凭据前核对回环监听进程属于运维账号；删除 `@KEY@` 替换表死代码；删除镜像内模块的原生 Mac 分支与 UID 501；新增守卫测试 `deploy/containers/host-literals.test.mjs`（[参考表](./docs/ops/参考表.md) §12）。
-- 运维注意：纯文档合并也会替换一次 API，合并前停用 release、生产空闲时放行。本版改了镜像内的模块，合并后要按[发版手册](./docs/ops/发版手册.md) §4 用新脚本升级三个 agent，build 前核对三份 agent 密钥属主为 `1000:1000`（发版手册 §2）；旧版升级脚本副本是回退工件，验证通过前不要删除。下次执行 `bootstrap-host.mjs apply-system` 之前要重新 `prepare`；plist 字节不变，不需要重装 LaunchDaemon。
+- 宿主工具、agent 密钥属主与启动审阅包的变更完成了本机核验；历史操作步骤已私有归档。当前 CI 维护、发包与实例升级边界以[运维入口](./docs/ops/README.md)为准。
 
 ## [0.3.6] - 2026-10-08
 
@@ -311,7 +310,7 @@ standalone 的 `server.js` 只读那份清单、**永不重跑** `next.config.mj
 ### 其它修正
 
 - **`cp .env.example .env` 会让 compose 直接起不来** —— 模板里 `DATA_ROOT=./data`
-  是给裸跑写的相对路径，compose 读它做插值后挂载点变相对路径，报
+  是本地开发的相对路径，compose 读它做插值后挂载点变相对路径，报
   `invalid mount path`。⇒ 改成注释状态，让两种形态各自的默认值都成立
   （实测两种情况展开结果一致）。⛔ 不是再加一段警告 —— 那段警告本来就在，
   而「复制模板」是所有人的第一反应。
@@ -341,7 +340,7 @@ standalone 的 `server.js` 只读那份清单、**永不重跑** `next.config.mj
 ⇒ 落地 11 §1.1 的默认形态：`ContainerAuthHelper` + `HelperContainerSession`，
 登录 CLI 跑在平台自己那张预制镜像的常驻 helper 容器里（与任务沙箱用同一张 ⇒ **CLI 版本
 必然一致**，这是 §1.1 列的第一条理由）。`AUTH_HELPER_MODE=container|host` 二选一，
-默认 `container`；`host` 保留给裸机 systemd 部署。
+默认 `container`；平台实例使用 provider 托管的 helper，本地开发诊断分支见 11 §1.1。
 
 #### ⚠️⚠️ 文档这一节有两处是错的，实现时撞出来后一并订正
 

@@ -1,7 +1,7 @@
 # 参与开发
 
 > **读者**：要在本地开发、向三个仓库提交改动的开发者与 AI agent。
-> **用途与边界**：本地环境、本地启动、三仓与子模块协作、PR 与 CI、合并的后果、权限、文档放置；不含生产运维（见 [运维入口](docs/ops/README.md)）和自托管 compose 部署（见 [11 部署形态](docs/shared/11-部署与扩展预留.md)）。
+> **用途与边界**：本地环境、本地启动、三仓与子模块协作、PR 与 CI、合并的后果、权限、文档放置；不含生产运维（见 [运维入口](docs/ops/README.md)）和实例部署（见 [统一部署形态](docs/shared/11-部署与扩展预留.md)）。
 > **权威范围**：本地开发步骤与端口约定、各仓 CI 门禁的本地复现、合并与发版权限、文档放置规则。
 > **适用基线**：v0.3.6 / `7eb7176` 起。
 
@@ -87,12 +87,12 @@ pnpm dev -H 127.0.0.1
 | `BOXLITE_HOME`         | 不设时为 `~/.boxlite`，不在 `DATA_ROOT` 里。同一目录只能被一个 API 进程持有，两个本地 API 要用不同目录                           |
 | 重置本地数据           | 停掉 API，确认没有残留的 `boxlite-shim` 进程（`pgrep -fl boxlite-shim`），再删除 `DATA_ROOT`                                     |
 
-例外：只有调试自制沙箱镜像时才设置 `SANDBOX_DEFAULT_IMAGE`，而且必须指向与本机档位一致的镜像。Mac 为 boxlite 档，BoxLite 从 `SANDBOX_BOXLITE_REGISTRY`（缺省 `localhost:5001`）指向的本地 registry 拉镜像；Linux 为 aio 档。本地 registry 的做法见 [api/images/README.md](api/images/README.md) 的「要不要 push」一节；那篇说“本地开发必须填”，只适用于这种调试场景（api 仓待修正，见[运维记录](docs/ops/运维记录.md) T13）。
+例外：只有调试自制沙箱镜像时才设置 `SANDBOX_DEFAULT_IMAGE`，而且必须指向与本机档位一致的镜像。Mac 为 boxlite 档，BoxLite 从 `SANDBOX_BOXLITE_REGISTRY`（缺省 `localhost:5001`）指向的本地 registry 拉镜像；Linux 为 aio 档。本地 registry 的做法见 [api/images/README.md](api/images/README.md) 的「要不要 push」一节；那篇说“本地开发必须填”，只适用于这种调试场景，配置与当前 API 镜像文档不一致时，以实际 provider 和镜像登记为准。
 
 ### 2.4 前后端之间怎么连
 
-- 本地与自托管 compose 形态：浏览器只访问 Web，`/api/*` 与 `/socket.io` 由 Next 转发到 `API_ORIGIN`；两个 `NEXT_PUBLIC_*_BASE_URL` 留空。
-- 生产：Vercel 上的前端直连 `agent-api` 域名，后端按 `API_ALLOWED_ORIGINS` 精确放行带凭证的跨域请求。
+- 本地开发：浏览器只访问 Web，`/api/*` 与 `/socket.io` 由 Next 转发到 `API_ORIGIN`；两个 `NEXT_PUBLIC_*_BASE_URL` 留空。
+- 部署实例：浏览器访问本实例 StableEntry，同源进入固定版本 Web、API 与 WebSocket。具体入口及转发边界见[统一部署指南](docs/ops/统一虚拟化与实例部署.md)。
 - `API_ORIGIN` 和 `NEXT_PUBLIC_*` 在 Next 启动或构建时读入：改了要重启 `pnpm dev`；生产构建要重新 `pnpm build`。
 
 ### 2.5 本地常见问题
@@ -121,15 +121,15 @@ pnpm dev -H 127.0.0.1
 | web 的 PR 或 `main`（web-ci，含跨仓子作业） | api `main` head                                     | 该提交          | 主仓 `main` head |
 | 主仓的 PR 或 `main`（project-ci）           | api `main` head                                     | web `main` head | 该提交           |
 | 每天 03:00 的定时检查                       | 主仓 `main` 的 [gitlink](docs/ops/README.md#术语表) | 同左            | 主仓 `main` head |
-| [统一发布](docs/ops/README.md#术语表)       | api `main` head                                     | web `main` head | 主仓 `main` head |
+| 既有组合构建模板                           | api `main` head                                     | web `main` head | 主仓 `main` head |
 | 本地 `pnpm docs:check`、e2e                 | 工作区检出的子模块                                  | 同左            | 工作区           |
 
-注：每天 03:00 的定时检查有已知缺陷，跑不到对账阶段，见[运维记录](docs/ops/运维记录.md) §3 的 T10。
+注：上表描述各 CI 模板的输入约定；是否启用及本次实际 SHA 以作业参数和构建收据为准，不能用历史定时状态替代当前检查。
 
 由此得出三条规则：
 
 - 依赖未合并 API 改动的 Web PR，CI 必然失败：它用的是 api `main`。先合 API。
-- 主仓 PR 的 CI 不看 PR 里的子模块指针，发布也不看。仍要更新指针：定时检查和本地复现以它为准，tag 时刻指针与三仓 `main` 一致也靠它。
+- 主仓 PR 的 CI 与上述既有组合构建模板不读取 PR 内的子模块指针。仍须更新指针用于复现；安装包与实验构建以明确冻结的三仓输入和收据为准，不能从模板默认值推定实际发布来源。
 - 遇到"本地绿、CI 红"，先看 CI 参数里的 `API_SHA`、`WEB_SHA`，再看本地 `git -C api log --oneline -1`。
 
 ### 3.2 分支与 PR
@@ -152,7 +152,7 @@ scripts/sync-submodules.sh --dry-run   # 只看会更新什么
 scripts/sync-submodules.sh             # 快进 api、web 到各自 origin/main 并生成一条提交（不推送）
 ```
 
-合并期间要临时停用 release、需要升级 Jenkins agent 时，由维护者按 [发版手册](docs/ops/发版手册.md) 的跨仓发版步骤处理。
+跨仓发布先固定经过验证的三仓输入，按 [发版手册](docs/ops/发版手册.md) 构建签名产物。Jenkins agent 维护与业务实例升级是独立操作，不能通过合并或恢复作业启用实例 deploy/promote。
 
 ## 4. CI 门禁与本地复现
 
@@ -216,27 +216,23 @@ pnpm deploy:test && pnpm docs:check
 - 守卫测试 `deploy/containers/host-literals.test.mjs` 扫描 `deploy/`、`scripts/` 下非测试、非文档的文件，以及根目录的 `package.json` 与 `docker-compose.yml`，拦截 `/Users/<账号>`、`douglasdong`、独立的 `501`、`homedir(`、读取 `process.env.HOME|USER|LOGNAME|XDG_*|AGENT_PLATFORM_*|COLIMA_HOME`、`.orbstack/` 与 `fnm/node-versions`。部署域名 `*.douglasdong.com` 不受限；其余例外逐条写在测试的白名单里，注明理由，每条必须恰好命中一次。它还断言镜像里的文件都不静态导入 `host-layout.mjs`。
 - 容器内的固定布局（`/home/jenkins`、uid 1000、`/srv/agent-platform/deploy` 等）是镜像契约，不受这条规则限制。
 
-## 5. 合并之后会发生什么
+## 5. 合并、发包与实例升级
 
-- 合并到任一仓 `main` 后，发现作业约 2 分钟内排一次统一发布：按需替换生产 API、上传 Vercel、发布 GitHub Release，版本号自动取下一个 patch。
-- 主仓的任何合并（包括纯文档）都会替换一次生产 API，要等生产空闲，约中断 1.5 分钟。只合 web 不替换 API，但随后更新主仓指针的那次合并会替换。
-- 发布阶段、耗时、失败处置与版本号规则见 [发版手册](docs/ops/发版手册.md)。
+合并推进源码及 CI。CD 只构建、验证、签名和发布不可变产物；实例由管理员主动发起升级。纯文档提交不会因此替换服务，发布包也不改变尚未选择升级的实例页面。当前禁用的自动 deploy/promote 保持禁用，模板同步和维护退出都不能重新放行。
 
-以下改动合并前先找维护者：
+| 改动 | 合并与发包前要核对 |
+| --- | --- |
+| `deploy/` 工具、作业模板、Dockerfile | 区分 CI 基础设施变更与实例运行控制，验证工具的信任输入及实际副作用 |
+| 运行镜像及输入清单 | 固定原生 ABI、源提交和完整摘要；需要更新构建工具时独立验证 |
+| BoxLite SDK、provider、auth helper、Owner 参数 | 在隔离环境运行真实 KVM／Guest 验证，CI 静态或模拟结果不能替代实机 |
+| 数据库迁移 | 核对唯一写者、兼容路径、fencing 和新写入后的恢复边界；不能因发布包直接迁移实例 |
+| 不向后兼容的接口 | 验证新旧角色与页面兼容，在实例升级计划中明确顺序和失败恢复 |
+| 沙箱镜像 | 发布不可变 digest，真实验证 CLI 版本；新镜像不改写已有 Guest |
+| 跨仓改动 | 固定 Root／API／Web 精确提交，按 §3 完成契约与 CI 检查 |
 
-| 改动                                                                                              | 原因                                                                                                                  |
-| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `deploy/` 下的工具、作业模板、Dockerfile、compose                                                 | 多数要升级 Jenkins agent、同步模板或重建服务才生效，合并本身不会生效。逐类对照见发版手册                              |
-| `deploy/containers/api-context.mjs` 的 [`CONTAINER_INPUTS`](docs/ops/README.md#术语表) 清单       | 清单变化要先升级 deploy agent，否则 API 构建报 `Pinned root image input missing`                                      |
-| BoxLite SDK、provider、auth helper；`CONTAINER_INPUTS` 文件的内容；`api-container.mjs` 的容器参数 | CI 没有 KVM，覆盖不到，合并即上线；合并前由维护者跑隔离回归，见[发版手册](docs/ops/发版手册.md)的高风险改动一节       |
-| api 新增 `drizzle` 迁移                                                                           | 发布会停在 `waiting-migration-review`，目前没有放行入口；要先约维护窗口并停用 release，规则见发版手册的含迁移发版一节 |
-| 不向后兼容的接口                                                                                  | 发布先替换 API 再上传前端，中间有"新 API + 旧前端"的窗口                                                              |
-| api 的 `images/*/Dockerfile`                                                                      | 只触发镜像检查；上线要打新的 `sandbox-image-v*` 标签，已发布的标签不能改指向                                          |
-| 跨两个以上仓库的改动                                                                              | 按 §3.3 顺序合并，合并期间由维护者停用 release                                                                        |
+运行镜像使用主仓部署工具定义的 Linux 原生边界，`api/Dockerfile` 与根 compose 文件仅保留作开发／构建工具输入，不是当前实例安装或升级入口。首次部署、管理员升级、CI 维护分别见 [发版手册](docs/ops/发版手册.md)和[统一部署指南](docs/ops/统一虚拟化与实例部署.md)。
 
-API 有两个 Dockerfile：生产镜像用主仓的 `deploy/containers/Dockerfile.api`，`api/Dockerfile` 只用于自托管 compose。改运行时系统依赖时两处都要看，前者还属于 `CONTAINER_INPUTS`。
-
-CHANGELOG 在主仓 PR 里顺手补，不要为它单独合一个主仓 PR（会多发一版）；写法与版本号预填规则见[发版手册](docs/ops/发版手册.md)的版本号一节。
+CHANGELOG 记录已完成的代码与验收边界；提交或版本标签不表示实例已经激活该版本。
 
 ## 6. 权限与 AI agent 的边界
 
