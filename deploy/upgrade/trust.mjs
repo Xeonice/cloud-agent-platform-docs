@@ -1,5 +1,6 @@
 import { createHash, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
 import { readFile, lstat } from 'node:fs/promises';
+import { permitsImageRuntimeVersionsPath } from './additive-migration-recipe.mjs';
 
 export const DIGEST = /^sha256:[a-f0-9]{64}$/;
 const SHA = /^[a-f0-9]{40}$/;
@@ -92,7 +93,7 @@ export function verifyManifest(envelope, roots, current, now = Date.now()) {
   for (const p of manifest.packages) invariant(roots.distributionOrigins.includes(new URL(p.url).origin), 'UNTRUSTED_DISTRIBUTION_ORIGIN');
   const path = manifest.upgradePaths.find(p => p.fromRelease === current.releaseId && current.schema >= p.minSchema && current.schema <= p.maxSchema);
   invariant(path && path.bridgeReleases.every(b => (current.bridges || []).includes(b)), 'UPGRADE_PATH_NOT_SUPPORTED');
-  invariant(path.targetSchema===current.schema,'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
+  invariant(path.targetSchema===current.schema||permitsImageRuntimeVersionsPath(path,current.schema),'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
   for (const name of ['api','web','installer','coordinator',...(manifest.components.owner?['owner']:[])]) { const live = current.protocols?.[name] || (['coordinator','owner'].includes(name)?current.protocols?.api:null); invariant(live && range(live) && live.min <= manifest.components[name].protocol.max && live.max >= manifest.components[name].protocol.min, 'INCOMPATIBLE_PROTOCOL'); }
   const different=['api','web','installer','coordinator',...(manifest.components.owner?['owner']:[])].some(name=>current[name+'Digest']!==manifest.components[name].artifactDigest||current[name+'InputFingerprint']!==manifest.components[name].inputFingerprint);
   invariant(current.releaseId !== manifest.releaseId||(current.partialRepair===true&&different),'ALREADY_INSTALLED');
@@ -105,7 +106,7 @@ export async function loadTrustRoot(path) {
 }
 export function freezePlan(verified, current) {
   const { manifest: m, manifestDigest, package: pkg, path } = verified;
-  invariant(path.targetSchema===current.schema,'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
+  invariant(path.targetSchema===current.schema||permitsImageRuntimeVersionsPath(path,current.schema),'GLOBAL_SCHEMA_MIGRATION_UNQUALIFIED');
   const apiReused = current.apiDigest === m.components.api.artifactDigest && current.apiInputFingerprint === m.components.api.inputFingerprint;
   const webReused = current.webDigest === m.components.web.artifactDigest && current.webInputFingerprint === m.components.web.inputFingerprint;
   const coordinatorDigest=current.coordinatorDigest||current.apiDigest,coordinatorInputFingerprint=current.coordinatorInputFingerprint||current.apiInputFingerprint;

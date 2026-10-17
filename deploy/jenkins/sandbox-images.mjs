@@ -42,7 +42,7 @@ export function imageRequest(
   if (
     !SHA.test(sha ?? "") ||
     !(ref === IMAGE_BRANCH || IMAGE_TAG_REF.test(ref)) ||
-    !["check", "publish"].includes(mode)
+    !["check", "publish", "promote"].includes(mode)
   )
     throw new Error(
       "Only the pinned API production branch or sandbox-image version tags may build images",
@@ -72,6 +72,9 @@ export function imageConfiguration(config) {
     config.registry !== "ghcr.io" ||
     config.owner !== "xeonice" ||
     config.defaultTag !== "latest" ||
+    (config.versionTag !== undefined &&
+      (config.versionTag === "latest" ||
+        !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(config.versionTag))) ||
     config.tagPrefix !== "sandbox-image-" ||
     JSON.stringify(config.platforms) !==
       JSON.stringify(["linux/amd64", "linux/arm64"]) ||
@@ -154,7 +157,11 @@ export async function imagePlan(source, request) {
         "Both agent CLI versions must be pinned in each Dockerfile",
       );
     const tag =
-      request.tag || `cc${claudeCode}-cx${codex}-g${request.sha.slice(0, 12)}`;
+      request.tag ||
+      config.versionTag ||
+      `cc${claudeCode}-cx${codex}-g${request.sha.slice(0, 12)}`;
+    if (config.versionTag && tag !== config.versionTag)
+      throw new Error("Image tag must match the package-bound versionTag");
     images.push({
       ...item,
       tag,
@@ -645,8 +652,11 @@ export function createImagePublisher(overrides = {}) {
             fetcher,
             signal,
           );
-          if (existing) {
-            // Resume an interrupted two-tier publication using its exact immutable source.
+          if (mode === "promote") {
+            if (!existing)
+              throw new Error(
+                "Publish and verify the immutable image before promoting latest",
+              );
             await invoke(
               DOCKER,
               [
@@ -659,6 +669,9 @@ export function createImagePublisher(overrides = {}) {
               ],
               { log, timeout: 120_000 },
             );
+            image.reused = true;
+          } else if (existing) {
+            // Resuming a publication never changes the default alias.
             image.reused = true;
           } else {
             const metadata = join(work, image.tier + "-build.json");
@@ -683,8 +696,6 @@ export function createImagePublisher(overrides = {}) {
                 "org.opencontainers.image.source=https://github.com/Xeonice/agent-platform-api",
                 "--tag",
                 image.repository + ":" + image.tag,
-                "--tag",
-                image.repository + ":latest",
                 image.context,
               ],
               { log, timeout: 90 * 60_000 },
@@ -705,24 +716,30 @@ export function createImagePublisher(overrides = {}) {
             fetcher,
             signal,
           );
-          const latest = await anonymousImage(
-            image.repository,
-            "latest",
-            sha,
-            image.runtimeVersions,
-            fetcher,
-            signal,
-          );
+          const latest =
+            mode === "promote"
+              ? await anonymousImage(
+                  image.repository,
+                  "latest",
+                  sha,
+                  image.runtimeVersions,
+                  fetcher,
+                  signal,
+                )
+              : null;
           if (
             !version ||
-            !latest ||
-            version.digest !== latest.digest ||
+            (mode === "promote" &&
+              (!latest || version.digest !== latest.digest)) ||
             (image.builtDigest && image.builtDigest !== version.digest)
           )
             throw new Error(
-              "Anonymous version/latest bytes do not match the published build",
+              "Anonymous image bytes do not match the published build or promoted alias",
             );
-          Object.assign(image, version, { status: "published" });
+          Object.assign(image, version, {
+            status: mode === "promote" ? "promoted" : "published",
+            latestPromoted: mode === "promote",
+          });
         } catch (error) {
           image.status = "failed";
           image.error = error.message;
@@ -731,9 +748,12 @@ export function createImagePublisher(overrides = {}) {
         await writeJson(report, result);
       }
       result.status = result.images.every(
-        (image) => image.status === "published",
+        (image) =>
+          image.status === (mode === "promote" ? "promoted" : "published"),
       )
-        ? "published"
+        ? mode === "promote"
+          ? "promoted"
+          : "published"
         : "failed";
       return result;
     } catch (error) {

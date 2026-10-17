@@ -184,6 +184,23 @@ test("image requests/configuration bind both provider coordinates and reject PRs
   const plan = await imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH));
   assert.equal(plan.images[0].tag, "cc2.1.251-cx0.150.1-gaaaaaaaaaaaa");
   assert.deepEqual(plan.images[0].runtimeVersions, runtimeVersions);
+  await fs.writeFile(
+    join(f.original, "config/sandbox-publish.json"),
+    JSON.stringify({ ...config, versionTag: "v9.0.0" }),
+  );
+  assert.equal(
+    (await imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH))).images[0]
+      .tag,
+    "v9.0.0",
+  );
+  await assert.rejects(
+    imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH, "v1.2.3")),
+    /package-bound versionTag/,
+  );
+  await fs.writeFile(
+    join(f.original, "config/sandbox-publish.json"),
+    JSON.stringify(config),
+  );
   await fs.symlink(
     "/tmp",
     join(f.original, config.images[0].context, "outside"),
@@ -277,10 +294,13 @@ async function publisherFixture(
   mode,
   scopes = "repo, write:packages",
   versionLabel,
+  existing = mode === "promote",
 ) {
   const f = await fixture(t);
   const calls = [];
   const published = new Set();
+  if (existing)
+    for (const image of config.images) published.add(`xeonice/${image.image}`);
   const model = registryModel(sha, ["amd64", "arm64"], versionLabel);
   let reads = 0;
   const token = "test-private-value-do-not-project";
@@ -343,6 +363,11 @@ async function publisherFixture(
       return "Platforms: linux/amd64, linux/arm64";
     }
     if (args[1] === "build") {
+      assert.equal(args.filter((arg) => arg === "--tag").length, 1);
+      assert.equal(
+        args.some((arg) => arg.endsWith(":latest")),
+        false,
+      );
       assert.equal(
         args[args.indexOf("--platform") + 1],
         "linux/amd64,linux/arm64",
@@ -356,6 +381,13 @@ async function publisherFixture(
         args[args.indexOf("--metadata-file") + 1],
         JSON.stringify({ "containerimage.digest": model.digest }),
       );
+      return "";
+    }
+    if (args[1] === "imagetools") {
+      assert.equal(mode, "promote");
+      assert.equal(args[2], "create");
+      assert.ok(args[4].endsWith(":latest"));
+      assert.ok(args[5].endsWith("@" + model.digest));
       return "";
     }
     throw new Error("Unexpected image command");
@@ -412,6 +444,11 @@ test("publish sends token only over login stdin/private Docker config, publishes
   assert.equal(f.result.images.length, 2);
   for (const image of f.result.images)
     assert.deepEqual(image.runtimeVersions, runtimeVersions);
+  assert.ok(f.result.images.every((image) => image.latestPromoted === false));
+  assert.equal(
+    f.calls.some((call) => call.args.includes("imagetools")),
+    false,
+  );
   assert.equal(
     f.result.images.every(
       (image) => image.anonymous && image.status === "published",
@@ -435,6 +472,50 @@ test("publish sends token only over login stdin/private Docker config, publishes
   assert.deepEqual(
     (await fs.readdir(f.work)).filter((name) => name.startsWith(".docker-")),
     [],
+  );
+});
+
+test("resuming immutable publication never promotes latest and builds no existing version", async (t) => {
+  const f = await publisherFixture(t, "publish", undefined, undefined, true);
+  assert.equal(f.result.status, "published");
+  assert.equal(
+    f.calls.some(
+      (call) =>
+        call.args.includes("--push") || call.args.includes("imagetools"),
+    ),
+    false,
+  );
+  assert.ok(
+    f.result.images.every((image) => image.reused && !image.latestPromoted),
+  );
+});
+
+test("explicit promotion verifies both immutable images and never builds a missing version", async (t) => {
+  const f = await publisherFixture(t, "promote");
+  assert.equal(f.result.status, "promoted");
+  assert.equal(
+    f.calls.filter((call) => call.args.includes("imagetools")).length,
+    2,
+  );
+  assert.equal(
+    f.calls.some((call) => call.args.includes("--push")),
+    false,
+  );
+  assert.ok(f.result.images.every((image) => image.latestPromoted));
+  const absent = await publisherFixture(
+    t,
+    "promote",
+    undefined,
+    undefined,
+    false,
+  );
+  assert.equal(absent.result.status, "failed");
+  assert.equal(
+    absent.calls.some(
+      (call) =>
+        call.args.includes("--push") || call.args.includes("imagetools"),
+    ),
+    false,
   );
 });
 
