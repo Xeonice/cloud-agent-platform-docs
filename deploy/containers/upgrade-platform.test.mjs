@@ -35,6 +35,22 @@ test('B01 cryptographic catalogue: fixed Ed25519 root, canonical bytes, tamperin
   const changed=structuredClone(signed);changed.manifest.releaseId='v9.0.0';assert.throws(()=>verifyManifest(changed,f.roots,f.current),{code:'SIGNATURE_OR_MANIFEST_DIGEST_INVALID'});
   const other=fixture();assert.throws(()=>verifyManifest(signed,other.roots,f.current),{code:'SIGNATURE_OR_MANIFEST_DIGEST_INVALID'});assert.throws(()=>canonical({x:Infinity}),{code:'NON_FINITE'});
 });
+test('operation resume capability is an optional signed Coordinator property, separate from legacy dataFormats',()=>{
+  const f=fixture();
+  f.manifest.components.coordinator.dataFormats=['project-name-v2-authority'];
+  const old=signManifest(f.manifest,'test-key',f.privateKey);
+  assert.equal(verifyManifest(old,f.roots,f.current).manifestDigest,old.manifestDigest);
+  f.manifest.components.coordinator.upgradeOperationFormats=['upgrade-plan-v1'];
+  const signed=signManifest(f.manifest,'test-key',f.privateKey);
+  assert.deepEqual(verifyManifest(signed,f.roots,f.current).manifest.components.coordinator.upgradeOperationFormats,['upgrade-plan-v1']);
+  assert.notEqual(old.manifestDigest,signed.manifestDigest);
+  const changed=structuredClone(signed);changed.manifest.components.coordinator.upgradeOperationFormats=[];
+  assert.throws(()=>verifyManifest(changed,f.roots,f.current),{code:'SIGNATURE_OR_MANIFEST_DIGEST_INVALID'});
+  for(const formats of [['unsupported'],['upgrade-plan-v1','upgrade-plan-v1'],'upgrade-plan-v1']){
+    f.manifest.components.coordinator.upgradeOperationFormats=formats;
+    assert.throws(()=>signManifest(f.manifest,'test-key',f.privateKey),{code:'INVALID_UPGRADE_OPERATION_FORMATS'});
+  }
+});
 test('B01 signed catalogue refuses architecture, origin, schema path, required bridge and channel mismatch before installation',()=>{
   const f=fixture();const signed=signManifest(f.manifest,'test-key',f.privateKey);
   for(const [patch,code]of [[{arch:'wrong'},'UNSUPPORTED_ARCHITECTURE'],[{schema:2},'UPGRADE_PATH_NOT_SUPPORTED'],[{channel:'beta'},'WRONG_CHANNEL']])assert.throws(()=>verifyManifest(signed,f.roots,{...f.current,...patch}),{code});

@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { command } from '../upgrade/artifacts.mjs';
-import { buildNativeBundle, runtimeFingerprint,probeCoordinatorDataFormats } from '../upgrade/build-distribution.mjs';
+import { buildNativeBundle, runtimeFingerprint,probeCoordinatorCapabilities } from '../upgrade/build-distribution.mjs';
 import { treeManifest, atomicJson, readJson, secureDirectory,fileDigest } from '../upgrade/io.mjs';
 import { digest, invariant,canonical,loadTrustRoot,verifySignedManifest } from '../upgrade/trust.mjs';
 import { validateMigrationPlan } from '../upgrade/migration-plan.mjs';
@@ -71,7 +71,7 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   if(reuseApi)components.api={...prior.manifest.components.api};if(reuseWeb)components.web={...prior.manifest.components.web};
   // Conservative role closures include the complete built API tree and its actual runtime inputs.
   // No role is considered reused on a source-tag comparison alone.
-  const coordinatorDataFormats=await probeCoordinatorDataFormats(join(built,'api'),{run});components.coordinator={...components.api,protocol:protocols.coordinator||protocols.api,...(coordinatorDataFormats.length?{dataFormats:coordinatorDataFormats}:{})};components.owner={...components.api,protocol:protocols.owner||protocols.api};
+  const coordinatorCapabilities=await probeCoordinatorCapabilities(join(built,'api'),{run});components.coordinator={...components.api,protocol:protocols.coordinator||protocols.api,...coordinatorCapabilities};components.owner={...components.api,protocol:protocols.owner||protocols.api};
   const outputRoot=join(root,'distribution'),pkg=await buildNativeBundle({builtRoot:built,outputRoot,platform:process.platform,arch:process.arch,components,releaseId,distributionOrigin,run});
   const result={purpose,sourceWitness,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn,outputRoot};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
 }

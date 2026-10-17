@@ -39,6 +39,7 @@ export function validateManifest(m, { purpose = 'release' } = {}) {
   invariant(m.commits && ['project','api','web'].every(k => SHA.test(m.commits[k])), 'INVALID_COMMITS');
   invariant(m.components && ['api','web','installer','coordinator'].every(k => { const c = m.components[k]; return c && DIGEST.test(c.artifactDigest) && DIGEST.test(c.inputFingerprint) && SHA.test(c.sourceRevision) && range(c.protocol); }), 'INVALID_COMPONENT_IDENTITY');
   for(const c of Object.values(m.components))if(c.dataFormats!==undefined)invariant(Array.isArray(c.dataFormats)&&c.dataFormats.every(v=>v==='project-name-v2-authority')&&new Set(c.dataFormats).size===c.dataFormats.length,'INVALID_COMPONENT_DATA_FORMATS');
+  for(const [name,c] of Object.entries(m.components))if(c.upgradeOperationFormats!==undefined)invariant(name==='coordinator'&&Array.isArray(c.upgradeOperationFormats)&&c.upgradeOperationFormats.every(v=>v==='upgrade-plan-v1')&&new Set(c.upgradeOperationFormats).size===c.upgradeOperationFormats.length,'INVALID_UPGRADE_OPERATION_FORMATS');
   if(m.components.owner)invariant(DIGEST.test(m.components.owner.artifactDigest)&&DIGEST.test(m.components.owner.inputFingerprint)&&SHA.test(m.components.owner.sourceRevision)&&range(m.components.owner.protocol),'INVALID_OWNER_IDENTITY');
   invariant(SHA.test(m.components.web.webRevision), 'WEB_BUILD_IDENTITY_MISSING');
   invariant(Array.isArray(m.packages) && m.packages.length && m.packages.length <= 16, 'PACKAGES_MISSING');

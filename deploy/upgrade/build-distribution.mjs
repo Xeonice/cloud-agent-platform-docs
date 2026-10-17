@@ -16,12 +16,53 @@ export async function probeProductionControlDependencies(apiRoot,{run=command,no
   invariant(result.trim()==='production-control-dependencies-passed','PRODUCTION_CONTROL_DEPENDENCIES_FAILED');
   return {kind:'production-dependencies',result:'passed',entry:ENTRY_FILES[2],startsListeners:false,opensDatabase:false,opensSdkHome:false};
 }
-export async function probeCoordinatorDataFormats(apiRoot,{run=command,node=process.execPath}={}) {
-  const factory=join(resolve(apiRoot),'apps/api/dist/platform/upgrade/upgrade-project-projection.js');
-  const stat=await fs.lstat(factory).catch(e=>{if(e.code==='ENOENT')return null;throw e;});if(!stat)return [];
-  invariant(stat.isFile()&&!stat.isSymbolicLink(),'COORDINATOR_CAPABILITY_FACTORY_INVALID');
-  const script="const{createRequire}=require('node:module');const r=createRequire(require.resolve('./apps/api/dist/platform/upgrade/upgrade.module.js'));r('reflect-metadata');const{MODULE_METADATA}=r('@nestjs/common/constants');const{PROJECT_READ_PROJECTION}=r('@platform/project');const f=require('./apps/api/dist/platform/upgrade/upgrade-project-projection.js');const{UpgradeModule}=require('./apps/api/dist/platform/upgrade/upgrade.module.js');const p=Reflect.getMetadata(MODULE_METADATA.PROVIDERS,UpgradeModule)||[];const bound=p.find(x=>x&&x.provide===PROJECT_READ_PROJECTION);if(bound&&bound.useFactory!==f.createUpgradeProjectProjection)throw Error('Capability binding differs');const formats=bound?f.UPGRADE_PROJECT_DATA_FORMATS:[];if(!Array.isArray(formats)||formats.some(x=>x!=='project-name-v2-authority')||new Set(formats).size!==formats.length)throw Error('Unsupported capability');process.stdout.write('production-coordinator-formats:'+JSON.stringify(formats));";
-  const result=await run(node,['-e',script],{cwd:resolve(apiRoot),env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});invariant(result.startsWith('production-coordinator-formats:'),'COORDINATOR_CAPABILITY_PROBE_FAILED');return JSON.parse(result.slice('production-coordinator-formats:'.length));
+export async function probeCoordinatorCapabilities(apiRoot,{run=command,node=process.execPath}={}) {
+  const root=resolve(apiRoot),base='apps/api/dist/platform/upgrade/';
+  const available=[];
+  for(const name of ['upgrade-project-projection.js','upgrade-service.js']){
+    const stat=await fs.lstat(join(root,base,name)).catch(e=>{if(e.code==='ENOENT')return null;throw e;});
+    if(stat){invariant(stat.isFile()&&!stat.isSymbolicLink(),'COORDINATOR_CAPABILITY_FACTORY_INVALID');available.push(name);}
+  }
+  if(!available.length)return {};
+  // Read declarations from the actual deployed closure and require its real DI
+  // bindings. Never infer a feature from the checkout/tag or edit old receipts.
+  const script=`
+    const {createRequire}=require('node:module');
+    const base='./apps/api/dist/platform/upgrade/';
+    const r=createRequire(require.resolve(base+'upgrade.module.js'));
+    r('reflect-metadata');
+    const {MODULE_METADATA}=r('@nestjs/common/constants');
+    const {UpgradeModule}=require(base+'upgrade.module.js');
+    const providers=Reflect.getMetadata(MODULE_METADATA.PROVIDERS,UpgradeModule)||[];
+    const capabilities={};
+    const checked=(values,allowed)=>{
+      if(!Array.isArray(values)||values.some(x=>!allowed.includes(x))||new Set(values).size!==values.length)throw Error('Unsupported capability');
+      return values;
+    };
+    if(${JSON.stringify(available)}.includes('upgrade-project-projection.js')){
+      const {PROJECT_READ_PROJECTION}=r('@platform/project');
+      const f=require(base+'upgrade-project-projection.js');
+      const bound=providers.find(x=>x&&x.provide===PROJECT_READ_PROJECTION);
+      if(bound&&bound.useFactory!==f.createUpgradeProjectProjection)throw Error('Capability binding differs');
+      if(bound)capabilities.dataFormats=checked(f.UPGRADE_PROJECT_DATA_FORMATS,['project-name-v2-authority']);
+    }
+    if(${JSON.stringify(available)}.includes('upgrade-service.js')){
+      const f=require(base+'upgrade-service.js');
+      if(f.UPGRADE_OPERATION_DATA_FORMATS!==undefined){
+        const {UpgradeOperationStore}=require(base+'upgrade-operation-store.js');
+        const {UpgradeProjection}=require(base+'upgrade-projection.js');
+        if(![f.UpgradeService,UpgradeOperationStore,UpgradeProjection].every(x=>typeof x==='function'&&providers.includes(x))||typeof f.UpgradeService.prototype.onApplicationBootstrap!=='function'||typeof f.UpgradeService.prototype.advanceOperation!=='function')throw Error('Upgrade operation driver not bound');
+        capabilities.upgradeOperationFormats=checked(f.UPGRADE_OPERATION_DATA_FORMATS,['upgrade-plan-v1']);
+      }
+    }
+    process.stdout.write('production-coordinator-capabilities:'+JSON.stringify(capabilities));
+  `;
+  const result=await run(node,['-e',script],{cwd:root,env:{NODE_ENV:'production',PATH:process.env.PATH||'/usr/bin:/bin'}});
+  invariant(result.startsWith('production-coordinator-capabilities:'),'COORDINATOR_CAPABILITY_PROBE_FAILED');
+  return JSON.parse(result.slice('production-coordinator-capabilities:'.length));
+}
+export async function probeCoordinatorDataFormats(apiRoot,options={}) {
+  return (await probeCoordinatorCapabilities(apiRoot,options)).dataFormats||[];
 }
 export async function probeProductionWebDependencies(webRoot,{run=command,node=process.execPath}={}){
   // Do not require standalone server.js, which binds a listener immediately.
