@@ -11,6 +11,8 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   importNativeSource,
   assertNativeStopReceipt,
@@ -290,6 +292,84 @@ test("real migrated schema-28 SQLite and files import without opening SDK or cha
     verifyNativeImportedTree(c.destinationRoot, r),
     (e) => e.code === "NATIVE_IMPORTED_BUSINESS_CHANGED",
   );
+});
+test("a sealed read-only WAL database with stale SHM imports without incremental backup or source writes", async (t) => {
+  const { config: c, root } = await fixture(t);
+  const sourceDatabase = join(c.sourceRoot, "platform.db"),
+    db = new D(sourceDatabase);
+  db.pragma("journal_mode=WAL");
+  db.exec(
+    "CREATE TABLE readonly_backup_regression(payload TEXT); INSERT INTO readonly_backup_regression VALUES(hex(zeroblob(524288)))",
+  );
+  db.pragma("wal_checkpoint(TRUNCATE)");
+  const staleShm = await fs.readFile(sourceDatabase + "-shm");
+  assert.equal((await fs.stat(sourceDatabase + "-wal")).size, 0);
+  db.close();
+  // Preserve the exact sidecar shape from the stopped export, then make all
+  // three database files genuinely nonwritable for this process. The fixture
+  // is over 100 pages, so the old incremental backup repeatedly restarts.
+  await fs.writeFile(sourceDatabase + "-wal", Buffer.alloc(0));
+  await fs.writeFile(sourceDatabase + "-shm", staleShm);
+  const sourceBytes = await fs.readFile(sourceDatabase);
+  c.stopReceipt.frozenDatabaseDigest =
+    "sha256:" + createHash("sha256").update(sourceBytes).digest("hex");
+  const configPath = join(root, "readonly-import.json");
+  await fs.writeFile(configPath, JSON.stringify(c), { mode: 0o600 });
+  const beforeEntries = (await fs.readdir(c.sourceRoot)).sort();
+  for (const suffix of ["", "-wal", "-shm"])
+    await fs.chmod(sourceDatabase + suffix, 0o400);
+  await fs.chmod(c.sourceRoot, 0o500);
+  try {
+    // Isolate the old implementation's unbounded setImmediate loop: a failed
+    // regression kills only this child, never the test runner or any service.
+    const moduleUrl = new URL("./native-source-import.mjs", import.meta.url);
+    await promisify(execFile)(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { readFile } from 'node:fs/promises'; import { importNativeSource } from ${JSON.stringify(moduleUrl.href)}; await importNativeSource(JSON.parse(await readFile(process.argv[1], 'utf8')));`,
+        configPath,
+      ],
+      { timeout: 10_000, maxBuffer: 1024 * 1024 },
+    );
+    assert.deepEqual(await fs.readFile(sourceDatabase), sourceBytes);
+    assert.deepEqual(await fs.readFile(sourceDatabase + "-shm"), staleShm);
+    assert.equal((await fs.stat(sourceDatabase + "-wal")).size, 0);
+    assert.deepEqual((await fs.readdir(c.sourceRoot)).sort(), beforeEntries);
+    for (const suffix of ["", "-wal", "-shm"])
+      assert.equal(
+        (await fs.stat(sourceDatabase + suffix)).mode & 0o777,
+        0o400,
+      );
+    const imported = new D(join(c.destinationRoot, "platform.db"));
+    try {
+      assert.equal(
+        imported
+          .prepare("SELECT length(payload) n FROM readonly_backup_regression")
+          .get().n,
+        1048576,
+      );
+      assert.equal(
+        imported.prepare("SELECT baseline_path p FROM projects").get().p,
+        "/data/baselines/p",
+      );
+      assertNativeDatabaseIdle(imported);
+    } finally {
+      imported.close();
+    }
+    const receipt = JSON.parse(await fs.readFile(c.receiptPath, "utf8"));
+    assert.equal(
+      receipt.sourceExportDatabaseDigest,
+      c.stopReceipt.frozenDatabaseDigest,
+    );
+    assert.ok(receipt.excluded.includes("platform.db-wal"));
+    assert.ok(receipt.excluded.includes("platform.db-shm"));
+  } finally {
+    await fs.chmod(c.sourceRoot, 0o700);
+    for (const suffix of ["", "-wal", "-shm"])
+      await fs.chmod(sourceDatabase + suffix, 0o600);
+  }
 });
 test("unknown data, external symlink and absolute Git pointers refuse the import", async (t) => {
   for (const kind of ["unknown", "symlink", "git"]) {

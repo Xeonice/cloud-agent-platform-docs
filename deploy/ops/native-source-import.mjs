@@ -426,16 +426,31 @@ export async function importNativeSource(c) {
   invariant(priorReceipt === null, "NATIVE_IMPORT_RECEIPT_EXISTS");
   await fs.mkdir(destinationRoot, { mode: 0o700 });
   await secureDirectory(destinationRoot);
+  // This is an already sealed stopped export, not a live SQLite backup. Never
+  // open its stale WAL/SHM: a read-only WAL source can restart every incremental
+  // backup step when its shared-memory index is not writable.
+  const destinationDatabase = join(destinationRoot, "platform.db");
+  await fs.copyFile(
+    join(sourceRoot, "platform.db"),
+    destinationDatabase,
+    fs.constants.COPYFILE_EXCL,
+  );
+  invariant(
+    canonical(await fileDigest(destinationDatabase)) ===
+      canonical(sealedDatabase),
+    "NATIVE_DATABASE_COPY_CHANGED",
+  );
+  await fs.chmod(destinationDatabase, 0o600);
   const D = createRequire(c.sqliteModulePath)("better-sqlite3"),
-    source = new D(join(sourceRoot, "platform.db"), {
+    snapshot = new D(destinationDatabase, {
       readonly: true,
       fileMustExist: true,
     });
   let before, copied;
   try {
-    source.exec("PRAGMA query_only=ON");
-    assertNativeDatabaseIdle(source);
-    before = source
+    snapshot.exec("PRAGMA query_only=ON");
+    assertNativeDatabaseIdle(snapshot);
+    before = snapshot
       .prepare(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
       )
@@ -443,22 +458,20 @@ export async function importNativeSource(c) {
       .map(({ name }) => ({
         name,
         ...rowDigest(
-          source,
+          snapshot,
           name,
           PATH_COLUMNS.filter(([t]) => t === name).map(([, col]) => col),
         ),
       }));
     copied = await copyBusiness(sourceRoot, destinationRoot);
-    await source.backup(join(destinationRoot, "platform.db"));
   } finally {
-    source.close();
+    snapshot.close();
   }
   invariant(
     (await fileDigest(join(sourceRoot, "platform.db"))).digest ===
       sealedDatabase.digest,
     "NATIVE_FROZEN_EXPORT_CHANGED",
   );
-  await fs.chmod(join(destinationRoot, "platform.db"), 0o600);
   const db = new D(join(destinationRoot, "platform.db"), {
     fileMustExist: true,
   });
