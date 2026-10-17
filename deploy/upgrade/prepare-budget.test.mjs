@@ -344,6 +344,43 @@ test(
   },
 );
 
+test("migration preparation and reconciliation wait for asynchronous integrity without changing the frozen batch budget", { concurrency: true }, async (t) => {
+  await Promise.all(["prepare", "status"].map(action => t.test(action, async t => {
+    const result = {commitKnown:true,integrityValid:true,complete:true};
+    const f = await boundary(t, {delays:{[action]:5200}, extra:({path}) => path.endsWith('/migration') ? result : undefined});
+    f.input.attempt.plan.migrationPath={migrationPlanDigest:digest};
+    f.input.attempt.plan.policy.migrationBatchMs=500;
+    const request={...f.input,action,checkpoint:null};
+    const started=Date.now();
+    assert.deepEqual(await f.executor.migration(request),result);
+    assert.ok(Date.now()-started>=5200);
+    assert.deepEqual(f.calls.map(c=>c.body),[{fence,operationId,action,planDigest:digest,checkpoint:null,policy:f.input.attempt.plan.policy}]);
+    assert.equal(f.calls[0].body.policy.migrationBatchMs,500);
+    assert.deepEqual(criticalCalls(f),[]);
+  })));
+});
+
+test("migration timeout overrides are bounded and cannot extend a write batch", { concurrency: true }, async (t) => {
+  const f=await boundary(t,{extra:({path})=>path.endsWith('/migration')?{complete:true}:undefined});
+  for(const action of ['prepare','status']){
+    for(const timeoutMs of [0,-1,120001,NaN,1.5]) await assert.rejects(async()=>f.coordinator.migration(attemptId,{action},{timeoutMs}),{code:'INVALID_MIGRATION_TIMEOUT'});
+  }
+  for(const action of ['batch','quiesce','release','adopt']) await assert.rejects(async()=>f.coordinator.migration(attemptId,{action},{timeoutMs:120000}),{code:'MIGRATION_TIMEOUT_NOT_ALLOWED'});
+  assert.deepEqual(f.calls,[]);
+});
+
+test("migration write batches keep the actual default 5s transport deadline", { concurrency: true }, async (t) => {
+  const f=await boundary(t,{delays:{batch:5300},extra:({path})=>path.endsWith('/migration')?{complete:true}:undefined});
+  f.input.attempt.plan.migrationPath={migrationPlanDigest:digest};
+  f.input.attempt.plan.policy.migrationBatchMs=500;
+  const started=Date.now();
+  await assert.rejects(f.executor.migration({...f.input,action:'batch',checkpoint:{phase:'batch'}}),{name:'TimeoutError'});
+  assert.ok(Date.now()-started>=4800);
+  assert.equal(f.calls.length,1);
+  assert.equal(f.calls[0].body.policy.migrationBatchMs,500);
+  assert.deepEqual(criticalCalls(f),[]);
+});
+
 async function webBoundary(
   t,
   {

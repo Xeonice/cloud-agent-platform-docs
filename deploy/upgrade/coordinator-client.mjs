@@ -10,6 +10,12 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     invariant(Number.isSafeInteger(options.timeoutMs)&&options.timeoutMs>0&&options.timeoutMs<=120000,'INVALID_PREPARATION_TIMEOUT');
     return {timeoutMs:options.timeoutMs};
   }
+  function migrationOptions(body,options) {
+    if(options?.timeoutMs===undefined)return undefined;
+    invariant(['prepare','status'].includes(body?.action),'MIGRATION_TIMEOUT_NOT_ALLOWED');
+    invariant(Number.isSafeInteger(options.timeoutMs)&&options.timeoutMs>0&&options.timeoutMs<=120000,'INVALID_MIGRATION_TIMEOUT');
+    return {timeoutMs:options.timeoutMs};
+  }
   async function rpc(path,body,selection,requestOptions) {
     const activeOrigin=await actualOrigin(selection);
     const r=await fetcher(activeOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':key,'x-platform-instance-id':instanceId},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestOptions?.timeoutMs??timeoutMs)});
@@ -26,7 +32,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     step:(id,stepId)=>rpc(prefix(id)+'/steps/'+encodeURIComponent(stepId)),
     snapshot:id=>rpc(prefix(id)),
     assertFence:(id,fence)=>rpc(prefix(id)+'/renew',{fence,controllerId:null,checkOnly:true},{allowQuiescing:true,attemptId:id,fence}),
-    migration:(id,body)=>rpc(prefix(id)+'/migration',body),
+    migration:(id,body,requestOptions)=>rpc(prefix(id)+'/migration',body,undefined,migrationOptions(body,requestOptions)),
     observation:(id,body)=>rpc('/internal/upgrades/observation?attemptId='+encodeURIComponent(id)+'&fence='+body.fence+'&weight='+body.weight),
     continuity:(id,body)=>rpc('/internal/upgrades/continuity?attemptId='+encodeURIComponent(id)+'&fence='+body.fence),
     validateSwitch:(id,body)=>rpc(prefix(id)+'/validate-switch',body),
