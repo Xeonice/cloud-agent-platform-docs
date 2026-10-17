@@ -771,27 +771,23 @@ test("real user acceptance, durable installation and original VM/terminal contin
       source.automationInput,
       201,
     );
-    const upgradeAuthPage = await context.newPage();
-    await upgradeAuthPage.goto(origin + "/settings/system#version");
-    await upgradeAuthPage
-      .getByRole("button", { name: "授权升级", exact: true })
-      .click();
-    await upgradeAuthPage
-      .getByLabel("实例升级授权密钥")
-      .fill(fixture.config.keys.upgrade);
-    await upgradeAuthPage
-      .getByRole("dialog")
-      .getByRole("button", { name: "授权升级", exact: true })
-      .click();
-    await expect(upgradeAuthPage.getByRole("dialog")).toHaveCount(0);
+    const upgradeStatusPage = await context.newPage();
+    await upgradeStatusPage.goto(origin + "/settings/system#version");
+    await expect(
+      upgradeStatusPage.getByRole("button", { name: "授权升级", exact: true }),
+    ).toHaveCount(0);
+    await expect(upgradeStatusPage.getByLabel("实例升级授权密钥")).toHaveCount(
+      0,
+    );
     const authorized = await json(
       request,
       origin,
       "/api/system/upgrade/status",
     );
     expect(authorized.capabilities.canUpgradeInstance).toBe(true);
+    expect(authorized.capabilities.canAuthenticate).toBe(false);
     expect(authorized.attempt).toBeNull();
-    await upgradeAuthPage.close();
+    await upgradeStatusPage.close();
     await page.reload();
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
@@ -1185,7 +1181,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     }
     expect(
       intent.actor_id === "instance-administrator",
-      "Only the actual instance upgrade grant accepts this intent",
+      "The existing authenticated instance session accepts this explicit intent",
     ).toBe(true);
     expect(intent.request_id).toBe(submittedCommand.requestId);
     expect(intent.request_id).toBe(accepted.requestId);

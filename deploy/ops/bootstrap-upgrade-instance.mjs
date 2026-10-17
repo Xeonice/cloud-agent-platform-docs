@@ -831,7 +831,11 @@ export async function createFoundation(
     DATA_ROOT: bootstrapDataRoot(c),
     DATABASE_URL: "/data/platform.db",
     MIGRATIONS_DIR: join(c.artifactRoot, "api/drizzle"),
-    UPGRADE_ADMIN_KEY: keys.upgrade,
+    // Existing installations may retain this internal continuity material.
+    // It never grants user upgrade access and is not generated for new installs.
+    ...(typeof keys.upgrade === "string" && keys.upgrade.length >= 32
+      ? { UPGRADE_LEGACY_AUTH_CONTINUITY_KEY: keys.upgrade }
+      : {}),
     UPGRADE_SESSION_SECRET: keys.upgradeSession,
     UPGRADE_TRUST_ROOT_PATH: c.trustRootPath,
     UPGRADE_CATALOG_FILE: c.catalogFile,
@@ -979,7 +983,6 @@ async function startBootstrap(c, { mode }) {
       "controller",
       "entry",
       "sticky",
-      "upgrade",
       "supervisor",
       "upgradeSession",
     ].map((k) => [k, randomBytes(32).toString("hex")]),
@@ -1630,7 +1633,6 @@ export async function resumeBootstrapFoundation(c) {
       "controller",
       "entry",
       "sticky",
-      "upgrade",
       "supervisor",
       "upgradeSession",
     ].every((k) => typeof keys[k] === "string" && keys[k].length >= 32),

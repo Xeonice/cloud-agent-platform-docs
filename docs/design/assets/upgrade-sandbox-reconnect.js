@@ -2,7 +2,7 @@
  * 离线设计增量：服务升级与原沙箱续接。
  * 复用 v2 的外壳、任务、终端、模态、主题与场景；不向服务发请求、不触发部署。
  * fakeCatalog 只模拟 CD 发布的安装包目录；它不会开始实例升级、变更服务或刷新页面。
- * fakePermission / offline request 仅为交互夹具；真实权限、幂等受理和升级须由后端验证，未调用真实 API。
+ * offline request 仅为交互夹具；真实访问保护、幂等受理和升级须由后端验证，未调用真实 API。
  * sessionStorage 只保存此离线示例的标签描述和演示计数，不保存任何真实会话凭据。
  * 独立 localStorage 提醒记录仅含虚构实例 ID 和本地自然日，不含版本、资源或身份凭据。
  */
@@ -32,7 +32,6 @@
   const SCENARIOS = [
     ['normal', '正常使用：原任务持续运行'],
     ['installable', '发现安装包：等待用户立即升级'],
-    ['permission-denied', '发现安装包：当前用户无升级权限'],
     ['shared-web', '复用原页面构建：本实例待升级，无需刷新'],
     ['page-target', '页面已经是新版：本实例仍待升级'],
     ['preparing', '准备新版本：尚未就绪，原服务继续运行'],
@@ -61,7 +60,6 @@
     progress: null, entryScene: null, attempt: null, requestSeq: 0, acceptedCount: 0,
     contract: null,
     catalog: { version: BASE_VERSION, packageRevision: null, verified: true },
-    fakePermission: { verified: true, mayUpgrade: true },
     version: { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION, target: null,
       targetWebRevision: null, requiresRefresh: false, phase: 'current', verified: true, checkedAt: '刚刚（示例）' },
   };
@@ -104,7 +102,7 @@
       observedSequence: state.observedSequence, scenario: state.scenario,
       refreshed: state.refreshed, version: state.version,
       progress: state.progress ? { percent: state.progress.percent, confirmedAt: state.progress.confirmedAt } : null, entryScene: state.entryScene,
-      catalog: state.catalog, fakePermission: state.fakePermission,
+      catalog: state.catalog,
       attempt: state.attempt, requestSeq: state.requestSeq, acceptedCount: state.acceptedCount,
       contract: state.contract,
       tabs: tabs.list.map((tab) => ({
@@ -154,9 +152,7 @@
     if (record.catalog && [BASE_VERSION, TARGET_VERSION].includes(record.catalog.version)) {
       state.catalog = { version: record.catalog.version, packageRevision: record.catalog.version === TARGET_VERSION ? fakeCatalog.packageRevision : null, verified: record.catalog.verified === true };
     } else if (state.version.target) state.catalog = { ...fakeCatalog, verified: state.version.verified };
-    if (record.fakePermission && typeof record.fakePermission.mayUpgrade === 'boolean') {
-      state.fakePermission = { verified: record.fakePermission.verified === true, mayUpgrade: record.fakePermission.mayUpgrade };
-    }
+    // 旧独立升级权限夹具不再恢复；本设计是通过原访问保护后的平台页面。
     if (Number.isSafeInteger(record.requestSeq) && record.requestSeq >= 0 && record.requestSeq < 1000000) state.requestSeq = record.requestSeq;
     if (Number.isSafeInteger(record.acceptedCount) && record.acceptedCount >= 0 && record.acceptedCount <= state.requestSeq) state.acceptedCount = record.acceptedCount;
     if (record.attempt && /^demo-upgrade-\d+$/.test(record.attempt.id) && record.attempt.target === TARGET_VERSION
@@ -206,11 +202,9 @@
     return state.catalog.verified && state.version.verified && state.version.phase === 'available-installable'
       && state.version.target === state.catalog.version && state.version.service !== state.catalog.version;
   }
-  function canInstallVersion() { return installable() && state.fakePermission.verified && state.fakePermission.mayUpgrade; }
-  function permissionText() {
-    if (!state.fakePermission.verified) return '升级权限待确认；请由有权限的用户核验后执行。（离线权限模拟）';
-    return state.fakePermission.mayUpgrade ? '升级由你主动发起；不会替你停止原任务。（离线权限模拟）'
-      : '尚未授权升级，可在系统页由实例管理者主动授权。（离线权限模拟）';
+  function canInstallVersion() { return installable(); }
+  function installIntentText() {
+    return '已进入平台，可直接点击立即升级；原任务继续运行。（离线受理模拟）';
   }
   function inProgress() {
     return state.version.verified && state.version.phase === 'upgrading' && state.progress
@@ -230,13 +224,13 @@
       target: TARGET_VERSION, initiatedBy: 'offline-explicit-user', status };
   }
   function startInstanceUpgrade() {
-    // 离线受理夹具：真实产品必须服务端验证 actor 权限、安装包身份、实例兼容与幂等键。
+    // 离线受理夹具：真实产品必须服务端验证已有访问会话、Origin／CSRF、实例绑定、安装包身份、实例兼容与幂等键。
     // 重复请求返回原 attempt；不替换目标，不清除本日提醒，也不启动任何真实部署。
     if (state.attempt && ['accepted', 'upgrading'].includes(state.attempt.status)) {
       P.announce('本实例升级已受理，继续查看同一次升级进度。'); return;
     }
     if (!canInstallVersion()) {
-      P.announce(installable() ? permissionText() : '当前没有可受理的新版本升级，请先检查版本。'); return;
+      P.announce(installable() ? installIntentText() : '当前没有可受理的新版本升级，请先检查版本。'); return;
     }
     const active = document.activeElement;
     createOfflineAttempt(); setProgress(20);
@@ -285,7 +279,7 @@
         targetWebRevision: target ? (reuseWeb ? BASE_REVISION : TARGET_REVISION) : null,
         requiresRefresh: !!target && !reuseWeb, phase, verified: true, checkedAt: '刚刚（示例）' };
     };
-    if (['normal', 'preparing', 'installable', 'permission-denied', 'shared-web', 'page-target'].includes(value)) { state.progress = null; state.attempt = null; }
+    if (['normal', 'preparing', 'installable', 'shared-web', 'page-target'].includes(value)) { state.progress = null; state.attempt = null; }
     if (value.startsWith('contract-')) {
       known(TARGET_VERSION, TARGET_VERSION, 'current');
       state.version.page = TARGET_VERSION; state.version.loadedWebRevision = TARGET_REVISION;
@@ -299,12 +293,11 @@
     else if (value === 'normal') {
       known(version.service, null, 'current'); state.catalog = { version: version.service, packageRevision: null, verified: true };
     }
-    else if (['installable', 'permission-denied', 'shared-web', 'page-target'].includes(value)) {
+    else if (['installable', 'shared-web', 'page-target'].includes(value)) {
       known(BASE_VERSION, TARGET_VERSION, 'available-installable', value === 'shared-web');
       if (value === 'shared-web') { state.version.page = BASE_VERSION; state.version.loadedWebRevision = BASE_REVISION; }
       if (value === 'page-target') { state.version.page = TARGET_VERSION; state.version.loadedWebRevision = TARGET_REVISION; }
       state.catalog = { ...fakeCatalog, verified: true };
-      state.fakePermission = { verified: true, mayUpgrade: value !== 'permission-denied' };
       if (!state.entryScene) state.entryScene = value === 'shared-web' ? 'upgrade-shared-web' : value === 'page-target' ? 'upgrade-page-target' : 'upgrade-available';
     }
     else if (value === 'preparing') {
@@ -339,7 +332,7 @@
   function versionStatus() {
     if (!state.version.verified) return { title: '待确认', tone: 'neutral', text: '版本信息读取失败；下面保留上次确认的读数，不能据此判断更新是否完成。' };
     switch (state.version.phase) {
-      case 'available-installable': return { title: canInstallVersion() ? '待你升级' : '待有权限用户升级', tone: 'info', text: `已发现安装包 ${state.catalog.version}；本实例仍安装 ${state.version.service}，当前页面为 ${state.version.page}。发布安装包不会自动升级本实例；只有明确选择「立即升级」才受理升级。${!state.version.requiresRefresh ? '本次复用原页面构建，实例升级完成后无需刷新页面。' : ''}` };
+      case 'available-installable': return { title: '待你升级', tone: 'info', text: `已发现安装包 ${state.catalog.version}；本实例仍安装 ${state.version.service}，当前页面为 ${state.version.page}。发布安装包不会自动升级本实例；只有明确选择「立即升级」才受理升级。${!state.version.requiresRefresh ? '本次复用原页面构建，实例升级完成后无需刷新页面。' : ''}` };
       case 'preparing': return { title: '准备中', tone: 'neutral', text: `正在准备 ${TARGET_VERSION}，当前服务仍为 ${BASE_VERSION}；版本尚未就绪。` };
       case 'upgrading': return { title: '升级中', tone: 'neutral', text: `用户已主动发起，本实例升级请求已受理（离线模拟）。阶段「${state.progress.stage}」，示例进度 ${state.progress.percent}%。${switchingService() ? `整体激活尚未确认，上次完整安装为 ${state.version.service}。` : `已安装服务仍为 ${state.version.service}。`}安装包已发布不等于实例已激活；仅本实例激活且页面可用后允许刷新。` };
       case 'ready': return { title: '已安装，待刷新页面', tone: 'info', text: `本实例已安装 ${state.version.service}。页面 ${state.version.page} → ${state.version.target}；当前页面尚未更新，刷新页面只重载本页面并重连原任务和终端。` };
@@ -412,7 +405,7 @@
     const text = installable() ? `已安装 ${state.version.service} · 页面 ${state.version.page}` : `页面 ${state.version.page} → ${state.version.target}`;
     if ($('[data-upgrade-notice-versions]', notice).textContent !== text) $('[data-upgrade-notice-versions]', notice).textContent = text;
     const summary = $('[data-upgrade-notice-summary]', notice);
-    summary.textContent = installable() ? (canInstallVersion() ? '安装包已发布，等待你主动升级本实例。' : permissionText())
+    summary.textContent = installable() ? (canInstallVersion() ? '安装包已发布，等待你主动升级本实例。' : installIntentText())
       : canRefreshVersion() ? `本实例已安装 ${state.version.service}；页面仍旧，刷新后重连原任务。` : '';
     summary.hidden = !summary.textContent;
     const progress = $('[data-upgrade-notice-progress]', notice); const progressMarkup = progressHtml();
@@ -438,7 +431,7 @@
       : state.version.verified ? '' : ' <span class="upgrade-version-last">上次确认</span>';
     const previousTarget = state.version.verified ? '' : ' <span class="upgrade-version-last">上次确认</span>';
     return `<div class="popover__head"><h2 class="popover__title" id="upgrade-version-popover-title">版本与更新</h2><p class="popover__desc">版本号仅为设计示例</p></div>
-      <div class="popover__body"><dl class="kv"><dt>已发布可用版本</dt><dd data-upgrade-catalog-version>${esc(state.catalog.version)}${state.catalog.verified ? '' : ' · 上次确认'}</dd><dt>已安装服务版本</dt><dd data-upgrade-service-version>${esc(serviceVersionText())}${previous}</dd><dt>当前页面版本</dt><dd data-upgrade-current-page>${esc(state.version.page)}</dd><dt>本次已受理目标</dt><dd data-upgrade-target-version>${esc(state.attempt ? state.attempt.target : '—（尚未发起升级）')}${state.attempt ? previousTarget : ''}</dd><dt>更新状态</dt><dd><span class="badge badge--20 badge--${status.tone}" data-upgrade-version-status>${esc(status.title)}</span></dd></dl><p class="popover__note" data-upgrade-version-description>${esc(status.text)}</p>${installable() ? `<p class="popover__note" data-upgrade-install-permission>${esc(permissionText())}</p>` : ''}${progressDisplayHtml()}</div>
+      <div class="popover__body"><dl class="kv"><dt>已发布可用版本</dt><dd data-upgrade-catalog-version>${esc(state.catalog.version)}${state.catalog.verified ? '' : ' · 上次确认'}</dd><dt>已安装服务版本</dt><dd data-upgrade-service-version>${esc(serviceVersionText())}${previous}</dd><dt>当前页面版本</dt><dd data-upgrade-current-page>${esc(state.version.page)}</dd><dt>本次已受理目标</dt><dd data-upgrade-target-version>${esc(state.attempt ? state.attempt.target : '—（尚未发起升级）')}${state.attempt ? previousTarget : ''}</dd><dt>更新状态</dt><dd><span class="badge badge--20 badge--${status.tone}" data-upgrade-version-status>${esc(status.title)}</span></dd></dl><p class="popover__note" data-upgrade-version-description>${esc(status.text)}</p>${installable() ? `<p class="popover__note" data-upgrade-install-permission>${esc(installIntentText())}</p>` : ''}${progressDisplayHtml()}</div>
       <div class="popover__foot"><div class="popover__actions"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-popover-check" aria-busy="${state.versionChecking}" aria-disabled="${state.versionChecking}">${state.versionChecking ? '检查中…' : '检查更新'}</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-popover-install"${canInstallVersion() ? '' : ' hidden'}>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-popover-refresh"${canRefreshVersion() ? '' : ' hidden'}>刷新页面</button><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-later" data-fk="upgrade-popover-later">稍后</button></div><button class="link" type="button" data-action="upgrade-open-versions" data-fk="upgrade-popover-detail">查看版本详情</button><p class="popover__note" data-upgrade-version-time>${esc(state.version.verified ? `检查于 ${state.version.checkedAt}` : `${state.version.checkedAt} · 当前待确认`)}</p></div>`;
   }
   function paintVersionPopover() {
@@ -465,7 +458,7 @@
             <li class="list__row"><div class="list__line"><span class="list__name">更新状态</span><span class="badge badge--20 badge--neutral" data-upgrade-version-status></span></div><p class="list__note" data-upgrade-version-description role="status"></p></li>
             <li class="list__row" data-upgrade-card-progress hidden></li>
             <li class="list__row" data-upgrade-install-permission hidden></li>
-          </ul><section class="upgrade-contract-section" aria-labelledby="upgrade-contract-heading" data-upgrade-contract hidden></section><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-authorize" data-fk="upgrade-authorize" hidden>授权升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
+          </ul><section class="upgrade-contract-section" aria-labelledby="upgrade-contract-heading" data-upgrade-contract hidden></section><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
         </article>`;
       board.prepend(section);
     }
@@ -490,9 +483,8 @@
     const refresh = $('[data-action="upgrade-refresh-version"]', section);
     refresh.hidden = !canRefreshVersion(); refresh.textContent = '刷新页面';
     $('[data-action="upgrade-install-version"]', section).hidden = !canInstallVersion();
-    $('[data-action="upgrade-authorize"]', section).hidden = state.fakePermission.mayUpgrade;
     const permission = $('[data-upgrade-install-permission]', section);
-    permission.textContent = permissionText(); permission.hidden = !installable();
+    permission.textContent = installIntentText(); permission.hidden = !installable();
     const progress = $('[data-upgrade-card-progress]', section); const progressMarkup = progressDisplayHtml();
     if (progress.dataset.html !== progressMarkup) { progress.innerHTML = progressMarkup; progress.dataset.html = progressMarkup; }
     progress.hidden = !progressMarkup;
@@ -511,7 +503,7 @@
     const reason = contract.phase === 'waiting' ? '回退窗口尚未结束，继续保留旧数据格式。'
       : contract.phase === 'unknown' ? '仅查询原请求，不重复执行。历史升级的100%记录保持不变。'
       : contract.phase === 'completed' ? '使用旧数据格式的历史版本无法重新接流。原任务继续运行。' : '';
-    const html = `<h3 class="section-head__title" id="upgrade-contract-heading">旧数据格式清理</h3><p class="text-muted" role="status">${labels[contract.phase]}</p>${reason ? `<p class="text-muted">${esc(reason)}</p>` : ''}<dl class="kv"><dt>所属服务版本</dt><dd>${TARGET_VERSION}</dd><dt>回退窗口截止</dt><dd>${contract.phase === 'waiting' ? '明天 09:00（示例）' : '今天 09:00，已结束（示例）'}</dd><dt>旧版本读者</dt><dd>${['completed', 'clearing'].includes(contract.phase) ? '0' : '1'}（示例）</dd>${contract.requestId ? `<dt>本次清理阶段</dt><dd>${contract.phase === 'completed' ? 'completed' : contract.phase === 'unknown' ? '待确认' : 'clearing'}</dd><dt>已清理行数</dt><dd>${contract.phase === 'completed' ? '3 / 3' : contract.phase === 'unknown' ? '待确认' : '1 / 3'}（示例）</dd>` : ''}</dl>${contract.phase === 'available' && state.fakePermission.mayUpgrade ? '<button class="btn btn--secondary btn--32" type="button" data-action="upgrade-contract-confirm">清理旧数据格式</button>' : ''}`;
+    const html = `<h3 class="section-head__title" id="upgrade-contract-heading">旧数据格式清理</h3><p class="text-muted" role="status">${labels[contract.phase]}</p>${reason ? `<p class="text-muted">${esc(reason)}</p>` : ''}<dl class="kv"><dt>所属服务版本</dt><dd>${TARGET_VERSION}</dd><dt>回退窗口截止</dt><dd>${contract.phase === 'waiting' ? '明天 09:00（示例）' : '今天 09:00，已结束（示例）'}</dd><dt>旧版本读者</dt><dd>${['completed', 'clearing'].includes(contract.phase) ? '0' : '1'}（示例）</dd>${contract.requestId ? `<dt>本次清理阶段</dt><dd>${contract.phase === 'completed' ? 'completed' : contract.phase === 'unknown' ? '待确认' : 'clearing'}</dd><dt>已清理行数</dt><dd>${contract.phase === 'completed' ? '3 / 3' : contract.phase === 'unknown' ? '待确认' : '1 / 3'}（示例）</dd>` : ''}</dl>${contract.phase === 'available' ? '<button class="btn btn--secondary btn--32" type="button" data-action="upgrade-contract-confirm">清理旧数据格式</button>' : ''}`;
     if (element.dataset.html !== html) { element.innerHTML = html; element.dataset.html = html; }
   }
   function connectionHtml() {
@@ -624,7 +616,7 @@
       case 'reconnect-confirmed': return '独立运行状态已确认：原任务仍在后台运行。这里仅重建浏览器连接，不重启运行环境。';
       case 'restored': return '已核对并重新连接同一个原任务和原进程；原用户终端清单已恢复，原指令没有再次执行。';
       case 'available': return '右上角图标与紧凑浮卡仅在存在已就绪的新页面时出现，不抢焦点、不自动刷新。关闭或点「稍后」后当天跨页、刷新和新标签不再浮卡提醒；下一本地自然日仍有可用新版才恢复。今日关闭后仍有新版，图标与静态小点继续可用；系统页版本卡始终可查。';
-      case 'installable': case 'permission-denied': case 'shared-web': case 'page-target': return 'fakeCatalog 只模拟 CD 发布安装包。发现 v0.3.9 时本实例仍安装 v0.3.8，不创建升级尝试、不显示百分比、不刷新；有权限用户明确选择产品「立即升级」才模拟受理。fakePermission 仅为离线夹具，真实请求必须由后端验证权限与幂等性。页面与实例版本独立；复用原页面构建无需刷新，页面已是新版也不表示实例已安装。当天关闭提醒不阻止主动升级，升级阶段也不清当天设置。';
+      case 'installable': case 'shared-web': case 'page-target': return 'fakeCatalog 只模拟 CD 发布安装包。发现 v0.3.9 时本实例仍安装 v0.3.8，不创建升级尝试、不显示百分比、不刷新；已进入平台的用户直接选择产品「立即升级」才模拟受理，无需额外口令、密钥或授权。真实请求必须由后端验证已有访问会话、Origin／CSRF、实例绑定与幂等性。页面与实例版本独立；复用原页面构建无需刷新，页面已是新版也不表示实例已安装。当天关闭提醒不阻止主动升级，升级阶段也不清当天设置。';
       case 'upgrading': return `这是用户已主动发起并受理的实例升级夹具，当前模拟阶段为「${state.progress.stage}」${state.progress.percent}%。不是目录发布自动部署；百分比由演示按钮手动推进，正常产品读取本实例真实升级进度。原任务与终端保持不变，本实例激活确认后才可刷新。`;
       case 'preparing': return '正在准备示例 v0.3.9；当前服务仍为 v0.3.8。尚未通过就绪检查，不提供刷新到新版本的入口。';
       case 'version-unknown': return '版本读数待确认；只展示上次已知服务与目标版本，不从终端断线推断服务已经升级。';
@@ -648,11 +640,11 @@
     const html = `<div class="dialog dialog--576" role="dialog" aria-modal="true" aria-labelledby="upgrade-demo-title" aria-describedby="upgrade-demo-description" data-dialog="upgrade-demo">
       <div class="dialog__header"><h2 class="dialog__title" id="upgrade-demo-title">服务升级与沙箱续接 · 演示</h2><p class="dialog__subtitle" id="upgrade-demo-description">沿用现有 v2 工作台，只演示新增的升级与连接状态。</p></div>
       <div class="dialog__body proto-about upgrade-demo-body">
-        <p>这是离线设计稿，使用 fakeCatalog、fakePermission 和 offline request 模拟，不连接服务、不执行部署。v0.3.8／v0.3.9 仅为展示示例。CD 只发布安装包；发现新包后等待用户在产品浮卡／版本详情里点「立即升级」，真实实施须由后端验证权限、实例兼容和幂等受理。受理后才有实例 attempt 与百分比；20／45／75／95／100 只用演示按钮手动推进。100% 表示本实例激活已确认；页面仍旧才提供「刷新页面」。关闭浮卡只暂停本地当天提醒，不阻止主动升级，跨待升级／进行中／待刷新也不重出；次日复核后恢复。系统页始终可查。</p>
+        <p>这是离线设计稿，使用 fakeCatalog 和 offline request 模拟，不连接服务、不执行部署。v0.3.8／v0.3.9 仅为展示示例。CD 只发布安装包；发现新包后等待用户在产品浮卡／版本详情里点「立即升级」，真实实施须由后端验证已有访问会话、Origin／CSRF、实例绑定、实例兼容和幂等受理。受理后才有实例 attempt 与百分比；20／45／75／95／100 只用演示按钮手动推进。100% 表示本实例激活已确认；页面仍旧才提供「刷新页面」。关闭浮卡只暂停本地当天提醒，不阻止主动升级，跨待升级／进行中／待刷新也不重出；次日复核后恢复。系统页始终可查。</p>
         <label class="field"><span class="field__label">演示场景</span><span class="select select--32"><select class="select__control" data-upgrade-scenario data-fk="upgrade-scenario">${SCENARIOS.map(([value, label]) => `<option value="${value}"${state.scenario === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select><span class="icon i-chevron-down select__icon" aria-hidden="true"></span></span></label>
         <div class="upgrade-demo-actions"><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-restore-reminder">恢复新版提示</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-start-progress">开始升级演示</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-advance-progress">推进升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-installed-ready">已安装待刷新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-show-task">查看原任务</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-add-shell">打开一个示例终端</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-simulate-refresh">演示刷新并重连</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-recover">模拟连接恢复并核对</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-next-day">模拟到明天</button></div>
         <section class="upgrade-demo-evidence" aria-labelledby="upgrade-evidence-title" data-upgrade-evidence><h3 id="upgrade-evidence-title">示例证据（用于评审）</h3><p data-upgrade-evidence-text></p><dl><dt>原任务</dt><dd>修一下登录态刷新 · login</dd><dt>原进程</dt><dd data-upgrade-process></dd><dt>已核对输出序号</dt><dd data-upgrade-sequence></dd><dt>原终端清单</dt><dd data-upgrade-tabs></dd><dt>页面状态</dt><dd data-upgrade-focus></dd><dt>提醒日期</dt><dd data-upgrade-reminder-today></dd><dt>本日提醒</dt><dd data-upgrade-reminder-state></dd><dt>升级受理</dt><dd data-upgrade-request-evidence></dd><dt>停止／重跑原指令</dt><dd>0 次／0 次</dd></dl></section>
-        <p class="upgrade-demo-footnote">通过 <code class="code">?scene=upgrade-available</code> 首次进入待用户升级场景；<code class="code">?scene=upgrade-progress</code> 为已主动发起的45%夹具，<code class="code">?scene=upgrade-ready</code> 为已安装待刷新夹具；<code class="code">?scene=upgrade-shared-web</code> 展示实际页面v0.3.8构建复用、实例仍待升级；<code class="code">?scene=upgrade-page-target</code> 展示页面已新但实例仍旧。实际刷新保留示例安装状态、attempt、进度、页面和今日关闭设置。「恢复新版提示」主动恢复待升级样例并仅清此设计提醒；「已安装待刷新」直接载入已激活夹具；「开始升级演示」直接载入已受理20%夹具并重置本设计提醒，「推进升级」手动执行20／45／75／95／100%。这些工具均保留原任务、标签与虚拟输出时钟，不能作为生产部署入口。无权限场景只读，产品立即升级处理器还会检查模拟权限与同一attempt幂等性；这不代表真实授权。「模拟到明天」只改变本页提醒日期偏移，不改全局Date或认证时钟。终端记录仅含虚构示例，不保存真实shellId、token、socketSessionKey、口令或任务指令。</p>
+        <p class="upgrade-demo-footnote">通过 <code class="code">?scene=upgrade-available</code> 首次进入待用户升级场景；<code class="code">?scene=upgrade-progress</code> 为已主动发起的45%夹具，<code class="code">?scene=upgrade-ready</code> 为已安装待刷新夹具；<code class="code">?scene=upgrade-shared-web</code> 展示实际页面v0.3.8构建复用、实例仍待升级；<code class="code">?scene=upgrade-page-target</code> 展示页面已新但实例仍旧。实际刷新保留示例安装状态、attempt、进度、页面和今日关闭设置。「恢复新版提示」主动恢复待升级样例并仅清此设计提醒；「已安装待刷新」直接载入已激活夹具；「开始升级演示」直接载入已受理20%夹具并重置本设计提醒，「推进升级」手动执行20／45／75／95／100%。这些工具均保留原任务、标签与虚拟输出时钟，不能作为生产部署入口。本设计展示通过现有访问保护后的页面，没有升级授权按钮或密钥表单；产品立即升级处理器仍检查可安装状态与同一attempt幂等性。「模拟到明天」只改变本页提醒日期偏移，不改全局Date或认证时钟。终端记录仅含虚构示例，不保存真实shellId、token、socketSessionKey、口令或任务指令。</p>
       </div><div class="dialog__footer"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-reset">重置演示</button><div class="dialog__footer-end"><button class="btn btn--secondary btn--32" type="button" data-dlg="cancel">回到工作台</button></div></div><button class="btn btn--tertiary btn--28 btn--icon dialog__close" type="button" aria-label="关闭演示" data-dlg="cancel"><span class="icon i-x" aria-hidden="true"></span></button></div>`;
     const modal = P.openModal(html, { kind: 'upgrade-demo', returnTo, initialFocus: '[data-upgrade-scenario]' });
     modal.box.addEventListener('click', (event) => { if (event.target.closest('[data-dlg="cancel"]')) P.closeModal(modal); });
@@ -708,27 +700,13 @@
     if (P.ui.route.view !== 'system') P.go('system'); else paintVersionCard();
   };
   P.actions['upgrade-refresh-version'] = () => refreshPage();
-  P.actions['upgrade-authorize'] = () => {
-    const returnTo = document.activeElement;
-    const modal = P.openModal(`<form class="dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-authorize-title" data-dialog="upgrade-authorize"><div class="dialog__header"><h2 class="dialog__title" id="upgrade-authorize-title">授权本实例升级</h2></div><div class="dialog__body"><p>使用安装时授予的独立升级密钥。普通访问口令不授予升级权限，取消不影响查看版本。</p><p class="text-muted">此处仅为离线权限示例；授权后仍需主动点击“立即升级”。</p><label class="field"><span class="field__label">实例升级授权密钥</span><input class="input" type="password" aria-label="实例升级授权密钥" autocomplete="off" data-upgrade-auth-key></label><p class="field__error" data-upgrade-auth-error hidden>请输入至少 16 个字符的离线示例密钥。</p></div><div class="dialog__footer"><button class="btn btn--tertiary btn--32" type="button" data-dlg="cancel">取消</button><button class="btn btn--primary btn--32" type="submit">授权升级</button></div></form>`, { kind: 'upgrade-authorize', returnTo, initialFocus: '[data-upgrade-auth-key]' });
-    const input = $('[data-upgrade-auth-key]', modal.box);
-    modal.box.addEventListener('click', (event) => { if (event.target.closest('[data-dlg="cancel"]')) { input.value = ''; P.closeModal(modal); } });
-    modal.box.addEventListener('submit', (event) => {
-      event.preventDefault();
-      if (input.value.length < 16) { $('[data-upgrade-auth-error]', modal.box).hidden = false; input.focus(); return; }
-      input.value = ''; state.fakePermission = { verified: true, mayUpgrade: true };
-      P.closeModal(modal); paintVersionCard(); paintVersionPopover(); paintUpdateNotice(); remember();
-      P.announce('离线模拟：升级授权已确认，尚未发起升级。');
-    });
-    modal.onClose = () => { input.value = ''; };
-  };
   P.actions['upgrade-contract-confirm'] = () => {
-    if (state.contract?.phase !== 'available' || !state.fakePermission.mayUpgrade) return;
+    if (state.contract?.phase !== 'available') return;
     const modal = P.openModal(`<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="upgrade-contract-title"><div class="dialog__header"><h2 class="dialog__title" id="upgrade-contract-title">确认清理旧数据格式</h2></div><div class="dialog__body"><p>这一步单独提交清理请求。服务端会重新核验回退窗口已结束、旧版本读者已退休、数据对账一致，随后停用旧数据表示并继续使用当前格式。</p><p>清理完成后，使用旧数据格式的历史版本无法重新接流。</p></div><div class="dialog__footer"><div class="dialog__footer-end"><button class="btn btn--secondary btn--32" type="button" data-dlg="cancel">取消</button><button class="btn btn--primary btn--32" type="button" data-contract-accept>确认清理</button></div></div></div>`, { kind: 'upgrade-contract', returnTo: document.activeElement, initialFocus: '[data-dlg="cancel"]' });
     modal.box.addEventListener('click', (event) => {
       if (event.target.closest('[data-dlg="cancel"]')) { P.closeModal(modal); return; }
       if (!event.target.closest('[data-contract-accept]')) return;
-      if (state.contract?.phase !== 'available' || !state.fakePermission.mayUpgrade) { P.closeModal(modal); return; }
+      if (state.contract?.phase !== 'available') { P.closeModal(modal); return; }
       state.contract = { phase: 'clearing', requestId: 'demo-contract-1' };
       state.scenario = 'contract-clearing'; P.closeModal(modal); update();
       P.announce('离线模拟：独立清理请求已受理。用演示场景切换查看完成或待确认状态。');
@@ -764,7 +742,6 @@
     state.progress = null; state.entryScene = null; state.attempt = null; state.requestSeq = 0; state.acceptedCount = 0;
     state.contract = null;
     state.catalog = { version: BASE_VERSION, packageRevision: null, verified: true };
-    state.fakePermission = { verified: true, mayUpgrade: true };
     state.version = { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION,
       target: null, targetWebRevision: null, requiresRefresh: false, phase: 'current', verified: true, checkedAt: '刚刚（示例）' };
     delete P.ui.tabs[TASK];
@@ -820,7 +797,7 @@
       paragraph.innerHTML = paragraph.innerHTML.replace('任务深链 <code class="code">?taskId=</code>（计划中，原型用自己的 <code class="code">#task-&lt;id&gt;</code>）；', '本原型使用 <code class="code">#task-&lt;id&gt;</code> 定位示例任务；真实页面的 <code class="code">?taskId=</code> 值为 sandbox ID，本轮沿用现有任务定位；');
     }
     const note = document.createElement('div');
-    note.innerHTML = '<h3>本轮：服务升级与原沙箱续接</h3><p>CD只发布安装包；<code class="code">?scene=upgrade-available</code> 首次展示发现新版但本实例尚未升级，需有权限用户主动点「立即升级」才模拟受理。待升级和已安装待刷新有静态点；进行中无点且百分比只由演示按钮推进。<code class="code">?scene=upgrade-progress</code> 是已主动发起45%夹具，<code class="code">?scene=upgrade-ready</code> 是已安装待刷新夹具。今日关闭浮卡不会阻止主动升级，阶段变化不重出；次日复核恢复。右下角升级演示有恢复待升级提示、已安装待刷新、开始／推进升级和无权限场景；原任务与终端保持。系统页区分已发布包、已安装服务和已加载页面。<code class="code">?scene=upgrade-contract</code> 展示独立旧数据格式清理；演示场景可切换等待、可清理、进行中、完成与结果待确认，原升级100%与原任务保持。</p>';
+    note.innerHTML = '<h3>本轮：服务升级与原沙箱续接</h3><p>CD只发布安装包；<code class="code">?scene=upgrade-available</code> 首次展示发现新版但本实例尚未升级，用户进入平台后直接点「立即升级」才模拟受理，无需额外升级密钥或授权步骤。待升级和已安装待刷新有静态点；进行中无点且百分比只由演示按钮推进。<code class="code">?scene=upgrade-progress</code> 是已主动发起45%夹具，<code class="code">?scene=upgrade-ready</code> 是已安装待刷新夹具。今日关闭浮卡不会阻止主动升级，阶段变化不重出；次日复核恢复。右下角升级演示有恢复待升级提示、已安装待刷新、开始／推进升级；原任务与终端保持。系统页区分已发布包、已安装服务和已加载页面。<code class="code">?scene=upgrade-contract</code> 展示独立旧数据格式清理；演示场景可切换等待、可清理、进行中、完成与结果待确认，原升级100%与原任务保持。</p>';
     panel.prepend(note);
     const gallery = $('.dialog__footer a', modal.box);
     if (gallery) { gallery.href = 'task-search-image-alias.html'; gallery.lastChild.textContent = '原 v2 原型'; }
@@ -830,7 +807,7 @@
     scenario: state.scenario, taskId: TASK, processId: PROCESS, sequence: state.sequence,
     observedSequence: state.observedSequence, refreshed: state.refreshed, shellRecovered: state.shellRecovered,
     version: { ...state.version }, progress: state.progress ? { ...state.progress } : null,
-    catalog: { ...state.catalog }, fakePermission: { ...state.fakePermission },
+    catalog: { ...state.catalog },
     attempt: state.attempt ? { ...state.attempt } : null, requestSeq: state.requestSeq, acceptedCount: state.acceptedCount,
     acceptedTarget: state.attempt ? state.attempt.target : null,
     installAcceptedCount: state.acceptedCount, requiresRefresh: state.version.requiresRefresh,

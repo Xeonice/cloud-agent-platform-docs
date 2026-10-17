@@ -146,7 +146,6 @@ test("fresh and resumed foundations start their real HTTP transports without lau
       "controller",
       "entry",
       "sticky",
-      "upgrade",
       "supervisor",
       "upgradeSession",
     ].map((name) => [name, name.padEnd(64, "x")]),
@@ -222,6 +221,8 @@ test("fresh and resumed foundations start their real HTTP transports without lau
   };
   let initialBinding = null;
   for (const mode of ["fresh", "resume"]) {
+    if (mode === "resume")
+      keys.upgrade = "legacy-continuity-only".padEnd(64, "x");
     const foundation = await createFoundation(c, {
       paths,
       keys,
@@ -246,6 +247,16 @@ test("fresh and resumed foundations start their real HTTP transports without lau
         keys.owner,
       );
       assert.equal(foundation.coordinatorEnv.DATABASE_URL, "/data/platform.db");
+      assert.equal("UPGRADE_ADMIN_KEY" in foundation.coordinatorEnv, false);
+      assert.equal(
+        foundation.coordinatorEnv.UPGRADE_LEGACY_AUTH_CONTINUITY_KEY,
+        mode === "resume" ? keys.upgrade : undefined,
+      );
+      assert.equal("UPGRADE_ADMIN_KEY" in foundation.controlEnv, false);
+      assert.equal(
+        "UPGRADE_LEGACY_AUTH_CONTINUITY_KEY" in foundation.controlEnv,
+        false,
+      );
       assert.equal(foundation.common.DISABLE_CREDENTIAL_REFRESH_SCANNER, "1");
       assert.equal(
         foundation.controlEnv.PLATFORM_CONTROL_RPC_KEY,
@@ -1219,6 +1230,26 @@ test("control, web, owner and installer reject credentials outside their role sc
     };
   for (const [kind, key, code] of [
     ["api", "DATA_ROOT", "BOOTSTRAP_CONTROL_EXCESS_AUTHORITY"],
+    [
+      "api",
+      "UPGRADE_LEGACY_AUTH_CONTINUITY_KEY",
+      "BOOTSTRAP_CONTROL_EXCESS_AUTHORITY",
+    ],
+    [
+      "owner",
+      "UPGRADE_LEGACY_AUTH_CONTINUITY_KEY",
+      "BOOTSTRAP_OWNER_EXCESS_AUTHORITY",
+    ],
+    [
+      "web",
+      "UPGRADE_LEGACY_AUTH_CONTINUITY_KEY",
+      "BOOTSTRAP_WEB_EXCESS_AUTHORITY",
+    ],
+    [
+      "installer",
+      "UPGRADE_LEGACY_AUTH_CONTINUITY_KEY",
+      "BOOTSTRAP_INSTALLER_EXCESS_AUTHORITY",
+    ],
     ["web", "ACCESS_PASSCODE", "BOOTSTRAP_WEB_EXCESS_AUTHORITY"],
     ["owner", "DATABASE_URL", "BOOTSTRAP_OWNER_EXCESS_AUTHORITY"],
     [

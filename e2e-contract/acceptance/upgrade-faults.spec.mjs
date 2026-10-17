@@ -696,27 +696,11 @@ async function installation(id, page, context) {
     );
     expect(disabledProbe.enabled).toBe(false);
     const initial = await state();
-    const authorize = async () => {
-      const auth = await context.newPage();
-      try {
-        await auth.goto(origin + "/settings/system#version");
-        await auth
-          .getByRole("button", { name: "授权升级", exact: true })
-          .click();
-        await auth.getByLabel("实例升级授权密钥").fill(config.keys.upgrade);
-        await auth
-          .getByRole("dialog")
-          .getByRole("button", { name: "授权升级", exact: true })
-          .click();
-        await expect(auth.getByRole("dialog")).toHaveCount(0);
-      } finally {
-        await auth.close();
-      }
-      expect((await state()).capabilities.canUpgradeInstance).toBe(true);
-    };
+    // The existing instance session is sufficient; no second authorization step.
+    expect(initial.capabilities.canUpgradeInstance).toBe(true);
+    expect(initial.capabilities.canAuthenticate).toBe(false);
     let acceptedIntent = null;
     const accept = async () => {
-      await authorize();
       await page.reload();
       await page
         .getByRole("button", { name: "版本与更新", exact: true })

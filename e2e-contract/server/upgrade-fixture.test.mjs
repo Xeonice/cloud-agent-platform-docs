@@ -42,6 +42,7 @@ async function transportFixture(t) {
 
 test("package-only HTTPS 503 preserves signed availability bytes and fails the real downloader without a stream", async t => {
   const { fixture, root, pkg, archiveRoot } = await transportFixture(t);
+  assert.equal("upgrade" in fixture.config.keys, false, "fresh instances need no upgrade access key");
   const protectedPaths = [fixture.manifestPath, fixture.trustRootPath, fixture.config.catalogFile, fixture.installationProofPath, join(archiveRoot, pkg.name)];
   const before = await Promise.all(protectedPaths.map(fileDigest));
   const fault = fixture.helpers.setPackageDownloadFault("http-503");

@@ -33,20 +33,20 @@ export async function createDockerRoleAdapter(c){
     const mounts=new Map();const mount=(path,rw=false)=>{if(!path)return;invariant(isAbsolute(path)&&!path.includes(','),'FIXED_CONTAINER_MOUNT_REQUIRED');mounts.set(resolve(path),Boolean(rw));};
     if(kind==='installer'){
       mount(join(artifactRoot,'installer'));mount(c.installerRoot);mount(await secureDirectory(join(c.installerRoot,'journals')),true);mount(await secureDirectory(join(c.installerRoot,'downloads')),true);mount(c.bindingRoot);mount(c.trustRootPath);
-      for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME|PLATFORM_COORDINATOR_RPC_KEY|PLATFORM_CONTROL_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_SESSION_SECRET)$/.test(key),'CONTROLLER_CONTAINER_EXCESS_AUTHORITY');
+      for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME|PLATFORM_COORDINATOR_RPC_KEY|PLATFORM_CONTROL_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_LEGACY_AUTH_CONTINUITY_KEY|UPGRADE_SESSION_SECRET)$/.test(key),'CONTROLLER_CONTAINER_EXCESS_AUTHORITY');
     }else if(kind==='web'){
       const webRoot=cwd;invariant(inside(artifactRoot,webRoot)||inside(installationRoot,webRoot),'WEB_ROOT_OUTSIDE_INSTALLATION');mount(webRoot);mount(await secureDirectory(join(webRoot,'.next','cache')),true);
       for(const key of Object.keys(env))invariant(!/KEY|SECRET|DATABASE|DATA_ROOT|BOXLITE|RUNTIME_OWNER_HOME|UPGRADE_/.test(key),'WEB_CONTAINER_EXCESS_AUTHORITY');
     }else{
       mount(artifactRoot);
-      if(kind==='api'){mount(c.bindingRoot);for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME|PLATFORM_COORDINATOR_RPC_KEY|PLATFORM_CONTROLLER_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_SESSION_SECRET|ACCESS_PASSCODE|PASSCODE_COOKIE_SECRET)$/.test(key),'CONTROL_CONTAINER_EXCESS_AUTHORITY');}
+      if(kind==='api'){mount(c.bindingRoot);for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME|PLATFORM_COORDINATOR_RPC_KEY|PLATFORM_CONTROLLER_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_LEGACY_AUTH_CONTINUITY_KEY|UPGRADE_SESSION_SECRET|ACCESS_PASSCODE|PASSCODE_COOKIE_SECRET)$/.test(key),'CONTROL_CONTAINER_EXCESS_AUTHORITY');}
       if(kind==='coordinator'){
         mount(c.businessRoot,true);mount(c.bindingRoot,true);mount(join(c.installerRoot,'artifacts'));mount(c.trustRootPath);mount(env.UPGRADE_CATALOG_FILE);mount(env.UPGRADE_QUALIFICATION_INSTALLATION_PATH);
       }
       if(kind==='owner'){
         invariant(isAbsolute(ownerHome)&&inside(installationRoot,ownerHome)&&!inside(c.installerRoot,ownerHome)&&!inside(c.businessRoot,ownerHome),'OWNER_HOME_ISOLATION_REQUIRED');mount(ownerHome,true);
         const workspaces=await secureDirectory(join(c.businessRoot,'workspaces'));mount(workspaces,true);
-        for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|PLATFORM_CONTROLLER_RPC_KEY|PLATFORM_CONTROL_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_SESSION_SECRET)$/.test(key),'OWNER_CONTAINER_EXCESS_AUTHORITY');
+        for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|PLATFORM_CONTROLLER_RPC_KEY|PLATFORM_CONTROL_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_LEGACY_AUTH_CONTINUITY_KEY|UPGRADE_SESSION_SECRET)$/.test(key),'OWNER_CONTAINER_EXCESS_AUTHORITY');
       }
     }
     mount(env.NODE_EXTRA_CA_CERTS);

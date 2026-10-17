@@ -25,7 +25,7 @@ export default defineConfig({
       },
     ],
   ],
-  // Authorization uses synthetic but still confidential installation material.
+  // Access sessions use synthetic but still confidential installation material.
   // Full HAR/trace would persist it, so only selected redacted evidence is saved.
   use: { trace: "off", screenshot: "off", video: "off" },
   projects: [

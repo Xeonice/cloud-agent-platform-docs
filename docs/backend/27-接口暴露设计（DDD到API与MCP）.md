@@ -342,14 +342,14 @@
 | 能力 | REST | 请求要点 | 响应 | 可能错误码 | 备注 |
 |---|---|---|---|---|---|
 | `upgradeStatus` | `GET /api/system/upgrade/status` | 认证用户，只读核验 | `UpgradeStatus` | 统一信封 | 无下载执行、无attempt创建；page与service独立 |
-| `grantInstanceUpgrade` | `POST /api/system/upgrade/access` | 独立升级密钥／Origin／CSRF | `UpgradeStatus` + HttpOnly grant | 统一信封 | 授权不升级，普通口令不默认admin |
+| `upgradeAccessCompatibility` | `POST /api/system/upgrade/access` | deprecated旧客户端兼容，接受{}或旧upgradeKey；已有访问保护／Origin／CSRF，无需升级密钥 | `UpgradeStatus` | 统一信封 | 不发grant、不创建attempt；新前端不调用 |
 | `requestInstanceUpgrade` | `POST /api/system/upgrade/requests` | 精确target digest／requestId／expected generation | 202 `UpgradeAttempt` | 统一信封 | 服务端instance CAS；目录不替换已接纳目标 |
 | `lookupInstanceUpgrade` | `GET /api/system/upgrade/requests/:requestId` | 同actor原请求ID | 原`UpgradeAttempt` | 统一信封 | 只查原结果，响应未知不自动新POST |
-| `requestUpgradeContract` | `POST /api/system/upgrade/contracts/requests` | 固定plan digest／requestId／generation／明确关闭回退确认 | 202 `UpgradeContractAttempt` | 统一信封 | 独立授权／Origin／CSRF，全实例与升级互斥；非升级自动步骤 |
+| `requestUpgradeContract` | `POST /api/system/upgrade/contracts/requests` | 固定plan digest／requestId／generation／明确关闭回退确认 | 202 `UpgradeContractAttempt` | 统一信封 | 已有访问保护／Origin／CSRF，全实例与升级互斥；非升级自动步骤 |
 | `lookupUpgradeContract` | `GET /api/system/upgrade/contracts/requests/:requestId` | 同actor原请求ID | 原`UpgradeContractAttempt` | 统一信封 | 只读查询；未知不重发或自动重试 |
 | `lookupApplicationOperation` | `GET /api/operations/:operationId` | 认证actor范围 | 原状态及可公开结果 | `OPERATION_RESULT_UNKNOWN` | 无SDK操作／无journal写；敏感结果不回显 |
 
-上述升级能力不进MCP。私有管理／应用RPC独立PSK与loopback认证，ControllerKey不授权任意业务、URL、shell或Docker参数；目录信任、唯一writer、固定工作计划、整体100、原任务连续性与安全回退见[升级后端方案](./changes/2026-10-10-不停机升级与运行环境分离.md)。
+升级命令复用已有访问会话，解锁后直接点击“立即升级”，无独立授权界面或用户升级密钥；`canAuthenticate` 仅供旧客户端兼容且固定 `false`。上述升级能力不进MCP。私有管理／应用RPC独立PSK与loopback认证，ControllerKey不授权任意业务、URL、shell或Docker参数；目录信任、唯一writer、固定工作计划、整体100、原任务连续性与安全回退见[升级后端方案](./changes/2026-10-10-不停机升级与运行环境分离.md)。
 
 ## 10. 前端消费视角速查（按页面/功能反查）
 
