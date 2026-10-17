@@ -204,3 +204,24 @@
     border-color: CanvasText;
   }
 }
+
+/* 2026-10-18：仅补事实与诊断，沿用现有版本卡和任务准备卡。 */
+.upgrade-experience-details {
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font: var(--text-copy-13);
+  overflow-wrap: anywhere;
+}
+.upgrade-experience-details[hidden] { display: none; }
+.upgrade-experience-details details { color: var(--foreground-muted); }
+.upgrade-experience-details summary { cursor: pointer; color: var(--foreground); }
+.upgrade-experience-details .btn-row { flex-wrap: wrap; }
+[data-upgrade-startup-facts] {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  font: var(--text-copy-13);
+}
+[data-upgrade-startup-facts] .kv { text-align: left; }

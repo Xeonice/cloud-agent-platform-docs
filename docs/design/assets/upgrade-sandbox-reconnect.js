@@ -17,6 +17,8 @@
   const TASK = 'login';
   const PROCESS = 'demo-process-7841';
   const BASE_VERSION = 'v0.3.8';
+  const BRIDGE_VERSION = 'v0.3.8-bridge';
+  const STARTUP_TASK = 'upgrade-startup-demo';
   const TARGET_VERSION = 'v0.3.9';
   const TARGET_REVISION = 'demo-web-0.3.9';
   const BASE_REVISION = 'demo-web-0.3.8';
@@ -37,6 +39,16 @@
     ['preparing', '准备新版本：尚未就绪，原服务继续运行'],
     ['upgrading', '已主动发起升级：确认受理与示例进度'],
     ['available', '本实例已安装新版：等待刷新页面'],
+    ['command-pending', '正在确认升级请求：只查询原请求'],
+    ['long-check', '重检查异步执行：工作台可继续使用'],
+    ['bridge-complete', '兼容准备完成：自动继续最终版本'],
+    ['stage-progress', '下载阶段有真实进展：总体工作量未知'],
+    ['mixed-failed', '部分组件已更新：无合格修复方案'],
+    ['mixed-repairable', '部分组件已更新：有明确安全修复目标'],
+    ['shared-completed', '同一页面构建：服务完成无需刷新'],
+    ['cli-default-updated', '受管默认镜像已更新：仅适用之后选择它的新任务'],
+    ['sandbox-start-inflight', '新沙箱长启动：原请求仍在执行'],
+    ['sandbox-start-unknown', '新沙箱长启动：原请求结果待确认'],
     ['reconnect-confirmed', '连接切换：已确认原任务继续运行'],
     ['reconnect-unknown', '连接中断：当前任务状态尚未确认'],
     ['retry-exhausted', '重连暂未成功：保留输出、手动重试'],
@@ -50,6 +62,7 @@
     ['contract-completed', '旧数据格式：清理完成，历史回退关闭'],
     ['contract-unknown', '旧数据格式：原清理请求结果待确认'],
   ];
+  const EXPERIENCE_SCENARIOS = new Set(['command-pending', 'long-check', 'bridge-complete', 'stage-progress', 'mixed-failed', 'mixed-repairable', 'shared-completed', 'cli-default-updated', 'sandbox-start-inflight', 'sandbox-start-unknown']);
   const templates = new Set(['term-login', 'term-login-shell', 'term-new-shell', 'term-new-codex', 'term-new-claude']);
   const kinds = new Set(['agent', 'shell', 'codex', 'claude']);
   let syncingScenario = false;
@@ -58,7 +71,7 @@
     refreshed: false, shellRecovered: false, lastVerifiedAt: '刚刚', timer: 0,
     snoozedDate: null, demoDayOffset: 0, versionChecking: false, focusVersionCard: false,
     progress: null, entryScene: null, attempt: null, requestSeq: 0, acceptedCount: 0,
-    contract: null,
+    contract: null, experience: null, pendingRequest: null,
     catalog: { version: BASE_VERSION, packageRevision: null, verified: true },
     version: { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION, target: null,
       targetWebRevision: null, requiresRefresh: false, phase: 'current', verified: true, checkedAt: '刚刚（示例）' },
@@ -73,6 +86,9 @@
   if (!window.location.hash) history.replaceState(null, '', '#task-login');
   P.scenario.define({ key: 'upgrade', group: '服务升级与沙箱续接', label: '升级与连接', def: 'normal', options: SCENARIOS });
 
+  // 历史TIMEOUT示例为已确认终结；不能与本轮inflight场景混用。
+  const historicalTimeout = P.task('node22');
+  if (historicalTimeout) { historicalTimeout.reason = '启动已确认终结：等待超时，环境未就绪'; historicalTimeout.detail = '已确认原启动操作终结；未创建可继续使用的运行环境（设计示例）'; }
   const target = () => P.task(TASK);
   const unknown = () => state.scenario === 'reconnect-unknown' || state.scenario === 'retry-exhausted';
   const disconnected = () => unknown() || state.scenario === 'reconnect-confirmed';
@@ -101,7 +117,8 @@
       schemaVersion: 1, taskId: TASK, activeTabId: tabs.active, sequence: state.sequence,
       observedSequence: state.observedSequence, scenario: state.scenario,
       refreshed: state.refreshed, version: state.version,
-      progress: state.progress ? { percent: state.progress.percent, confirmedAt: state.progress.confirmedAt } : null, entryScene: state.entryScene,
+      progress: state.progress ? { percent: state.progress.percent, stage: state.progress.stage, confirmedAt: state.progress.confirmedAt } : null, entryScene: state.entryScene,
+      experience: state.experience, pendingRequest: state.pendingRequest,
       catalog: state.catalog,
       attempt: state.attempt, requestSeq: state.requestSeq, acceptedCount: state.acceptedCount,
       contract: state.contract,
@@ -129,9 +146,9 @@
     state.refreshed = record.refreshed === true;
     // 上一版按 revision 永久关闭的字段已废弃，不迁移为本日设置，也不挡新规则。
     const version = record.version;
-    if (version && [BASE_VERSION, TARGET_VERSION].includes(version.service) && [BASE_VERSION, TARGET_VERSION].includes(version.page)
+    if (version && [BASE_VERSION, BRIDGE_VERSION, TARGET_VERSION].includes(version.service) && [BASE_VERSION, TARGET_VERSION].includes(version.page)
       && (version.target === null || version.target === TARGET_VERSION)
-      && ['current', 'available-installable', 'preparing', 'upgrading', 'ready', 'failed', 'delayed', 'unknown'].includes(version.phase)) {
+      && ['current', 'available-installable', 'preparing', 'pending', 'upgrading', 'ready', 'failed', 'delayed', 'unknown'].includes(version.phase)) {
       state.version = { service: version.service, page: version.page, target: version.target,
         loadedWebRevision: version.page === TARGET_VERSION ? TARGET_REVISION : BASE_REVISION,
         targetWebRevision: version.target === TARGET_VERSION ? (version.requiresRefresh === false ? (version.page === TARGET_VERSION ? TARGET_REVISION : BASE_REVISION) : TARGET_REVISION) : null,
@@ -142,7 +159,9 @@
         loadedWebRevision: TARGET_REVISION, targetWebRevision: TARGET_REVISION, requiresRefresh: false,
         phase: 'current', verified: true, checkedAt: '上次确认（示例）' };
     }
-    const progress = record.progress && PROGRESS_STEPS.find((step) => step.percent === record.progress.percent);
+    const progress = record.progress && (PROGRESS_STEPS.find((step) => step.percent === record.progress.percent)
+      || (EXPERIENCE_SCENARIOS.has(record.scenario) && record.progress.percent === null && typeof record.progress.stage === 'string' && record.progress.stage.length < 100
+        ? { percent: null, stage: record.progress.stage } : null));
     const confirmedAt = record.progress && typeof record.progress.confirmedAt === 'string' && record.progress.confirmedAt.length < 40
       && Number.isFinite(Date.parse(record.progress.confirmedAt)) ? record.progress.confirmedAt : null;
     state.progress = progress ? { ...progress, confirmedAt } : null;
@@ -167,6 +186,10 @@
     if (record.contract && ['waiting', 'available', 'clearing', 'completed', 'unknown'].includes(record.contract.phase)) {
       state.contract = { phase: record.contract.phase,
         requestId: /^demo-contract-\d+$/.test(record.contract.requestId || '') ? record.contract.requestId : null };
+    }
+    if (EXPERIENCE_SCENARIOS.has(record.scenario)) {
+      state.experience = experienceFixture(record.scenario);
+      state.pendingRequest = record.scenario === 'command-pending' ? 'demo-request-pending-1' : null;
     }
     state.shellRecovered = tabs.some((tab) => tab.kind !== 'agent');
     return true;
@@ -210,9 +233,10 @@
     return state.version.verified && state.version.phase === 'upgrading' && state.progress
       && state.progress.percent < 100 && state.version.targetWebRevision && !!state.attempt;
   }
-  function canShowUpdate() { return installable() || inProgress() || canRefreshVersion(); }
+  function isPending() { return state.version.phase === 'pending' && !!state.pendingRequest; }
+  function canShowUpdate() { return installable() || isPending() || inProgress() || canRefreshVersion(); }
   function switchingService() { return inProgress() && state.progress.percent >= 75; }
-  function serviceVersionText() { return switchingService() ? '切换中／待确认' : state.version.service; }
+  function serviceVersionText() { return state.experience?.mixed ? '部分组件已更新／整体未确认' : switchingService() ? '切换中／待确认' : state.version.service; }
   function showProgress() { return state.version.verified && state.progress && ['upgrading', 'ready', 'current'].includes(state.version.phase); }
   function progressFact() {
     return unknown() ? '模拟运行证据：当前任务状态待确认，已保留上次输出。' : '模拟运行证据：原任务继续运行。';
@@ -253,12 +277,17 @@
   function progressHtml() {
     if (!showProgress()) return '';
     const { percent, stage } = state.progress;
+    if (percent === null) {
+      const measure = state.experience?.download;
+      return `<div class="progress upgrade-publish-progress" data-upgrade-progress-container><p class="progress__detail" data-upgrade-progress-stage>${esc(stage)}</p><p class="progress__note">本次总体工作量尚未确定</p>${measure ? `<div class="progress__track"><div class="meter" role="progressbar" aria-label="安装包下载阶段进度（设计示例）" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${measure.percent}" aria-valuetext="安装包下载${measure.percent}%，${esc(measure.bytes)}"><span class="meter__bar" style="width:${measure.percent}%"></span></div><span class="progress__pct">${measure.percent}%</span></div><p class="progress__note">仅安装包下载 · ${esc(measure.bytes)}（设计示例）</p>` : ''}<p class="progress__note">当前阶段已用2分18秒 · 最后实质进展30秒前 · 最后确认刚刚（设计示例）</p></div>`;
+    }
     return `<div class="progress upgrade-publish-progress" data-upgrade-progress-container><div class="progress__track"><div class="meter" role="progressbar" aria-label="本实例升级发布进度（模拟）" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}" aria-valuetext="${percent}%，${esc(stage)}，模拟进度" data-upgrade-progress><span class="meter__bar" style="width:${percent}%"></span></div><span class="progress__pct" data-upgrade-progress-percent>${percent}%</span></div><div class="progress__meta"><span class="progress__detail" data-upgrade-progress-stage>${esc(stage)}</span><span>模拟进度</span></div><p class="progress__note" data-upgrade-progress-fact>${esc(progressFact())}</p></div>`;
   }
   function setProgress(percent) {
     const step = PROGRESS_STEPS.find((item) => item.percent === percent);
     if (!step) return;
     state.progress = demoProgress(step);
+    if (percent === 100) state.experience = null;
     state.catalog = { ...fakeCatalog, verified: true };
     if (!state.attempt) createOfflineAttempt();
     state.attempt.status = percent === 100 ? 'completed' : 'upgrading';
@@ -272,7 +301,7 @@
   }
   function applyVersionScenario(value) {
     const version = state.version;
-    state.contract = null;
+    state.contract = null; state.experience = null; state.pendingRequest = null;
     const known = (service, target, phase, reuseWeb = false) => {
       state.version = { service, page: version.page, target,
         loadedWebRevision: version.page === TARGET_VERSION ? TARGET_REVISION : BASE_REVISION,
@@ -280,7 +309,22 @@
         requiresRefresh: !!target && !reuseWeb, phase, verified: true, checkedAt: '刚刚（示例）' };
     };
     if (['normal', 'preparing', 'installable', 'shared-web', 'page-target'].includes(value)) { state.progress = null; state.attempt = null; }
-    if (value.startsWith('contract-')) {
+    if (EXPERIENCE_SCENARIOS.has(value)) {
+      state.experience = experienceFixture(value);
+      state.progress = null; state.attempt = null;
+      state.catalog = { ...fakeCatalog, verified: true };
+      if (value.startsWith('sandbox-start-')) { known(BASE_VERSION, null, 'current'); return; }
+      if (value === 'command-pending') { known(BASE_VERSION, TARGET_VERSION, 'pending'); state.pendingRequest = 'demo-request-pending-1'; return; }
+      if (value === 'shared-completed' || value === 'cli-default-updated') {
+        known(TARGET_VERSION, TARGET_VERSION, 'current', true); createOfflineAttempt('completed');
+        state.progress = demoProgress(PROGRESS_STEPS[4]); return;
+      }
+      const failed = value.startsWith('mixed-');
+      known(value === 'bridge-complete' ? BRIDGE_VERSION : BASE_VERSION, TARGET_VERSION, failed ? 'failed' : 'upgrading');
+      createOfflineAttempt(failed ? 'failed' : 'upgrading');
+      if (!failed) state.progress = demoProgress({ percent: null, stage: value === 'stage-progress' ? '下载与校验安装包' : value === 'bridge-complete' ? '兼容准备完成，继续更新目标版本' : '兼容与数据准备：正在核验数据' });
+    }
+    else if (value.startsWith('contract-')) {
       known(TARGET_VERSION, TARGET_VERSION, 'current');
       state.version.page = TARGET_VERSION; state.version.loadedWebRevision = TARGET_REVISION;
       state.version.requiresRefresh = false;
@@ -331,6 +375,10 @@
   }
   function versionStatus() {
     if (!state.version.verified) return { title: '待确认', tone: 'neutral', text: '版本信息读取失败；下面保留上次确认的读数，不能据此判断更新是否完成。' };
+    if (isPending()) return { title: '正在确认升级请求', tone: 'neutral', text: '尚未确认受理，只查询原请求；没有已确认的执行进度。保留当前任务，不重复提交。' };
+    if (state.experience?.mixed) return { title: '升级未完成，部分组件已更新', tone: 'warn', text: '上次完整确认版本仍为v0.3.8；本次最终目标尚未完成。独立检查确认服务当前可用（设计示例），可继续工作。实际组件和修复条件在下方详情中。' };
+    if (state.experience?.chain) return { title: '继续更新最终版本', tone: 'neutral', text: '兼容准备版本已确认；同一次升级正继续更新v0.3.9，无需再次点击。最终目标尚未确认，当前没有整体百分比或刷新动作。' };
+    if (state.version.phase === 'upgrading' && state.progress?.percent === null) return { title: '升级进行中', tone: 'neutral', text: '请求已受理，长检查在后台继续；轻量状态查询不等待长检查。可继续使用原工作台。当前只展示已确认的阶段事实。' };
     switch (state.version.phase) {
       case 'available-installable': return { title: '待你升级', tone: 'info', text: `已发现安装包 ${state.catalog.version}；本实例仍安装 ${state.version.service}，当前页面为 ${state.version.page}。发布安装包不会自动升级本实例；只有明确选择「立即升级」才受理升级。${!state.version.requiresRefresh ? '本次复用原页面构建，实例升级完成后无需刷新页面。' : ''}` };
       case 'preparing': return { title: '准备中', tone: 'neutral', text: `正在准备 ${TARGET_VERSION}，当前服务仍为 ${BASE_VERSION}；版本尚未就绪。` };
@@ -379,7 +427,7 @@
       button.innerHTML = '<span class="icon i-circle-arrow-up" aria-hidden="true"></span><span class="upgrade-update-dot" data-upgrade-update-dot aria-hidden="true" hidden></span>';
       actions.appendChild(button);
     }
-    button.setAttribute('aria-label', inProgress() ? '版本与更新，本实例正在升级' : installable() ? '版本与更新，发现可安装新版本' : '版本与更新，有可用页面更新');
+    button.setAttribute('aria-label', isPending() ? '版本与更新，正在确认升级请求' : inProgress() ? '版本与更新，本实例正在升级' : installable() ? '版本与更新，发现可安装新版本' : '版本与更新，有可用页面更新');
     const open = P.popover.isOpenFor(VERSION_POPOVER);
     button.setAttribute('aria-expanded', String(open));
     if (open) button.setAttribute('aria-controls', VERSION_POPOVER); else button.removeAttribute('aria-controls');
@@ -401,11 +449,11 @@
     // 完整读数浮层由用户主动打开时暂时覆盖提醒；关闭后提醒仍按本日规则常驻。
     notice.hidden = !trigger || P.gated || P.ui.loading || P.popover.isOpenFor(VERSION_POPOVER);
     notice.inert = P.modals.length > 0;
-    $('#upgrade-update-notice-title', notice).textContent = inProgress() ? `正在升级到 ${state.version.target}` : installable() ? `发现新版本 ${state.catalog.version}` : '升级完成，页面待刷新';
-    const text = installable() ? `已安装 ${state.version.service} · 页面 ${state.version.page}` : `页面 ${state.version.page} → ${state.version.target}`;
+    $('#upgrade-update-notice-title', notice).textContent = isPending() ? '正在确认升级请求' : inProgress() ? `正在升级到 ${state.version.target}` : installable() ? `发现新版本 ${state.catalog.version}` : '升级完成，页面待刷新';
+    const text = isPending() ? `最终目标 ${state.version.target} · 尚未确认受理` : installable() ? `已安装 ${state.version.service} · 页面 ${state.version.page}` : `页面 ${state.version.page} → ${state.version.target}`;
     if ($('[data-upgrade-notice-versions]', notice).textContent !== text) $('[data-upgrade-notice-versions]', notice).textContent = text;
     const summary = $('[data-upgrade-notice-summary]', notice);
-    summary.textContent = installable() ? (canInstallVersion() ? '安装包已发布，等待你主动升级本实例。' : installIntentText())
+    summary.textContent = isPending() ? '只查询原请求，尚未确认受理；不会重复提交。' : state.experience?.chain ? '兼容准备完成，将自动继续最终目标，无需再次操作。' : installable() ? (canInstallVersion() ? '安装包已发布，等待你主动升级本实例。' : installIntentText())
       : canRefreshVersion() ? `本实例已安装 ${state.version.service}；页面仍旧，刷新后重连原任务。` : '';
     summary.hidden = !summary.textContent;
     const progress = $('[data-upgrade-notice-progress]', notice); const progressMarkup = progressHtml();
@@ -431,7 +479,7 @@
       : state.version.verified ? '' : ' <span class="upgrade-version-last">上次确认</span>';
     const previousTarget = state.version.verified ? '' : ' <span class="upgrade-version-last">上次确认</span>';
     return `<div class="popover__head"><h2 class="popover__title" id="upgrade-version-popover-title">版本与更新</h2><p class="popover__desc">版本号仅为设计示例</p></div>
-      <div class="popover__body"><dl class="kv"><dt>已发布可用版本</dt><dd data-upgrade-catalog-version>${esc(state.catalog.version)}${state.catalog.verified ? '' : ' · 上次确认'}</dd><dt>已安装服务版本</dt><dd data-upgrade-service-version>${esc(serviceVersionText())}${previous}</dd><dt>当前页面版本</dt><dd data-upgrade-current-page>${esc(state.version.page)}</dd><dt>本次已受理目标</dt><dd data-upgrade-target-version>${esc(state.attempt ? state.attempt.target : '—（尚未发起升级）')}${state.attempt ? previousTarget : ''}</dd><dt>更新状态</dt><dd><span class="badge badge--20 badge--${status.tone}" data-upgrade-version-status>${esc(status.title)}</span></dd></dl><p class="popover__note" data-upgrade-version-description>${esc(status.text)}</p>${installable() ? `<p class="popover__note" data-upgrade-install-permission>${esc(installIntentText())}</p>` : ''}${progressDisplayHtml()}</div>
+      <div class="popover__body"><dl class="kv"><dt>已发布可用版本</dt><dd data-upgrade-catalog-version>${esc(state.catalog.version)}${state.catalog.verified ? '' : ' · 上次确认'}</dd><dt>已安装服务版本</dt><dd data-upgrade-service-version>${esc(serviceVersionText())}${previous}</dd><dt>当前页面版本</dt><dd data-upgrade-current-page>${esc(state.version.page)}</dd><dt>本次已受理目标</dt><dd data-upgrade-target-version>${esc(state.attempt ? state.attempt.target : '—（尚未发起升级）')}${state.attempt ? previousTarget : ''}</dd><dt>更新状态</dt><dd><span class="badge badge--20 badge--${status.tone}" data-upgrade-version-status>${esc(status.title)}</span></dd></dl><p class="popover__note" data-upgrade-version-description>${esc(status.text)}</p>${installable() ? `<p class="popover__note" data-upgrade-install-permission>${esc(installIntentText())}</p>` : ''}${progressDisplayHtml()}${experienceHtml()}</div>
       <div class="popover__foot"><div class="popover__actions"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-popover-check" aria-busy="${state.versionChecking}" aria-disabled="${state.versionChecking}">${state.versionChecking ? '检查中…' : '检查更新'}</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-popover-install"${canInstallVersion() ? '' : ' hidden'}>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-popover-refresh"${canRefreshVersion() ? '' : ' hidden'}>刷新页面</button><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-later" data-fk="upgrade-popover-later">稍后</button></div><button class="link" type="button" data-action="upgrade-open-versions" data-fk="upgrade-popover-detail">查看版本详情</button><p class="popover__note" data-upgrade-version-time>${esc(state.version.verified ? `检查于 ${state.version.checkedAt}` : `${state.version.checkedAt} · 当前待确认`)}</p></div>`;
   }
   function paintVersionPopover() {
@@ -458,7 +506,7 @@
             <li class="list__row"><div class="list__line"><span class="list__name">更新状态</span><span class="badge badge--20 badge--neutral" data-upgrade-version-status></span></div><p class="list__note" data-upgrade-version-description role="status"></p></li>
             <li class="list__row" data-upgrade-card-progress hidden></li>
             <li class="list__row" data-upgrade-install-permission hidden></li>
-          </ul><section class="upgrade-contract-section" aria-labelledby="upgrade-contract-heading" data-upgrade-contract hidden></section><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
+          </ul><section class="upgrade-experience-details" data-upgrade-experience hidden></section><section class="upgrade-contract-section" aria-labelledby="upgrade-contract-heading" data-upgrade-contract hidden></section><div class="card__footer"><span class="card__footer-help" data-upgrade-version-time></span><div class="card__footer-end"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-check-version" data-fk="upgrade-check-version">检查更新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-install-version" data-fk="upgrade-install-version" hidden>立即升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-refresh-version" data-fk="upgrade-refresh-version" hidden>刷新页面</button></div></div>
         </article>`;
       board.prepend(section);
     }
@@ -478,7 +526,7 @@
     if (description.textContent !== status.text) description.textContent = status.text;
     $('[data-upgrade-version-time]', section).textContent = state.version.verified ? `检查于 ${state.version.checkedAt}` : `${state.version.checkedAt} · 当前待确认`;
     const check = $('[data-action="upgrade-check-version"]', section);
-    check.textContent = state.versionChecking ? '检查中…' : '检查更新';
+    check.textContent = state.versionChecking ? '检查中…' : state.experience?.mixed ? '检查状态' : '检查更新';
     check.setAttribute('aria-busy', String(state.versionChecking)); check.setAttribute('aria-disabled', String(state.versionChecking));
     const refresh = $('[data-action="upgrade-refresh-version"]', section);
     refresh.hidden = !canRefreshVersion(); refresh.textContent = '刷新页面';
@@ -488,11 +536,32 @@
     const progress = $('[data-upgrade-card-progress]', section); const progressMarkup = progressDisplayHtml();
     if (progress.dataset.html !== progressMarkup) { progress.innerHTML = progressMarkup; progress.dataset.html = progressMarkup; }
     progress.hidden = !progressMarkup;
+    const experience = $('[data-upgrade-experience]', section);
+    const experienceMarkup = experienceHtml();
+    if (experience.dataset.html !== experienceMarkup) { experience.innerHTML = experienceMarkup; experience.dataset.html = experienceMarkup; }
+    experience.hidden = !experienceMarkup;
     paintContract(section);
     if (state.focusVersionCard) {
       state.focusVersionCard = false; const card = $('#upgrade-version-card');
       card.focus({ preventScroll: true }); section.scrollIntoView({ block: 'start', behavior: 'auto' });
     }
+  }
+  function experienceFixture(value) {
+    if (value === 'stage-progress') return { download: { percent: 64, bytes: '60.4 MB / 94.3 MB' } };
+    if (value === 'bridge-complete') return { chain: true };
+    if (value.startsWith('mixed-')) return { mixed: true, repairable: value === 'mixed-repairable' };
+    if (value === 'cli-default-updated') return { defaultImageChanged: true };
+    if (value === 'long-check') return { checking: true };
+    return {};
+  }
+  function experienceHtml() {
+    const value = state.experience;
+    if (!value) return '';
+    if (value.mixed) return `<dl class="kv"><dt>上次完整确认版本</dt><dd>${BASE_VERSION}</dd><dt>服务可用性</dt><dd>可继续使用 · 刚刚独立确认（设计示例）</dd><dt>最终目标与结果</dt><dd>${TARGET_VERSION} · 未完成</dd></dl><details><summary>查看实际组件与诊断</summary><p>API仍为原版本，协调器已替换；未确认整体安装成功。阶段：验证并切换服务；诊断内容不含口令和会话凭据（设计示例）。</p></details><p>${value.repairable ? '服务端已核验安全修复方案，目标为v0.3.9；只有主动点击才提交新的固定修复请求。' : '暂没有合格安全修复方案；继续使用并检查状态，不盲目回退或重启。'}</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-show-task">继续使用</button><button class="btn btn--tertiary btn--32" data-action="upgrade-check-version">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-copy-diagnostic">复制诊断信息</button>${value.repairable ? '<button class="btn btn--secondary btn--32" data-action="upgrade-repair-demo">修复到v0.3.9</button>' : ''}</div>`;
+    if (value.chain) return `<dl class="kv"><dt>最终目标</dt><dd>${TARGET_VERSION}（固定）</dd><dt>兼容准备</dt><dd>${BRIDGE_VERSION} 已确认</dd><dt>本次用户计划</dt><dd>进行中 · 正在更新最终目标</dd></dl><details><summary>查看内部执行记录</summary><p>兼容准备技术attempt已确认100%；其历史保持不变。本次用户计划尚未完成，无整体100%或刷新按钮。</p></details>`;
+    if (value.defaultImageChanged) return '<p>本次受管默认镜像已更新。之后选择该默认镜像的新任务使用Codex 0.163.0、Claude Code 2.1.302；已有沙箱继续原环境。用户自定义默认和显式选择的其他镜像保持原配置（设计示例）。</p>';
+    if (value.checking) return '<p>正在后台核验约1GB数据；原任务继续运行。状态查询只返回最后已确认的事实及时间，缺少新证据时标为待确认（设计示例）。</p>';
+    return '';
   }
   function paintContract(section) {
     const element = $('[data-upgrade-contract]', section), contract = state.contract;
@@ -567,6 +636,7 @@
     }
     // 提醒按实例 / 当前示例用户的本地自然日关闭，与目标 revision 无关。
     if (!unknown()) { state.observedSequence = state.sequence; state.lastVerifiedAt = '刚刚'; }
+    ensureStartupScene();
     update();
     if (announce) P.announce(SCENARIOS.find(([key]) => key === value)[1]);
     if (value === 'restored') state.timer = setTimeout(() => setScenario('normal', { announce: false, versions: false }), 5000);
@@ -640,11 +710,11 @@
     const html = `<div class="dialog dialog--576" role="dialog" aria-modal="true" aria-labelledby="upgrade-demo-title" aria-describedby="upgrade-demo-description" data-dialog="upgrade-demo">
       <div class="dialog__header"><h2 class="dialog__title" id="upgrade-demo-title">服务升级与沙箱续接 · 演示</h2><p class="dialog__subtitle" id="upgrade-demo-description">沿用现有 v2 工作台，只演示新增的升级与连接状态。</p></div>
       <div class="dialog__body proto-about upgrade-demo-body">
-        <p>这是离线设计稿，使用 fakeCatalog 和 offline request 模拟，不连接服务、不执行部署。v0.3.8／v0.3.9 仅为展示示例。CD 只发布安装包；发现新包后等待用户在产品浮卡／版本详情里点「立即升级」，真实实施须由后端验证已有访问会话、Origin／CSRF、实例绑定、实例兼容和幂等受理。受理后才有实例 attempt 与百分比；20／45／75／95／100 只用演示按钮手动推进。100% 表示本实例激活已确认；页面仍旧才提供「刷新页面」。关闭浮卡只暂停本地当天提醒，不阻止主动升级，跨待升级／进行中／待刷新也不重出；次日复核后恢复。系统页始终可查。</p>
+        <p>这是离线设计稿，使用 fakeCatalog 和 offline request 模拟，不连接服务、不执行部署。v0.3.8／v0.3.9 仅为展示示例。CD 只发布安装包；发现新包后等待用户在产品浮卡／版本详情里点「立即升级」，真实实施须由后端验证已有访问会话、Origin／CSRF、实例绑定、实例兼容和幂等受理。受理后才有实例attempt；总体未知时不编百分比，仍可展示真实阶段进展。桥接完成只算兼容准备，最终目标确认才算整体完成；20／45／75／95／100 只用演示按钮手动推进。100% 表示本实例激活已确认；页面仍旧才提供「刷新页面」。关闭浮卡只暂停本地当天提醒，不阻止主动升级，跨待升级／进行中／待刷新也不重出；次日复核后恢复。系统页始终可查。</p>
         <label class="field"><span class="field__label">演示场景</span><span class="select select--32"><select class="select__control" data-upgrade-scenario data-fk="upgrade-scenario">${SCENARIOS.map(([value, label]) => `<option value="${value}"${state.scenario === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select><span class="icon i-chevron-down select__icon" aria-hidden="true"></span></span></label>
         <div class="upgrade-demo-actions"><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-restore-reminder">恢复新版提示</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-start-progress">开始升级演示</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-advance-progress">推进升级</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-installed-ready">已安装待刷新</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-show-task">查看原任务</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-add-shell">打开一个示例终端</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-simulate-refresh">演示刷新并重连</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-recover">模拟连接恢复并核对</button><button class="btn btn--secondary btn--32" type="button" data-action="upgrade-next-day">模拟到明天</button></div>
         <section class="upgrade-demo-evidence" aria-labelledby="upgrade-evidence-title" data-upgrade-evidence><h3 id="upgrade-evidence-title">示例证据（用于评审）</h3><p data-upgrade-evidence-text></p><dl><dt>原任务</dt><dd>修一下登录态刷新 · login</dd><dt>原进程</dt><dd data-upgrade-process></dd><dt>已核对输出序号</dt><dd data-upgrade-sequence></dd><dt>原终端清单</dt><dd data-upgrade-tabs></dd><dt>页面状态</dt><dd data-upgrade-focus></dd><dt>提醒日期</dt><dd data-upgrade-reminder-today></dd><dt>本日提醒</dt><dd data-upgrade-reminder-state></dd><dt>升级受理</dt><dd data-upgrade-request-evidence></dd><dt>停止／重跑原指令</dt><dd>0 次／0 次</dd></dl></section>
-        <p class="upgrade-demo-footnote">通过 <code class="code">?scene=upgrade-available</code> 首次进入待用户升级场景；<code class="code">?scene=upgrade-progress</code> 为已主动发起的45%夹具，<code class="code">?scene=upgrade-ready</code> 为已安装待刷新夹具；<code class="code">?scene=upgrade-shared-web</code> 展示实际页面v0.3.8构建复用、实例仍待升级；<code class="code">?scene=upgrade-page-target</code> 展示页面已新但实例仍旧。实际刷新保留示例安装状态、attempt、进度、页面和今日关闭设置。「恢复新版提示」主动恢复待升级样例并仅清此设计提醒；「已安装待刷新」直接载入已激活夹具；「开始升级演示」直接载入已受理20%夹具并重置本设计提醒，「推进升级」手动执行20／45／75／95／100%。这些工具均保留原任务、标签与虚拟输出时钟，不能作为生产部署入口。本设计展示通过现有访问保护后的页面，没有升级授权按钮或密钥表单；产品立即升级处理器仍检查可安装状态与同一attempt幂等性。「模拟到明天」只改变本页提醒日期偏移，不改全局Date或认证时钟。终端记录仅含虚构示例，不保存真实shellId、token、socketSessionKey、口令或任务指令。</p>
+        <p class="upgrade-demo-footnote">通过 <code class="code">?scene=upgrade-available</code> 首次进入待用户升级场景；<code class="code">?scene=upgrade-progress</code> 为已主动发起的45%夹具，<code class="code">?scene=upgrade-ready</code> 为已安装待刷新夹具；<code class="code">?scene=upgrade-shared-web</code> 展示实际页面v0.3.8构建复用、实例仍待升级；<code class="code">?scene=upgrade-page-target</code> 展示页面已新但实例仍旧。实际刷新保留示例安装状态、attempt、进度、页面和今日关闭设置。「恢复新版提示」主动恢复待升级样例并仅清此设计提醒；「已安装待刷新」直接载入已激活夹具；「开始升级演示」直接载入已受理20%夹具并重置本设计提醒，「推进升级」手动执行20／45／75／95／100%。这些工具均保留原任务、标签与虚拟输出时钟，不能作为生产部署入口。本设计展示通过现有访问保护后的页面，没有升级授权按钮或密钥表单；产品立即升级处理器仍检查可安装状态与同一attempt幂等性。新场景可通过<code class="code">?scene=upgrade-command-pending</code>、<code class="code">?scene=upgrade-bridge-complete</code>、<code class="code">?scene=upgrade-stage-progress</code>、<code class="code">?scene=upgrade-mixed-failed</code>及<code class="code">?scene=upgrade-sandbox-start-inflight</code>进入，完整场景见选择器。「模拟到明天」只改变本页提醒日期偏移，不改全局Date或认证时钟。终端记录仅含虚构示例，不保存真实shellId、token、socketSessionKey、口令或任务指令。</p>
       </div><div class="dialog__footer"><button class="btn btn--tertiary btn--32" type="button" data-action="upgrade-reset">重置演示</button><div class="dialog__footer-end"><button class="btn btn--secondary btn--32" type="button" data-dlg="cancel">回到工作台</button></div></div><button class="btn btn--tertiary btn--28 btn--icon dialog__close" type="button" aria-label="关闭演示" data-dlg="cancel"><span class="icon i-x" aria-hidden="true"></span></button></div>`;
     const modal = P.openModal(html, { kind: 'upgrade-demo', returnTo, initialFocus: '[data-upgrade-scenario]' });
     modal.box.addEventListener('click', (event) => { if (event.target.closest('[data-dlg="cancel"]')) P.closeModal(modal); });
@@ -652,6 +722,11 @@
     paintDemoEvidence();
   }
   function closeDemo() { const modal = P.topModal(); if (modal && modal.kind === 'upgrade-demo') P.closeModal(modal); }
+  P.actions['upgrade-copy-diagnostic'] = () => {
+    const text = '设计示例：升级未完成，部分组件已更新；最终目标v0.3.9；服务可用性刚刚确认；不含凭据。';
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => P.announce('已复制脱敏设计诊断。'), () => P.announce(text)); else P.announce(text);
+  };
+  P.actions['upgrade-repair-demo'] = () => { setScenario('long-check'); P.announce('离线模拟：已主动受理固定目标v0.3.9的修复计划，不自动循环重试。'); };
   P.actions['upgrade-demo'] = openDemo;
   P.actions['upgrade-show-task'] = () => { closeDemo(); ensureTask(); };
   P.actions['upgrade-add-shell'] = () => { closeDemo(); addDemoShell(); };
@@ -740,7 +815,7 @@
     state.sequence = 41; state.observedSequence = 41; state.refreshed = false; state.shellRecovered = false;
     state.snoozedDate = null; state.demoDayOffset = 0; state.versionChecking = false;
     state.progress = null; state.entryScene = null; state.attempt = null; state.requestSeq = 0; state.acceptedCount = 0;
-    state.contract = null;
+    state.contract = null; state.experience = null; state.pendingRequest = null;
     state.catalog = { version: BASE_VERSION, packageRevision: null, verified: true };
     state.version = { service: BASE_VERSION, page: BASE_VERSION, loadedWebRevision: BASE_REVISION,
       target: null, targetWebRevision: null, requiresRefresh: false, phase: 'current', verified: true, checkedAt: '刚刚（示例）' };
@@ -757,6 +832,34 @@
     paintConnection(host, task);
     if (task.id === TASK) { paintOutput(); remember(); }
   });
+  // 复用原任务准备卡展示独立新任务；原login任务和终端不变。
+  P.mainTpl.unshift((route) => route.view === 'task' && route.taskId === STARTUP_TASK ? 'tpl-task-startup' : undefined);
+  const startupView = P.views['tpl-task-startup'];
+  if (startupView) {
+    const refreshStartup = startupView.refresh;
+    startupView.refresh = function (host, route) {
+      refreshStartup.call(this, host, route);
+      if (route.taskId !== STARTUP_TASK) return;
+      const unknownResult = state.scenario === 'sandbox-start-unknown';
+      const card = $('#main > .empty', host), phases = $('.phases', host);
+      $('[data-first-image]', card)?.remove();
+      $('.empty__title', card).textContent = unknownResult ? '正在确认原启动请求的结果' : '启动请求仍在执行，正在确认结果';
+      const meter = $('.meter', phases);
+      meter.removeAttribute('aria-valuenow'); meter.setAttribute('aria-valuetext', '启动总体进度未知');
+      $('.meter__bar', meter).style.width = '0%';
+      $('.phases__list', phases).innerHTML = '<li class="phases__item" data-phase-state="done"><span class="icon phases__icon i-check" aria-hidden="true"></span><span class="phases__label">准备代码副本</span><span class="phases__meta">已确认</span></li><li class="phases__item" data-phase-state="active"><span class="icon icon--14 phases__icon i-circle-filled" aria-hidden="true"></span><span class="phases__label">运行环境创建／启动</span><p class="phases__note">控制请求等待期已结束，原操作尚未确认终结。正在核验同一个沙箱；当前没有足够事实判断是否在下载镜像。</p></li><li class="phases__item" data-phase-state="pending"><span class="icon icon--14 phases__icon i-circle" aria-hidden="true"></span><span class="phases__label">环境初始化与Agent工具准备</span><span class="phases__meta">等待确认</span></li>';
+      let facts = $('[data-upgrade-startup-facts]', phases);
+      if (!facts) { facts = document.createElement('section'); facts.dataset.upgradeStartupFacts = ''; phases.appendChild(facts); }
+      facts.innerHTML = `<dl class="kv"><dt>原启动操作</dt><dd>demo-start-1 · ${unknownResult ? '结果暂不可查' : '仍在执行'}（设计示例）</dd><dt>启动已用时间</dt><dd>10分33秒</dd><dt>阶段已用时间</dt><dd>8分05秒</dd><dt>最后实质进展</dt><dd>8分05秒前</dd><dt>最近查询／心跳</dt><dd>${unknownResult ? '暂时未取得新观测' : '刚刚；可联系不等于已有新进展'}</dd></dl><p>名额与原沙箱保留；检查、继续等待或重新打开页面均不重复启动，不重置历史时间。</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-startup-check">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-startup-wait">继续等待</button></div>`;
+    };
+  }
+  P.actions['upgrade-startup-check'] = () => P.announce('已只读查询原启动操作；设计夹具仍为原状态，未重复启动。');
+  P.actions['upgrade-startup-wait'] = () => P.announce('继续等待同一个启动操作，原时间记录和资源占用保持。');
+  function ensureStartupScene() {
+    if (!state.scenario.startsWith('sandbox-start-')) { if (P.ui.route.taskId === STARTUP_TASK) P.go(`task-${TASK}`); return; }
+    if (!P.task(STARTUP_TASK)) P.world.tasks.push({ id: STARTUP_TASK, project: 'web', name: '验证新环境的工具版本', agent: 'Codex', state: 'starting', status: 'starting', since: P.clock.now() - 633000, image: { ref: '平台默认镜像（设计示例）', builtin: true }, observed: false });
+    if (P.ui.route.taskId !== STARTUP_TASK) P.go(`task-${STARTUP_TASK}`);
+  }
   P.hook('boot', () => {
     readDailyReminder();
     const restored = restoreRecord(saved);
@@ -772,12 +875,14 @@
       applyVersionScenario(scenario);
       if (!disconnected()) state.scenario = scenario;
     }
+    const experienceEntry = entryScene?.replace(/^upgrade-/, '');
+    if (EXPERIENCE_SCENARIOS.has(experienceEntry) && !restored) { state.scenario = experienceEntry; state.entryScene = entryScene; applyVersionScenario(experienceEntry); }
     syncingScenario = true;
     P.scenario.set('upgrade', state.scenario);
     syncingScenario = false;
     paintOutput(); paintVersionEntry();
   });
-  P.hook('loaded', () => { if (entryScene === 'upgrade-contract') P.go('system'); update(); });
+  P.hook('loaded', () => { if (entryScene === 'upgrade-contract') P.go('system'); ensureStartupScene(); update(); });
   P.clock.ticker({
     active: () => !!target() && target().state === 'running',
     tick(now) {
@@ -807,7 +912,7 @@
     scenario: state.scenario, taskId: TASK, processId: PROCESS, sequence: state.sequence,
     observedSequence: state.observedSequence, refreshed: state.refreshed, shellRecovered: state.shellRecovered,
     version: { ...state.version }, progress: state.progress ? { ...state.progress } : null,
-    catalog: { ...state.catalog },
+    catalog: { ...state.catalog }, experience: state.experience, pendingRequest: state.pendingRequest,
     attempt: state.attempt ? { ...state.attempt } : null, requestSeq: state.requestSeq, acceptedCount: state.acceptedCount,
     acceptedTarget: state.attempt ? state.attempt.target : null,
     installAcceptedCount: state.acceptedCount, requiresRefresh: state.version.requiresRefresh,
