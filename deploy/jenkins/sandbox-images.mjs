@@ -143,9 +143,10 @@ export async function imagePlan(source, request) {
       throw new Error("Image Dockerfile must be a regular source file");
     const dockerfile = await fs.readFile(file, "utf8");
     const version = (name) =>
-      new RegExp("^ARG " + name + "=([0-9]+(?:\\.[0-9]+){1,2})\\s*$", "m").exec(
-        dockerfile,
-      )?.[1];
+      new RegExp(
+        "^ARG " + name + "=((?:0|[1-9][0-9]*)(?:\\.(?:0|[1-9][0-9]*)){2})\\s*$",
+        "m",
+      ).exec(dockerfile)?.[1];
     const claudeCode = version("CLAUDE_CODE_VERSION");
     const codex = version("CODEX_VERSION");
     if (!claudeCode || !codex)
@@ -159,6 +160,7 @@ export async function imagePlan(source, request) {
       tag,
       claudeCode,
       codex,
+      runtimeVersions: { codex, "claude-code": claudeCode },
       repository: `${config.registry}/${config.owner}/${item.image}`,
       dockerfileHash: createHash("sha256").update(dockerfile).digest("hex"),
     });
@@ -327,6 +329,7 @@ export async function anonymousImage(
   image,
   tag,
   expectedSha,
+  expectedRuntimeVersions,
   fetcher = fetch,
   signal,
 ) {
@@ -337,6 +340,11 @@ export async function anonymousImage(
     throw new Error(
       "Anonymous verification accepts only fixed image coordinates",
     );
+  if (
+    !expectedRuntimeVersions?.codex ||
+    !expectedRuntimeVersions?.["claude-code"]
+  )
+    throw new Error("Anonymous verification requires both pinned CLI versions");
   const name = image.slice("ghcr.io/".length);
   const request = (url, headers = {}, blob = false) =>
     fetcher(url, {
@@ -421,9 +429,36 @@ export async function anonymousImage(
       throw new Error(
         "Immutable image tag belongs to a different source revision",
       );
+    const label = config.config?.Labels?.["platform.runtimeVersions"];
+    let runtimeVersions;
+    try {
+      if (typeof label !== "string" || label.length > 2048) throw new Error();
+      runtimeVersions = JSON.parse(label);
+    } catch {
+      throw new Error(
+        "Anonymous linux/" + arch + " runtime version label missing or invalid",
+      );
+    }
+    if (
+      !runtimeVersions ||
+      Array.isArray(runtimeVersions) ||
+      Object.entries(expectedRuntimeVersions).some(
+        ([runtime, version]) => runtimeVersions[runtime] !== version,
+      )
+    )
+      throw new Error(
+        "Anonymous linux/" +
+          arch +
+          " runtime versions differ from pinned build",
+      );
     platforms.push("linux/" + arch);
   }
-  return { digest, platforms, anonymous: true };
+  return {
+    digest,
+    platforms,
+    anonymous: true,
+    runtimeVersions: { ...expectedRuntimeVersions },
+  };
 }
 
 async function writeJson(path, value) {
@@ -606,6 +641,7 @@ export function createImagePublisher(overrides = {}) {
             image.repository,
             image.tag,
             sha,
+            image.runtimeVersions,
             fetcher,
             signal,
           );
@@ -665,6 +701,7 @@ export function createImagePublisher(overrides = {}) {
             image.repository,
             image.tag,
             sha,
+            image.runtimeVersions,
             fetcher,
             signal,
           );
@@ -672,6 +709,7 @@ export function createImagePublisher(overrides = {}) {
             image.repository,
             "latest",
             sha,
+            image.runtimeVersions,
             fetcher,
             signal,
           );

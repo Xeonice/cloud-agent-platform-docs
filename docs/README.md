@@ -15,6 +15,8 @@
 
 新增功能设计见 [不停机升级与沙箱续接](./product/changes/2026-10-10-不停机升级与沙箱续接.md)：[UPG 产品需求](./product/requirements/UPG.md)定义9条需求／52条AC，CD只发布版本安装包，实例用户主动决定升级。[交互设计稿](./design/upgrade-sandbox-reconnect.html#task-login)沿用原工作台，入口加`?scene=upgrade-available`查看发现新版，点击“立即升级”才进入模拟过程；`?scene=upgrade-progress`直接查看明确发起后的进度，`?scene=upgrade-ready`查看已安装后的页面刷新。演示工具可切三态／无新版；[后端与部署计划](./backend/changes/2026-10-10-不停机升级与运行环境分离.md)、[前端实施计划](./frontend/changes/2026-10-10-升级提示与原终端续接.md)分别记录实现变更；[独立测试计划](./testing/changes/2026-10-10-不停机升级与沙箱续接测试计划.md)统一覆盖前端、后端、契约、真实联调及运行连续性，逐项映射52条AC。业务实现与实际检查见[实施验证记录](./testing/results/2026-10-12-升级实现验证记录.md)；完整同构门禁尚未完成，原型不连接生产。
 
+新增镜像信息见 [镜像 CLI 版本需求与设计](./product/changes/2026-10-17-镜像CLI版本信息.md)：[原 v2 增量设计](./design/image-cli-versions.html)、[后端元数据设计](./backend/changes/2026-10-17-镜像CLI版本元数据.md)、[前端展示设计](./frontend/changes/2026-10-17-镜像CLI版本展示.md)及[独立前后端测试计划](./testing/changes/2026-10-17-镜像CLI版本信息测试计划.md)。新增 REQ-IMG-062/063 共 8 条 AC，展示各 digest 声明的 Codex/Claude Code 版本，不更改 CLI 固定版本；[本地验证记录](./testing/results/2026-10-17-镜像CLI版本信息.md)与线上发布状态分别维护。
+
 运维与发布见 [运维入口](./ops/README.md)；本地开发与贡献流程见 [CONTRIBUTING](../CONTRIBUTING.md)。
 
 ## 目录结构

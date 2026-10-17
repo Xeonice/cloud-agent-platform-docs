@@ -137,10 +137,21 @@ async function fixture(t) {
   );
   await fs.writeFile(join(sourceRoot, "boxlite/do-not-import"), "native-sdk");
   const db = new D(join(sourceRoot, "platform.db"));
+  // The retired Native importer accepts its frozen schema-28 export only. New
+  // platform migrations must not silently turn this historical fixture into a
+  // schema the importer never claimed to accept.
+  const migrationsFolder = join(root, "schema-28");
+  await fs.cp(
+    fileURLToPath(new URL("../../api/drizzle", import.meta.url)),
+    migrationsFolder,
+    { recursive: true },
+  );
+  const journalPath = join(migrationsFolder, "meta/_journal.json");
+  const journal = JSON.parse(await fs.readFile(journalPath, "utf8"));
+  journal.entries = journal.entries.slice(0, 28);
+  await fs.writeFile(journalPath, JSON.stringify(journal));
   migrate(drizzle(db), {
-    migrationsFolder: fileURLToPath(
-      new URL("../../api/drizzle", import.meta.url),
-    ),
+    migrationsFolder,
   });
   db.prepare(
     "INSERT INTO projects(id,name,source_type,clone_status,baseline_path,created_at,updated_at) VALUES('p','Test','empty','ready',?,1,1)",
