@@ -13,6 +13,11 @@ const REPOS={project:'cloud-agent-platform-docs',api:'agent-platform-api',web:'a
 // ssh2 publishes upstream test-only TLS private keys. They are never runtime
 // inputs and may not cross the package's private-file boundary.
 const runtimeCopyAllowed=path=>!/(?:^|\/)node_modules\/ssh2\/test(?:\/|$)/.test(path);
+// Older installed Supervisors copy this directory but do not create it before
+// the production adapter binds it writable. Keep it in fresh and reused tars.
+export async function prepareWebRuntimeDirectories(builtRoot) {
+  return secureDirectory(join(builtRoot,'web','.next/cache'));
+}
 export async function packagePinnedInstance({workspace,commits,releaseId,channel,distributionOrigin,protocols,previousBundle=null,migrationPlan=null,purpose='release',sourceRepositories=null,sourceBundles=null,run=command}) {
   invariant(['project','api','web'].every(k=>SHA.test(commits[k])),'PINNED_COMMITS_REQUIRED');
   invariant(['release','qualification'].includes(purpose)&&(!(sourceRepositories||sourceBundles)||purpose==='qualification')&&!(sourceRepositories&&sourceBundles),'PRODUCTION_SOURCE_OVERRIDE_FORBIDDEN');
@@ -57,6 +62,7 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   else {await fs.cp(join(web,'.next/standalone'),join(built,'web'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/_next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});
   await fs.cp(join(web,'public'),join(built,'web/public'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/.next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});
   }
+  await prepareWebRuntimeDirectories(built);
   await fs.cp(join(project,'deploy/upgrade'),join(built,'installer'),{recursive:true,dereference:true,filter:path=>!path.endsWith('.test.mjs')});
   const migration=migrationPlan?validateMigrationPlan(migrationPlan):null;
   if(migration)await atomicJson(join(built,'upgrade-migration.json'),migration.plan);

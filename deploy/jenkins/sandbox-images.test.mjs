@@ -320,6 +320,10 @@ async function publisherFixture(
     }
     assert.equal(command, DOCKER);
     assert.equal(options.env.DOCKER_HOST, DOCKER_HOST);
+    if (args[0] === "--context") {
+      assert.equal(args[1], BUILDER);
+      args = args.slice(2);
+    } else assert.notEqual(args[1], "build");
     if (args[0] === "context") {
       const privateConfig = JSON.parse(
         await fs.readFile(
