@@ -1,9 +1,9 @@
 import { join } from 'node:path';
-import { invariant, canonical } from './trust.mjs';
+import { invariant, canonical, digest } from './trust.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
 export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,entryKey,supervisorOrigin,supervisorKey,fetcher=fetch}) {
   invariant(supervisorOrigin&&supervisorKey?.length>=32,'SEPARATE_SUPERVISOR_REQUIRED');
-  async function entry(path,body) { const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':entryKey},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(5000)});invariant(r.ok,'ENTRY_RPC_FAILED');return r.json(); }
+  async function entry(path,body,requestTimeoutMs=5000) { const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':entryKey},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestTimeoutMs)});invariant(r.ok,'ENTRY_RPC_FAILED');return r.json(); }
   async function supervise(path,attempt,fence,kind,requestTimeoutMs=120000) {const r=await fetcher(supervisorOrigin+path,{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':supervisorKey},body:JSON.stringify({attemptId:attempt.attemptId,fence,kind}),signal:AbortSignal.timeout(requestTimeoutMs)});const result=await r.json();invariant(r.ok,result.code||'SUPERVISOR_RPC_FAILED');return result;}
   const start=(kind,artifact,attempt,fence,requestTimeoutMs)=>supervise('/start',attempt,fence,kind,requestTimeoutMs);
   function remainingStartup(deadline,code='ROLE_PREPARATION_STARTUP_EXCEEDED'){const remaining=deadline-Date.now();invariant(remaining>0,code);return Math.min(120000,remaining);}
@@ -25,6 +25,36 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     await coordinator.assertFence(attempt.attemptId,fence);
     return {binding,receipt:{metadataOnly:true,before,after:binding}};
   }
+  async function admitConfirmedSource(attempt,fence,current,deadline,code='ROLE_PREPARATION_STARTUP_EXCEEDED') {
+    if(current.weight===0)return admitWeightZero(attempt,fence,current);
+    const remaining=()=>remainingStartup(deadline,code),read=async work=>{const budget=remaining();let timer;try{return await Promise.race([work(),new Promise((_,fail)=>{timer=setTimeout(()=>fail(Object.assign(Error(code),{code})),budget)})]);}finally{clearTimeout(timer);}};
+    const fixed=value=>{const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;};
+    invariant(current.instanceId===instanceId&&current.weight===100&&typeof current.attemptId==='string'&&current.attemptId!==attempt.attemptId&&Number.isSafeInteger(current.fence)&&current.fence<fence&&Number.isSafeInteger(current.routeGeneration)&&current.routeGeneration>0,'CONFIRMED_SOURCE_ROUTE_REQUIRED');
+    await read(()=>coordinator.assertFence(attempt.attemptId,fence));
+    const snapshot=await read(()=>coordinator.snapshot(attempt.attemptId)),activation=snapshot.sourceActivation,actual=snapshot.sourceActual;
+    invariant(snapshot.attempt?.attemptId===attempt.attemptId&&snapshot.attempt.instanceId===instanceId&&snapshot.fence===fence&&snapshot.plan?.planDigest===attempt.plan.planDigest&&typeof activation?.releaseId==='string'&&Number.isSafeInteger(activation.activationGeneration)&&activation.activationGeneration>0,'CONFIRMED_SOURCE_SNAPSHOT_REQUIRED');
+    if(actual){const proof={...actual};delete proof.proofDigest;invariant(actual.schemaVersion===1&&actual.qualified===true&&actual.partial===true&&actual.instanceId===instanceId&&actual.baseConfirmedReleaseId===activation.releaseId&&actual.activationGeneration===activation.activationGeneration&&digest(proof)===actual.proofDigest,'SOURCE_ACTUAL_UNQUALIFIED');}
+    const source=(actual?.components||activation.components)?.api,selected=current.candidateApi;
+    invariant(source&&selected?.digest===source.artifactDigest&&typeof selected.origin==='string','CONFIRMED_SOURCE_COMPONENT_MISMATCH');
+    const prior=await read(()=>coordinator.snapshot(current.attemptId));
+    invariant(prior.attempt?.attemptId===current.attemptId&&prior.attempt.instanceId===instanceId&&prior.attempt.state==='activation-confirmed'&&prior.fence===current.fence&&prior.attempt.generation===activation.activationGeneration&&prior.attempt.targetReleaseId===activation.releaseId&&prior.manifest?.releaseId===activation.releaseId&&canonical(prior.manifest.components?.api)===canonical(source),'CONFIRMED_SOURCE_HISTORY_MISMATCH');
+    const step=prior.appliedSteps?.find(step=>step.stepId==='candidate'),record=step?.evidence;
+    invariant(record&&step.receiptDigest===digest(record)&&record.instanceId===instanceId&&record.attemptId===current.attemptId&&record.kind==='api'&&record.origin===selected.origin&&record.artifactDigest===source.artifactDigest&&typeof record.startIdentity==='string'&&record.startIdentity.length>0&&Number.isSafeInteger(record.pid)&&record.pid>0,'CONFIRMED_SOURCE_CANDIDATE_RECEIPT_REQUIRED');
+    invariant(typeof coordinator.processObserve==='function','SOURCE_PROCESS_OBSERVATION_REQUIRED');
+    const observed=await read(()=>coordinator.processObserve({instanceId,attemptId:current.attemptId,kind:'api',origin:record.origin,startIdentity:record.startIdentity,artifactDigest:record.artifactDigest,pid:record.pid}));
+    const fresh=()=>{const age=Date.now()-Date.parse(observed.observedAt);return Number.isFinite(age)&&age>=-1000&&age<=attempt.plan.policy.observationFreshnessMs;};
+    invariant(observed.qualified===true&&observed.startIdentity===record.startIdentity&&observed.artifactDigest===record.artifactDigest&&observed.pid===record.pid&&fresh(),'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED');
+    const before=fixed(current),latest=await read(()=>entry('/binding'));
+    invariant(canonical(fixed(latest))===canonical(before),'CONFIRMED_SOURCE_BINDING_CHANGED');
+    await read(()=>coordinator.assertFence(attempt.attemptId,fence));remaining();invariant(fresh(),'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED');
+    // All future HTTP requests still select exactly the currently serving API.
+    // The stable Entry keeps existing HTTP/WS transports and retained Webs.
+    const next={...before,attemptId:attempt.attemptId,fence,routeGeneration:before.routeGeneration+1,weight:0,oldApi:{...selected},candidateApi:null};
+    let binding;try{binding=await entry('/binding',next,Math.min(5000,remaining()));}catch(error){remaining();throw error;}remaining();
+    invariant(canonical(binding)===canonical(next),'CONFIRMED_SOURCE_ADMISSION_UNKNOWN');
+    await read(()=>coordinator.assertFence(attempt.attemptId,fence));
+    return {binding,receipt:{servingEquivalent:true,before,after:binding,sourceReleaseId:activation.releaseId,sourceActivationGeneration:activation.activationGeneration,sourceComponent:source,sourceCandidateReceiptDigest:step.receiptDigest,sourceProcess:observed}};
+  }
   async function sourceBaseline(attempt,fence,expectedGeneration) {
     const policy=attempt.plan.policy,windowMs=Math.max(60000,policy.stageDurationMs||0);
     const deadline=Date.now()+Math.max(policy.candidateStartupMs||120000,windowMs+policy.observationFreshnessMs);
@@ -33,7 +63,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     let bindingAdmission=null;
     while(true) {
       await coordinator.assertFence(attempt.attemptId,fence);
-      const admitted=await admitWeightZero(attempt,fence,await entry('/binding')),current=admitted.binding;
+      const admitted=await admitConfirmedSource(attempt,fence,await entry('/binding'),deadline,'COORDINATOR_SOURCE_BASELINE_NOT_QUALIFIED'),current=admitted.binding;
       bindingAdmission ||= admitted.receipt;
       invariant(current.instanceId===instanceId&&current.attemptId===attempt.attemptId&&current.fence===fence&&current.weight===0&&current.oldApi?.digest===source.artifactDigest,'COORDINATOR_SOURCE_BASELINE_ROUTE_CHANGED');
       // The 60s collection happens in the Observer. Each read remains an ordinary
@@ -148,6 +178,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     const deadline=statusOnly?0:Date.now()+(attempt.plan.policy.candidateStartupMs||120000);
     await coordinator.assertFence(attempt.attemptId,fence);const rpc=kind==='owner'?coordinator.ownerCandidate:coordinator.coordinatorHandoff;invariant(typeof rpc==='function','ROLE_TRANSITION_RPC_REQUIRED');
     if(statusOnly){const observed=await supervise('/observe',attempt,fence,kind);if(observed.definitelyAbsent)return {definitelyNotApplied:true};const result=await rpc(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate:observed.record,action:'status'});if(result.applied===true&&result.evidence?.qualified===true){let evidence=result.evidence;if(kind==='coordinator'){invariant(Number.isSafeInteger(evidence.generation)&&evidence.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,evidence.generation);evidence={...evidence,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return {applied:true,evidence,completedWork:1};}invariant(result.definitelyNotApplied===true,'ROLE_TRANSITION_RESULT_UNKNOWN');return result;}
+    const admission=kind==='owner'?await admitConfirmedSource(attempt,fence,await entry('/binding'),deadline):null;
     const candidate=await start(kind,artifact,attempt,fence,remainingStartup(deadline));await waitProcess(kind,attempt,fence,deadline);
     if(kind==='coordinator'){
       while(true){remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await coordinator.assertFence(attempt.attemptId,fence);const measured=await coordinator.observation(attempt.attemptId,{fence,weight:0}),p=measured.probes,baseline=measured.baseline,hard=measured.invariants;remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');
@@ -157,7 +188,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       }
     }
     let evidence;for(const action of kind==='owner'?['prepare','adopt']:['prepare','quiesce','release','adopt']){await coordinator.assertFence(attempt.attemptId,fence);if(action==='prepare'||action==='quiesce'||(kind==='owner'&&action==='adopt'))remainingStartup(deadline);evidence=await rpc(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate,action},action==='prepare'?{timeoutMs:remainingStartup(deadline)}:undefined);if(action==='prepare')remainingStartup(deadline);invariant(evidence.commitKnown===true,'ROLE_TRANSITION_COMMIT_UNKNOWN');}
-    const applied=evidence.evidence??evidence;invariant(applied.qualified===true&&applied.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');if(kind==='coordinator'){invariant(Number.isSafeInteger(applied.generation)&&applied.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,applied.generation);return {...applied,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return applied;
+    const applied=evidence.evidence??evidence;invariant(applied.qualified===true&&applied.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');if(kind==='coordinator'){invariant(Number.isSafeInteger(applied.generation)&&applied.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,applied.generation);return {...applied,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return admission?.receipt?{...applied,sourceBindingAdmission:admission.receipt}:applied;
   }
   return {
     async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT'); await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,'installer'); },
@@ -167,7 +198,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     ownerCandidate:input=>roleTransition('owner',input),
     coordinatorHandoff:input=>roleTransition('coordinator',input),
     async candidate({artifact,attempt,fence}) {
-      await coordinator.assertFence(attempt.attemptId,fence);const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000),binding=await entry('/binding'),admitted=binding.weight===0?await admitWeightZero(attempt,fence,binding):null,process=await start('api',artifact,attempt,fence);await waitProcess('api',attempt,fence,deadline);
+      await coordinator.assertFence(attempt.attemptId,fence);const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000),binding=await entry('/binding'),admitted=await admitConfirmedSource(attempt,fence,binding,deadline,'CANDIDATE_STARTUP_BUDGET_EXCEEDED'),process=await start('api',artifact,attempt,fence);await waitProcess('api',attempt,fence,deadline);
       while(true) {
         invariant(Date.now()<deadline,'CANDIDATE_STARTUP_BUDGET_EXCEEDED');
         await coordinator.assertFence(attempt.attemptId,fence);
@@ -185,7 +216,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       if(step.kind==='installer-handoff'){const observed=await supervise('/observe',attempt,fence,'installer');if(observed.definitelyAbsent)return {definitelyNotApplied:true};invariant(observed.qualified===true,'INSTALLER_IDENTITY_UNKNOWN');return {definitelyNotApplied:true};}
       if(step.kind==='owner-candidate'||step.kind==='coordinator-handoff')return roleTransition(step.kind==='owner-candidate'?'owner':'coordinator',{attempt,fence,operationId:local.operationId},true);
       if(step.kind==='candidate') {
-        const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000),binding=await entry('/binding'),admitted=binding.weight===0?await admitWeightZero(attempt,fence,binding):null;
+        const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000),binding=await entry('/binding'),admitted=await admitConfirmedSource(attempt,fence,binding,deadline,'CANDIDATE_STARTUP_BUDGET_EXCEEDED');
         const first=await supervise('/observe',attempt,fence,'api');const observed=first.definitelyAbsent?first:await waitProcess('api',attempt,fence,deadline);
         if(observed.definitelyAbsent)return {definitelyNotApplied:true};const record=observed.record;
         invariant(record&&observed.qualified&&observed.artifactDigest===attempt.manifest.components.api.artifactDigest&&observed.startIdentity===record.startIdentity,'CANDIDATE_PROCESS_IDENTITY_UNKNOWN');
