@@ -39,6 +39,14 @@ export {
   createProductionRoleAdapter,
 } from "../upgrade/production-role-adapter.mjs";
 
+import {
+  nativeSource,
+  assertNativeOriginal,
+  assertNativeStopReceipt,
+  assertNativeDatabaseIdle,
+  verifyNativeImportedTree,
+} from "./native-source-import.mjs";
+
 const CID = /^[a-f0-9]{64}$/;
 const IMAGE = /^sha256:[a-f0-9]{64}$/;
 const BLOCKERS = [
@@ -130,13 +138,16 @@ export function assertBootstrapConfig(c) {
     !inside(c.businessHostPath, c.root) && !inside(c.root, c.businessHostPath),
     "BOOTSTRAP_BUSINESS_PATHS_OVERLAP",
   );
-  invariant(
-    c.original &&
-      CID.test(c.original.containerId) &&
-      IMAGE.test(c.original.image) &&
-      typeof c.original.startedAt === "string",
-    "PINNED_LEGACY_CONTAINER_REQUIRED",
-  );
+  if (nativeSource(c)) assertNativeOriginal(c.original);
+  else
+    invariant(
+      c.original &&
+        (c.original.kind === undefined || c.original.kind === "docker") &&
+        CID.test(c.original.containerId) &&
+        IMAGE.test(c.original.image) &&
+        typeof c.original.startedAt === "string",
+      "PINNED_LEGACY_CONTAINER_REQUIRED",
+    );
   invariant(
     CID.test(c.foundationContainerId),
     "PINNED_BOOTSTRAP_FOUNDATION_REQUIRED",
@@ -217,17 +228,25 @@ export function legacyIdle(value) {
 
 export function assertCloneReceipt(c, receipt, { requireStopped = true } = {}) {
   invariant(
-    receipt?.kind === "idle-first-bootstrap-clone" &&
+    receipt?.kind ===
+      (nativeSource(c)
+        ? "darwin-native-bootstrap-clone"
+        : "idle-first-bootstrap-clone") &&
       receipt.instanceId === c.instanceId &&
       receipt.businessHostPath === c.businessHostPath &&
       canonical(receipt.original) === canonical(c.original),
     "EXACT_BOOTSTRAP_CLONE_REQUIRED",
   );
   invariant(
-    receipt.originalVolumePreserved === true &&
-      receipt.originalContainerPreserved === true &&
+    (nativeSource(c)
+      ? receipt.originalDataPreserved === true &&
+        receipt.originalInstallationPreserved === true
+      : receipt.originalVolumePreserved === true &&
+        receipt.originalContainerPreserved === true) &&
       receipt.databaseBackupVerified === true &&
-      receipt.completeVolumeBackupVerified === true &&
+      (nativeSource(c)
+        ? receipt.businessExportVerified === true
+        : receipt.completeVolumeBackupVerified === true) &&
       typeof receipt.backupPath === "string" &&
       isAbsolute(receipt.backupPath),
     "BOOTSTRAP_ROLLBACK_COPY_REQUIRED",
@@ -248,8 +267,21 @@ export function assertCloneReceipt(c, receipt, { requireStopped = true } = {}) {
       receipt.activeAgentTasks === 0,
     "LEGACY_RUNTIME_ADOPTION_REQUIRED",
   );
+  if (nativeSource(c)) {
+    assertNativeStopReceipt(c.original, receipt.sourceStop);
+    invariant(
+      receipt.darwinSdkImported === false &&
+        receipt.pathConversion?.sourceDataRoot === c.original.dataRoot &&
+        receipt.pathConversion.targetDataRoot === bootstrapDataRoot(c) &&
+        IMAGE.test(receipt.copiedBusinessTreeDigest) &&
+        receipt.sourceExportDatabaseDigest ===
+          receipt.sourceStop.frozenDatabaseDigest &&
+        receipt.masterKeyDigest === receipt.sourceStop.masterKeyDigest,
+      "NATIVE_IMPORT_PROOF_REQUIRED",
+    );
+  }
   invariant(
-    receipt.databaseMigration?.from === 25 &&
+    receipt.databaseMigration?.from === (nativeSource(c) ? 28 : 25) &&
       receipt.databaseMigration.to === 28 &&
       receipt.databaseMigration.integrity === "ok" &&
       receipt.databaseMigration.foreignKeyViolations === 0 &&
@@ -360,9 +392,13 @@ export function assertFoundationCloneMounts(c, foundation, old) {
       foundation.State.Running === true &&
       has("/data") &&
       !foundation.Mounts.some((m) =>
-        old.Mounts.some(
-          (o) => o.Destination === "/data" && m.Source === o.Source && m.RW,
-        ),
+        nativeSource(c)
+          ? m.RW &&
+            (inside(c.original.dataRoot, m.Source) ||
+              inside(m.Source, c.original.dataRoot))
+          : old.Mounts.some(
+              (o) => o.Destination === "/data" && m.Source === o.Source && m.RW,
+            ),
       ),
     "BOOTSTRAP_FOUNDATION_CLONE_MOUNT_REQUIRED",
   );
@@ -414,6 +450,7 @@ export async function verifySealedCloneFiles({
 }
 
 export function assertLegacyPhysical(c, old, { requireStopped = false } = {}) {
+  invariant(!nativeSource(c), "NATIVE_SOURCE_IS_NOT_DOCKER");
   invariant(
     old?.Id === c.original.containerId &&
       old.Image === c.original.image &&
@@ -437,7 +474,7 @@ export function assertLegacyPhysical(c, old, { requireStopped = false } = {}) {
 
 export function previewProbeOrigin(c) {
   invariant(
-    c.kind === "idle-first-bootstrap-experiment",
+    c.kind === "idle-first-bootstrap-experiment" && !nativeSource(c),
     "PREVIEW_REQUIRES_EXPLICIT_EXPERIMENT",
   );
   const origin = new URL(
@@ -509,6 +546,42 @@ async function observePreviewSource(c, verified) {
   };
 }
 
+export async function observeBootstrapSource(
+  c,
+  { run = execute, requireStopped = false } = {},
+) {
+  if (nativeSource(c)) {
+    const receipt = assertCloneReceipt(
+      c,
+      await privateJson(c.cloneReceiptPath),
+      { requireStopped: true },
+    );
+    assertNativeStopReceipt(c.original, receipt.sourceStop);
+    return null;
+  }
+  const old = JSON.parse(
+    await run(c.docker.cli || "docker", [
+      ...c.docker.args,
+      "inspect",
+      c.original.containerId,
+    ]),
+  )[0];
+  return assertLegacyPhysical(c, old, { requireStopped });
+}
+
+export function assertBootstrapAuth(c, authEnv) {
+  invariant(
+    Object.keys(authEnv).every((k) => AUTH_ENV.includes(k)) &&
+      typeof authEnv.ACCESS_PASSCODE === "string" &&
+      authEnv.ACCESS_PASSCODE.length >= 1 &&
+      ((nativeSource(c) && authEnv.PASSCODE_COOKIE_SECRET === undefined) ||
+        (typeof authEnv.PASSCODE_COOKIE_SECRET === "string" &&
+          authEnv.PASSCODE_COOKIE_SECRET.length >= 32)),
+    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
+  );
+  return authEnv;
+}
+
 export async function verifyBootstrapInputs(
   c,
   { run = execute, requireStopped = false } = {},
@@ -533,14 +606,7 @@ export async function verifyBootstrapInputs(
   }
   verifyBootstrapCatalog(c, roots, catalog, proof);
   const authEnv = await privateJson(c.authEnvPath);
-  invariant(
-    Object.keys(authEnv).every((k) => AUTH_ENV.includes(k)) &&
-      typeof authEnv.ACCESS_PASSCODE === "string" &&
-      authEnv.ACCESS_PASSCODE.length >= 1 &&
-      typeof authEnv.PASSCODE_COOKIE_SECRET === "string" &&
-      authEnv.PASSCODE_COOKIE_SECRET.length >= 32,
-    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
-  );
+  assertBootstrapAuth(c, authEnv);
   const receipt = assertCloneReceipt(c, await privateJson(c.cloneReceiptPath), {
     requireStopped,
   });
@@ -548,14 +614,7 @@ export async function verifyBootstrapInputs(
     !receipt.channel || receipt.channel === roots.channel,
     "BOOTSTRAP_CHANNEL_MISMATCH",
   );
-  const old = JSON.parse(
-    await run(c.docker.cli || "docker", [
-      ...c.docker.args,
-      "inspect",
-      c.original.containerId,
-    ]),
-  )[0];
-  assertLegacyPhysical(c, old, { requireStopped });
+  const old = await observeBootstrapSource(c, { run, requireStopped });
   const image = JSON.parse(
     await run(c.docker.cli || "docker", [
       ...c.docker.args,
@@ -614,6 +673,7 @@ export async function verifyBootstrapInputs(
     journal.entries.length === receipt.databaseMigration.to,
     "BOOTSTRAP_SCHEMA_MISMATCH",
   );
+  if (nativeSource(c)) await verifyNativeImportedTree("/data", receipt);
   await verifySealedCloneFiles({
     databaseDigest: receipt.cloneDatabaseDigest,
     masterKeyDigest: receipt.masterKeyDigest,
@@ -634,6 +694,20 @@ export async function verifyBootstrapInputs(
           journal.entries.length,
       "BOOTSTRAP_CLONE_DATABASE_INVALID",
     );
+    if (nativeSource(c)) {
+      assertNativeDatabaseIdle(db);
+      if (authEnv.PASSCODE_COOKIE_SECRET === undefined) {
+        const cookie = db
+          .prepare(
+            "SELECT access_passcode_session_secret secret FROM system_settings WHERE id=1",
+          )
+          .get()?.secret;
+        invariant(
+          typeof cookie === "string" && cookie.length >= 32,
+          "PRESERVED_NATIVE_DATABASE_COOKIE_REQUIRED",
+        );
+      }
+    }
     invariant(
       db
         .prepare(
@@ -663,7 +737,10 @@ export async function verifyBootstrapInputs(
       if (row.baseline_path !== null)
         invariant(
           typeof row.baseline_path === "string" &&
-            inside("/data", row.baseline_path) &&
+            inside(
+              nativeSource(c) ? bootstrapDataRoot(c) : "/data",
+              row.baseline_path,
+            ) &&
             (await fs.realpath(row.baseline_path)) === row.baseline_path &&
             (await fs.stat(row.baseline_path)).isDirectory(),
           "BOOTSTRAP_PROJECT_PATH_CHANGED",
@@ -1165,8 +1242,13 @@ async function startBootstrap(c, { mode }) {
     initialArtifactRoot: c.artifactRoot,
     businessHostPath: c.businessHostPath,
     original: c.original,
-    originalContainerPreserved: true,
-    originalVolumePreserved: true,
+    ...(nativeSource(c)
+      ? {
+          originalDataPreserved: true,
+          originalInstallationPreserved: true,
+          sourceKind: "darwin-native",
+        }
+      : { originalContainerPreserved: true, originalVolumePreserved: true }),
     bootstrapMaintenanceRequired: mode !== "preview",
     installationPurpose:
       c.kind === "idle-first-bootstrap-experiment"
@@ -1522,14 +1604,7 @@ export async function resumeBootstrapFoundation(c) {
         ? await privateJson(c.qualificationInstallationPath)
         : null;
   verifyBootstrapCatalog(c, roots, catalog, proof);
-  const old = JSON.parse(
-    await execute(c.docker.cli || "docker", [
-      ...c.docker.args,
-      "inspect",
-      c.original.containerId,
-    ]),
-  )[0];
-  assertLegacyPhysical(c, old);
+  const old = await observeBootstrapSource(c);
   const foundation = JSON.parse(
     await execute(c.docker.cli || "docker", [
       ...c.docker.args,
@@ -1694,14 +1769,7 @@ export async function createBootstrapTcpBridge(
   { restoreReceipt = null } = {},
 ) {
   assertBridgeConfig(c);
-  const old = JSON.parse(
-    await execute(c.docker.cli || "docker", [
-      ...c.docker.args,
-      "inspect",
-      c.original.containerId,
-    ]),
-  )[0];
-  assertLegacyPhysical(c, old, { requireStopped: true });
+  await observeBootstrapSource(c, { requireStopped: true });
   const authEnv = await privateJson(c.authEnvPath),
     origin = `http://127.0.0.1:${c.ports.entry}`;
   {

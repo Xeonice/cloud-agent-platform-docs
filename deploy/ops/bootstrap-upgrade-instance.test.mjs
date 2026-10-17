@@ -26,6 +26,8 @@ import {
   assertBridgeConfig,
   assertBridgeTarget,
   createFoundation,
+  assertBootstrapAuth,
+  observeBootstrapSource,
 } from "./bootstrap-upgrade-instance.mjs";
 import {
   providerEnvironment,
@@ -1349,4 +1351,214 @@ test("adapter refuses mutable or authority-bearing runtime images before startin
     (error) => error.code === "BOOTSTRAP_RUNTIME_IMAGE_INVALID",
   );
   assert.equal(calls.length, 1);
+});
+
+const nativeConfig = () => ({
+  ...config(),
+  original: {
+    kind: "darwin-native",
+    platform: "darwin",
+    arch: "arm64",
+    dataRoot: "/Users/operator/native/data",
+    api: {
+      label: "com.example.native.api",
+      pid: 42,
+      birthMicros: "1791945075334011",
+      entry: "/Users/operator/native/api.js",
+      entryDigest: image,
+    },
+    web: {
+      label: "com.example.native.web",
+      pid: 43,
+      birthMicros: "1791945075334021",
+      entry: "/Users/operator/native/web.js",
+      entryDigest: image,
+    },
+  },
+});
+const nativeReceipt = (c) => ({
+  ...receipt(c),
+  kind: "darwin-native-bootstrap-clone",
+  originalDataPreserved: true,
+  originalInstallationPreserved: true,
+  businessExportVerified: true,
+  sourceStop: {
+    schemaVersion: 1,
+    kind: "darwin-native-source-stop",
+    original: c.original,
+    before: { ...status(), draining: false },
+    beforeStop: { ...status(), draining: false },
+    admissionHeld: true,
+    oldProcessAbsent: true,
+    launchdUnloaded: true,
+    frozenDatabaseDigest: image,
+    masterKeyDigest: image,
+    stoppedAt: "2026-10-17T00:00:00Z",
+    observedAt: "2026-10-17T00:00:01Z",
+  },
+  databaseMigration: {
+    from: 28,
+    to: 28,
+    integrity: "ok",
+    foreignKeyViolations: 0,
+  },
+  darwinSdkImported: false,
+  sourceExportDatabaseDigest: image,
+  copiedBusinessTreeDigest: image,
+  pathConversion: {
+    sourceDataRoot: c.original.dataRoot,
+    targetDataRoot: bootstrapDataRoot(c),
+  },
+});
+test("one-time Native import has exact real source processes and sealed stop proof; Docker gate is not weakened", () => {
+  const c = nativeConfig(),
+    r = nativeReceipt(c);
+  assert.equal(assertBootstrapConfig(c), c);
+  assert.equal(assertCloneReceipt(c, r), r);
+  fails(
+    () =>
+      assertBootstrapConfig({
+        ...c,
+        original: { ...c.original, kind: "invented" },
+      }),
+    "PINNED_LEGACY_CONTAINER_REQUIRED",
+  );
+  fails(
+    () =>
+      assertBootstrapConfig({
+        ...c,
+        original: {
+          ...c.original,
+          api: { ...c.original.api, birthMicros: "unknown" },
+        },
+      }),
+    "PINNED_NATIVE_PROCESS_REQUIRED",
+  );
+  fails(
+    () =>
+      assertCloneReceipt(c, {
+        ...r,
+        databaseMigration: { ...r.databaseMigration, from: 25 },
+      }),
+    "BOOTSTRAP_DATABASE_MIGRATION_UNVERIFIED",
+  );
+  fails(
+    () =>
+      assertCloneReceipt(config(), {
+        ...receipt(config()),
+        databaseMigration: { ...receipt(config()).databaseMigration, from: 28 },
+      }),
+    "BOOTSTRAP_DATABASE_MIGRATION_UNVERIFIED",
+  );
+  fails(
+    () =>
+      assertCloneReceipt(c, {
+        ...r,
+        sourceStop: { ...r.sourceStop, launchdUnloaded: false },
+      }),
+    "NATIVE_SOURCE_STOP_UNCONFIRMED",
+  );
+  fails(
+    () => assertCloneReceipt(c, { ...r, darwinSdkImported: true }),
+    "NATIVE_IMPORT_PROOF_REQUIRED",
+  );
+  fails(
+    () =>
+      assertCloneReceipt(c, {
+        ...r,
+        sourceExportDatabaseDigest: "sha256:" + "f".repeat(64),
+      }),
+    "NATIVE_IMPORT_PROOF_REQUIRED",
+  );
+  fails(() => assertLegacyPhysical(c, {}), "NATIVE_SOURCE_IS_NOT_DOCKER");
+  fails(
+    () => previewProbeOrigin({ ...c, kind: "idle-first-bootstrap-experiment" }),
+    "PREVIEW_REQUIRES_EXPLICIT_EXPERIMENT",
+  );
+});
+test("Native cookie may continue using original database secret; Docker still requires its explicit cookie secret", () => {
+  const c = nativeConfig(),
+    auth = {
+      ACCESS_PASSCODE: "private-fixture",
+      PASSCODE_COOKIE_SECURE: "false",
+      ACCESS_PASSCODE_ALLOW_LOOPBACK: "false",
+    };
+  assert.equal(assertBootstrapAuth(c, auth), auth);
+  fails(
+    () => assertBootstrapAuth(config(), auth),
+    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
+  );
+  fails(
+    () => assertBootstrapAuth(c, { ...auth, PASSCODE_COOKIE_SECRET: "" }),
+    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
+  );
+  fails(
+    () => assertBootstrapAuth(c, { ...auth, PLATFORM_MASTER_KEY: "secret" }),
+    "PRESERVED_BOOTSTRAP_AUTH_REQUIRED",
+  );
+});
+test("Native foundation only mounts its new business copy and refuses writable original source", () => {
+  const c = nativeConfig(),
+    f = {
+      Id: c.foundationContainerId,
+      State: { Running: true },
+      Mounts: [{ Source: c.businessHostPath, Destination: "/data", RW: true }],
+    };
+  assert.equal(assertFoundationCloneMounts(c, f, null), f);
+  fails(
+    () =>
+      assertFoundationCloneMounts(
+        c,
+        {
+          ...f,
+          Mounts: [
+            ...f.Mounts,
+            { Source: c.original.dataRoot, Destination: "/legacy", RW: true },
+          ],
+        },
+        null,
+      ),
+    "BOOTSTRAP_FOUNDATION_CLONE_MOUNT_REQUIRED",
+  );
+  const own = roleMounts(c, {
+    kind: "owner",
+    artifactRoot: c.artifactRoot,
+    ownerHome: c.root + "/original-owner",
+    env: {},
+  });
+  assert.equal(
+    own.some(
+      (m) =>
+        m.source === c.businessHostPath ||
+        m.source.startsWith(c.original.dataRoot),
+    ),
+    false,
+  );
+});
+test("Native start, resume and bridge source observation consumes actual protected receipt without Docker impersonation", async (t) => {
+  const dir = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "native-bootstrap-source-")),
+  );
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const c = { ...nativeConfig(), cloneReceiptPath: join(dir, "clone.json") };
+  await fs.writeFile(c.cloneReceiptPath, JSON.stringify(nativeReceipt(c)), {
+    mode: 0o600,
+  });
+  let commands = 0;
+  assert.equal(
+    await observeBootstrapSource(c, {
+      requireStopped: true,
+      run: async () => {
+        commands++;
+        throw Error("must not inspect a fabricated container");
+      },
+    }),
+    null,
+  );
+  assert.equal(commands, 0);
+  await fs.chmod(c.cloneReceiptPath, 0o644);
+  await assert.rejects(
+    observeBootstrapSource(c),
+    (e) => e.code === "PRIVATE_BOOTSTRAP_INPUT_REQUIRED",
+  );
 });
