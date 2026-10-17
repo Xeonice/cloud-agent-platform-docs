@@ -21,7 +21,8 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
   publicationRoot=await secureDirectory(publicationRoot||join(dirname(root),basename(root)+'-supervisor-publication'));invariant(!publicationRoot.startsWith(root+'/')&&publicationRoot!==root,'PUBLICATION_ROOT_MUST_BE_PRIVATE');
   for(const k of Object.keys(controlEnv))invariant(ALLOWED_ENV.has(k),'FORBIDDEN_CONTROL_ROLE_ENV');if(controlEnv.PLATFORM_INSTANCE_ID)invariant(controlEnv.PLATFORM_INSTANCE_ID===instanceId,'CONTROL_WRONG_INSTANCE');if(controlEnv.COORDINATOR_RPC_URL)invariant(controlEnv.COORDINATOR_RPC_URL===coordinator.origin,'CONTROL_WRONG_COORDINATOR');
   for(const k of Object.keys(coordinatorEnv||{}))invariant(ROLE_ENV.has(k),'FORBIDDEN_COORDINATOR_INSTALLATION_ENV');for(const k of Object.keys(ownerEnv||{}))invariant(OWNER_ENV.has(k),'FORBIDDEN_OWNER_INSTALLATION_ENV');
-  for(const k of Object.keys(runtimeEnv))invariant(PROXY_ENV.includes(k),'FORBIDDEN_INSTALLATION_RUNTIME_ENV');
+  for(const k of Object.keys(runtimeEnv))invariant(PROXY_ENV.includes(k)||k==='DISABLE_CREDENTIAL_REFRESH_SCANNER','FORBIDDEN_INSTALLATION_RUNTIME_ENV');
+  invariant(runtimeEnv.DISABLE_CREDENTIAL_REFRESH_SCANNER===undefined||runtimeEnv.DISABLE_CREDENTIAL_REFRESH_SCANNER==='1','FORBIDDEN_INSTALLATION_RUNTIME_ENV');
   const busy=new Set(),owned=new Map();
   const retirement=await createContractRetirement({directory:join(publicationRoot,'installed-roles'),instanceId,coordinator,launchAdapter,controlKey:controlEnv.PLATFORM_CONTROL_RPC_KEY,controllerKey:coordinatorEnv?.PLATFORM_CONTROLLER_RPC_KEY,ownerKey:ownerEnv?.PLATFORM_COORDINATOR_RPC_KEY,businessRoot:coordinatorEnv?.DATA_ROOT});
   const registered=new Set();

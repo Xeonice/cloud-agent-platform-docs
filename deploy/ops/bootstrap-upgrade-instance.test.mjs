@@ -29,6 +29,7 @@ import {
   assertBootstrapAuth,
   observeBootstrapSource,
 } from "./bootstrap-upgrade-instance.mjs";
+import { createCandidateSupervisor } from "../upgrade/candidate-supervisor.mjs";
 import {
   providerEnvironment,
   roleEnvironment,
@@ -133,7 +134,11 @@ test("fresh and resumed foundations start their real HTTP transports without lau
     await fs.mkdtemp(join(tmpdir(), "bootstrap-foundation-")),
   );
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  const c = { ...config(), root };
+  const c = {
+    ...config(),
+    root,
+    runtimeEnv: { DISABLE_CREDENTIAL_REFRESH_SCANNER: "1" },
+  };
   const keys = Object.fromEntries(
     [
       "owner",
@@ -241,6 +246,7 @@ test("fresh and resumed foundations start their real HTTP transports without lau
         keys.owner,
       );
       assert.equal(foundation.coordinatorEnv.DATABASE_URL, "/data/platform.db");
+      assert.equal(foundation.common.DISABLE_CREDENTIAL_REFRESH_SCANNER, "1");
       assert.equal(
         foundation.controlEnv.PLATFORM_CONTROL_RPC_KEY,
         keys.control,
@@ -1561,4 +1567,71 @@ test("Native start, resume and bridge source observation consumes actual protect
     observeBootstrapSource(c),
     (e) => e.code === "PRIVATE_BOOTSTRAP_INPUT_REQUIRED",
   );
+});
+
+test("isolated clone may disable shared OAuth refresh only with the existing exact disable value", () => {
+  const c = config();
+  assert.equal(assertBootstrapConfig(c), c);
+  const isolated = {
+    ...c,
+    runtimeEnv: { DISABLE_CREDENTIAL_REFRESH_SCANNER: "1" },
+  };
+  assert.equal(assertBootstrapConfig(isolated), isolated);
+  for (const value of ["0", "true", true, 0, null, "1\n"])
+    fails(
+      () =>
+        assertBootstrapConfig({
+          ...c,
+          runtimeEnv: { DISABLE_CREDENTIAL_REFRESH_SCANNER: value },
+        }),
+      "BOOTSTRAP_REFRESH_DISABLE_VALUE_INVALID",
+    );
+  fails(
+    () =>
+      assertBootstrapConfig({
+        ...c,
+        runtimeEnv: {
+          DISABLE_CREDENTIAL_REFRESH_SCANNER: "1",
+          AUTH_SECRET: "forbidden",
+        },
+      }),
+    "FORBIDDEN_BOOTSTRAP_RUNTIME_AUTHORITY",
+  );
+});
+
+test("Supervisor independently permits only the exact isolated OAuth disable switch", async (t) => {
+  const root = await fs.realpath(
+    await fs.mkdtemp(join(tmpdir(), "supervisor-refresh-gate-")),
+  );
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const args = {
+    root,
+    instanceId: "isolated-refresh",
+    key: "s".repeat(32),
+    coordinator: {},
+    controlEnv: { PLATFORM_CONTROL_RPC_KEY: "c".repeat(32) },
+  };
+  for (const value of ["0", "true", true, null, "1\n"])
+    await assert.rejects(
+      createCandidateSupervisor({
+        ...args,
+        runtimeEnv: { DISABLE_CREDENTIAL_REFRESH_SCANNER: value },
+      }),
+      (e) => e.code === "FORBIDDEN_INSTALLATION_RUNTIME_ENV",
+    );
+  await assert.rejects(
+    createCandidateSupervisor({
+      ...args,
+      runtimeEnv: {
+        DISABLE_CREDENTIAL_REFRESH_SCANNER: "1",
+        ACCESS_PASSCODE: "forbidden",
+      },
+    }),
+    (e) => e.code === "FORBIDDEN_INSTALLATION_RUNTIME_ENV",
+  );
+  const supervisor = await createCandidateSupervisor({
+    ...args,
+    runtimeEnv: { DISABLE_CREDENTIAL_REFRESH_SCANNER: "1" },
+  });
+  await supervisor.close();
 });

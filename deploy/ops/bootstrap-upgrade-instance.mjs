@@ -85,6 +85,7 @@ const RUNTIME_ENV = [
   "SSL_CERT_DIR",
   "LANG",
   "TZ",
+  "DISABLE_CREDENTIAL_REFRESH_SCANNER",
 ];
 const AUTH_ENV = [
   "ACCESS_PASSCODE",
@@ -204,6 +205,13 @@ export function assertBootstrapConfig(c) {
   invariant(
     Object.keys(c.runtimeEnv || {}).every((k) => RUNTIME_ENV.includes(k)),
     "FORBIDDEN_BOOTSTRAP_RUNTIME_AUTHORITY",
+  );
+  // Isolated copies must not rotate a shared OAuth refresh token. This is a
+  // one-way disable switch, never a configurable alternate scanner mode.
+  invariant(
+    c.runtimeEnv?.DISABLE_CREDENTIAL_REFRESH_SCANNER === undefined ||
+      c.runtimeEnv.DISABLE_CREDENTIAL_REFRESH_SCANNER === "1",
+    "BOOTSTRAP_REFRESH_DISABLE_VALUE_INVALID",
   );
   invariant(
     Number.isSafeInteger(c.uid) &&
