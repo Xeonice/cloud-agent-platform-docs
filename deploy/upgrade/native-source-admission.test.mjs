@@ -25,7 +25,7 @@ async function boundary(t, options={}) {
     server.on('upgrade',(_req,socket)=>{sockets.add(socket);socket.once('close',()=>sockets.delete(socket));socket.write('HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');socket.on('data',bytes=>socket.write(bytes));});
     const origin=await listen(server);backends.push({identity,record:{...identity,kind:'api',origin}});
   }
-  let source=1,target=2,sourceGeneration=2,priorAttempt='confirmed-bridge',attemptId='accepted-final',fence=6,revoked=false,validations=0,raced=false,observedProcess=false,fenceDelayed=false;
+  let source=1,target=2,sourceGeneration=options.sourceActivationGeneration??2,priorSourceGeneration=options.priorSourceActivationGeneration??sourceGeneration-1,priorAttemptGeneration=options.priorAttemptGeneration??sourceGeneration,attemptGeneration=options.attemptGeneration??priorAttemptGeneration+1,priorAttempt='confirmed-bridge',attemptId='accepted-final',fence=6,revoked=false,validations=0,raced=false,observedProcess=false,fenceDelayed=false;
   const sourceRelease=()=>source===1?'bridge-release':'final-release';
   const priorReceipt=()=>({...backends[source].record,attemptId:priorAttempt});
   const web={origin:backends[0].record.origin,root:tmpdir(),digest:components[0].artifactDigest,treeDigest:components[0].artifactDigest},retainedWeb=[{...web,root:tmpdir()}];
@@ -35,8 +35,8 @@ async function boundary(t, options={}) {
   function fixed(b){const v={...b};for(const k of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete v[k];return v;}
   async function stamp(){const r=await fetch(entry.controlOrigin+'/fence',{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':key},body:JSON.stringify({instanceId,attemptId,fence})});assert.equal(r.status,200);}
   await stamp();
-  function currentSnapshot(){const v={attempt:{attemptId,instanceId,generation:sourceGeneration+1,state:'prepared'},fence,plan:{planDigest:'fixed-plan'},sourceActivation:{releaseId:sourceRelease(),activationGeneration:sourceGeneration,components:{api:components[source]}}};options.snapshot?.(v);return v;}
-  function historicalSnapshot(){const record=priorReceipt(),v={attempt:{attemptId:priorAttempt,instanceId,generation:sourceGeneration,targetReleaseId:sourceRelease(),state:'activation-confirmed'},fence:fence-2,manifest:{releaseId:sourceRelease(),components:{api:components[source]}},appliedSteps:[{stepId:'candidate',receiptDigest:digest(record),evidence:record}]};options.prior?.(v);return v;}
+  function currentSnapshot(){const v={attempt:{attemptId,instanceId,generation:attemptGeneration,state:'prepared'},fence,plan:{planDigest:'fixed-plan',sourceActivationGeneration:sourceGeneration},sourceActivation:{releaseId:sourceRelease(),activationGeneration:sourceGeneration,components:{api:components[source]}}};options.snapshot?.(v);return v;}
+  function historicalSnapshot(){const record=priorReceipt(),v={attempt:{attemptId:priorAttempt,instanceId,generation:priorAttemptGeneration,targetReleaseId:sourceRelease(),state:'activation-confirmed'},fence:fence-2,plan:{sourceActivationGeneration:priorSourceGeneration},sourceActivation:{releaseId:'previous-source',activationGeneration:priorSourceGeneration,components:{api:components[source-1]}},manifest:{releaseId:sourceRelease(),components:{api:components[source]}},appliedSteps:[{stepId:'candidate',receiptDigest:digest(record),evidence:record}]};options.prior?.(v);return v;}
   const receiver=createServer(async(req,res)=>{
     try {
       let raw='';for await(const chunk of req)raw+=chunk;const body=raw?JSON.parse(raw):null,url=new URL(req.url,'http://localhost');requests.push({path:url.pathname,body,at:Date.now()});let result;
@@ -80,34 +80,54 @@ async function boundary(t, options={}) {
     return fetch(url,request);
   };
   const executor=createNativeExecutor({root:folder,instanceId,coordinator:createCoordinatorClient({origin,instanceId,key:'c'.repeat(32)}),entryOrigin:entry.controlOrigin,entryKey:key,supervisorOrigin:origin,supervisorKey:'s'.repeat(32),fetcher});
-  const input=()=>({artifact:{root:folder},attempt:{attemptId,targetDigest:components[target].artifactDigest,manifest:{components:{api:components[target]}},plan:{planDigest:'fixed-plan',policy:{candidateStartupMs:options.budgetMs||2000,observationFreshnessMs:options.freshnessMs||5000,stageDurationMs:60000,minRequests:100,probeHz:10,requestDeadlineMs:2000,attachDeadlineMs:5000}}},fence});
+  const input=()=>({artifact:{root:folder},attempt:{attemptId,targetDigest:components[target].artifactDigest,manifest:{components:{api:components[target]}},plan:{planDigest:'fixed-plan',sourceActivationGeneration:sourceGeneration,policy:{candidateStartupMs:options.budgetMs||2000,observationFreshnessMs:options.freshnessMs||5000,stageDurationMs:60000,minRequests:100,probeHz:10,requestDeadlineMs:2000,attachDeadlineMs:5000}}},fence});
   t.after(async()=>{for(const timer of timers)clearTimeout(timer);for(const socket of sockets)socket.destroy();await entry.close();for(const server of servers){server.closeAllConnections();await new Promise(ok=>server.close(ok));}await rm(folder,{recursive:true,force:true});assert.deepEqual(errors,[]);});
   return {entry,executor,input,getBinding,requests,backends,components,web,retainedWeb,validations:()=>validations,
     async mutateBinding(change){const b=fixed(await getBinding()),next={...b,...change};const r=await fetch(entry.controlOrigin+'/binding',{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':key},body:JSON.stringify(next)});assert.equal(r.status,200);},
-    async nextUpgrade(){source=target;target++;sourceGeneration++;priorAttempt=attemptId;attemptId='accepted-next-upgrade';fence+=2;validations=0;await stamp();},
+    async nextUpgrade(){source=target;target++;priorSourceGeneration=sourceGeneration;sourceGeneration++;priorAttemptGeneration=attemptGeneration;attemptGeneration++;priorAttempt=attemptId;attemptId='accepted-next-upgrade';fence+=2;validations=0;await stamp();},
   };
 }
 
 test('confirmed 100% source admission preserves live HTTP and the original WS before Owner preparation',async t=>{
-  const f=await boundary(t),url=new URL(f.entry.origin),socket=connect(Number(url.port),url.hostname);t.after(()=>socket.destroy());
+  for(const [name,options] of [['matching counters',{}],['failed attempt consumed a generation',{priorAttemptGeneration:5,priorSourceActivationGeneration:3,sourceActivationGeneration:4,attemptGeneration:6}]])await t.test(name,async t=>{
+  const f=await boundary(t,options),url=new URL(f.entry.origin),socket=connect(Number(url.port),url.hostname);t.after(()=>socket.destroy());
   const read=()=>new Promise((ok,fail)=>{socket.once('data',v=>ok(v.toString()));socket.once('error',fail);});
   const opened=read();socket.write('GET /ws HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');assert.match(await opened,/101 Switching Protocols/);
   assert.equal((await (await fetch(f.entry.origin+'/api/who')).json()).backend,1);
   const before=await f.getBinding(),result=await f.executor.ownerCandidate({...f.input(),operationId:'owner-op'}),after=await f.getBinding();
   assert.equal(result.sourceBindingAdmission.servingEquivalent,true);assert.equal(after.weight,0);assert.deepEqual(after.oldApi,before.candidateApi);assert.equal(after.candidateApi,null);assert.equal(after.routeGeneration,before.routeGeneration+1);
+  assert.equal(result.sourceBindingAdmission.sourceActivationGeneration,options.sourceActivationGeneration??2);
   assert.deepEqual(after.web,before.web);assert.deepEqual(after.retainedWeb,before.retainedWeb);assert.equal(after.activeWS,1);
   assert.equal((await (await fetch(f.entry.origin+'/api/who')).json()).backend,1);
   const echo=read();socket.write('same-source-connection');assert.equal(await echo,'same-source-connection');
   assert.ok(f.requests.findIndex(r=>r.path==='/binding'&&r.method==='POST')<f.requests.findIndex(r=>r.path==='/start'));
   assert.equal(f.requests.filter(r=>r.path==='/binding'&&r.method==='POST').length,1);
+  });
 });
 
 test('two consecutive API upgrades admit each actual confirmed source and still wait for the new source gate',async t=>{
-  const f=await boundary(t);const first=await f.executor.candidate(f.input());assert.equal(f.validations(),3);assert.equal(first.bindingAdmission.sourceProcess.startIdentity,'incarnation-1');
+  for(const [name,options] of [['matching counters',{}],['independent attempt and activation counters',{priorAttemptGeneration:5,priorSourceActivationGeneration:3,sourceActivationGeneration:4,attemptGeneration:6}]])await t.test(name,async t=>{
+  const f=await boundary(t,options);const first=await f.executor.candidate(f.input());assert.equal(f.validations(),3);assert.equal(first.bindingAdmission.sourceProcess.startIdentity,'incarnation-1');
   await f.executor.applyRoute({...f.input(),candidate:first,weight:100});assert.equal((await (await fetch(f.entry.origin+'/api/who')).json()).backend,2);
   await f.nextUpgrade();const second=await f.executor.candidate(f.input());assert.equal(f.validations(),3);assert.equal(second.bindingAdmission.sourceProcess.startIdentity,'incarnation-2');
   const b=await f.getBinding();assert.equal(b.weight,0);assert.equal(b.oldApi.digest,f.components[2].artifactDigest);assert.equal(b.candidateApi,null);assert.deepEqual(b.web,f.web);assert.deepEqual(b.retainedWeb,f.retainedWeb);
   assert.equal((await (await fetch(f.entry.origin+'/api/who')).json()).backend,2);
+  });
+});
+
+test('independent generation sequences reject mismatched source anchors and non-increasing attempts',async t=>{
+  const gap={priorAttemptGeneration:5,priorSourceActivationGeneration:3,sourceActivationGeneration:4,attemptGeneration:6};
+  for(const [name,change,code] of [
+    ['prior source activation changed',{prior:v=>v.sourceActivation.activationGeneration--},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['prior source and plan agree but do not precede current activation',{prior:v=>{v.sourceActivation.activationGeneration=2;v.plan.sourceActivationGeneration=2;}},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['prior plan does not match its source activation',{prior:v=>v.plan.sourceActivationGeneration++},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['prior source anchor absent',{prior:v=>delete v.sourceActivation},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['current source activation changed',{snapshot:v=>v.sourceActivation.activationGeneration++},'CONFIRMED_SOURCE_SNAPSHOT_REQUIRED'],
+    ['current plan source activation changed',{snapshot:v=>v.plan.sourceActivationGeneration++},'CONFIRMED_SOURCE_SNAPSHOT_REQUIRED'],
+    ['current activation and snapshot plan disagree with this fixed plan',{snapshot:v=>{v.sourceActivation.activationGeneration++;v.plan.sourceActivationGeneration++;}},'CONFIRMED_SOURCE_SNAPSHOT_REQUIRED'],
+    ['same accepted attempt generation',{attemptGeneration:5},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['older accepted attempt generation',{attemptGeneration:4},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+  ])await t.test(name,async t=>{const f=await boundary(t,{...gap,...change});await assert.rejects(f.executor.candidate(f.input()),{code});assert.equal(f.requests.filter(r=>r.path==='/binding'&&r.method==='POST'||r.path==='/start').length,0);assert.equal((await f.getBinding()).weight,100);});
 });
 
 test('candidate reconciliation performs the same admission before any candidate role observation',async t=>{
