@@ -679,6 +679,8 @@ export function createImagePublisher(overrides = {}) {
             await invoke(
               DOCKER,
               [
+                "--context",
+                BUILDER,
                 "buildx",
                 "build",
                 "--progress=plain",
