@@ -557,7 +557,7 @@
   function experienceHtml() {
     const value = state.experience;
     if (!value) return '';
-    if (value.mixed) return `<dl class="kv"><dt>上次完整确认版本</dt><dd>${BASE_VERSION}</dd><dt>服务可用性</dt><dd>可继续使用 · 刚刚独立确认（设计示例）</dd><dt>最终目标与结果</dt><dd>${TARGET_VERSION} · 未完成</dd></dl><details><summary>查看实际组件与诊断</summary><p>API仍为原版本，协调器已替换；未确认整体安装成功。阶段：验证并切换服务；诊断内容不含口令和会话凭据（设计示例）。</p></details><p>${value.repairable ? '服务端已核验安全修复方案，目标为v0.3.9；只有主动点击才提交新的固定修复请求。' : '暂没有合格安全修复方案；继续使用并检查状态，不盲目回退或重启。'}</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-show-task">继续使用</button><button class="btn btn--tertiary btn--32" data-action="upgrade-check-version">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-copy-diagnostic">复制诊断信息</button>${value.repairable ? '<button class="btn btn--secondary btn--32" data-action="upgrade-repair-demo">修复到v0.3.9</button>' : ''}</div>`;
+    if (value.mixed) return `<dl class="kv"><dt>上次完整确认版本</dt><dd>${BASE_VERSION}</dd><dt>服务可用性</dt><dd>可继续使用 · 刚刚独立确认（设计示例）</dd><dt>最终目标与结果</dt><dd>${TARGET_VERSION} · 未完成</dd></dl><details><summary>查看实际组件与诊断</summary><p>API仍为原版本，协调器已替换；未确认整体安装成功。阶段：验证并切换服务；诊断内容不含口令和会话凭据（设计示例）。</p></details><p>${value.repairable ? '服务端已核验安全修复方案，目标为v0.3.9；只有主动点击才提交新的固定修复请求。' : '暂没有合格安全修复方案；继续使用并检查状态，不盲目回退或重启。'}</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-show-task">继续使用</button><button class="btn btn--tertiary btn--32" data-action="upgrade-check-mixed-status">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-copy-diagnostic">复制诊断信息</button>${value.repairable ? '<button class="btn btn--secondary btn--32" data-action="upgrade-repair-demo">修复到v0.3.9</button>' : ''}</div>`;
     if (value.chain) return `<dl class="kv"><dt>最终目标</dt><dd>${TARGET_VERSION}（固定）</dd><dt>兼容准备</dt><dd>${BRIDGE_VERSION} 已确认</dd><dt>本次用户计划</dt><dd>进行中 · 正在更新最终目标</dd></dl><details><summary>查看内部执行记录</summary><p>兼容准备技术attempt已确认100%；其历史保持不变。本次用户计划尚未完成，无整体100%或刷新按钮。</p></details>`;
     if (value.defaultImageChanged) return '<p>本次受管默认镜像已更新。之后选择该默认镜像的新任务使用Codex 0.163.0、Claude Code 2.1.302；已有沙箱继续原环境。用户自定义默认和显式选择的其他镜像保持原配置（设计示例）。</p>';
     if (value.checking) return '<p>正在后台核验约1GB数据；原任务继续运行。状态查询只返回最后已确认的事实及时间，缺少新证据时标为待确认（设计示例）。</p>';
@@ -722,6 +722,7 @@
     paintDemoEvidence();
   }
   function closeDemo() { const modal = P.topModal(); if (modal && modal.kind === 'upgrade-demo') P.closeModal(modal); }
+  P.actions['upgrade-check-mixed-status'] = () => P.actions['upgrade-check-version']();
   P.actions['upgrade-copy-diagnostic'] = () => {
     const text = '设计示例：升级未完成，部分组件已更新；最终目标v0.3.9；服务可用性刚刚确认；不含凭据。';
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => P.announce('已复制脱敏设计诊断。'), () => P.announce(text)); else P.announce(text);
@@ -847,10 +848,10 @@
       const meter = $('.meter', phases);
       meter.removeAttribute('aria-valuenow'); meter.setAttribute('aria-valuetext', '启动总体进度未知');
       $('.meter__bar', meter).style.width = '0%';
-      $('.phases__list', phases).innerHTML = '<li class="phases__item" data-phase-state="done"><span class="icon phases__icon i-check" aria-hidden="true"></span><span class="phases__label">准备代码副本</span><span class="phases__meta">已确认</span></li><li class="phases__item" data-phase-state="active"><span class="icon icon--14 phases__icon i-circle-filled" aria-hidden="true"></span><span class="phases__label">运行环境创建／启动</span><p class="phases__note">控制请求等待期已结束，原操作尚未确认终结。正在核验同一个沙箱；当前没有足够事实判断是否在下载镜像。</p></li><li class="phases__item" data-phase-state="pending"><span class="icon icon--14 phases__icon i-circle" aria-hidden="true"></span><span class="phases__label">环境初始化与Agent工具准备</span><span class="phases__meta">等待确认</span></li>';
+      $('.phases__list', phases).innerHTML = '<li class="phases__item" data-phase-state="done"><span class="icon phases__icon i-check" aria-hidden="true"></span><span class="phases__label">准备代码副本</span><span class="phases__meta">已确认</span></li><li class="phases__item" data-phase-state="active"><span class="icon icon--14 phases__icon i-circle-filled" aria-hidden="true"></span><span class="phases__label">运行环境创建／启动</span><p class="phases__note">暂未收到启动结果，正在确认原操作状态，不会重复启动。</p></li><li class="phases__item" data-phase-state="pending"><span class="icon icon--14 phases__icon i-circle" aria-hidden="true"></span><span class="phases__label">环境初始化与Agent工具准备</span><span class="phases__meta">等待确认</span></li>';
       let facts = $('[data-upgrade-startup-facts]', phases);
       if (!facts) { facts = document.createElement('section'); facts.dataset.upgradeStartupFacts = ''; phases.appendChild(facts); }
-      facts.innerHTML = `<dl class="kv"><dt>原启动操作</dt><dd>demo-start-1 · ${unknownResult ? '结果暂不可查' : '仍在执行'}（设计示例）</dd><dt>启动已用时间</dt><dd>10分33秒</dd><dt>阶段已用时间</dt><dd>8分05秒</dd><dt>最后实质进展</dt><dd>8分05秒前</dd><dt>最近查询／心跳</dt><dd>${unknownResult ? '暂时未取得新观测' : '刚刚；可联系不等于已有新进展'}</dd></dl><p>名额与原沙箱保留；检查、继续等待或重新打开页面均不重复启动，不重置历史时间。</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-startup-check">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-startup-wait">继续等待</button></div>`;
+      facts.innerHTML = `<dl class="kv"><dt>原启动请求</dt><dd>${unknownResult ? '结果暂不可查' : '仍在执行'}（设计示例）</dd><dt>启动已用时间</dt><dd>10分33秒</dd><dt>阶段已用时间</dt><dd>8分05秒</dd><dt>最后实质进展</dt><dd>8分05秒前</dd><dt>最近查询／心跳</dt><dd>${unknownResult ? '暂时未取得新观测' : '刚刚；可联系不等于已有新进展'}</dd></dl><details><summary>查看启动诊断</summary><p>原操作：demo-start-1（设计示例）</p></details><p>名额与原沙箱保留；检查、继续等待或重新打开页面均不重复启动，不重置历史时间。</p><div class="btn-row"><button class="btn btn--secondary btn--32" data-action="upgrade-startup-check">检查状态</button><button class="btn btn--tertiary btn--32" data-action="upgrade-startup-wait">继续等待</button></div>`;
     };
   }
   P.actions['upgrade-startup-check'] = () => P.announce('已只读查询原启动操作；设计夹具仍为原状态，未重复启动。');
