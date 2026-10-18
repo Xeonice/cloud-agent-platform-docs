@@ -31,8 +31,8 @@ async function listener(t, handler, port = 0) {
       let raw = "";
       for await (const chunk of request) raw += chunk;
       const body = raw ? JSON.parse(raw) : undefined;
-      const value = await handler(request, body);
-      if (!response.destroyed) {
+      const value = await handler(request, body, response);
+      if (!response.destroyed && !response.writableEnded) {
         response.setHeader("content-type", "application/json");
         response.end(JSON.stringify(value));
       }
@@ -73,13 +73,13 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
   };
   let generation = 1;
   const oldBinding = structuredClone(binding);
-  const origin = await listener(t, async (request, body) => {
+  const origin = await listener(t, async (request, body, response) => {
     const path = new URL(request.url, "http://127.0.0.1").pathname;
     const phase = body?.action ?? path;
     calls.push({ path, phase, method: request.method, body });
     if (delays[phase]) await sleep(delays[phase]);
     if (extra) {
-      const handled = await extra({ path, body, record });
+      const handled = await extra({ path, body, record, response });
       if (handled !== undefined) return handled;
     }
     if (path === "/start") return record;
@@ -273,6 +273,105 @@ test(
     );
   },
 );
+
+test("preparation waits for a real 5.2s observation inside its original budget", async (t) => {
+  let observations = 0;
+  const f = await boundary(t, {
+    extra: async ({ path }) => {
+      if (path === "/internal/upgrades/observation" && ++observations === 1)
+        await sleep(5200);
+    },
+  });
+  const started = Date.now();
+  const result = await f.executor.coordinatorHandoff(f.input);
+  assert.ok(Date.now() - started >= 5200);
+  assert.equal(result.qualified, true);
+  assert.equal(f.calls.filter((call) => call.path === "/start").length, 1);
+  assert.deepEqual(criticalCalls(f).map((call) => call.phase), ["quiesce", "release", "adopt"]);
+});
+
+test("a completed stale observation is reread serially without restarting or reposting prepare", async (t) => {
+  let observations = 0, active = 0, maxActive = 0;
+  const f = await boundary(t, {
+    extra: async ({ path, response }) => {
+      if (path !== "/internal/upgrades/observation") return;
+      active++; maxActive = Math.max(maxActive, active); observations++;
+      await sleep(25); active--;
+      if (observations === 1) {
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(JSON.stringify({ code: "OBSERVATION_STALE" }));
+        return null;
+      }
+    },
+  });
+  const result = await f.executor.coordinatorHandoff(f.input);
+  assert.equal(result.qualified, true);
+  assert.equal(maxActive, 1);
+  assert.equal(f.calls.filter((call) => call.path === "/start").length, 1);
+  assert.equal(f.calls.filter((call) => call.phase === "prepare").length, 1);
+  assert.equal(observations, 3); // initial stale, fresh preflight, fresh post-adoption
+});
+
+for (const code of ["OBSERVATION_SCOPE_CHANGED", "GLOBAL_SCHEMA_INTEGRITY_FAILED", "UPGRADE_FENCE_EXPIRED"]) {
+  test("preparation never retries a completed hard rejection: " + code, async (t) => {
+    let observations = 0;
+    const f = await boundary(t, {
+      extra: async ({ path, response }) => {
+        if (path !== "/internal/upgrades/observation") return;
+        observations++;
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(JSON.stringify({ code }));
+        return null;
+      },
+    });
+    await assert.rejects(f.executor.coordinatorHandoff(f.input), (error) => error.code === code);
+    assert.equal(observations, 1);
+    assert.deepEqual(criticalCalls(f), []);
+    assert.equal(f.calls.filter((call) => call.phase === "prepare").length, 0);
+  });
+}
+
+test("unknown observation at the original deadline is not reread or allowed to quiesce", async (t) => {
+  let observations = 0;
+  const f = await boundary(t, {
+    budgetMs: 250,
+    extra: async ({ path }) => {
+      if (path === "/internal/upgrades/observation") {
+        observations++;
+        await sleep(400);
+      }
+    },
+  });
+  await assert.rejects(f.executor.coordinatorHandoff(f.input), (error) => {
+    assert.equal(error.name, "TimeoutError");
+    assert.equal(error.rpcContext.path, "/internal/upgrades/observation");
+    assert.ok(error.rpcContext.timeoutMs <= 250);
+    return true;
+  });
+  assert.equal(observations, 1);
+  assert.deepEqual(criticalCalls(f), []);
+  assert.equal(f.calls.filter((call) => call.phase === "prepare").length, 0);
+});
+
+test("repeated completed stale reads share the original deadline and never prepare", async (t) => {
+  let observations = 0;
+  const f = await boundary(t, {
+    budgetMs: 250,
+    extra: async ({ path, response }) => {
+      if (path !== "/internal/upgrades/observation") return;
+      observations++;
+      response.writeHead(409, { "content-type": "application/json" });
+      response.end(JSON.stringify({ code: "OBSERVATION_STALE" }));
+      return null;
+    },
+  });
+  const started = Date.now();
+  await assert.rejects(f.executor.coordinatorHandoff(f.input), (error) => error.code === "COORDINATOR_BASELINE_NOT_QUALIFIED");
+  assert.ok(Date.now() - started >= 200);
+  assert.ok(observations >= 1 && observations <= 3);
+  assert.deepEqual(criticalCalls(f), []);
+  assert.equal(f.calls.filter((call) => call.phase === "prepare").length, 0);
+});
 
 test(
   "only local prepare may change the transport deadline",

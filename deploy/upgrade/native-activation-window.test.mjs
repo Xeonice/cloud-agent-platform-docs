@@ -48,7 +48,12 @@ async function activationBoundary(t, options = {}) {
       }
       else if (path === "/internal/upgrades/observation") {
         assert.equal(Number(url.searchParams.get("weight")), 100);
-        observations++; result = measurement(); if (options.transform) options.transform(result, { observations, binding, requests }); last = result;
+        observations++;
+        if (options.staleAt?.includes(observations)) {
+          res.writeHead(409, { "content-type": "application/json" }); res.end(JSON.stringify({ code: "OBSERVATION_STALE" })); return;
+        }
+        if (observations === 1 && options.firstObservationDelayMs) await new Promise(resolve => { const timer = setTimeout(() => { timers.delete(timer); resolve(); }, options.firstObservationDelayMs); timers.add(timer); });
+        result = measurement(); if (options.transform) options.transform(result, { observations, binding, requests }); last = result;
         if (options.revokeAfterObservation) revoked = true;
       } else if (path.endsWith("/validate-switch")) {
         validations++; assert.equal(body.actual.routeGeneration, options.webReused ? 6 : 7); assert.equal(body.actual.weight, 100);
@@ -85,6 +90,26 @@ test("changed API activation waits after the actual Web generation reset for an 
   assert.equal(result.activationScope.observerEpoch, "accepted-observer-epoch");
   assert.equal(result.activationObservation.baseline.windowMs, 60000);
   assert.equal(result.compatibility.qualified, true);
+  f.unchanged();
+});
+
+test("activation retains its original deadline while a read-only observation exceeds 5s", async t => {
+  const f = await activationBoundary(t, { alwaysFull: true, firstObservationDelayMs: 5200, policy: { candidateStartupMs: 8000 } });
+  const started = Date.now();
+  const result = await f.executor.activationEvidence(f.input);
+  assert.ok(Date.now() - started >= 5200);
+  assert.equal(result.compatibility.qualified, true);
+  assert.equal(f.counts().observations, 1);
+  f.unchanged();
+});
+
+test("a completed stale read resets activation's consecutive evaluations", async t => {
+  const f = await activationBoundary(t, { alwaysFull: true, staleAt: [2], transform: (result, { observations }) => {
+    if (observations === 1 || observations === 3) result.candidate.errorRate = 0.02;
+  } });
+  const result = await f.executor.activationEvidence(f.input);
+  assert.equal(result.compatibility.qualified, true);
+  assert.equal(f.counts().observations, 4);
   f.unchanged();
 });
 

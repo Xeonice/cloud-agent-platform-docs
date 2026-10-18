@@ -21,6 +21,23 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
   async function supervise(path,attempt,fence,kind,requestTimeoutMs=120000) {const r=await fetcher(supervisorOrigin+path,{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':supervisorKey},body:JSON.stringify({attemptId:attempt.attemptId,fence,kind}),signal:AbortSignal.timeout(requestTimeoutMs)});const result=await r.json();invariant(r.ok,result.code||'SUPERVISOR_RPC_FAILED');return result;}
   const start=(kind,artifact,attempt,fence,requestTimeoutMs)=>supervise('/start',attempt,fence,kind,requestTimeoutMs);
   function remainingStartup(deadline,code='ROLE_PREPARATION_STARTUP_EXCEEDED'){const remaining=deadline-Date.now();invariant(remaining>0,code);return Math.min(120000,remaining);}
+  async function boundedObservation(attempt,fence,weight,deadline,code,onStale) {
+    while(true) {
+      const timeoutMs=remainingStartup(deadline,code);
+      try {
+        const measured=await coordinator.observation(attempt.attemptId,{fence,weight},{timeoutMs});
+        remainingStartup(deadline,code);return measured;
+      } catch(error) {
+        // Only a completed HTTP rejection proves that the previous read and
+        // its worker have finished. Never overlap scans after an unknown result,
+        // retry a mutation, or weaken scope/integrity/freshness qualification.
+        if(error.code!=='OBSERVATION_STALE'||!Number.isInteger(error.status)||error.status<400)throw error;
+        remainingStartup(deadline,code);onStale?.();
+        await coordinator.assertFence(attempt.attemptId,fence);
+        await new Promise(ok=>setTimeout(ok,Math.min(100,remainingStartup(deadline,code))));
+      }
+    }
+  }
   async function webHealth(actual,requestTimeoutMs=2000){const web=actual.web;try{invariant(web?.origin,'WEB_ORIGIN_UNKNOWN');const u=new URL(web.origin);invariant(u.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(u.hostname)&&u.pathname==='/'&&!u.search&&!u.hash&&!u.username&&!u.password,'WEB_ORIGIN_UNKNOWN');const [processResponse,buildResponse]=await Promise.all([fetcher(u.origin+'/web-process',{signal:AbortSignal.timeout(requestTimeoutMs)}),fetcher(u.origin+'/web-build',{signal:AbortSignal.timeout(requestTimeoutMs)})]);invariant(processResponse.ok&&buildResponse.ok,'WEB_PROCESS_UNHEALTHY');const identity=await processResponse.json(),build=await buildResponse.json();invariant(identity.instanceId===instanceId&&identity.artifactDigest===web.digest&&Number.isSafeInteger(identity.pid)&&identity.pid>0&&typeof identity.startIdentity==='string'&&/^[a-f0-9]{40}$/.test(build.webRevision)&&identity.webRevision===build.webRevision,'WEB_PROCESS_IDENTITY_MISMATCH');return {qualified:true,artifactDigest:identity.artifactDigest,webRevision:build.webRevision,startIdentity:identity.startIdentity,pid:identity.pid,observedAt:new Date().toISOString()};}catch(error){return {qualified:false,artifactDigest:web?.digest||null,reason:error.code||'WEB_PROCESS_UNREACHABLE',observedAt:new Date().toISOString()};}}
 
   async function waitProcess(kind,attempt,fence,deadline=Date.now()+120000){while(true){remainingStartup(deadline,'CANDIDATE_PROCESS_STARTUP_EXCEEDED');await coordinator.assertFence(attempt.attemptId,fence);const observed=await supervise('/observe',attempt,fence,kind,remainingStartup(deadline,'CANDIDATE_PROCESS_STARTUP_EXCEEDED'));remainingStartup(deadline,'CANDIDATE_PROCESS_STARTUP_EXCEEDED');if(observed.qualified===true)return observed;await new Promise(ok=>setTimeout(ok,Math.min(100,Math.max(1,deadline-Date.now()))));}}
@@ -105,9 +122,9 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       const admitted=await admitConfirmedSource(attempt,fence,await entry('/binding'),deadline,'COORDINATOR_SOURCE_BASELINE_NOT_QUALIFIED'),current=admitted.binding;
       bindingAdmission ||= admitted.receipt;
       invariant(current.instanceId===instanceId&&current.attemptId===attempt.attemptId&&current.fence===fence&&current.weight===0&&current.oldApi?.digest===source.artifactDigest,'COORDINATOR_SOURCE_BASELINE_ROUTE_CHANGED');
-      // The 60s collection happens in the Observer. Each read remains an ordinary
-      // short RPC, after adoption has already restored the unique live writer.
-      const measured=await coordinator.observation(attempt.attemptId,{fence,weight:0}),baseline=measured.baseline,p=measured.probes,hard=measured.invariants;
+      // The Observer collects the real window independently. A read also waits
+      // for its uncached read-only integrity worker, within this same deadline.
+      const measured=await boundedObservation(attempt,fence,0,deadline,'COORDINATOR_SOURCE_BASELINE_NOT_QUALIFIED'),baseline=measured.baseline,p=measured.probes,hard=measured.invariants;
       invariant(typeof baseline?.known==='boolean'&&typeof baseline.qualified==='boolean'&&Number.isSafeInteger(measured.coordinatorGeneration)&&measured.coordinatorGeneration>0&&typeof measured.observerEpoch==='string'&&measured.observerEpoch.length>0,'COORDINATOR_SOURCE_BASELINE_PROTOCOL_REQUIRED');
       invariant(expectedGeneration===undefined||measured.coordinatorGeneration===expectedGeneration,'COORDINATOR_SOURCE_BASELINE_GENERATION_CHANGED');
       // A newly admitted scope has no measurements before the first real
@@ -160,7 +177,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     const unchanged=async()=>{const current=await read(()=>entry('/binding'));invariant(canonical(fixed(current))===frozen,'ACTIVATION_BINDING_CHANGED');return current;};
     while(true) {
       await fenceCheck();await unchanged();
-      const measured=await read(()=>coordinator.observation(attempt.attemptId,{fence,weight:100}));
+      const measured=await read(()=>boundedObservation(attempt,fence,100,deadline,'ACTIVATION_SCOPE_COLLECTION_EXCEEDED',()=>{previous={};nextEvaluation=0;}));
       invariant(Number.isSafeInteger(measured.coordinatorGeneration)&&measured.coordinatorGeneration>0&&typeof measured.observerEpoch==='string'&&measured.observerEpoch.length>0,'ACTIVATION_OBSERVATION_PROTOCOL_REQUIRED');
       invariant(measured.coordinatorGeneration===generation&&measured.observerEpoch===epoch,'ACTIVATION_OBSERVER_SCOPE_CHANGED');
       const at=Date.parse(measured.observedAt),now=Date.now();
@@ -220,7 +237,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     const admission=kind==='owner'?await admitConfirmedSource(attempt,fence,await entry('/binding'),deadline):null;
     const candidate=await start(kind,artifact,attempt,fence,remainingStartup(deadline));await waitProcess(kind,attempt,fence,deadline);
     if(kind==='coordinator'){
-      while(true){remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await coordinator.assertFence(attempt.attemptId,fence);const measured=await coordinator.observation(attempt.attemptId,{fence,weight:0}),p=measured.probes,baseline=measured.baseline,hard=measured.invariants;remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');
+      while(true){remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await coordinator.assertFence(attempt.attemptId,fence);const measured=await boundedObservation(attempt,fence,0,deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED'),p=measured.probes,baseline=measured.baseline,hard=measured.invariants;remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');
         const enough=Number(baseline?.requests)>=attempt.plan.policy.minRequests;
         const safe=measured.sharedStateHealthy===true&&measured.continuity?.qualified===true&&hard&&['unauthorizedStops','resourceRebuilds','duplicateCommands','duplicateOccurrences','writerConflicts','migrationDifferences','integrityFailures'].every(k=>hard[k]===0)&&p?.hz>=attempt.plan.policy.probeHz&&p.failures===0&&p.maxLatencyMs<=attempt.plan.policy.requestDeadlineMs&&p.attachMaxMs<=attempt.plan.policy.attachDeadlineMs&&baseline?.errorRate===0;
         if(enough&&safe)break;invariant(Date.now()<deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await new Promise(ok=>setTimeout(ok,100));
@@ -264,7 +281,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       }
       return {definitelyNotApplied:true};
     },
-    async observe({attempt,fence,weight}) { await coordinator.assertFence(attempt.attemptId,fence);const observation=await coordinator.observation(attempt.attemptId,{fence,weight});const continuity=await coordinator.continuity(attempt.attemptId,{fence});const web=await webHealth(await entry('/binding'));return {...observation,continuity,web}; },
+    async observe({attempt,fence,weight}) {const deadline=Date.now()+Math.min(120000,attempt.plan.policy.candidateStartupMs||120000);await coordinator.assertFence(attempt.attemptId,fence);const observation=await boundedObservation(attempt,fence,weight,deadline,'OBSERVATION_COLLECTION_EXCEEDED');const continuity=await coordinator.continuity(attempt.attemptId,{fence});const web=await webHealth(await entry('/binding'));remainingStartup(deadline,'OBSERVATION_COLLECTION_EXCEEDED');return {...observation,continuity,web}; },
     async applyRoute({attempt,fence,weight,candidate}) {await coordinator.assertFence(attempt.attemptId,fence);let current=await entry('/binding'),proof;if(current.weight===0&&weight>0){proof=await sourceBaseline(attempt,fence);current=proof.binding;}const next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{instanceId,attemptId:attempt.attemptId,fence,routeGeneration:current.routeGeneration+1,weight,candidateApi:{origin:candidate.origin,digest:candidate.artifactDigest}});const result=await entry('/binding',next);return proof?{...result,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission}:result;},
     async bindWeb({attempt,fence,artifact}) {const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000);await coordinator.assertFence(attempt.attemptId,fence);const process=await start('web',artifact,attempt,fence,remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED')),observed=await waitProcess('web',attempt,fence,deadline);const web={origin:process.origin,root:join(artifact.root,'web'),digest:attempt.manifest.components.web.artifactDigest,treeDigest:artifact.treeDigest},health=await webHealth({web},Math.min(2000,remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED')));remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED');invariant(health.qualified===true&&health.webRevision===attempt.manifest.components.web.webRevision&&health.startIdentity===process.startIdentity&&health.pid===observed.pid,'WEB_CANDIDATE_NOT_READY');await coordinator.assertFence(attempt.attemptId,fence);const current=await entry('/binding');remainingStartup(deadline,'WEB_CANDIDATE_STARTUP_EXCEEDED');const next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{fence,attemptId:attempt.attemptId,routeGeneration:current.routeGeneration+1,web,retainedWeb:current.web.digest===web.digest?current.retainedWeb:[current.web,...current.retainedWeb].filter((w,i,a)=>a.findIndex(x=>x.digest===w.digest)===i)});return entry('/binding',next);},
     async actual() {return entry('/binding');},
@@ -273,7 +290,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     // batch writes and user-facing health/attachment deadlines remain unchanged.
     async migration({attempt,fence,operationId,action,checkpoint}) {return coordinator.migration(attempt.attemptId,{fence,operationId,action,planDigest:attempt.plan.migrationPath.migrationPlanDigest,checkpoint,policy:attempt.plan.policy},['prepare','status'].includes(action)?{timeoutMs:120000}:undefined);},
     async activationEvidence({attempt,fence}) {if(attempt.plan.apiReused!==true)return changedApiActivation(attempt,fence);await sourceBaseline(attempt,fence);const actual=await entry('/binding'),compatibility=await coordinator.validateSwitch(attempt.attemptId,{fence,actual,manifestDigest:attempt.targetDigest}),continuity=await coordinator.continuity(attempt.attemptId,{fence});const actualInstaller=await supervise('/current-installer',attempt,fence,'installer');return {actual,actualInstaller,compatibility,continuity,observedAt:new Date().toISOString(),manifestDigest:attempt.targetDigest,instanceId};},
-    async fallbackEligibility({attempt,fence,fault}) {return coordinator.fallbackEligibility(attempt.attemptId,{fence,fault,actual:await entry('/binding')});},
+    async fallbackEligibility({attempt,fence,fault}) {const deadline=Date.now()+120000;const actual=await entry('/binding'),result=await coordinator.fallbackEligibility(attempt.attemptId,{fence,fault,actual},{timeoutMs:remainingStartup(deadline,'FALLBACK_ELIGIBILITY_COLLECTION_EXCEEDED')});remainingStartup(deadline,'FALLBACK_ELIGIBILITY_COLLECTION_EXCEEDED');return result;},
     async recover({attempt,fence,recoveryPlan}) {await coordinator.assertFence(attempt.attemptId,fence);if(recoveryPlan.coordinator||recoveryPlan.owner){const transitioned=await coordinator.coordinatorRecovery(attempt.attemptId,{fence,recoveryPlanDigest:recoveryPlan.planDigest});invariant(transitioned.commitKnown===true&&transitioned.qualified===true&&transitioned.originalResourcesPreserved===true,'COORDINATOR_RECOVERY_UNCONFIRMED');}const current=await entry('/binding'),next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{fence,attemptId:attempt.attemptId,routeGeneration:current.routeGeneration+1});if(recoveryPlan.api) {next.oldApi=recoveryPlan.api;next.weight=0;}if(recoveryPlan.web){next.retainedWeb=[current.web,...current.retainedWeb];next.web=recoveryPlan.web;}return entry('/binding',next);},
     // Deliberately no VM lifecycle, whole-volume restore, shell or scheduler method.
   };

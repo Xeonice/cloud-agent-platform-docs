@@ -16,11 +16,25 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     invariant(Number.isSafeInteger(options.timeoutMs)&&options.timeoutMs>0&&options.timeoutMs<=120000,'INVALID_MIGRATION_TIMEOUT');
     return {timeoutMs:options.timeoutMs};
   }
+  function controlReadOptions(options) {
+    if(options?.timeoutMs===undefined)return undefined;
+    invariant(Number.isSafeInteger(options.timeoutMs)&&options.timeoutMs>0&&options.timeoutMs<=120000,'INVALID_CONTROL_READ_TIMEOUT');
+    return {timeoutMs:options.timeoutMs};
+  }
   async function rpc(path,body,selection,requestOptions) {
-    const activeOrigin=await actualOrigin(selection);
-    const r=await fetcher(activeOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':key,'x-platform-instance-id':instanceId},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestOptions?.timeoutMs??timeoutMs)});
-    const result=await r.json();if(!r.ok)throw Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status});
-    return result.data ?? result;
+    const started=Date.now(),requestTimeoutMs=requestOptions?.timeoutMs??timeoutMs;
+    try {
+      const activeOrigin=await actualOrigin(selection);
+      const r=await fetcher(activeOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':key,'x-platform-instance-id':instanceId},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestTimeoutMs)});
+      const result=await r.json();if(!r.ok)throw Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status});
+      return result.data ?? result;
+    } catch(error) {
+      const failure=error instanceof Error?error:new Error('Coordinator RPC failed',{cause:error});
+      const context={path:path.split('?')[0],action:['prepare','status','quiesce','release','adopt','batch'].includes(body?.action)?body.action:null,timeoutMs:requestTimeoutMs,startedAt:new Date(started).toISOString(),elapsedMs:Date.now()-started};
+      // Only fixed routing/timing facts reach the durable fault receipt. Never
+      // include origins, headers, body, credentials or query parameter values.
+      failure.rpcContext=context;failure.faultEvidence={rpc:context};throw failure;
+    }
   }
   const prefix=id=>'/internal/upgrades/'+encodeURIComponent(id);
   return {
@@ -33,10 +47,10 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     snapshot:id=>rpc(prefix(id)),
     assertFence:(id,fence)=>rpc(prefix(id)+'/renew',{fence,controllerId:null,checkOnly:true},{allowQuiescing:true,attemptId:id,fence}),
     migration:(id,body,requestOptions)=>rpc(prefix(id)+'/migration',body,undefined,migrationOptions(body,requestOptions)),
-    observation:(id,body)=>rpc('/internal/upgrades/observation?attemptId='+encodeURIComponent(id)+'&fence='+body.fence+'&weight='+body.weight),
+    observation:(id,body,requestOptions)=>rpc('/internal/upgrades/observation?attemptId='+encodeURIComponent(id)+'&fence='+body.fence+'&weight='+body.weight,undefined,undefined,controlReadOptions(requestOptions)),
     continuity:(id,body)=>rpc('/internal/upgrades/continuity?attemptId='+encodeURIComponent(id)+'&fence='+body.fence),
     validateSwitch:(id,body)=>rpc(prefix(id)+'/validate-switch',body),
-    fallbackEligibility:(id,body)=>rpc(prefix(id)+'/fallback-eligibility',body),
+    fallbackEligibility:(id,body,requestOptions)=>rpc(prefix(id)+'/fallback-eligibility',body,undefined,controlReadOptions(requestOptions)),
     controllerHandoff:(id,body)=>rpc(prefix(id)+'/controller-handoff',body),
     coordinatorHandoff:async(id,body,requestOptions)=>rpc(prefix(id)+'/coordinator-handoff',body,{allowQuiescing:true,attemptId:id,fence:body.fence},preparationOptions(body,requestOptions)),
     ownerCandidate:async(id,body,requestOptions)=>rpc(prefix(id)+'/owner-candidate',body,undefined,preparationOptions(body,requestOptions)),
