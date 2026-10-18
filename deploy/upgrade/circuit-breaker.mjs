@@ -11,7 +11,8 @@ export function inspectObservation(observation,policy,now=Date.now(),previous={}
   // gathering a fresh window. Missing traffic proof cannot hide a dead Web/API.
   if(observation.web?.qualified===false)return {qualified:false,fault:'WEB_UNHEALTHY',componentScope:['web']};
   const p=observation.probes,cp=observation.candidateProbes;
-  const hardProbe=(lane,attach=false)=>!lane||typeof lane.failures!=='number'||lane.failures!==0||(lane.known!==false&&!Number.isFinite(lane.maxLatencyMs))||(Number.isFinite(lane.maxLatencyMs)&&lane.maxLatencyMs>policy.requestDeadlineMs)||(attach&&(!Number.isFinite(lane.attachMaxMs)||lane.attachMaxMs>policy.attachDeadlineMs));
+  const emptyProbe=lane=>lane?.known===false&&lane.samples===0&&lane.failures===0&&lane.maxLatencyMs===null&&lane.windowMs===0;
+  const hardProbe=(lane,attach=false)=>!lane||typeof lane.failures!=='number'||lane.failures!==0||(!Number.isFinite(lane.maxLatencyMs)&&!emptyProbe(lane))||(Number.isFinite(lane.maxLatencyMs)&&lane.maxLatencyMs>policy.requestDeadlineMs)||(attach&&(!Number.isFinite(lane.attachMaxMs)&&!(emptyProbe(lane)&&lane.attachMaxMs===null)||Number.isFinite(lane.attachMaxMs)&&lane.attachMaxMs>policy.attachDeadlineMs));
   if(hardProbe(p,true)||(cp!==undefined&&hardProbe(cp)))return {qualified:false,fault:'SLO_PROBE_FAILED'};
   for(const lane of [p,...(cp===undefined?[]:[cp])]) {
     const span=lane.windowMs??observation.windowMs;

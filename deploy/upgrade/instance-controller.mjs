@@ -171,7 +171,13 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       let evidence,inspection;try{
         // A reused API keeps its confirmed source route. Observe that physical
         // endpoint without claiming an absent candidate or changing the binding.
-        const actual=await executor.actual(),weight=actual.weight;
+        let actual=await executor.actual();
+        if(actual.attemptId===accepted.attemptId&&actual.fence!==session.fence){
+          invariant(typeof executor.refreshConfirmedFence==='function','CONFIRMED_RETENTION_FENCE_UNCONFIRMED');
+          const admitted=await executor.refreshConfirmedFence({attempt,fence:session.fence,current:actual});actual=admitted.binding;
+          journal.retentionBindingAdmission=admitted.receipt;
+        }
+        const weight=actual.weight;
         const servingApi=weight===100?actual.candidateApi:actual.oldApi;
         invariant((weight===0||weight===100)&&(plan.apiReused===true||weight===100)&&servingApi?.digest===attempt.manifest.components.api.artifactDigest,'CONFIRMED_ROUTE_UNCONFIRMED');
         evidence=await executor.observe({attempt,fence:session.fence,weight});inspection=inspectObservation(evidence,plan.policy,Date.now(),journal.previousObservation||{});

@@ -1,6 +1,20 @@
 import { join } from 'node:path';
-import { invariant, canonical, digest } from './trust.mjs';
+import { invariant, canonical, digest, DIGEST } from './trust.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
+function fixedBinding(value) {
+  const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;
+}
+function servingBinding(value) {
+  const result=fixedBinding(value);delete result.fence;delete result.routeGeneration;return result;
+}
+// A Controller reclaim changes its lease fence, never the immutable activation
+// receipt. Bridge that historical gap only for the exact confirmed serving
+// binding; arbitrary older fences are not evidence of a confirmed source.
+function confirmedBindingReceipt(snapshot,current,instanceId) {
+  const step=snapshot.appliedSteps?.find(step=>step.stepId==='activation-confirm'),evidence=step?.evidence,actual=evidence?.actual;
+  invariant(snapshot.attempt?.state==='activation-confirmed'&&DIGEST.test(snapshot.attempt.targetDigest)&&evidence&&step.receiptDigest===digest(evidence)&&evidence.instanceId===instanceId&&evidence.manifestDigest===snapshot.attempt.targetDigest&&evidence.compatibility?.qualified===true&&evidence.continuity?.qualified===true&&actual?.instanceId===instanceId&&actual.attemptId===snapshot.attempt.attemptId&&current.attemptId===snapshot.attempt.attemptId&&[0,100].includes(actual.weight)&&Number.isSafeInteger(actual.fence)&&actual.fence>0&&Number.isSafeInteger(current.fence)&&current.fence>=actual.fence&&Number.isSafeInteger(actual.routeGeneration)&&actual.routeGeneration>0&&Number.isSafeInteger(current.routeGeneration)&&current.routeGeneration>=actual.routeGeneration&&canonical(servingBinding(actual))===canonical(servingBinding(current)),'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED');
+  return {step,evidence};
+}
 export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,entryKey,supervisorOrigin,supervisorKey,fetcher=fetch}) {
   invariant(supervisorOrigin&&supervisorKey?.length>=32,'SEPARATE_SUPERVISOR_REQUIRED');
   async function entry(path,body,requestTimeoutMs=5000) { const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':entryKey},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestTimeoutMs)});invariant(r.ok,'ENTRY_RPC_FAILED');return r.json(); }
@@ -28,7 +42,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
   async function admitConfirmedSource(attempt,fence,current,deadline,code='ROLE_PREPARATION_STARTUP_EXCEEDED') {
     if(current.weight===0)return admitWeightZero(attempt,fence,current);
     const remaining=()=>remainingStartup(deadline,code),read=async work=>{const budget=remaining();let timer;try{return await Promise.race([work(),new Promise((_,fail)=>{timer=setTimeout(()=>fail(Object.assign(Error(code),{code})),budget)})]);}finally{clearTimeout(timer);}};
-    const fixed=value=>{const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;};
+    const fixed=fixedBinding;
     invariant(current.instanceId===instanceId&&current.weight===100&&typeof current.attemptId==='string'&&current.attemptId!==attempt.attemptId&&Number.isSafeInteger(current.fence)&&current.fence<fence&&Number.isSafeInteger(current.routeGeneration)&&current.routeGeneration>0,'CONFIRMED_SOURCE_ROUTE_REQUIRED');
     await read(()=>coordinator.assertFence(attempt.attemptId,fence));
     const snapshot=await read(()=>coordinator.snapshot(attempt.attemptId)),activation=snapshot.sourceActivation,actual=snapshot.sourceActual;
@@ -40,7 +54,8 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     // Failed attempts consume attempt generations; only successful confirmation
     // advances activation generation. Bind each sequence to its durable source.
     const priorActivation=prior.sourceActivation?.activationGeneration;
-    invariant(prior.attempt?.attemptId===current.attemptId&&prior.attempt.instanceId===instanceId&&prior.attempt.state==='activation-confirmed'&&prior.fence===current.fence&&Number.isSafeInteger(prior.attempt.generation)&&prior.attempt.generation>=activation.activationGeneration&&prior.attempt.generation<snapshot.attempt.generation&&Number.isSafeInteger(priorActivation)&&priorActivation>0&&prior.plan?.sourceActivationGeneration===priorActivation&&priorActivation+1===activation.activationGeneration&&prior.attempt.targetReleaseId===activation.releaseId&&prior.manifest?.releaseId===activation.releaseId&&canonical(prior.manifest.components?.api)===canonical(source),'CONFIRMED_SOURCE_HISTORY_MISMATCH');
+    invariant(prior.attempt?.attemptId===current.attemptId&&prior.attempt.instanceId===instanceId&&prior.attempt.state==='activation-confirmed'&&Number.isSafeInteger(prior.fence)&&prior.fence>=current.fence&&prior.fence<fence&&Number.isSafeInteger(prior.attempt.generation)&&prior.attempt.generation>=activation.activationGeneration&&prior.attempt.generation<snapshot.attempt.generation&&Number.isSafeInteger(priorActivation)&&priorActivation>0&&prior.plan?.sourceActivationGeneration===priorActivation&&priorActivation+1===activation.activationGeneration&&prior.attempt.targetReleaseId===activation.releaseId&&prior.manifest?.releaseId===activation.releaseId&&canonical(prior.manifest.components?.api)===canonical(source),'CONFIRMED_SOURCE_HISTORY_MISMATCH');
+    const activationReceipt=prior.fence===current.fence?null:confirmedBindingReceipt(prior,current,instanceId);
     const step=prior.appliedSteps?.find(step=>step.stepId==='candidate'),record=step?.evidence;
     invariant(record&&step.receiptDigest===digest(record)&&record.instanceId===instanceId&&record.attemptId===current.attemptId&&record.kind==='api'&&record.origin===selected.origin&&record.artifactDigest===source.artifactDigest&&typeof record.startIdentity==='string'&&record.startIdentity.length>0&&Number.isSafeInteger(record.pid)&&record.pid>0,'CONFIRMED_SOURCE_CANDIDATE_RECEIPT_REQUIRED');
     invariant(typeof coordinator.processObserve==='function','SOURCE_PROCESS_OBSERVATION_REQUIRED');
@@ -56,7 +71,28 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     let binding;try{binding=await entry('/binding',next,Math.min(5000,remaining()));}catch(error){remaining();throw error;}remaining();
     invariant(canonical(binding)===canonical(next),'CONFIRMED_SOURCE_ADMISSION_UNKNOWN');
     await read(()=>coordinator.assertFence(attempt.attemptId,fence));
-    return {binding,receipt:{servingEquivalent:true,before,after:binding,sourceReleaseId:activation.releaseId,sourceActivationGeneration:activation.activationGeneration,sourceComponent:source,sourceCandidateReceiptDigest:step.receiptDigest,sourceProcess:observed}};
+    return {binding,receipt:{servingEquivalent:true,before,after:binding,sourceReleaseId:activation.releaseId,sourceActivationGeneration:activation.activationGeneration,sourceComponent:source,sourceCandidateReceiptDigest:step.receiptDigest,...(activationReceipt?{sourceActivationReceiptDigest:activationReceipt.step.receiptDigest}:{}),sourceProcess:observed}};
+  }
+  async function refreshConfirmedFence({attempt,fence,current}) {
+    await coordinator.assertFence(attempt.attemptId,fence);
+    const snapshot=await coordinator.snapshot(attempt.attemptId);
+    invariant(snapshot.attempt?.attemptId===attempt.attemptId&&snapshot.attempt.instanceId===instanceId&&snapshot.attempt.state==='activation-confirmed'&&snapshot.fence===fence&&snapshot.attempt.targetDigest===attempt.targetDigest&&snapshot.plan?.planDigest===attempt.plan.planDigest&&canonical(snapshot.manifest?.components)===canonical(attempt.manifest.components)&&current.instanceId===instanceId&&current.attemptId===attempt.attemptId&&Number.isSafeInteger(current.fence)&&current.fence<fence&&(current.weight===100||current.weight===0&&attempt.plan.apiReused===true),'CONFIRMED_RETENTION_SCOPE_CHANGED');
+    const anchor=confirmedBindingReceipt(snapshot,current,instanceId),selected=current.weight===100?current.candidateApi:current.oldApi,component=attempt.manifest.components.api;
+    invariant(selected?.digest===component.artifactDigest,'CONFIRMED_SOURCE_COMPONENT_MISMATCH');
+    const candidate=snapshot.appliedSteps?.find(step=>step.stepId==='candidate'),record=current.weight===100?candidate?.evidence:anchor.evidence.compatibility.identity;
+    invariant(record&&(current.weight!==100||candidate.receiptDigest===digest(record)&&record.attemptId===attempt.attemptId&&record.kind==='api'&&record.origin===selected.origin)&&record.instanceId===instanceId&&record.artifactDigest===component.artifactDigest&&typeof record.startIdentity==='string'&&record.startIdentity.length>0&&Number.isSafeInteger(record.pid)&&record.pid>0,'CONFIRMED_SOURCE_CANDIDATE_RECEIPT_REQUIRED');
+    const observed=await coordinator.processObserve({instanceId,attemptId:attempt.attemptId,kind:'api',origin:selected.origin,startIdentity:record.startIdentity,artifactDigest:record.artifactDigest,pid:record.pid});
+    const fresh=()=>{const age=Date.now()-Date.parse(observed.observedAt);return Number.isFinite(age)&&age>=-1000&&age<=attempt.plan.policy.observationFreshnessMs;};
+    invariant(observed.qualified===true&&observed.startIdentity===record.startIdentity&&observed.artifactDigest===record.artifactDigest&&observed.pid===record.pid&&fresh(),'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED');
+    const before=fixedBinding(current),latest=await entry('/binding');
+    invariant(canonical(fixedBinding(latest))===canonical(before),'CONFIRMED_SOURCE_BINDING_CHANGED');
+    await coordinator.assertFence(attempt.attemptId,fence);invariant(fresh(),'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED');
+    // Only authority metadata advances. StableEntry's generation CAS rejects a
+    // competing route commit and preserves every established HTTP/WS transport.
+    const next={...before,fence,routeGeneration:before.routeGeneration+1},binding=await entry('/binding',next);
+    invariant(canonical(binding)===canonical(next),'CONFIRMED_SOURCE_ADMISSION_UNKNOWN');
+    await coordinator.assertFence(attempt.attemptId,fence);
+    return {binding,receipt:{servingEquivalent:true,before,after:binding,activationReceiptDigest:anchor.step.receiptDigest,sourceProcess:observed}};
   }
   async function sourceBaseline(attempt,fence,expectedGeneration) {
     const policy=attempt.plan.policy,windowMs=Math.max(60000,policy.stageDurationMs||0);
@@ -194,6 +230,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     const applied=evidence.evidence??evidence;invariant(applied.qualified===true&&applied.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');if(kind==='coordinator'){invariant(Number.isSafeInteger(applied.generation)&&applied.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,applied.generation);return {...applied,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return admission?.receipt?{...applied,sourceBindingAdmission:admission.receipt}:applied;
   }
   return {
+    refreshConfirmedFence,
     async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT'); await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,'installer'); },
     async installerIsCurrent({attempt,fence}){const identity=await supervise('/current-installer',attempt,fence,'installer');return identity.artifactDigest===attempt.manifest.components.installer.artifactDigest&&identity.inputFingerprint===attempt.manifest.components.installer.inputFingerprint;},
     async installerCandidate({artifact,attempt,fence}){const record=await start('installer',artifact,attempt,fence);const deadline=Date.now()+120000;while(true){const result=await supervise('/observe',attempt,fence,'installer');if(result.qualified===true)return {...record,...result.identity};invariant(Date.now()<deadline,'INSTALLER_CANDIDATE_STARTUP_EXCEEDED');await new Promise(ok=>setTimeout(ok,100));}},

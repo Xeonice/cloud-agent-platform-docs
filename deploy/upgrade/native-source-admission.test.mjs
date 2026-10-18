@@ -35,8 +35,9 @@ async function boundary(t, options={}) {
   function fixed(b){const v={...b};for(const k of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete v[k];return v;}
   async function stamp(){const r=await fetch(entry.controlOrigin+'/fence',{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':key},body:JSON.stringify({instanceId,attemptId,fence})});assert.equal(r.status,200);}
   await stamp();
+  let activationActual=fixed(entry.observe());
   function currentSnapshot(){const v={attempt:{attemptId,instanceId,generation:attemptGeneration,state:'prepared'},fence,plan:{planDigest:'fixed-plan',sourceActivationGeneration:sourceGeneration},sourceActivation:{releaseId:sourceRelease(),activationGeneration:sourceGeneration,components:{api:components[source]}}};options.snapshot?.(v);return v;}
-  function historicalSnapshot(){const record=priorReceipt(),v={attempt:{attemptId:priorAttempt,instanceId,generation:priorAttemptGeneration,targetReleaseId:sourceRelease(),state:'activation-confirmed'},fence:fence-2,plan:{sourceActivationGeneration:priorSourceGeneration},sourceActivation:{releaseId:'previous-source',activationGeneration:priorSourceGeneration,components:{api:components[source-1]}},manifest:{releaseId:sourceRelease(),components:{api:components[source]}},appliedSteps:[{stepId:'candidate',receiptDigest:digest(record),evidence:record}]};options.prior?.(v);return v;}
+  function historicalSnapshot(){const record=priorReceipt(),targetDigest=digest('prior-manifest-'+priorAttempt),activation={instanceId,manifestDigest:targetDigest,actual:activationActual,compatibility:{qualified:true,identity:backends[source].identity},continuity:{qualified:true}},v={attempt:{attemptId:priorAttempt,instanceId,generation:priorAttemptGeneration,targetReleaseId:sourceRelease(),targetDigest,state:'activation-confirmed'},fence:fence-2,plan:{sourceActivationGeneration:priorSourceGeneration},sourceActivation:{releaseId:'previous-source',activationGeneration:priorSourceGeneration,components:{api:components[source-1]}},manifest:{releaseId:sourceRelease(),components:{api:components[source]}},appliedSteps:[{stepId:'candidate',receiptDigest:digest(record),evidence:record},{stepId:'activation-confirm',receiptDigest:digest(activation),evidence:activation}]};options.prior?.(v);return v;}
   const receiver=createServer(async(req,res)=>{
     try {
       let raw='';for await(const chunk of req)raw+=chunk;const body=raw?JSON.parse(raw):null,url=new URL(req.url,'http://localhost');requests.push({path:url.pathname,body,at:Date.now()});let result;
@@ -84,7 +85,7 @@ async function boundary(t, options={}) {
   t.after(async()=>{for(const timer of timers)clearTimeout(timer);for(const socket of sockets)socket.destroy();await entry.close();for(const server of servers){server.closeAllConnections();await new Promise(ok=>server.close(ok));}await rm(folder,{recursive:true,force:true});assert.deepEqual(errors,[]);});
   return {entry,executor,input,getBinding,requests,backends,components,web,retainedWeb,validations:()=>validations,
     async mutateBinding(change){const b=fixed(await getBinding()),next={...b,...change};const r=await fetch(entry.controlOrigin+'/binding',{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':key},body:JSON.stringify(next)});assert.equal(r.status,200);},
-    async nextUpgrade(){source=target;target++;priorSourceGeneration=sourceGeneration;sourceGeneration++;priorAttemptGeneration=attemptGeneration;attemptGeneration++;priorAttempt=attemptId;attemptId='accepted-next-upgrade';fence+=2;validations=0;await stamp();},
+    async nextUpgrade(){activationActual=fixed(entry.observe());source=target;target++;priorSourceGeneration=sourceGeneration;sourceGeneration++;priorAttemptGeneration=attemptGeneration;attemptGeneration++;priorAttempt=attemptId;attemptId='accepted-next-upgrade';fence+=2;validations=0;await stamp();},
   };
 }
 
@@ -172,4 +173,31 @@ test('source proof consumes the original startup budget and late reads never adm
 
 test('source process proof must remain fresh after the final binding and fence reads',async t=>{
   for(const [name,options] of [['slow binding read',{finalReadDelayMs:200}],['slow fence read',{finalFenceDelayMs:200}]])await t.test(name,async t=>{const f=await boundary(t,{...options,freshnessMs:100});await assert.rejects(f.executor.candidate(f.input()),{code:'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED'});assert.equal(f.requests.filter(r=>r.path==='/start'||r.path==='/binding'&&r.method==='POST').length,0);assert.equal((await f.getBinding()).weight,100);});
+});
+
+
+test('a reclaimed historical fence requires the immutable activation binding and still admits the actual live source',async t=>{
+  const f=await boundary(t,{prior:v=>v.fence++});
+  const before=await f.getBinding(),result=await f.executor.candidate(f.input());
+  assert.equal(before.fence,4);assert.equal(result.bindingAdmission.before.fence,4);
+  assert.match(result.bindingAdmission.sourceActivationReceiptDigest,/^sha256:/);
+  assert.equal(result.bindingAdmission.sourceProcess.startIdentity,'incarnation-1');
+  assert.equal((await f.getBinding()).fence,6);
+  assert.equal((await (await fetch(f.entry.origin+'/api/who')).json()).backend,1);
+});
+
+test('historical reclaim cannot substitute a forged activation receipt, wrong fence or competing binding',async t=>{
+  const changeAnchor=change=>v=>{v.fence++;const step=v.appliedSteps.find(s=>s.stepId==='activation-confirm');change(step.evidence);step.receiptDigest=digest(step.evidence);};
+  for(const [name,options,code] of [
+    ['missing receipt',{prior:v=>{v.fence++;v.appliedSteps=v.appliedSteps.filter(s=>s.stepId!=='activation-confirm');}},'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED'],
+    ['changed receipt bytes',{prior:v=>{v.fence++;v.appliedSteps[1].evidence.actual.routeGeneration++;}},'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED'],
+    ['different serving tuple',{prior:changeAnchor(e=>e.actual={...e.actual,web:{...e.actual.web,digest:'sha256:'+'f'.repeat(64)}})},'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED'],
+    ['other activation manifest',{prior:changeAnchor(e=>e.manifestDigest=digest('other-manifest'))},'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED'],
+    ['receipt fence newer than actual binding',{prior:changeAnchor(e=>e.actual={...e.actual,fence:5})},'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED'],
+    ['prior fence equal new active fence',{prior:v=>v.fence=6},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['prior fence newer than new active fence',{prior:v=>v.fence=7},'CONFIRMED_SOURCE_HISTORY_MISMATCH'],
+    ['source process replaced',{prior:v=>v.fence++,observed:v=>v.startIdentity='replacement'},'CONFIRMED_SOURCE_PROCESS_UNQUALIFIED'],
+    ['active lease revoked',{prior:v=>v.fence++,revokeAfterObserve:true},'UPGRADE_FENCE_EXPIRED'],
+    ['competing Entry commit',{prior:v=>v.fence++,raceCommit:true},'ENTRY_RPC_FAILED'],
+  ])await t.test(name,async t=>{const f=await boundary(t,options);await assert.rejects(f.executor.candidate(f.input()),{code});assert.equal(f.requests.filter(r=>r.path==='/start').length,0);assert.equal((await f.getBinding()).weight,100);});
 });
