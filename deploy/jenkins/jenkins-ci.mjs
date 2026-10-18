@@ -165,8 +165,7 @@ export async function runPhase(
   if (phase === "provider-caps")
     return run(context.node, ["scripts/check-fake-provider-caps.mjs"]);
   if (phase === "openapi") {
-    await pnpm(["openapi:emit"]);
-    await git(["diff", "--exit-code", "--", "openapi.json"]);
+    await pnpm(["check:openapi"]);
     return;
   }
   if (phase === "native") {

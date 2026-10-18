@@ -25,11 +25,14 @@ async function fixture(t) {
   );
   t.after(() => fs.rm(work, { recursive: true, force: true }));
   const source = join(work, "source");
-  for (const name of ["api", "web", "deploy/jenkins", "deploy/containers"])
+  for (const name of ["api", "web", "deploy/jenkins", "deploy/containers", "deploy/host", "deploy/ops", "deploy/upgrade"])
     await fs.mkdir(join(source, name), { recursive: true });
   for (const name of [
     "deploy/jenkins/public.test.mjs",
     "deploy/containers/docker.test.mjs",
+    "deploy/host/entry.test.mjs",
+    "deploy/ops/bootstrap.test.mjs",
+    "deploy/upgrade/fencing.test.mjs",
   ])
     await fs.writeFile(join(source, name), "import 'node:test';");
   const calls = [];
@@ -57,7 +60,7 @@ test("Linux docs executes only the real docs gate, not skipped native deployment
   const commands = f.calls.filter((x) => x.command !== "/usr/bin/git");
   assert.deepEqual(
     commands.map((x) => x.args),
-    [["scripts/docs-check.mjs"]],
+    [["scripts/docs-check.mjs", "--require-contracts"]],
   );
   assert.equal(commands[0].command, "/usr/local/bin/node");
   assert.equal(
@@ -73,7 +76,10 @@ test("Linux deployment regression executes every deployment source directory", a
   assert.deepEqual(command.args, [
     "--test",
     "deploy/containers/docker.test.mjs",
+    "deploy/host/entry.test.mjs",
     "deploy/jenkins/public.test.mjs",
+    "deploy/ops/bootstrap.test.mjs",
+    "deploy/upgrade/fencing.test.mjs",
   ]);
   assert.equal(command.command, "/usr/local/bin/node");
   assert.equal(
@@ -84,7 +90,7 @@ test("Linux deployment regression executes every deployment source directory", a
 
 test("Linux deployment regression refuses an empty suite", async (t) => {
   const f = await fixture(t);
-  for (const directory of ["jenkins", "containers"])
+  for (const directory of ["jenkins", "containers", "host", "ops", "upgrade"])
     await fs.rm(join(f.source, "deploy", directory), { recursive: true });
   await assert.rejects(f.invoke("deployment-tests"), /sources are missing/);
   assert.equal(

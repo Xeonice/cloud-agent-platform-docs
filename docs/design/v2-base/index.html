@@ -4,7 +4,7 @@
   - 外壳常驻、主区切换的单页应用；视图与弹层的标记与静态稿同源：tools/build-proto.cjs 把试点（../../pilot/p*.html）与补全稿（../drafts/f-*.html）里的部件
     原样拷进下面的 <template>（标在 @copy … @end 之间，别手改这几段；--check 校验同步）；数据由 js/*.js 按同一套类名填进去。
   - 只用纯 HTML + 少量 JS（经典脚本 + 全局命名空间 window.P，按顺序加载：core → ui → flows-prj → flows-lch → flows-crd → flows-img → flows-sys → flows-wb → flows-aut），
-    不引框架、不加载任何外部资源；状态只在内存里，主题与侧栏收起记在 localStorage（读写都 try/catch）。
+    不引框架、不加载任何外部资源；业务状态只在内存里，主题、侧栏收起与治理提示当天关闭记录记在 localStorage（读写都 try/catch）。
     （第三段起加载顺序：core → ui → flows-prj → flows-lch → flows-crd → flows-img → flows-sys → flows-dep → flows-wb → flows-aut；第四段把 flows-wb / flows-aut 写满）
   - 说明见 notes/wiring.md（模块、公共函数、数据字段、场景、每个流程怎么走）；端到端测试 tools/proto-test.cjs。
 -->
@@ -2870,7 +2870,7 @@ Tests:       <span class="ansi-green ansi-bold">10 passed</span>, 10 total
       <header class="wiz__head">
         <div class="wiz__head-main">
           <h1 class="wiz__title" id="wiz-title">平台初始化 · 共 5 步</h1>
-          <p class="wiz__desc" id="wiz-desc">一次性设置：先确认这台机器能联网、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
+          <p class="wiz__desc" id="wiz-desc">一次性设置：先查看平台声明目标的联网检查结果、备齐沙箱镜像，再配一个你自己的模型帐号，最后看一眼本机资源。只有配模型帐号那一步需要你离开这一页；之后所有配置都能在「系统状态」里改。</p>
         </div>
         <p class="wiz__count">第 <b>1</b> / 5 步</p>
       </header>
@@ -2883,10 +2883,10 @@ Tests:       <span class="ansi-green ansi-bold">10 passed</span>, 10 total
         </ol>
       <div class="wiz__card">
         <div class="wiz__body">
-          <div class="wiz__step-head"><h2 class="wiz__step-title">联网检查</h2><p class="wiz__step-desc">平台需要连得上模型 API（Agent 用）与镜像下载源（下载沙箱镜像用）。这里直接显示上次检查的结果，不重跑一轮——需要最新结果时点 [重新检测]。</p></div>
+          <div class="wiz__step-head"><h2 class="wiz__step-title">联网检查</h2><p class="wiz__step-desc">探测平台声明的模型 API／镜像下载源地址，结果不替代实际任务配置。这里直接显示上次检查的结果与原检测时刻，不重跑一轮；需要最新结果时点 [重新检测]。</p></div>
           <section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="ok">
             <div class="dep-verdict">
-              <p class="dep-msg dep-msg--muted" role="status" data-testid="connectivity-verdict">联网正常：模型 API 与镜像下载源都连得上。</p>
+              <p class="dep-msg dep-msg--muted" role="status" data-testid="connectivity-verdict">本次声明的探测目标均连得上；这不验证所有 Agent 或实际任务的完整调用。</p>
               <button class="btn btn--secondary btn--32" type="button">重新检测</button>
             </div>
             <ul class="list check-list dep-checks">
@@ -2913,12 +2913,12 @@ Tests:       <span class="ansi-green ansi-bold">10 passed</span>, 10 total
 </template>
 <template id="tpl-dep-offline">
 <!-- @copy ../drafts/f-dep-init-05.html el:[data-testid=offline-notice] -->
-<section class="note note--fail" role="alert" aria-label="离线确认" data-testid="offline-notice" data-acknowledged="false">
+<section class="note note--warn" role="alert" aria-label="确认联网检查结果" data-testid="offline-notice" data-acknowledged="false">
             <span class="icon i-wifi-off" aria-hidden="true"></span>
             <div class="note__body">
-              <p class="note__title">以离线模式继续</p>
-              <p class="note__text">网络恢复后无需重装，回系统状态页重新检测即可。</p>
-              <div class="note__actions dep-actions"><button class="btn btn--secondary btn--32" type="button">我知道，继续</button><span class="dep-actions__note">点它表示你确认在这台机器上 Agent 不可用，仍要完成初始化。</span></div>
+              <p class="note__title">确认联网检查结果</p>
+              <p class="note__text">这些结果只覆盖上列探测目标，不代表所有 Agent 不可用。你仍可继续初始化，任务以实际请求结果为准。</p>
+              <div class="note__actions dep-actions"><button class="btn btn--secondary btn--32" type="button">我知道，继续</button><span class="dep-actions__note">点它只确认已知晓本次检测结果，不会禁用任务。</span></div>
             </div>
           </section>
 <!-- @end -->
@@ -2941,7 +2941,7 @@ Tests:       <span class="ansi-green ansi-bold">10 passed</span>, 10 total
           <div class="dep-divider" role="presentation"></div>
           <section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="partial">
             <div class="dep-verdict">
-              <p class="dep-msg dep-msg--warn" role="status" data-testid="connectivity-verdict"><span class="icon i-triangle-alert" aria-hidden="true"></span><span>有镜像下载源超时未响应 —— 模型 API 都连得上，Agent 可用；受影响的只是下载新镜像。超时不等于连不上：一条时快时慢的链路会周期性超过这次检查的超时时限，重跑一次看它是否稳定。</span></p>
+              <p class="dep-msg dep-msg--warn" role="status" data-testid="connectivity-verdict"><span class="icon i-triangle-alert" aria-hidden="true"></span><span>本次声明的模型 API 目标连得上，镜像下载源超时未响应。超时不等于连不上；这些探测不判断 Agent 或实际镜像拉取是否可用。</span></p>
               <button class="btn btn--secondary btn--32" type="button">重新检测</button>
             </div>
             <ul class="list check-list dep-checks">
@@ -2953,7 +2953,7 @@ Tests:       <span class="ansi-green ansi-bold">10 passed</span>, 10 total
             </li>
             <li class="list__row" data-testid="connectivity-item-ghcr.io" data-ok="false" data-timed-out="true" data-model-api="false">
               <div class="check-row__head"><span class="check-row__title">ghcr.io</span><span class="dep-value" data-testid="connectivity-kind">镜像下载源</span><span class="check-row__status dep-push"><span class="badge badge--20 badge--timeout"><span class="icon i-clock" aria-hidden="true"></span>超时未响应</span></span></div>
-              <p class="dep-hint">这不等于连不上：ghcr.io（预制镜像所在的镜像下载源（由 SANDBOX_DEFAULT_IMAGE 推出））7000ms 内未完成 TLS 握手，而一条时快时慢的链路会周期性越过超时时限，Agent 用的是长连接，在这种链路上通常照样能用。重跑一次看它稳不稳定：偶发多半只是慢，可以直接往下走；每次都这样就按不通处理（内网常见形态是「网络通、但要走代理」，在系统设置里填 HTTPS_PROXY 后重试）</p>
+              <p class="dep-hint">这不等于连不上：声明目标 ghcr.io 本轮未在时限内完成 TLS 握手。可重新检测；这不验证实际任务的模型地址或 Agent 能力。</p>
             </li>
             </ul>
             <p class="dep-checked-at" data-testid="connectivity-checked-at">上次检测：2026-10-02 09:14:05（2 分钟前）（本轮刚检测）</p>

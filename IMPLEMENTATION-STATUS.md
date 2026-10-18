@@ -1,12 +1,14 @@
 # 当前实现与验收入口
 
-当前产品规格包含 259 个 REQ、1088 个 AC。原有 250 个 REQ、1036 个 AC 的编号保持，新增的 UPG 领域包含 9 个 REQ、52 个 AC，状态为 planned。稳定编号与 Given/When/Then 保存在 [领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见 [产品裁决](./docs/product/requirements/decisions.md)。
+当前生成验收清单包含1096个AC，既有REQ／AC保持稳定编号；UPG领域包含9个REQ、52个AC，完整验收尚未完成。稳定编号与Given/When/Then保存在[领域需求](./docs/product/requirements/README.md)；互斥替代与延后范围见[产品裁决](./docs/product/requirements/decisions.md)。
 
 ## 当前实现
 
 前端以共享 AppFrame 承载工作台与设置页，任务、项目与管理流程采用同一组实际查询和操作。后端提供 REST/MCP、终端 WebSocket、诊断 SSE、SQLite 事务和 BoxLite 生命周期。接口与前端类型从同源契约生成，读取失败不伪装为空或健康，取消与失败保留可恢复状态。
 
 任务发起的项目、分支与镜像采用统一搜索单选控件；镜像支持注册别名、独立编辑和按别名查找，任务继续提交真实镜像坐标。代码、迁移与本地验收见[任务选择与镜像别名记录](./docs/product/changes/2026-10-09-任务选择与镜像别名.md#8-本轮交付检查)，该记录不代表已发布到远端。
+
+本轮已恢复部署／Golden测试入口、生产Owner扩展和credential台账边界，修复升级原请求恢复，落实完整类型感知lint与纯领域入口，并强化CI契约完整性。联网历史与诊断只展示声明目标的事实，不再决定任务准入；初始化显式确认和实际业务校验保留。源码、PRD、原型与本地验收见[架构整改执行记录](./docs/testing/results/2026-10-18-架构审查与整改执行记录.md)，发布和实例激活分别记录。
 
 构建与发布固定 Root／API／Web 精确提交，PR 构建用于验收；CD 仅发布产物。服务统一采用 Colima Linux arm64、Foundation 与 ControlAPI／Web／StateCoordinator／RuntimeOwner／Installer，实例管理员决定升级时机。Jenkins controller 和通用构建与业务运行分开。部署、运行与维护见 [运维入口](./docs/ops/README.md)。本页不保存容易过期的 PID、构建号或部署快照。
 

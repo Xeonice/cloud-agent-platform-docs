@@ -2,7 +2,7 @@
  * 交互原型 · 启动检查与初始化向导（js/flows-dep.js）：F-DEP-INIT（第三段接线）
  *   启动检查中（f-dep-init-01）：init-status 回来之前整屏一句，外壳、向导、口令门都不挂；判定之后只挂一个——口令门（flows-crd.js，先于这里）/ 向导 / 工作台；
  *     读不到（场景「系统状态 › 连接：后端不可达」）→ 放行进工作台 + 横幅「无法确认平台状态」，不掉进向导（REQ-DEP-001、002）
- *   向导五步（外壳之外整屏阻断、不可关闭；f-dep-init-02…14）：联网检查（先显示上次结果，没有才自动跑；[重新检测] 3 秒节流；离线要显式确认）→
+ *   向导五步（外壳之外整屏阻断、不可关闭；f-dep-init-02…14）：联网检查（先显示上次结果，没有才自动跑；[重新检测] 3 秒节流；声明模型目标全部失败时需显式确认检测结果）→
  *     代理配置（只在联网有失败项时进流程，否则「可跳过」；保存并重新检测）→ 沙箱镜像（五项检查链；第 5 项「没下载到本机」自动开始准备，复用镜像段的「下载到本机」块）→
  *     模型帐号（同一个登录面板，宿主 wizard；至少一个可用才不拦）→ 本机资源（偏低不是门）→ [确认，开始使用]（写入失败 / 网络断开 → [重试]；409 写入时发现离线 → 回第 1 步；
  *     409 已经初始化过了 → 直接放行，REQ-DEP-016）→ 卸载向导、进工作台
@@ -23,13 +23,13 @@
   const G = '首次启动';
   P.scenario.define({ key: 'init', group: G, label: '初始化状态', def: 'done', options: [['done', '已初始化（示例世界）'], ['fresh', '未初始化：首次启动（启动检查 → 初始化向导）']] });
   P.scenario.define({ key: 'init-history', group: G, label: '向导 · 上次联网检查', def: 'ok', options: [['ok', '有（2026-10-01 18:40:12，全部连得上）'], ['none', '没有（进向导自动跑一轮）']] });
-  P.scenario.define({ key: 'init-conn', group: G, label: '向导 · 联网检查结果', def: 'ok', options: [['ok', '全部连得上'], ['partial', '镜像下载源超时未响应'], ['offline', '离线：模型 API 全部连不上'], ['timeout', '模型 API 全部超时（不判离线）']] });
+  P.scenario.define({ key: 'init-conn', group: G, label: '向导 · 联网检查结果', def: 'ok', options: [['ok', '全部连得上'], ['partial', '镜像下载源超时未响应'], ['offline', '声明模型目标全部失败（需显式确认）'], ['timeout', '模型 API 全部超时（不判离线）']] });
   P.scenario.define({ key: 'init-proxy', group: G, label: '向导 · 下一次保存代理', once: true, def: 'ok', options: [['ok', '成功'], ['timeout', '请求超时']] });
   P.scenario.define({ key: 'init-chain', group: G, label: '向导 · 镜像检查', def: 'auto', options: [['auto', '按预制镜像在不在本机（不在：第 5 项提示，自动准备）'], ['registry', '第 2 项未通过（自建镜像没推上去）'], ['abort', '检查中断']] });
   P.scenario.define({ key: 'init-provision', group: G, label: '向导 · 准备镜像', def: 'ok', options: [['ok', '成功'], ['fail', '下载失败（连接中断，不自动重试）']] });
   P.scenario.define({ key: 'init-runtimes', group: G, label: '向导 · Agent 列表', def: 'ok', options: [['ok', '读得到'], ['fail', '读不到']] });
   P.scenario.define({ key: 'init-resource', group: G, label: '向导 · 本机资源', def: 'auto', options: [['auto', '读系统状态同一份读数'], ['low', '偏低（另一台机器：可用磁盘 38 GB）'], ['fail', '读不到']] });
-  P.scenario.define({ key: 'init-write', group: G, label: '向导 · 下一次写入「已初始化」', once: true, def: 'ok', options: [['ok', '成功'], ['fail', '写入失败（数据目录只读；[重试] 成功）'], ['network', '网络断开（请求没到平台）'], ['offline', '写入时发现离线（409，回联网检查）'], ['already', '已经初始化过了（409：另一个标签页先完成，直接放行）']] });
+  P.scenario.define({ key: 'init-write', group: G, label: '向导 · 下一次写入「已初始化」', once: true, def: 'ok', options: [['ok', '成功'], ['fail', '写入失败（数据目录只读；[重试] 成功）'], ['network', '网络断开（请求没到平台）'], ['offline', '写入时缺少探测结果确认（409，回联网检查）'], ['already', '已经初始化过了（409：另一个标签页先完成，直接放行）']] });
   const backendDown = () => P.scenario.is('sys-conn', 'down');
 
   // ================================================================== 数据（notes/dep.md §5；f-dep-init-02…14 的示例值）
@@ -40,16 +40,16 @@
     { host: 'api.anthropic.com', kind: '模型 API', model: true, desc: 'Claude Code 的模型 API', ms: 236 },
     { host: 'ghcr.io', kind: '镜像下载源', model: false, desc: '预制镜像所在的镜像下载源（由 SANDBOX_DEFAULT_IMAGE 推出）', ms: 412 },
   ];
-  const TIMEOUT_HINT = (t) => `这不等于连不上：${t.host}（${t.desc}）7000ms 内未完成 TLS 握手，而一条时快时慢的链路会周期性越过超时时限，Agent 用的是长连接，在这种链路上通常照样能用。重跑一次看它稳不稳定：偶发多半只是慢，可以直接往下走；每次都这样就按不通处理（内网常见形态是「网络通、但要走代理」，在系统设置里填 HTTPS_PROXY 后重试）`;
-  const DNS_HINT = (t) => `DNS 解析不了 ${t.host}（${t.desc}）。内网环境通常要配代理：在初始化向导 / 系统设置里填 HTTP_PROXY / HTTPS_PROXY`;
+  const TIMEOUT_HINT = (t) => `这不等于连不上：声明目标 ${t.host}（${t.desc}）本轮未在时限内完成 TLS 握手。可重新检测；这不验证实际任务的模型地址或 Agent 能力。`;
+  const DNS_HINT = (t) => `声明目标 ${t.host}（${t.desc}）DNS 解析失败。可检查该地址或供联网检查使用的代理；保存代理不会改变沙箱网络或 Agent 环境。`;
   // 逐目标结果（REQ-DEP-006）与结论（REQ-DEP-007：只有模型 API 全部「连不上」才算离线；全部超时不算）
   const rowState = (kind, t) => (kind === 'offline' ? 'fail' : kind === 'partial' && !t.model ? 'timeout' : kind === 'timeout' && t.model ? 'timeout' : 'ok');
   const VERDICT = {
-    ok: ['muted', null, '联网正常：模型 API 与镜像下载源都连得上。'],
-    partial: ['warn', 'i-triangle-alert', '有镜像下载源超时未响应 —— 模型 API 都连得上，Agent 可用；受影响的只是下载新镜像。超时不等于连不上：一条时快时慢的链路会周期性超过这次检查的超时时限，重跑一次看它是否稳定。'],
-    offline: ['fail', 'i-circle-x', '当前连不上外网，Agent 将不可用 —— 每个 Agent 都必须能访问自己的模型 API，这是物理约束，不是配置问题。平台其余功能（项目管理、凭证与镜像配置、系统诊断）照常可用。'],
-    timeout: ['warn', 'i-triangle-alert', '模型 API 都超时未响应 —— 这不等于连不上，平台不按离线处理。一条时快时慢的链路会周期性超过这次检查的超时时限，重跑一次看它是否稳定：偶发多半只是慢，可以直接往下走；每次都这样就按不通处理。'],
-    none: ['muted', null, '还没有检查过这台机器能不能联网。'],
+    ok: ['muted', null, '本次声明的探测目标均连得上；这不验证所有 Agent 或实际任务的完整调用。'],
+    partial: ['warn', 'i-triangle-alert', '本次声明的模型 API 目标连得上，镜像下载源超时未响应。超时不等于连不上；这些探测不判断 Agent 或实际镜像拉取是否可用。'],
+    offline: ['warn', 'i-triangle-alert', '本次声明的模型 API 探测目标未通过检查。结果只覆盖这些目标，不代表所有 Agent 不可用；任务以实际配置和请求结果为准。'],
+    timeout: ['warn', 'i-triangle-alert', '本次声明的模型 API 探测目标均超时未响应。超时不等于连不上，可重新检测；不据此判断所有 Agent 能力，也不全局禁用任务。'],
+    none: ['muted', null, '还没有声明目标的联网检查结果，无法判定这些目标的可达性。'],
   };
   const HISTORY_AT = Date.UTC(2026, 9, 1, 10, 40, 12); // 2026-10-01 18:40:12（东八区）：init-status 里的上次结果（g8-02）
   const CHAIN = [
@@ -287,9 +287,9 @@
     const foot = $('.wiz__footer', card);
     let note = '', btns = '';
     if (id === 'connectivity') {
-      if (offlineBlocked()) note = '请先在上方确认「以离线模式继续」。';
+      if (offlineBlocked()) note = '请先在上方确认联网检查结果。';
       btns = footerBtns({ prev: false, nextDisabled: offlineBlocked() });
-    } else if (id === 'proxy') { if (offlineBlocked()) note = '请先在上方确认「以离线模式继续」。'; btns = footerBtns({ next: '跳过，下一步', nextDisabled: offlineBlocked() }); }
+    } else if (id === 'proxy') { if (offlineBlocked()) note = '请先在上方确认联网检查结果。'; btns = footerBtns({ next: '跳过，下一步', nextDisabled: offlineBlocked() }); }
     else if (id === 'preset-image') {
       if (W.chain.phase !== 'done') { note = '镜像检查完成后才能继续。'; btns = footerBtns({ nextDisabled: true }); }
       else if (chainReady()) btns = footerBtns({});
@@ -331,17 +331,17 @@
         return `<li class="list__row" data-testid="connectivity-item-${t.host}" data-ok="${ok}" data-timed-out="${st === 'timeout'}" data-model-api="${t.model}"><div class="check-row__head"><span class="check-row__title">${t.host}</span><span class="dep-value" data-testid="connectivity-kind">${t.kind}</span>${head}</div>${hint}</li>`;
       }).join('')}</ul>`;
     } else if (running) list = '<p class="dep-msg dep-msg--muted" data-testid="connectivity-pending">正在检测联网状况…</p>';
-    const at = res ? `<p class="dep-checked-at" data-testid="connectivity-checked-at">上次检测：${P.fmtDash(res.at)}（${P.fmtAgo(res.at)}）（${res.fresh ? '本轮刚检测' : '上次检测的结果，进向导不重跑'}）</p>` : '';
+    const at = res ? `<p class="dep-checked-at" data-testid="connectivity-checked-at">${Number.isFinite(res.at) && res.at > 0 ? `上次检测：${P.fmtDash(res.at)}（${P.fmtAgo(res.at)}）` : '检测时刻未提供'}（${res.fresh ? '本轮原型模拟检测' : '原型历史快照，进向导不重跑'}）</p>` : '';
     const dv = vk === 'offline' ? 'offline' : vk === 'ok' ? 'ok' : vk === 'none' ? 'none' : 'partial';
     return `<section class="wiz__section" aria-label="联网检查" data-testid="connectivity-check" data-verdict="${dv}"><div class="dep-verdict">${verdict}${btn}</div>${list}${at}</section>`;
   }
   function offlineNoticeEl() {
-    // 离线确认（REQ-DEP-008；f-dep-init-05）：确认之前 [下一步] 禁用；确认后提示条留着，按钮那一行换成「已确认…」
+    // 探测结果确认（REQ-DEP-008；f-dep-init-05）：确认之前 [下一步] 禁用；确认后提示条留着，按钮那一行换成「已确认…」
     const n = P.fromTpl('tpl-dep-offline', { keepRoles: true });
     const acts = $('.dep-actions', n);
     if (W.offlineAck) {
       n.dataset.acknowledged = 'true';
-      acts.innerHTML = '<span class="dep-actions__note" data-testid="offline-acknowledged"><span class="icon icon--inline i-check" aria-hidden="true"></span>已确认以离线模式继续 —— 完成初始化后，工作台会常驻一条离线横幅，发起任务的入口会置灰（只置灰、不隐藏）。</span>';
+      acts.innerHTML = '<span class="dep-actions__note" data-testid="offline-acknowledged"><span class="icon icon--inline i-check" aria-hidden="true"></span>已确认本次联网检查结果，可继续初始化；完成后可在系统状态页重新检测。</span>';
     } else Object.assign($('.btn', acts).dataset, { action: 'wiz-ack', fk: 'wiz-ack' });
     return n;
   }
@@ -384,7 +384,7 @@
     W.focusAfter = 'wiz-next';
     paint();
     const n = $('[data-fk="wiz-next"]', W.root); if (n && !n.disabled) n.focus({ preventScroll: true });
-    P.announce('已确认以离线模式继续');
+    P.announce('已确认本次联网检查结果');
   };
   // 冷却倒数与「（刚刚）→（1 分钟前）」：每个时钟秒就地重画（只在冷却中或有进行中对象时时钟才走）
   P.clock.ticker({ active: () => W.phase === 'wizard' && P.clock.now() < W.cooldownUntil, tick: () => paint() });
@@ -430,7 +430,7 @@
       const n = frag(`<p class="dep-msg dep-msg--fail" role="alert" id="wiz-proxy-error" data-testid="proxy-error"><span class="icon i-circle-x" aria-hidden="true"></span><span>${esc(want)}</span></p>`); // 同 f-dep-init-06 的失败句
       if (err) err.replaceWith(n); else $('.dep-actions', f).before(n);
     } else if (!want && err) err.remove();
-    block(body, 'conn', connSectionHtml()); // 表单下面同时显示联网结果（离线时连同离线确认），看着结果改代理（REQ-DEP-009）
+    block(body, 'conn', connSectionHtml()); // 表单下面同时显示联网结果（命中既有判据时连同探测结果确认），看着结果改代理（REQ-DEP-009）
     paintOffline(body);
     for (const el of $$(':scope > :not([data-wk]):not(.wiz__step-head)', body)) el.remove();
   }
@@ -657,7 +657,7 @@
     const acts = $('.note__actions', n);
     if (W.error === 'offline') {
       // 写入时发现离线（409 OFFLINE_NOT_ACKNOWLEDGED）：按码给前端句 + [回到联网检查]（Q-DEP-01 A），不原样显示后端句
-      $('.note__text', n).textContent = '刚才这一轮联网检查发现模型 API 全部连不上：回第 1 步重新检测，确认以离线模式继续后再完成。';
+      $('.note__text', n).textContent = '本次声明的模型 API 探测目标未通过检查：回第 1 步查看并确认检测结果后再完成初始化。这不代表所有 Agent 不可用。';
       acts.innerHTML = '<button class="btn btn--secondary btn--32" type="button" data-action="wiz-back-conn" data-fk="wiz-back-conn">回到联网检查</button>';
     } else {
       // 其余失败：原因用后端信封里的人话（稿件示例「写入失败：数据目录只读…」）；拿不到信封（网络断开）用前端句，不上屏「Failed to fetch」（AC-DEP-016.6，暂行句）
@@ -687,16 +687,16 @@
       // 按码分流（REQ-DEP-016）：409 ALREADY_INITIALIZED = 目标状态已达成 → 直接放行、不出错误；409 OFFLINE_NOT_ACKNOWLEDGED（没确认过离线时）→ 前端句 + [回到联网检查]；其余失败停在向导 + [重试]
       const from = viaRetry ? 'wiz-retry' : 'wiz-next';
       if (sc === 'fail' || sc === 'network') { W.error = sc; W.focusAfter = 'wiz-retry'; W.focusFrom = from; paint(); P.announce(`初始化没有完成。${sc === 'network' ? '网络请求失败，平台没收到这次写入。检查网络后再点 [重试]。' : '写入失败：数据目录只读（/srv/agent-platform/data）。请检查挂载权限后重试。'}`); return; }
-      if (sc === 'offline' && !W.offlineAck) { W.error = 'offline'; W.focusAfter = 'wiz-back-conn'; W.focusFrom = from; paint(); P.announce('初始化没有完成。刚才这一轮联网检查发现模型 API 全部连不上：回第 1 步重新检测，确认以离线模式继续后再完成。'); return; }
+      if (sc === 'offline' && !W.offlineAck) { W.error = 'offline'; W.focusAfter = 'wiz-back-conn'; W.focusFrom = from; paint(); P.announce('初始化没有完成。本次声明的模型 API 探测目标未通过检查：回第 1 步查看并确认检测结果后再完成初始化。这不代表所有 Agent 不可用。'); return; }
       complete();
     });
   }
-  // 成功：向导整棵卸载（不出「初始化完成」类提示），第一屏按地址渲染；最后一轮联网结论写进历史——离线时工作台常驻离线横幅（REQ-DEP-008 / 015）
+  // 成功：向导卸载并按地址渲染；保留原探测来源与时刻，联网提醒不禁用任务（REQ-DEP-008 / 015）。
   let landFocus = false;
   function complete() {
     if (P.closeAuthPanel) P.closeAuthPanel();
     const e = effective();
-    if (e && P.sysNet) { P.sysNet.offline = e.kind === 'offline'; P.sysNet.at = e.at; }
+    if (e && P.sysNet) { P.sysNet.offline = e.kind === 'offline'; P.sysNet.at = e.at; P.sysNet.source = e.fresh ? '本轮原型模拟检测' : '原型初始化历史快照'; }
     W.inFlow = false; W.error = null;
     P.scenario.reset('init'); // 已初始化（不发 'scenario'：世界就是向导里留下的这一份，不换回示例世界）
     landFocus = true;

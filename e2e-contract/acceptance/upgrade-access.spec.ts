@@ -130,14 +130,19 @@ test("instance access alone permits upgrades and reload never asks for another c
       path: test.info().outputPath("instance-access-version-card.png"),
     });
 
-    const checked = page.waitForResponse(
-      (response) =>
-        new URL(response.url()).pathname === "/api/system/upgrade/status",
-    );
-    await version
-      .getByRole("button", { name: "检查更新", exact: true })
-      .click();
-    expect((await checked).status()).toBe(200);
+    // This fixture has no installed release identity: the existing unknown-state
+    // UI offers a read-only status check, rather than claiming an update target.
+    const [checked] = await Promise.all([
+      page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/system/upgrade/status",
+        { timeout: 5_000 },
+      ),
+      version
+        .getByRole("button", { name: "检查状态", exact: true })
+        .click({ timeout: 5_000 }),
+    ]);
+    expect(checked.status()).toBe(200);
     await page.reload();
     await expect(
       version.getByRole("heading", { name: "版本与更新", exact: true }),

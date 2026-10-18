@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { userInfo } from "node:os";
 import { pathToFileURL } from "node:url";
 import { SHA } from "./jenkins-ci.mjs";
+import { deploymentTestSources } from "./deployment-test-sources.mjs";
 import {
   buildSystem,
   ciContext,
@@ -170,25 +171,12 @@ export async function projectCI(phase, rootSha, apiSha, webSha, options = {}) {
       throw new Error("Pinned repository changed");
   if (phase === "docs") {
     // Missing submodules are an error above. The cross-repository doc gates may not silently skip.
-    await run(context.node, ["scripts/docs-check.mjs"]);
+    await run(context.node, ["scripts/docs-check.mjs", "--require-contracts"]);
     return;
   }
   if (phase === "deployment-tests") {
-    const tests = [];
-    for (const directory of ["deploy/jenkins", "deploy/containers"]) {
-      const files = await fs
-        .readdir(join(source, directory), { withFileTypes: true })
-        .catch((error) => {
-          if (error.code === "ENOENT") return [];
-          throw error;
-        });
-      for (const file of files)
-        if (file.isFile() && file.name.endsWith(".test.mjs"))
-          tests.push(join(directory, file.name));
-    }
-    if (!tests.length)
-      throw new Error("Deployment regression sources are missing");
-    await run(context.node, ["--test", ...tests.sort()]);
+    const tests = await deploymentTestSources(source);
+    await run(context.node, ["--test", ...tests]);
     return;
   }
   if (phase === "install") {

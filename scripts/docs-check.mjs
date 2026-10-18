@@ -8,14 +8,15 @@
 // 检查分三类：
 //   A 类 —— 文档内部检查，只读 docs/**，始终跑。
 //   B 类 —— 依赖 api submodule 的检查（B1 读 api/openapi.json，B2 扫 api 源码里的
-//           @Tool 注册）；submodule 未 checkout 时 **大声 skip 而不失败**，
-//           让 A 类照常把关。
+//           @Tool 注册）；本地文档模式缺输入时大声 skip；--require-contracts
+//           或 CI=true 时缺输入必须失败，不能把跳过当作契约验收。
 //   C 类 —— 读取主仓部署源码，对文档执行纯配置函数一致性校验；不运行角色或访问网络，
 //           必需源码缺失直接失败。
 //
 // 用法：
 //   node scripts/docs-check.mjs             # 跑全部检查
 //   node scripts/docs-check.mjs --verbose   # 额外打印解析出的端点集合 / MCP tool 集合（排查用）
+//   node scripts/docs-check.mjs --require-contracts # CI 必需输入完整，禁止 B 类 skip
 //
 // 退出码：有问题 1，全过 0。
 //
@@ -23,6 +24,14 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const args = process.argv.slice(2).filter((arg) => arg !== '--');
+const unknownArgs = args.filter((arg) => !['--verbose', '--require-contracts'].includes(arg));
+if (unknownArgs.length > 0) {
+  console.error(`docs:check 不支持的参数：${unknownArgs.join('、')}`);
+  process.exit(1);
+}
+const REQUIRE_CONTRACTS = args.includes('--require-contracts') || process.env.CI === 'true';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DOCS = path.join(ROOT, 'docs');
@@ -46,13 +55,15 @@ const WEB_RESERVED_ENV = path.join(WEB_ROOT, 'src', 'lib', 'image', 'validateEnv
 const API_SSE_PROTOCOL = path.join(API_ROOT, 'packages', 'contracts', 'src', 'sse-protocol.ts');
 const WEB_SSE_PROTOCOL = path.join(WEB_ROOT, 'src', 'types', 'sse-protocol.ts');
 const API_SRC_ROOTS = ['apps', 'packages'].map((d) => path.join(API_ROOT, d));
+const API_REQUIRED_SOURCE_ROOTS = ['apps/api/src', 'packages/contracts/src']
+  .map((d) => path.join(API_ROOT, d));
 // C1 只读取部署源码，并调用无文件／网络／生命周期操作的纯配置函数。
 const DEPLOY_DOC = path.join(DOCS, 'shared', '11-部署与扩展预留.md');
 const ROLE_ADAPTER = path.join(ROOT, 'deploy', 'upgrade', 'production-role-adapter.mjs');
 const BOOTSTRAP = path.join(ROOT, 'deploy', 'ops', 'bootstrap-upgrade-instance.mjs');
 const IP_BRIDGE = path.join(ROOT, 'deploy', 'host', 'ip-entry-bridge.mjs');
 
-const VERBOSE = process.argv.includes('--verbose');
+const VERBOSE = args.includes('--verbose');
 
 // ---------------------------------------------------------------------------
 // MCP 传输层端点排除清单（**只作用于 B1**，显式、带理由、可审计）
@@ -103,8 +114,18 @@ const TRANSPORT_ONLY_PATHS = new Map([
 // ---------------------------------------------------------------------------
 const rel = (p) => path.relative(ROOT, p);
 const results = [];
-const record = (cls, id, name, status, summary, details = []) =>
+const record = (cls, id, name, status, summary, details = []) => {
+  if (cls === 'B' && status === 'skip' && REQUIRE_CONTRACTS) {
+    status = 'fail';
+    summary = summary.replace(/^SKIP\s*——\s*/, '必需契约输入缺失 —— ');
+    details = ['--require-contracts / CI=true 不允许缺失契约输入。', ...details];
+  }
   results.push({ cls, id, name, status, summary, details });
+};
+
+function missingApiSourceRoots() {
+  return API_REQUIRED_SOURCE_ROOTS.filter((directory) => !fs.existsSync(directory));
+}
 
 /** 递归收集 docs/ 下的 .md */
 function walkMd(dir, out = []) {
@@ -571,6 +592,8 @@ const ERRNO_SHAPE = /^E[A-Z]{2,}$/;
  * 同样按**形状**排除而不是列名字。
  */
 const SIGNAL_SHAPE = /^SIG[A-Z]+$/;
+// SQL value serializers return these language literals, not platform error codes.
+const SQL_LITERAL_SHAPE = /^(?:NULL|TRUE|FALSE)$/;
 
 function collectErrorCodesFromSource() {
   const found = new Map(); // code -> Set(相对路径)
@@ -588,6 +611,7 @@ function collectErrorCodesFromSource() {
     // 出现 errno 形状的行，门禁直接报错，而不是悄悄放行一个永远对不上的码。
     if (ERRNO_SHAPE.test(code)) return;
     if (SIGNAL_SHAPE.test(code)) return;
+    if (SQL_LITERAL_SHAPE.test(code)) return;
     if (!found.has(code)) found.set(code, new Set());
     found.get(code).add(file);
   };
@@ -702,8 +726,11 @@ function checkErrorCodeCatalog() {
     ]);
     return;
   }
-  if (!fs.existsSync(API_ROOT) || !fs.existsSync(path.join(API_ROOT, 'packages'))) {
-    record('B', 'A5', '错误码对账', 'skip', 'api submodule 未检出，跳过源码侧扫描');
+  const missing = missingApiSourceRoots();
+  if (missing.length > 0) {
+    record('B', 'A5', '错误码对账', 'skip', `SKIP —— 找不到 ${missing.map(rel).join('、')}`, [
+      'API 错误码源码输入不完整，本轮没有执行源码与文档的全量对账。',
+    ]);
     return;
   }
   // 反向自防：扫描侧按形状排除 errno，那么码表里就不能出现 errno 形状的行 ——
@@ -714,6 +741,11 @@ function checkErrorCodeCatalog() {
     record('B', 'A5', '错误码对账', 'fail', `码表里有 errno 形状的行：${errnoRows.join('、')}`, [
       '→ errno 不是面向用户的错误码，应在抛出处归一成闭集码（见 classifyWorkspacePrepareError）',
     ]);
+    return;
+  }
+  const sqlLiteralRows = [...doc].filter((code) => SQL_LITERAL_SHAPE.test(code));
+  if (sqlLiteralRows.length) {
+    record('B', 'A5', '错误码对账', 'fail', `码表不能登记SQL原语：${sqlLiteralRows.join('、')}`);
     return;
   }
   const src = collectErrorCodesFromSource();
@@ -752,7 +784,7 @@ function checkOpenapiCoverage() {
       'api submodule 未 checkout —— 本轮「没有人」在把关',
       '「后端加了端点却没同步 10 §6」这条漂移（09 §2.4 · 审计 P1-6）。',
       '  本地：git submodule update --init api',
-      '  CI  ：Jenkins agent-platform-contract 会按完整 SHA checkout 三仓，缺子模块直接失败，不会走到这里',
+      '  CI  ：--require-contracts / CI=true 要求本项输入完整，缺输入直接失败',
       '──────────────────────────────────────────────────────────────',
     ]);
     return;
@@ -1047,15 +1079,15 @@ function parseToolCounts(docRel) {
 }
 
 function checkMcpToolParity() {
-  const apiUsable = API_SRC_ROOTS.some((d) => fs.existsSync(d));
-  if (!apiUsable) {
-    record('B', 'B2', 'MCP tool 面对账', 'skip', `SKIP —— 找不到 ${rel(API_SRC_ROOTS[1])}`, [
+  const missing = missingApiSourceRoots();
+  if (missing.length > 0) {
+    record('B', 'B2', 'MCP tool 面对账', 'skip', `SKIP —— 找不到 ${missing.map(rel).join('、')}`, [
       '──────────────────────────────────────────────────────────────',
       'api submodule 未 checkout —— 本轮「没有人」在把关',
       '「代码注册了 tool 却没同步 02 §5.2」/「表里挂着从没注册过的 tool」这类',
       '双向漂移（09 §2.4 · B2）。',
       '  本地：git submodule update --init api',
-      '  CI  ：Jenkins agent-platform-contract 会按完整 SHA checkout 三仓，缺子模块直接失败，不会走到这里',
+      '  CI  ：--require-contracts / CI=true 要求本项输入完整，缺输入直接失败',
       '──────────────────────────────────────────────────────────────',
     ]);
     return;
@@ -1319,7 +1351,7 @@ const padName = (s) => s + ' '.repeat(Math.max(0, NAME_COL - width(s)));
 
 const GROUPS = [
   ['A', 'A. 文档内部检查（不依赖 submodule，始终跑）'],
-  ['B', 'B. 依赖 api submodule 的检查（openapi.json / api 源码；缺失即 skip，不判失败）'],
+  ['B', `B. 跨仓契约检查（openapi.json / 源码；${REQUIRE_CONTRACTS ? '严格模式：缺失即失败' : '本地文档模式：缺失即 skip'}）`],
   ['C', 'C. 文档 ↔ 现行部署契约对账（必需源码缺失即失败）'],
   // ⚠️ A5 的编号是 A，分组却在 B —— 编号按「加进来的顺序」，分组按「依赖什么」。
   //    它的对账基准（10 §6.8 码表）确实只读 docs，但另一半要扫 api 源码，

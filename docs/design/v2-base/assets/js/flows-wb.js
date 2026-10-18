@@ -136,7 +136,7 @@
     if (card.dataset.html !== html) { card.innerHTML = html; card.dataset.html = html; }
   }
   const frag = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
-  // 不能发起任务的原因（离线等）：入口只置灰、不隐藏，按下 / 聚焦时说原因（REQ-WB-014）
+  // 真实项目等条件不满足时入口只置灰、不隐藏；联网探测不独立禁用（REQ-WB-014）。
   function blockedAttrs(p) { const why = P.newTaskBlocked(p); return why ? ` aria-disabled="true" data-reason="${esc(why)}"` : ''; }
   P.views['tpl-overview'] = { refresh: (host) => fillOverview(host) };
   // P2 总览：卡片 / 行的空白处 = 点它的标题链接
@@ -408,7 +408,7 @@
     },
     create: () => ({
       label: '新建', align: 'end',
-      // 离线时「新任务…」置灰并说原因（REQ-WB-014：总览「新建 ⌄」里的那一项也算发起入口）
+      // 总览「新建 ⌄」沿用真实项目准入原因，不将联网探测作为禁用条件（REQ-WB-014）。
       html: menuItem({ label: '新任务…', icon: 'i-square-terminal', disabled: !!newTaskReason(), reason: newTaskReason(), act: (ret) => P.openNewTask(null, ret) })
         + menuItem({ label: '新建项目…', icon: 'i-folder-plus', act: (ret) => P.openNewProject({}, ret) }),
     }),
@@ -799,7 +799,7 @@
     if (tab) P.hint(tab, '原型里的终端是静态画面：键入不会送到 Agent（真实产品里在这里直接输入）');
   });
 
-  // ------------------------------------------------------------------ 其余发起入口的离线置灰（REQ-WB-014）：P6 空态「新任务」；没有项目时侧栏不出「按状态筛选」（AC-WB-001.1）
+  // ------------------------------------------------------------------ 其余发起入口的真实项目准入（REQ-WB-014）：P6 空态「新任务」；没有项目时侧栏不出「按状态筛选」（AC-WB-001.1）
   P.hook('main:refreshed', (host, r) => {
     const en = $('[data-fk="e-new"]', host);
     if (en && r.view === 'project') { const why = P.newTaskBlocked(P.proj(r.projectId)); if (why) { en.setAttribute('aria-disabled', 'true'); en.dataset.reason = why; } else { en.removeAttribute('aria-disabled'); delete en.dataset.reason; } }

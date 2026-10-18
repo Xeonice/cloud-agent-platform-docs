@@ -1841,14 +1841,31 @@ export interface RuntimeAdapterRegistry {
 }
 ```
 
-**注册机制不是 `XxxModule.register()` 语法糖**：第三方模块在自己的 `@Module` 里注入 registry token，在自己的 `onModuleInit` 里调 `register()`——没有平台侧的动态模块工厂要写。内建 **`AioSandboxProvider`（`aio`，default）**、**`BoxliteSandboxProvider`（`boxlite`）**、`ClaudeCodeAdapter`、`CodexAdapter` 走的是**同一个** `register()`（构造器注入 → `this.register(x)`），因此只有一条注册路径、一次唯一性校验。`CreateSandbox.provider` 未指定时回退 `defaultProvider`；`CreateSandbox.runtime` 必填、无回退。注册校验：name/id 唯一，冲突启动即 fail-fast。
+**注册机制不是 `XxxModule.register()` 语法糖**：第三方模块在自己的 `@Module` 里注入 registry token，在自己的 `onModuleInit` 里调 `register()`。安装方在受信、构建期固定的角色组合根中导入该模块，不修改内建 providers 数组或 registry 构造器。内建 **`AioSandboxProvider`（`aio`）**、**`BoxliteSandboxProvider`（`boxlite`）**、`ClaudeCodeAdapter`、`CodexAdapter` 走的是**同一个** `register()`，因此只有一条注册路径、一次唯一性校验。`CreateSandbox.provider` 未指定时回退 `defaultProvider`；`CreateSandbox.runtime` 必填、无回退。注册校验：name/id 唯一，冲突启动即 fail-fast。
 
-> **落地状态（✅ 已实现）**：上面的两个接口就是 `packages/contracts` 里的原文，`SandboxProviderRegistry`（sandbox/infrastructure/registry）与 `DefaultRuntimeAdapterRegistry`（runtime/infrastructure/registry）是它们的实现；重名/重 id **抛错 fail-fast**（provider 抛 `ALREADY_EXISTS`）。`SANDBOX_PROVIDER_REGISTRY` 与 `RUNTIME_ADAPTER_REGISTRY` 两个 token 均由各自 `@Global` 模块 `exports`，所以第三方模块能真正注入到。
-> 两处**设计取舍**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填），加一个没有读者的选项正是本文档反对的死契约；② 注册期只校验唯一性，**capabilities 完整性由类型系统保证**（`SandboxProviderCapabilities` 6 位全必填，少一位编译不过，另有 wire schema 的编译期对齐守卫），无需运行时再查一遍。
-> 验收：e2e `apps/api/test/e2e/registry-extension.e2e-spec.ts` 以一个"第三方 npm 包"形态的 `@Module` 注入两个 token 并在 `onModuleInit` 注册——**不改任何内建模块的 providers 数组、不改 registry 构造器**——随后 `GET /api/providers` 列出它、`POST /api/sandboxes` 经它 provision、`GET /api/runtimes` + `POST .../credentials/secret` 走它的 adapter。
+**生产角色中的注册位置（2026-10-18 T03）**：Provider SDK 属于 RuntimeOwner，Provider 扩展模块也装配到 Owner；RuntimeAdapter 和 ImageSpec 扩展模块仍装配到 Coordinator。包若同时提供三类扩展，应暴露分开的模块出口。Coordinator 的 `RuntimeOwnerProviderRegistry` 是经过认证的远程目录，拒绝本地 `register()`；恢复扩展能力不意味着把 SDK、Owner home 或 VM 生命周期放回 Coordinator。
+
+`roles/runtime-owner-main.ts` 调用 `startRuntimeOwnerApplication()`。启动顺序为：验证 Owner 角色与最小环境权限 → 取得独占 home/process lock → 创建仅含 Owner providers 的 Nest 组合 → 等待全部初始化 hooks（含异步 `onModuleInit`）→ 核对已安装 artifact → 创建 Owner 私有 SQLite journal → 监听认证 loopback RPC。`RuntimeOwnerModule` 通过 `SANDBOX_PROVIDER_REGISTRY` 导出真正的 `SandboxProviderRegistry`；内建 provider 与第三方仍调用同一个注册方法。Nest 组合自身不监听 HTTP，不导入业务 AppModule、业务数据库、调度器或自动化。
+
+安装方的受信组合形态如下；这段导入与角色入口随安装包构建、校验和签名，不读取浏览器传入的模块路径，也没有注册 RPC：
+
+```typescript
+@Module({ imports: [RuntimeOwnerApplicationModule, AcmeOwnerProviderModule] })
+class InstallationOwnerModule {}
+
+// Owner 的角色入口调用；AcmeOwnerProviderModule 在自己的 onModuleInit 中
+// 注入 SANDBOX_PROVIDER_REGISTRY 并 registry.register(provider, { default: true })。
+await startRuntimeOwnerApplication(InstallationOwnerModule);
+```
+
+重复启动在任何插件构造与初始化 hook 之前被进程锁拒绝。初始化或监听失败会关闭已取得的组合句柄与 Owner journal，最后释放进程锁；正常关闭幂等，锁保留到所有销毁 hooks 完成。构造器自身抛出之前尚未返回的资源仍由该构造器负责清理，Nest 不提供构造事务。扩展模块顶层只声明组合，SDK 资源在受保护的构造／初始化阶段取得。新 Owner 只接新资源；已有 handle 继续携带原 ownerId，通过原 Owner 寻址，不因默认 provider 或活动 Owner 切换而重建。
+
+> **落地状态（✅ 已实现）**：`SandboxProviderRegistry`（Owner 的 sandbox/infrastructure/registry）与 `DefaultRuntimeAdapterRegistry`（Coordinator 的 runtime/infrastructure/registry）为可注册实现；重名/重 id **抛错 fail-fast**（provider 抛 `ALREADY_EXISTS`）。token 均从所属角色的 `@Global` 模块导出。
+> 两处**设计取舍**：① `RuntimeAdapterRegistry.register` 不收 `opts.default`——本平台没有"默认 runtime"概念（`CreateSandbox.runtime` 必填）；② `SandboxProviderCapabilities` 的七位完整性由类型与 wire schema 对齐守卫约束，已声明能力的行为一致性还须通过 §10 的 Golden 条款。
+> 当前验收为 `acceptance/contracts/protocol/owner-extension.spec.ts`：运行编译后的真实 `runtime-owner-main`，以及受信第三方组合的独立 Owner 进程；注册 hooks 完成后才监听，Coordinator 通过原认证 HTTP／SQLite journal／租约使用第三方实现，保留 handle 仍回到原 Owner。重复注册、重复进程、角色或权限错误、初始化与 bind 失败均验证拒绝及清理。外部资源实现是受控 fixture，不能据此声称真实 BoxLite VM、CLI 或完整模型任务已验收。旧 `apps/api/test/e2e/registry-extension.e2e-spec.ts` 于 2026-10-05 测试迁移时删除，不再作为当前验收证据。
 >
 > **`IMAGE_SPEC_REGISTRY`（✅ 已实现——2026-08 镜像管理切片；本块此前写的是「裸 Symbol」，那句话现在是反的）**：接口在 `contracts/src/image-spec.contract.ts`（`ImageSpecRegistry`），实现是 `M/image` 的 `DefaultImageSpecRegistry`，DI 绑定与 `exports` 在 `image.module.ts`。内建 `oci` provider 经**构造器注入 → `this.register(oci, {default:true})`**，与第三方在自己 `onModuleInit` 里调的是**同一个** `register()`——一条注册路径、一次唯一性校验、重名 fail-fast（抛 `ALREADY_EXISTS`），与上面两个 registry 同构。至此"provider / runtime / 镜像三层可注册"（产品 19 §1 原则 5）**三层都是活的**。
-> 验收：同一份 `registry-extension.e2e-spec.ts` 里，第三方模块用 `register(acmeImageSpec, { default: true })` 把平台的解析器**移到自己身上**，随后注册镜像解出来的 digest 是第三方那个常量——内建 `oci` 一旦悄悄顶上，这条断言当场红。**registry 是承重的，不是摆设。** ⚠️ 一处口径要说准：该用例调的是 `ImageApplicationService.registerImage()`，**不是 HTTP `POST /api/images`**；controller→application 那一跳由 `images.e2e-spec.ts` 覆盖。另外**没有 per-request 的 provider 选择器**——四处 `resolve` 一律取 `defaultProvider`，换 provider 的唯一方式就是 `register(..., {default:true})`。
+> 当前 Golden 中 `acceptance/contracts/pure/oci-image-spec.spec.ts` 验证真实内建 OCI 实现，网络 registry 是 fixture；本轮 Owner 协议验收不代表第三方 RuntimeAdapter／ImageSpec 的完整端到端注册链已重跑。它们保留原公开注册接口。**没有 per-request 的 ImageSpec provider 选择器**——四处 `resolve` 一律取 `defaultProvider`，换 provider 的方式是 `register(..., {default:true})`。
 >
 > **落地的确不止是"补一个 registry"，四个时刻都接上了**：`resolve` 的四个调用时刻（§7）**跨两个模块**——注册与重验证在新建的 `M/image`，时刻③④在 **`M/sandbox` 的 `admit()` 与 `imageSpecOf()` 里**（26 §7 标了具体函数），两处都已改（§7 落地状态表末两行）。八个镜像错误码也已进 10 §6.8 主表，`docs-check` 的 A5 扫描范围随之扩到 `M/image` 与 `contracts/src/image-spec.contract.ts`——**这一步不能省，否则 A5 对它们会一直是绿的，而绿的原因是它没在看**。
 
@@ -1890,7 +1907,7 @@ export interface RuntimeAdapterRegistry {
 
 **目的**：第三方实现跑通即视为合格插件，无需平台维护者逐个审查。**内建实现（`aio` / `boxlite` / ClaudeCode / Codex）在 CI 跑同一套 testkit——无双重标准**，也倒逼 testkit 覆盖全面。
 
-**形态**：`@platform/contracts/testkit` 子路径导出（发包后为 `@platform/sandbox-contracts/testkit`，§9），导出两个套件，内部 describe/it，按"声明了什么"自动决定条款必跑还是跳过。
+**形态**：`@platform/contracts/testkit` 子路径导出（发包后为 `@platform/sandbox-contracts/testkit`，§9），导出 Provider、RuntimeAdapter、ImageSpec 三个套件，内部 describe/it，按"声明了什么"自动决定条款必跑还是跳过。
 
 ```typescript
 import {
@@ -1913,17 +1930,16 @@ runRuntimeAdapterContractTests('my-agent', () => new MyRuntimeAdapter(), {
 // 全部 MUST 条款通过 = 兼容平台契约
 ```
 
-> **落地状态（✅ 已实现，范围见下）**：两个套件都已落地并进 `pnpm test:contract`（CI 的 `contract-testkit` 步骤，`.github/workflows/ci.yml`）。
+> **现行执行入口（2026-10-18 恢复）**：`pnpm test:contract` 先运行 `acceptance/contracts/pure` 中三类真实内建实现的公共套件，再运行 `acceptance/contracts/protocol/owner-extension.spec.ts`。它们同时进入当前四层 acceptance workspace 与 Jenkins 的相应检查；不再引用已删除的 GitHub Actions 或旧 test/contract 目录。protocol 前统一增量编译，fresh checkout 与 CI 都执行当前源码的 role main，不依赖旧 dist。
 >
 > | 跑套件的实现 | 位置 | 跑到的条款 |
 > |---|---|---|
-> | `aio` / `boxlite`（**真实内建类**） | `packages/modules/sandbox/test/contract/builtin-providers.contract.spec.ts` | SP-00、CAP-01（结构半场）、**CAP-02**、**CAP-03**——**无条件跑**，构造这两个 provider 既不连 docker 也不起 micro-VM |
-> | `aio` / `boxlite`（**真实内建类，live**） | `apps/api/test/e2e/builtin-provider-contract.e2e-spec.ts` | 再加 SP-01（真 create→destroy）。宿主不可用时**大声 skip**（stderr 打黄框，说明缺什么），绝不假装通过 |
-> | `fake`（内存实现） | `packages/contracts/test/contract/sandbox-provider.contract.spec.ts` | SP-00、CAP-01、CAP-02、**CAP-03**、SP-01 |
-> | `codex` / `claude-code`（**真实内建 adapter**） | `packages/modules/runtime/test/contract/builtin-adapters.contract.spec.ts` | RA-03、RA-08 ~ RA-14（见 §10.3）——**无条件跑** |
-> | 第三方 provider + adapter | `apps/api/test/e2e/registry-extension.e2e-spec.ts`（注册链路验收，非 testkit） | —— |
+> | `aio` / `boxlite`（**真实内建类**） | `acceptance/contracts/pure/builtin-providers.spec.ts` | SP-00、CAP-01、**CAP-02**、**CAP-03** 静态条款必跑；不连接 Docker 或打开 SDK home |
+> | `codex` / `claude-code`（**真实内建 adapter**） | `acceptance/contracts/pure/builtin-adapters.spec.ts` | RA-03／07／08–17 按实际声明与输入 fixture 执行；不运行 CLI、不发模型请求 |
+> | `oci`（**真实内建 ImageSpec**） | `acceptance/contracts/pure/oci-image-spec.spec.ts` | IS-01–05；仅 registry 网络边界使用 fixture |
+> | 第三方 Owner Provider 模块 | `acceptance/contracts/protocol/owner-extension.spec.ts` | 真实生产入口／DI／独立进程／认证 HTTP／私有 SQLite；外部资源受控 |
 >
-> **live 条款的 skip 语义**：`runSandboxProviderContractTests` 只在**传入 `opts.context`** 时打开 live 条款；不传则该 describe 块以 `SKIPPED — <skipLiveReason>` 的标题出现在报告里（不是消失）。live 块之所以放在 e2e 而非 contract 工程：一要真宿主，二是 BoxLite **跨进程只允许一个 runtime per `BOXLITE_HOME`**，而 `e2e` 是 vitest workspace 里唯一 `singleFork` 的工程，`contract` 是并行的。
+> **live 条款的 skip 语义**：Provider 的真实 create/destroy、数据面条款需要显式 `context`／`dataPlaneContext`；当前静态入口不提供这些宿主输入，逐条以明确原因跳过，不能统计为真实 VM 验收。RuntimeAdapter 未声明的可选 refresh／平台 auth-file 条款也按声明明确跳过；已经声明且 fixture 可满足的静态 MUST 不得跳过。旧 live 调用文件已经删除，不能继续把其历史结果计为当前 CI 的 live 通过。
 >
 > **为什么 RuntimeAdapter 套件只覆盖一部分**：它刻意只收"零 CLI、零网络"的条款，这样它能在任何机器上无条件跑；需要真 CLI 的条款（RA-01/02 安装往返、RA-05 challenge 形状、RA-06 凭证材料）留给后续的 sandbox-run 切片。
 

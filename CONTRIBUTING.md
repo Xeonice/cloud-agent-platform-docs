@@ -168,7 +168,7 @@ scripts/sync-submodules.sh             # 快进 api、web 到各自 origin/main 
 # 本地，api 目录。CI 在 Linux ARM64 上另做原生模块加载，本地无对应命令
 pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint --max-warnings=0 && pnpm format:check
 pnpm check:default-image && pnpm test:acceptance && node scripts/check-fake-provider-caps.mjs
-pnpm build && pnpm check:openapi
+pnpm check:openapi
 ```
 
 ```sh
@@ -180,7 +180,7 @@ pnpm test && pnpm test:storybook && pnpm build-storybook && pnpm build
 
 ```sh
 # 本地，仓库根目录（e2e-contract 依赖 api、web 已安装依赖）
-pnpm deploy:test && pnpm docs:check
+pnpm deploy:test && node scripts/docs-check.mjs --require-contracts
 (cd e2e-contract && pnpm install --frozen-lockfile && pnpm exec playwright install chromium && pnpm test)
 ```
 
@@ -188,8 +188,8 @@ pnpm deploy:test && pnpm docs:check
 
 - api 与 web 的 pre-push 钩子已覆盖格式、lint、类型检查与 OpenAPI 漂移（api 会先 `build`）；web 还跑 story 覆盖与 mock 契约锚定。
 - `pnpm deploy:test` 本地约 5 秒。在 Mac 上有 4 个用例显示 skip，属预期：它们只在 Linux CI 容器（`/home/jenkins/agent/workspace`、uid 1000）里执行。
-- CI 的 contract 作业只跑 `deploy/jenkins` 与 `deploy/containers` 下的测试。升级脚本的语法、self-test 与入口门由 `deploy/containers/upgrade-agents-entry.test.mjs` 带进 contract；`deploy/ops` 下的其余测试只在本地跑（运维记录 T30），改了它要自己跑一遍。
-- `pnpm docs:check` 在子模块缺失时把 B 类检查标为 skip；CI 检出三仓，不允许 skip。
+- 本地与CI共用递归部署测试发现，覆盖`deploy/{containers,host,jenkins,ops,upgrade}`及新增测试目录；既有必需目录缺失或为空必须失败。环境不适用的skip仍明确保留，不冒充已通过。
+- `pnpm docs:check`保留本地文档模式，依赖缺失逐项skip；完整本地复现与CI显式使用`--require-contracts`，`CI=true`同样要求必需输入完整。API的`check:openapi`自身先build再生成；两子仓均要求契约已跟踪、已在HEAD，生成后连同暂存差异一起与HEAD比较。
 - api 的 `pnpm check:acceptance` 读取主仓的 `docs/product/requirements`，只能在主仓检出的 `api/` 里本地运行，不在 Jenkins 门禁内。
 - `agent-platform-mutation` 当前未启用，不参与任何门禁。
 
