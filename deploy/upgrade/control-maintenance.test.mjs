@@ -128,6 +128,69 @@ test('pending business intent, live global holder or future control schema preve
     assert.equal((await f.maintenance.advance(f.input.maintenanceId)).phase, 'blocked'); assert.deepEqual(f.counts(), { starts: 0, stops: 0 });
   });
 });
+function retirementTable(sqlite) {
+  sqlite.exec('CREATE TABLE control_normal_retirements(operation_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,intent TEXT NOT NULL,intent_digest TEXT NOT NULL,state TEXT NOT NULL,retirement_plan TEXT,result TEXT)');
+}
+function retirementRow(sqlite, instanceId, state, now) {
+  const operationId = '11111111-1111-5111-a111-111111111111';
+  const intent = { schemaVersion: 1, kind: 'normal-retirement', instanceId, operationId,
+    deadline: now + 120000, budget: { maxDurationMs: 120000 } };
+  sqlite.prepare('INSERT INTO control_normal_retirements VALUES(?,?,?,?,?,NULL,NULL)')
+    .run(operationId, instanceId, canonical(intent), digest(intent), state);
+  return operationId;
+}
+test('unreconciled normal retirement prevents the maintenance CAS even after both command journals are applied and authority is released', async t => {
+  for (const state of ['prepared', 'draining', 'expired-unknown', 'future-unknown']) await t.test(state, async sub => {
+    const f = await fixture(sub), instanceId = f.authority.observe().instanceId;
+    retirementTable(f.controlSqlite);
+    const operationId = retirementRow(f.controlSqlite, instanceId, state, f.now());
+    const scope = f.authority.grant({ operationId, epoch: 6, executorId: 'retirement-agent', kind: 'maintenance', leaseMs: 120000 });
+    const authorization = { operationId, epoch: scope.epoch, executorId: scope.holderId, kind: scope.kind, expiresAt: scope.leaseExpiresAt };
+    const key = { operationId, commandId: operationId + ':retire' };
+    // Real independent Root and Supervisor journals both contain the original
+    // applied receipt. The enclosing Root retirement still lacks confirmation.
+    for (const sqlite of [f.controlSqlite, f.sqlite]) {
+      const journal = createControlCommandJournal({ sqlite, instanceId, clock: f.now, assertAuthority: input => f.authority.assert(input) });
+      journal.prepare({ ...key, authorization, stepId: 'retire', spec: { kind: 'retire-candidate', deadline: f.now() + 120000 } });
+      journal.begin({ ...key, authorization });
+      journal.record({ ...key, authorization, state: 'applied', result: { instanceId, operationId, commandId: key.commandId, commitKnown: true } });
+      assert.equal(journal.lookup(key).state, 'applied');
+      assert.deepEqual(journal.pending(), []);
+    }
+    f.authority.release({ operationId, epoch: scope.epoch, executorId: scope.holderId });
+    f.elapse(120001);
+    f.input.expectedControlEpoch = scope.epoch;
+    f.input.deadline = f.now() + 30000; f.input.rollbackDeadline = f.now() + 60000;
+    const beforeAuthority = f.authority.observe();
+    const beforeRetirement = f.controlSqlite.prepare('SELECT * FROM control_normal_retirements').get();
+    let capacityCalls = 0;
+    f.lifecycle.capacity = async () => { capacityCalls++; throw Error('Pending retirement must not reach capacity'); };
+    await f.maintenance.submit(f.input);
+    f.reopen();
+    const result = await f.maintenance.advance(f.input.maintenanceId);
+    assert.equal(result.phase, 'blocked');
+    assert.equal(result.reason, 'CONTROL_MAINTENANCE_BUSINESS_NOT_QUIESCENT');
+    assert.deepEqual(f.authority.observe(), beforeAuthority);
+    assert.equal(f.authority.observe().mode, 'active');
+    assert.deepEqual(f.controlSqlite.prepare('SELECT * FROM control_normal_retirements').get(), beforeRetirement);
+    assert.deepEqual(f.counts(), { starts: 0, stops: 0 }); assert.equal(f.signalCount(), 0); assert.equal(capacityCalls, 0);
+    assert.equal(f.sqlite.prepare('SELECT count(*) AS count FROM supervisor_control_maintenance_actions').get().count, 0);
+  });
+});
+test('terminal or other-instance normal retirements and legacy ledgers without that table allow the maintenance barrier', async t => {
+  for (const mode of ['applied', 'blocked', 'other-instance', 'no-table']) await t.test(mode, async sub => {
+    const f = await fixture(sub), instanceId = f.authority.observe().instanceId;
+    if (mode !== 'no-table') {
+      retirementTable(f.controlSqlite);
+      retirementRow(f.controlSqlite, mode === 'other-instance' ? 'another-instance' : instanceId,
+        mode === 'other-instance' ? 'expired-unknown' : mode, f.now());
+    }
+    await f.maintenance.submit(f.input);
+    assert.equal((await f.maintenance.advance(f.input.maintenanceId)).phase, 'barrier-held');
+    assert.equal(f.authority.observe().mode, 'passive'); assert.equal(f.authority.observe().epoch, 6);
+    assert.deepEqual(f.counts(), { starts: 0, stops: 0 });
+  });
+});
 test('expiry never removes passive maintenance isolation, and unknown source shutdown is never treated as stopped', async t => {
   const f = await fixture(t); await f.maintenance.submit(f.input); await f.maintenance.advance(f.input.maintenanceId);
   f.lifecycle.stop = async () => { throw Error('Unknown stop before physical receipt'); };

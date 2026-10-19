@@ -88,6 +88,11 @@ export function createControlMaintenance({ sqlite, controlSqlite, controlDbPath,
       invariant(controlSqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table), 'CONTROL_MAINTENANCE_LEDGER_INCOMPLETE');
       invariant(!controlSqlite.prepare(sql).get(instanceId), 'CONTROL_MAINTENANCE_BUSINESS_NOT_QUIESCENT');
     }
+    // An applied participant command is not confirmation of its enclosing
+    // retirement. Preserve unknown outcomes until the Agent reconciles them.
+    // idle() runs inside reserve()'s control-ledger transaction before its CAS.
+    if (controlSqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='control_normal_retirements'").get())
+      invariant(!controlSqlite.prepare("SELECT 1 FROM control_normal_retirements WHERE instance_id=? AND state NOT IN ('applied','blocked') LIMIT 1").get(instanceId), 'CONTROL_MAINTENANCE_BUSINESS_NOT_QUIESCENT');
     if (sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='supervisor_side_effect'").get()) invariant(!sqlite.prepare('SELECT 1 FROM supervisor_side_effect LIMIT 1').get(), 'CONTROL_MAINTENANCE_SUPERVISOR_BUSY');
     if (sqlite.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='control_commands'").get()) invariant(!sqlite.prepare("SELECT 1 FROM control_commands WHERE instance_id=? AND state IN ('planned','executing','unknown','blocked') LIMIT 1").get(instanceId), 'CONTROL_MAINTENANCE_SUPERVISOR_BUSY');
   }
