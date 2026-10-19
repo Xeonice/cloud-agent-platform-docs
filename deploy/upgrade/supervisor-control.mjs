@@ -102,6 +102,8 @@ export async function createSupervisorControl({
           "capacityTransitionRoot",
           "maintenanceKey",
           "maintenance",
+          "capacityTemplates",
+          "migratedArtifactPath",
         ],
       ) &&
       config.key?.length >= 32 &&
@@ -157,6 +159,8 @@ export async function createSupervisorControl({
               "control_commands",
               "supervisor_control_maintenance",
               "supervisor_control_maintenance_actions",
+              "supervisor_capacity_templates",
+              "supervisor_capacity_reservations",
             ].includes(name),
           ),
           "SUPERVISOR_STATE_DB_WRONG_SCOPE",
@@ -257,7 +261,7 @@ export async function createSupervisorControl({
               !(
                 config.capacityCollectorConfigPath &&
                 row.state === "applied" &&
-                row.spec.kind === "supervisor-start"
+                ["supervisor-start", "retire-candidate"].includes(row.spec.kind)
               )
             )
               sqlite
@@ -620,7 +624,7 @@ export async function createSupervisorControl({
           const row = journal.lookup(input);
           invariant(
             row?.state === "applied" &&
-              row.spec.kind === "supervisor-start" &&
+              ["supervisor-start", "retire-candidate"].includes(row.spec.kind) &&
               row.specDigest === input.specDigest,
             "SUPERVISOR_CAPACITY_RECEIPT_UNKNOWN",
           );

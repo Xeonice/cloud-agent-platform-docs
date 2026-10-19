@@ -212,12 +212,12 @@ export function deriveCapacityObservation({ config: c, before, after, plan, qual
 
 /** Sole-writer revision lock plus Supervisor's inode/digest CAS protects the
  * observation publication. Unknown observations are persisted, never fabricated. */
-export function createControlCapacityCollector({ config: c, clock = Date.now, monotonic = () => performance.now(), sample = sampleLinuxCapacity }) {
+export function createControlCapacityCollector({ config: c, clock = Date.now, monotonic = () => performance.now(), sample = sampleLinuxCapacity, publicationLock }) {
   validateConfig(c);
   return { async collect({ plan, expectedRevision, signal: parentSignal } = {}) {
     invariant(integer(expectedRevision), 'CAPACITY_REVISION_REQUIRED');
     const parent = await secureDirectory(dirname(c.observationPath)); invariant(join(parent, c.observationPath.slice(parent.length + 1)) === c.observationPath, 'CAPACITY_OBSERVATION_PATH_INVALID');
-    const lock = await fs.open(c.observationPath + '.collector-lock', 'wx', 0o600).catch(error => { if (error.code === 'EEXIST') throw Error('CAPACITY_COLLECTOR_BUSY'); throw error; });
+    const lock = publicationLock ? (await publicationLock.acquire(), null) : await fs.open(c.observationPath + '.collector-lock', 'wx', 0o600).catch(error => { if (error.code === 'EEXIST') throw Error('CAPACITY_COLLECTOR_BUSY'); throw error; });
     const signal = AbortSignal.any([AbortSignal.timeout(c.timeoutMs), ...(parentSignal ? [parentSignal] : [])]);
     const start = clock(); let previous;
     try {
@@ -244,7 +244,7 @@ export function createControlCapacityCollector({ config: c, clock = Date.now, mo
       const current = await boundedFile(c.observationPath, 1024 * 1024, undefined, true).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
       invariant(canonical(current) === canonical(previous), 'CAPACITY_OBSERVATION_CAS_CHANGED');
       await atomicJson(c.observationPath, observation); return observation;
-    } finally { await lock.close(); await fs.unlink(c.observationPath + '.collector-lock'); }
+    } finally { if(publicationLock)await publicationLock.release();else{await lock.close(); await fs.unlink(c.observationPath + '.collector-lock');} }
   } };
 }
 
@@ -320,35 +320,55 @@ export function transitionCapacityAfterMaintenance({ plan, config, record, sampl
   invariant(canonical(own(sample.containers.filter(row => row.instanceId === config.instanceId))) === canonical(own(nextConfig.residents.flatMap(row => row.containers))), 'CAPACITY_MAINTENANCE_INVENTORY_CHANGED');
   return { plan: freezeCapacityBudget(nextPlan), config: nextConfig, physical: target };
 }
+export function transitionCapacityAfterRetirement({plan,config,record,sample,now=Date.now()}) {
+  validateConfig(config);
+  const spec=record?.spec,result=record?.result,target=spec?.target;
+  invariant(record?.instanceId===config.instanceId&&record.state==='applied'&&record.specDigest===digest(spec)&&spec?.kind==='retire-candidate'&&spec.instanceId===config.instanceId&&
+    result?.instanceId===config.instanceId&&result.operationId===record.operationId&&result.commandId===record.commandId&&result.specDigest===record.specDigest&&canonical(result.target)===canonical(target)&&
+    result.normalExit===true&&result.signal==='SIGTERM'&&result.forced===false&&result.removed===false&&result.volumesRemoved===false&&result.exit?.running===false&&result.exit.hostPid===0&&result.exit.oomKilled===false&&[0,143].includes(result.exit.exitCode), 'CAPACITY_RETIREMENT_RECEIPT_UNKNOWN');
+  invariant(freezeCapacityBudget(plan).planDigest===plan.planDigest&&plan.instanceId===config.instanceId&&plan.sourceDigest===config.sourceDigest&&now>=sample.startedAt&&now-sample.startedAt<=5000&&
+    !sample.containers.some(row=>row.containerId===target.containerId),'CAPACITY_RETIREMENT_PHYSICAL_UNKNOWN');
+  const buckets=config.residents.filter(row=>row.containers.some(item=>item.containerId===target.containerId));
+  invariant(buckets.length===1,'CAPACITY_RETIREMENT_BINDING_UNKNOWN');
+  const bucket=buckets[0],old=bucket.containers.find(row=>row.containerId===target.containerId);
+  invariant(['instanceId','role','containerId','startIdentity','startedAt','artifactDigest'].every(key=>old[key]===target[key])&&old.pid===target.hostPid&&['api','coordinator','web','installer'].includes(old.role),'CAPACITY_RETIREMENT_BINDING_CHANGED');
+  const nextPlan=structuredClone(plan),nextConfig=structuredClone(config),nextBucket=nextConfig.residents.find(row=>row.id===bucket.id),matches=Object.entries(nextPlan.allocations).flatMap(([category,rows])=>rows.filter(row=>row.id===bucket.id).map(row=>({category,row})));
+  invariant(matches.length===1&&matches[0].row.resident===true,'CAPACITY_RETIREMENT_ALLOCATION_UNKNOWN');
+  nextBucket.containers=nextBucket.containers.filter(row=>row.containerId!==target.containerId);
+  if(nextBucket.containers.length)matches[0].row.identityDigest=capacityResidentIdentity(nextBucket.containers);
+  else {nextConfig.residents=nextConfig.residents.filter(row=>row.id!==bucket.id);nextPlan.allocations[matches[0].category]=nextPlan.allocations[matches[0].category].filter(row=>row.id!==bucket.id);}
+  invariant(canonical(own(sample.containers.filter(row=>row.instanceId===config.instanceId)))===canonical(own(nextConfig.residents.flatMap(row=>row.containers))),'CAPACITY_RETIREMENT_INVENTORY_CHANGED');
+  return {plan:freezeCapacityBudget(nextPlan),config:nextConfig,physical:old,allocationId:bucket.id};
+}
 
 /** Supervisor-owned files and the real Supervisor journal are injected at
  * assembly. Callers submit only the original command IDs, never resource facts.
  * Between the two file publications old observations cannot match the new
  * resident set, so admission stays closed until a fresh collection completes. */
 function createCapacityBookkeeper({ journal, instanceId, planPath, configPath, transitionRoot, clock = Date.now,
-  sample = sampleLinuxCapacity, write = atomicJson, maintenance = false }) {
+  sample = sampleLinuxCapacity, write = atomicJson, maintenance = false, retirement = false, publicationLock }) {
   invariant(typeof journal?.lookup === 'function' && ID.test(instanceId) && [planPath, configPath, transitionRoot].every(isAbsolute) && planPath !== configPath, 'CAPACITY_BOOKKEEPER_CONFIG_INVALID');
   return { async register({ operationId, commandId, signal } = {}) {
     invariant(ID.test(operationId) && ID.test(commandId), 'CAPACITY_START_COMMAND_REQUIRED');
     await secureDirectory(transitionRoot);
-    const lock = await fs.open(join(transitionRoot, 'publication.lock'), 'wx', 0o600).catch(error => { if (error.code === 'EEXIST') throw Error('CAPACITY_BOOKKEEPER_BUSY'); throw error; });
+    const lock = publicationLock ? (await publicationLock.acquire(), null) : await fs.open(join(transitionRoot, 'publication.lock'), 'wx', 0o600).catch(error => { if (error.code === 'EEXIST') throw Error('CAPACITY_BOOKKEEPER_BUSY'); throw error; });
     try {
-      const record = journal.lookup({ operationId, commandId }); if (maintenance) appliedMaintenance(record, instanceId); else appliedStart(record, instanceId);
+      const record = journal.lookup({ operationId, commandId }); if (maintenance) appliedMaintenance(record, instanceId); else if(retirement) invariant(record?.state==='applied'&&record.spec?.kind==='retire-candidate'&&record.specDigest===digest(record.spec),'CAPACITY_RETIREMENT_RECEIPT_UNKNOWN'); else appliedStart(record, instanceId);
       const path = join(transitionRoot, digest({ instanceId, operationId, commandId }).slice(7) + '.json');
       const previous = await boundedFile(path, 1024 * 1024, signal, true).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
       let intent = previous ? JSON.parse(previous.text) : null;
       if (intent) {
         const { intentDigest, ...facts } = intent;
-        invariant(intentDigest === digest(facts) && intent.maintenance === maintenance && intent.instanceId === instanceId && intent.operationId === operationId && intent.commandId === commandId && intent.specDigest === record.specDigest, 'CAPACITY_TRANSITION_CORRUPT');
+        invariant(intentDigest === digest(facts) && intent.maintenance === maintenance && !!intent.retirement === retirement && intent.instanceId === instanceId && intent.operationId === operationId && intent.commandId === commandId && intent.specDigest === record.specDigest, 'CAPACITY_TRANSITION_CORRUPT');
         if (intent.state === 'applied') return intent.receipt;
         invariant(intent.state === 'pending', 'CAPACITY_TRANSITION_CORRUPT');
       } else {
         const config = JSON.parse((await boundedFile(configPath, 1024 * 1024, signal, true)).text), plan = JSON.parse((await boundedFile(planPath, 1024 * 1024, signal, true)).text);
         const boundedSignal = AbortSignal.any([AbortSignal.timeout(config.timeoutMs), ...(signal ? [signal] : [])]);
         const actual = await sample(config, { signal: boundedSignal, clock });
-        const next = (maintenance ? transitionCapacityAfterMaintenance : transitionCapacityAfterStart)({ config, plan, record, sample: actual, now: clock() });
-        const facts = { schemaVersion: 1, state: 'pending', maintenance, instanceId, operationId, commandId, specDigest: record.specDigest, originalPlanDigest: plan.planDigest,
-          oldPlanDigest: digest(plan), oldConfigDigest: digest(config), nextPlan: next.plan, nextConfig: next.config, physical: next.physical };
+        const next = (maintenance ? transitionCapacityAfterMaintenance : retirement? transitionCapacityAfterRetirement : transitionCapacityAfterStart)({ config, plan, record, sample: actual, now: clock() });
+        const facts = { schemaVersion: 1, state: 'pending', maintenance, retirement, instanceId, operationId, commandId, specDigest: record.specDigest, originalPlanDigest: plan.planDigest,
+          oldPlanDigest: digest(plan), oldConfigDigest: digest(config), nextPlan: next.plan, nextConfig: next.config, physical: next.physical, allocationId:record.spec.capacityAllocationId??next.allocationId };
         intent = { ...facts, intentDigest: digest(facts) }; await write(path, intent);
       }
       const fresh = await sample(intent.nextConfig, { signal: AbortSignal.any([AbortSignal.timeout(intent.nextConfig.timeoutMs), ...(signal ? [signal] : [])]), clock });
@@ -359,11 +379,12 @@ function createCapacityBookkeeper({ journal, instanceId, planPath, configPath, t
         if (hash !== digest(next)) await write(target, next);
       }
       const receipt = { instanceId, operationId, commandId, specDigest: record.specDigest, sourceDigest: intent.nextPlan.sourceDigest,
-        oldPlanDigest: intent.originalPlanDigest, planDigest: intent.nextPlan.planDigest, configDigest: digest(intent.nextConfig), allocationId: record.spec.capacityAllocationId, physical: intent.physical, appliedAt: new Date(clock()).toISOString() };
+        oldPlanDigest: intent.originalPlanDigest, planDigest: intent.nextPlan.planDigest, configDigest: digest(intent.nextConfig), allocationId: intent.allocationId??record.spec.capacityAllocationId, physical: intent.physical, appliedAt: new Date(clock()).toISOString() };
       const { intentDigest: _old, ...facts } = intent, done = { ...facts, state: 'applied', receipt };
       await write(path, { ...done, intentDigest: digest(done) }); return receipt;
-    } finally { await lock.close(); await fs.unlink(join(transitionRoot, 'publication.lock')); }
+    } finally { if(publicationLock)await publicationLock.release();else{await lock.close(); await fs.unlink(join(transitionRoot, 'publication.lock'));} }
   } };
 }
 export const createCapacityStartBookkeeper = options => createCapacityBookkeeper({ ...options, maintenance: false });
 export const createCapacityMaintenanceBookkeeper = options => createCapacityBookkeeper({ ...options, maintenance: true });
+export const createCapacityRetirementBookkeeper = options => createCapacityBookkeeper({ ...options, retirement: true });

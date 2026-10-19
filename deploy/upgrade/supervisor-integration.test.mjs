@@ -56,12 +56,12 @@ async function fixture(t) {
   };
   await fs.writeFile(
     join(artifactRoot, "installed.json"),
-    JSON.stringify({ packageDigest: pkg.digest, components }),
+    JSON.stringify({ packageDigest: pkg.digest, treeDigest: digest(files), components }),
     { mode: 0o600 },
   );
   await fs.writeFile(
     join(artifactRoot, "upgrade-artifact.json"),
-    JSON.stringify({ treeDigest: digest(files), files }),
+    JSON.stringify({ treeDigest: digest(files), components, files }),
     { mode: 0o600 },
   );
   let authority = {
@@ -231,7 +231,7 @@ async function fixture(t) {
     coordinatorKey: key,
     instanceId,
   });
-  const supervisor = await createCandidateSupervisor({
+  const supervisorOptions = {
     root,
     instanceId,
     key,
@@ -245,7 +245,8 @@ async function fixture(t) {
     businessObserverKey: "b".repeat(32),
     stableControl,
     Database,
-  });
+  };
+  let supervisor = await createCandidateSupervisor(supervisorOptions);
   t.after(() => supervisor.close());
   const client = createSupervisorClient({
     origin: supervisor.origin,
@@ -330,8 +331,36 @@ async function fixture(t) {
     setAuthority: (change) => {
       authority = { ...authority, ...change };
     },
+    artifactRoot,
+    async reopen() {
+      await supervisor.close();
+      supervisor = await createCandidateSupervisor(supervisorOptions);
+      return createSupervisorClient({ origin: supervisor.origin, key, instanceId });
+    },
   };
 }
+test("publication completed before journal acknowledgement is recovered only by original read-only command lookup after Supervisor restart", async (t) => {
+  const f=await fixture(t);
+  await f.client.admitControl({epoch:1,operationId:'operation',executorId:'engine'});
+  const command=f.command('publish-window');command.spec.kind='supervisor-publish';command.spec.request.kind='package';
+  f.supervisor.stableControl.journal.prepare(command);
+  f.supervisor.stableControl.journal.begin(command);
+  const before=f.supervisor.stableControl.lookup(command);
+  assert.equal(before.state,'executing');
+  const client=await f.reopen(),row=await client.lookupCommand({operationId:command.operationId,commandId:command.commandId});
+  assert.equal(row.state,'applied');assert.equal(row.result.root,f.artifactRoot);assert.equal(row.result.packageDigest,command.spec.packageDigest);
+  assert.deepEqual(row.spec,before.spec);assert.equal(row.spec.deadline,before.spec.deadline);assert.equal(f.launches,0);
+  assert.deepEqual(await client.lookupCommand({operationId:command.operationId,commandId:command.commandId}),row);
+});
+test("unknown publication with a changed installed tree stays unknown and is never unpacked or replayed by lookup", async (t) => {
+  const f=await fixture(t);await f.client.admitControl({epoch:1,operationId:'operation',executorId:'engine'});
+  const command=f.command('unknown-publish');command.spec.kind='supervisor-publish';command.spec.request.kind='package';
+  const journal=f.supervisor.stableControl.journal;journal.prepare(command);journal.begin(command);journal.record({...command,state:'unknown',result:{code:'LOST_ACK'}});
+  await fs.appendFile(join(f.artifactRoot,'web/server.js'),'// changed\n');
+  const client=await f.reopen(),row=await client.lookupCommand({operationId:command.operationId,commandId:command.commandId});
+  assert.equal(row.state,'unknown');assert.equal(row.result.code,'SUPERVISOR_PUBLICATION_PROOF_UNKNOWN');assert.equal(f.launches,0);
+  assert.match(await fs.readFile(join(f.artifactRoot,'web/server.js'),'utf8'),/changed/);
+});
 test("real Supervisor HTTP joins global/local admission, control-only ledger, frozen capacity and process launch", async (t) => {
   const f = await fixture(t),
     command = f.command();
@@ -438,7 +467,12 @@ test("actual late launch stays single-flight after a lost HTTP acknowledgement; 
   );
   assert.equal(f.launches, 1);
   release();
-  await new Promise((r) => setTimeout(r, 20));
+  // Wait for the actual server-side journal completion, not an assumed 20ms
+  // scheduling window. Looking up while the original Promise is still live is
+  // correctly rejected by the production single-flight guard.
+  const settledDeadline=Date.now()+5000;
+  while(f.supervisor.stableControl.lookup(command)?.state==='executing'&&Date.now()<settledDeadline)await new Promise(r=>setTimeout(r,5));
+  assert.equal(f.supervisor.stableControl.lookup(command)?.state,'applied');
   const row = await f.client.lookupCommand({
     operationId: "operation",
     commandId: "late-command",

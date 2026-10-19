@@ -1,10 +1,12 @@
-import { isAbsolute } from 'node:path';
-import { lstat, realpath } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
+import { lstat, realpath, chmod } from 'node:fs/promises';
+import { secureDirectory } from './io.mjs';
 import { invariant, digest, canonical } from './trust.mjs';
 import { readSupervisorFact } from './supervisor-control.mjs';
-import { createControlCapacityCollector, createCapacityStartBookkeeper, createCapacityMaintenanceBookkeeper } from './control-capacity-collector.mjs';
+import { createControlCapacityCollector, createCapacityStartBookkeeper, createCapacityMaintenanceBookkeeper, createCapacityRetirementBookkeeper } from './control-capacity-collector.mjs';
 import { evaluateCapacityAdmission } from './capacity-admission.mjs';
 import { createControlMaintenance } from './control-maintenance.mjs';
+import { createAttemptCapacityReservations, terminalCapacityReservationProof } from './capacity-reservation.mjs';
 
 const ID = /^[a-zA-Z0-9._:-]{1,180}$/;
 const keys = (value, required) => value && Object.getPrototypeOf(value) === Object.prototype && Object.keys(value).length === required.length && required.every(key => Object.hasOwn(value, key));
@@ -17,6 +19,16 @@ const reason = error => /^[A-Z0-9_]{1,100}$/.test(error?.code || error?.message 
 export async function createSupervisorControlRuntime({ instanceId, config, supervisor, Database, lifecycle = null, clock = Date.now, sample, monotonic, intervalMs = 750 }) {
   invariant(ID.test(instanceId) && supervisor?.assembly?.sqlite && supervisor.journal && [config.capacityPlanPath, config.capacityCollectorConfigPath, config.capacityTransitionRoot, config.resourceObservationPath].every(path => typeof path === 'string' && isAbsolute(path)) &&
     Number.isSafeInteger(intervalMs) && intervalMs >= 500 && intervalMs <= 2000, 'SUPERVISOR_CAPACITY_RUNTIME_CONFIG_INVALID');
+  invariant(Database,'SUPERVISOR_PUBLICATION_DATABASE_REQUIRED');
+  const publicationRoot=await secureDirectory(config.capacityTransitionRoot),publicationPath=join(publicationRoot,'capacity-publication.db');
+  const publicationStat=await lstat(publicationPath).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+  invariant(!publicationStat||publicationStat.isFile()&&!publicationStat.isSymbolicLink()&&(publicationStat.mode&0o077)===0,'SUPERVISOR_PUBLICATION_DATABASE_INSECURE');
+  // This mutex database has no authority/journal tables. Sampling cannot take
+  // the ordinary Supervisor admission/command writer lock for 250ms or longer.
+  const publicationDb=new Database(publicationPath);await chmod(publicationPath,0o600);publicationDb.pragma('busy_timeout=50');
+  invariant(publicationDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().every(row=>row.name==='publication_mutex'),'SUPERVISOR_PUBLICATION_DATABASE_SCOPE_INVALID');
+  publicationDb.exec('CREATE TABLE IF NOT EXISTS publication_mutex(singleton INTEGER PRIMARY KEY CHECK(singleton=1))');
+  const publicationLock={acquire:()=>publicationDb.exec('BEGIN IMMEDIATE'),release:()=>publicationDb.exec('COMMIT')};
   let queue = Promise.resolve(), closed = false, collectorPending = false, lastCollection = null;
   const jobs = new Map(), failures = new Map();
   function serial(work) {
@@ -30,19 +42,22 @@ export async function createSupervisorControlRuntime({ instanceId, config, super
   }
   async function collectNow() {
     const { plan, collector } = await readCapacity(), previous = await readSupervisorFact(config.resourceObservationPath, 1048576).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
-    const value = await createControlCapacityCollector({ config: collector.value, clock, ...(sample ? { sample } : {}), ...(monotonic ? { monotonic } : {}) }).collect({ plan: plan.value, expectedRevision: previous?.value.revision ?? 0 });
+    const value = await createControlCapacityCollector({ config: collector.value, clock, publicationLock, ...(sample ? { sample } : {}), ...(monotonic ? { monotonic } : {}) }).collect({ plan: plan.value, expectedRevision: previous?.value.revision ?? 0 });
     // A replan outside our serial queue can only turn this result into unknown;
     // it cannot make an observation of the former resident set authorize work.
     const current = await readCapacity();
     invariant(current.plan.digest === plan.digest && current.collector.digest === collector.digest, 'SUPERVISOR_CAPACITY_RUNTIME_CHANGED');
     lastCollection = value; return value;
   }
-  const options = { instanceId, planPath: config.capacityPlanPath, configPath: config.capacityCollectorConfigPath, transitionRoot: config.capacityTransitionRoot, clock, ...(sample ? { sample } : {}) };
-  const starts = createCapacityStartBookkeeper({ ...options, journal: supervisor.journal });
+  const options = { instanceId, planPath: config.capacityPlanPath, configPath: config.capacityCollectorConfigPath, transitionRoot: config.capacityTransitionRoot, clock, publicationLock, ...(sample ? { sample } : {}) };
+  const starts = createCapacityStartBookkeeper({ ...options, journal: supervisor.journal }), retirements=createCapacityRetirementBookkeeper({...options,journal:supervisor.journal});
+  let reservationLedger=null;
+  if(config.capacityTemplates){const stat=await lstat(config.controlDbPath);invariant(stat.isFile()&&!stat.isSymbolicLink()&&(stat.mode&0o077)===0&&await realpath(config.controlDbPath)===config.controlDbPath,'SUPERVISOR_CAPACITY_LEDGER_INSECURE');reservationLedger=new Database(config.controlDbPath,{readonly:true,fileMustExist:true});reservationLedger.pragma('query_only=ON');reservationLedger.pragma('busy_timeout=0');}
+  const reservations=config.capacityTemplates?createAttemptCapacityReservations({sqlite:supervisor.assembly.sqlite,instanceId,templates:config.capacityTemplates,planPath:config.capacityPlanPath,configPath:config.capacityCollectorConfigPath,clock,publicationLock,terminalProof:input=>terminalCapacityReservationProof({controlSqlite:reservationLedger,supervisorSqlite:supervisor.assembly.sqlite,instanceId,...input,now:clock()})}):null;
   async function appliedStart(row) {
-    if (row?.state !== 'applied' || row.spec?.kind !== 'supervisor-start') return row;
+    if (row?.state !== 'applied' || !['supervisor-start','retire-candidate'].includes(row.spec?.kind)) return row;
     return serial(async () => {
-      await starts.register({ operationId: row.operationId, commandId: row.commandId });
+      await (row.spec.kind==='retire-candidate'?retirements:starts).register({ operationId: row.operationId, commandId: row.commandId });
       supervisor.completeCapacityStart({ operationId: row.operationId, commandId: row.commandId, specDigest: row.specDigest });
       await collectNow(); return row;
     });
@@ -112,11 +127,14 @@ export async function createSupervisorControlRuntime({ instanceId, config, super
     for (const row of pending) maintenanceRequest('advance', { maintenanceId: row.maintenance_id });
   }
   let closing;
-  return { collect: () => serial(collectNow), appliedStart, maintenanceRequest, capacityState: () => lastCollection,
+  return { collect: () => serial(collectNow), appliedStart,
+    reserve: (command,snapshot) => serial(async()=>{invariant(reservations,'SUPERVISOR_CAPACITY_TEMPLATES_REQUIRED');const prior=reservations.lookup(command);if(prior?.row.state==='applied')return prior.receipt;const observation=prior?null:await collectNow();const prepared=await reservations.prepare(command,snapshot,observation);if(prepared.qualified===false)return prepared;return reservations.confirm(command,await collectNow());}),
+    reservationStatus: command => {const prior=reservations?.lookup(command);return prior?{state:prior.row.state==='applied'?'applied':'unknown',result:prior.receipt}:{state:'definitely-not-applied',result:{dispatched:false}};},
+    maintenanceRequest, capacityState: () => lastCollection,
     agentStartIdentity() {
       if (!maintenance) return config.agentStartIdentity;
       const completed = supervisor.assembly.sqlite.prepare("SELECT result FROM supervisor_control_maintenance WHERE instance_id=? AND phase IN ('completed','rolled-back') ORDER BY epoch DESC,rowid DESC LIMIT 1").get(instanceId);
       return completed ? JSON.parse(completed.result).proof.metadata.startIdentity : config.agentStartIdentity;
     },
-    close() { return closing ??= (async () => { closed = true; clearInterval(timer); await Promise.allSettled([...jobs.values()].map(value => value.task)); await queue; controlSqlite?.close(); })(); } };
+    close() { return closing ??= (async () => { closed = true; clearInterval(timer); await Promise.allSettled([...jobs.values()].map(value => value.task)); await queue; controlSqlite?.close(); reservationLedger?.close(); publicationDb.close(); })(); } };
 }

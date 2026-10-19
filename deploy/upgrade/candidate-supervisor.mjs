@@ -12,6 +12,8 @@ import { createControlPlaneClient } from './control-plane-client.mjs';
 import { createCoordinatorInventory, createCoordinatorIdentityReader } from './supervisor-inventory.mjs';
 import { createSupervisorControl } from './supervisor-control.mjs';
 import { createSupervisorControlRuntime } from './supervisor-control-runtime.mjs';
+import { createProductionCandidateReferenceCollector } from './candidate-reference-collector.mjs';
+import { publishCandidateCoordinatorExit } from './coordinator-exit-receipt.mjs';
 import { createBoundedRoleSampler } from './supervisor-sampler.mjs';
 import { planCandidateRetirement,createCandidateRetirementExecutor } from './candidate-retirement.mjs';
 import { createContractRetirement } from './contract-retirement.mjs';
@@ -36,11 +38,14 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
   if(stable)invariant(launchAdapter&&stableControl.agentStartIdentity?.length>=16,'SUPERVISOR_STABLE_PHYSICAL_ADAPTER_REQUIRED');
   if(stableControl?.maintenance)invariant(stableControl.maintenanceKey!==key,'SUPERVISOR_MAINTENANCE_KEY_NOT_SEPARATE');
   const controlRuntime=stableControl?.capacityCollectorConfigPath?await createSupervisorControlRuntime({instanceId,config:stableControl,supervisor:stable,Database,lifecycle:controlMaintenanceLifecycle}):null;
-  const afterStart=row=>controlRuntime?controlRuntime.appliedStart(row):row;
+  const afterStart=async row=>{await publishCandidateCoordinatorExit({instanceId,row,retiredRoot:join(publicationRoot,'retired-coordinators'),inspect:id=>launchAdapter.inspect(id)});return controlRuntime?controlRuntime.appliedStart(row):row;};
   const sampleProvider=createBoundedRoleSampler({targets:()=>[...owned.values()].filter(r=>r.containerId).slice(0,16),procRoot:launchAdapter?.procRoot||'/proc',cgroupRoot:launchAdapter?.cgroupRoot||'/sys/fs/cgroup'});
   const commands=new Map();
   const retirement=await createContractRetirement({directory:join(publicationRoot,'installed-roles'),instanceId,coordinator,launchAdapter,controlKey:controlEnv.PLATFORM_CONTROL_RPC_KEY,controllerKey:coordinatorEnv?.PLATFORM_CONTROLLER_RPC_KEY,ownerKey:ownerEnv?.PLATFORM_COORDINATOR_RPC_KEY,businessRoot:coordinatorEnv?.DATA_ROOT});
   const coordinatorInventory=createCoordinatorInventory({instanceId,processRoot:join(root,'processes'),registryPath:join(publicationRoot,'installed-roles','installed-roles.json'),retiredRoot:join(publicationRoot,'retired-coordinators'),inspect:id=>launchAdapter.inspect(id),readIdentity:createCoordinatorIdentityReader({instanceId,controlKey:controlEnv.PLATFORM_CONTROL_RPC_KEY,controllerKey:coordinatorEnv?.PLATFORM_CONTROLLER_RPC_KEY})});
+  const referenceCollector=stable&&coordinatorEnv?.PLATFORM_ENTRY_CONTROL_ORIGIN&&coordinatorEnv?.PLATFORM_COORDINATOR_BINDING_PATH?await createProductionCandidateReferenceCollector({root,publicationRoot,instanceId,controlDbPath:stableControl.controlDbPath,coordinatorBindingPath:coordinatorEnv.PLATFORM_COORDINATOR_BINDING_PATH,entryOrigin:coordinatorEnv.PLATFORM_ENTRY_CONTROL_ORIGIN,entryKey:coordinatorEnv.PLATFORM_ENTRY_CONTROL_KEY,apiKey:controlEnv.PLATFORM_CONTROL_RPC_KEY,coordinatorKey:coordinatorEnv.PLATFORM_CONTROLLER_RPC_KEY,adapter:launchAdapter,Database,supervisorSqlite:stable.assembly.sqlite,observationPath:stableControl.referenceStatePath}):null;
+  const referenceState=(target,command=null,abortSignal)=>referenceCollector?referenceCollector.getState({target,command,abortSignal}):stable.referenceState(target);
+  const referenceCommand=request=>({operationId:request.operationId,commandId:request.commandId,specDigest:request.specDigest??digest(request.spec)});
   const registered=new Set();
   async function refreshInstalledRoles(){for(const record of owned.values()){if(!['owner','coordinator'].includes(record.kind)||registered.has(record.startIdentity))continue;const r=record.kind==='coordinator'?{...record,origin:record.applicationOrigin,metadataPath:'/internal/application/identity'}:record;try{await retirement.register(r);registered.add(record.startIdentity);}catch(e){if(['REGISTERED_ROLE_METADATA_UNKNOWN','INSTALLED_ROLE_METADATA_MISMATCH'].includes(e.code)||e.name==='TypeError'||e.name==='TimeoutError')continue;throw e;}}}
   async function publish(attemptId,fence,dispatch=null){
@@ -53,6 +58,17 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
     const fixed=await fileDigest(copy);invariant(fixed.digest===pkg.digest&&fixed.bytes===pkg.bytes,'PUBLICATION_PACKAGE_CHANGED');await coordinator.assertFence(attemptId,fence);
     if(dispatch)await dispatch.assertBeforeDispatch();
     const artifact=await unpackVerified(copy,pkg,root,snapshot.manifest.components);await coordinator.assertFence(attemptId,fence);return artifact;
+  }
+  async function publicationProof(command,snapshot=null){
+    const spec=command.spec;invariant(spec.kind==='supervisor-publish'&&spec.request?.kind==='package'&&typeof spec.request.attemptId==='string','SUPERVISOR_PUBLICATION_SCOPE_UNKNOWN');
+    snapshot=snapshot||await coordinator.snapshot(spec.request.attemptId);
+    invariant(snapshot.attempt?.instanceId===instanceId&&snapshot.plan?.planDigest===spec.planDigest&&snapshot.plan.package?.digest===spec.packageDigest,'SUPERVISOR_FROZEN_PLAN_CHANGED');
+    const artifactRoot=join(root,'artifacts',spec.packageDigest.slice(7)),installed=await readJson(join(artifactRoot,'installed.json'),null);
+    if(!installed)return{state:'unknown',result:{code:'SUPERVISOR_PUBLICATION_OUTCOME_UNKNOWN'}};
+    const bundle=await readJson(join(artifactRoot,'upgrade-artifact.json')),files=(await treeManifest(artifactRoot)).filter(f=>!['installed.json','upgrade-artifact.json'].includes(f.path)),components=snapshot.manifest.components;
+    invariant(installed.packageDigest===spec.packageDigest&&installed.treeDigest===bundle.treeDigest&&canonical(installed.components)===canonical(components)&&canonical(bundle.components)===canonical(components)&&canonical(files)===canonical(bundle.files)&&digest(files)===bundle.treeDigest,'SUPERVISOR_PUBLICATION_PROOF_UNKNOWN');
+    for(const [role,prefix]of[['api','api/'],['coordinator','api/'],['owner','api/'],['web','web/'],['installer','installer/']])if(components[role])invariant(digest(files.filter(f=>f.path.startsWith(prefix)))===components[role].artifactDigest,'SUPERVISOR_PUBLICATION_COMPONENT_CHANGED');
+    return{state:'applied',result:{root:artifactRoot,...installed}};
   }
   async function inspect(attemptId,kind) {
     const record=await readJson(join(root,'processes',`${attemptId}-${kind}.json`),null);if(!record)return {definitelyAbsent:true};
@@ -106,8 +122,8 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
     if(path!=='/retire-candidate')invariant(canonical(spec.request)===canonical({attemptId:input.attemptId,kind:input.kind})&&input.fence===command.authorization?.epoch&&(path==='/publish'?input.kind==='package':['api','web','coordinator','owner'].includes(input.kind)),'SUPERVISOR_COMMAND_REQUEST_CHANGED');
     return command;
   }
-  const candidateRetirement=stable?createCandidateRetirementExecutor({instanceId,getState:({target})=>stable.referenceState(target),journal:stable.journal,readTimeoutMs:2000,adapter:{
-    terminate:request=>stable.track(async()=>{const state=await stable.referenceState(request.target),plan=planCandidateRetirement({instanceId,target:request.target,state,deadline:request.deadline,budget:request.budget,maxObservationAgeMs:commands.get(request.commandId)?.spec.maxObservationAgeMs,now:Date.now()});invariant(plan.qualified&&plan.spec.expectedRevision===request.expectedRevision&&plan.spec.expectedStateDigest===request.expectedStateDigest,'SUPERVISOR_RETIREMENT_REFERENCE_CHANGED');const command=commands.get(request.commandId);invariant(command,'SUPERVISOR_COMMAND_CONTEXT_UNKNOWN');await stable.assertCurrent(command);invariant(typeof launchAdapter.retireCandidate==='function','SUPERVISOR_RETIREMENT_ADAPTER_REQUIRED');return launchAdapter.retireCandidate({...request,assertBeforeDispatch:async()=>{await stable.assertCurrent(command);const current=await stable.referenceState(request.target),p=planCandidateRetirement({instanceId,target:request.target,state:current,deadline:request.deadline,budget:request.budget,maxObservationAgeMs:command.spec.maxObservationAgeMs,now:Date.now()});invariant(p.qualified&&p.specDigest===digest(command.spec),'SUPERVISOR_RETIREMENT_REFERENCE_CHANGED');}});}),
+  const candidateRetirement=stable?createCandidateRetirementExecutor({instanceId,getState:({target,command,abortSignal})=>referenceState(target,command,abortSignal),journal:stable.journal,readTimeoutMs:2000,adapter:{
+    terminate:request=>stable.track(async()=>{const state=await referenceState(request.target,referenceCommand(request)),plan=planCandidateRetirement({instanceId,target:request.target,state,deadline:request.deadline,budget:request.budget,maxObservationAgeMs:commands.get(request.commandId)?.spec.maxObservationAgeMs,now:Date.now()});invariant(plan.qualified&&plan.spec.expectedRevision===request.expectedRevision&&plan.spec.expectedStateDigest===request.expectedStateDigest,'SUPERVISOR_RETIREMENT_REFERENCE_CHANGED');const command=commands.get(request.commandId);invariant(command,'SUPERVISOR_COMMAND_CONTEXT_UNKNOWN');await stable.assertCurrent(command);invariant(typeof launchAdapter.retireCandidate==='function','SUPERVISOR_RETIREMENT_ADAPTER_REQUIRED');return launchAdapter.retireCandidate({...request,assertBeforeDispatch:async()=>{await stable.assertCurrent(command);const current=await referenceState(request.target,referenceCommand(request)),p=planCandidateRetirement({instanceId,target:request.target,state:current,deadline:request.deadline,budget:request.budget,maxObservationAgeMs:command.spec.maxObservationAgeMs,now:Date.now()});invariant(p.qualified&&p.specDigest===digest(command.spec),'SUPERVISOR_RETIREMENT_REFERENCE_CHANGED');}});}),
     lookupCommand:request=>launchAdapter.lookupRetirement(request),
   }}):null;
   async function stableRequest(req,input){
@@ -117,12 +133,21 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
       invariant(Object.keys(input).every(k=>['operationId','commandId'].includes(k)),'SUPERVISOR_FIXED_COMMAND_REQUIRED');const row=stable.lookup(input);
       if(!row||!['executing','unknown'].includes(row.state))return afterStart(row);
       const command={operationId:row.operationId,commandId:row.commandId,stepId:row.stepId,spec:row.spec,authorization:stable.currentAuthorization()};
-      if(row.spec.kind==='retire-candidate'){await stable.assertCurrent(command);stable.assertIdle();const plan={qualified:true,spec:row.spec,specDigest:row.specDigest};return candidateRetirement.reconcile({...command,plan});}
+      if(row.spec.kind==='retire-candidate'){await stable.assertCurrent(command);stable.assertIdle();const plan={qualified:true,spec:row.spec,specDigest:row.specDigest};return afterStart(await candidateRetirement.reconcile({...command,plan}));}
       return afterStart(await stable.run(command,{execute:()=>{throw Object.assign(Error('Read-only lookup cannot dispatch'),{code:'SUPERVISOR_LOOKUP_DISPATCH_FORBIDDEN'});},reconcile:async()=>{
+        if(row.spec.kind==='capacity-reservation'){invariant(controlRuntime,'SUPERVISOR_CAPACITY_RUNTIME_REQUIRED');const status=controlRuntime.reservationStatus(command);if(status.state==='definitely-not-applied')return status;return {state:'applied',result:await controlRuntime.reserve(command,null)};}
         if(row.spec.kind==='supervisor-start'){const r=row.spec.request,record=await readJson(join(root,'processes',`${r.attemptId}-${r.kind}.json`),null);if(!record)return{state:'definitely-not-applied',result:{dispatched:false}};invariant(record.commandId===command.commandId&&record.specDigest===row.specDigest,'SUPERVISOR_START_IDENTITY_UNKNOWN');return launchAdapter.lookupStart(record);}
+        if(row.spec.kind==='supervisor-publish')return publicationProof(command);
         if(row.spec.kind==='contract-retire-reader'){const r=row.spec.request,readers=await retirement.readers(),reader=readers.readers.find(v=>v.readerId===r.readerId),proof=reader?.retirementEvidence;if(reader?.retired===true&&proof?.qualified===true&&proof.contractAttemptId===r.contractAttemptId&&proof.operationId===r.operationId&&proof.originalResourcesPreserved===true)return{state:'applied',result:proof};}
         return{state:'unknown',result:{code:'SUPERVISOR_ORIGINAL_RESULT_UNKNOWN'}};
       }}));
+    }
+    if(req.url==='/capacity-reservation'){
+      invariant(Object.keys(input).sort().join() === 'attemptId,command,fence'&&input.command?.spec?.kind==='capacity-reservation'&&input.command.spec.instanceId===instanceId&&input.command.operationId===input.attemptId&&input.command.authorization?.epoch===input.fence&&controlRuntime,'SUPERVISOR_FIXED_RESERVATION_REQUIRED');
+      const command=input.command, grant=await stable.assertCurrent(command);invariant(grant.kind==='upgrade'&&grant.operationId===input.attemptId&&grant.epoch===input.fence,'SUPERVISOR_RESERVATION_AUTHORITY_INVALID');
+      const previous=stable.lookup(command);if(previous?.state==='applied')return previous;
+      const snapshot=await coordinator.snapshot(input.attemptId);
+      return stable.run(command,{execute:async({assertCurrent})=>{await assertCurrent();return controlRuntime.reserve(command,snapshot);},reconcile:async()=>{const status=controlRuntime.reservationStatus(command);return status.state==='definitely-not-applied'?status:{state:'applied',result:await controlRuntime.reserve(command,null)};}});
     }
     if(req.url==='/observe'){invariant(Object.keys(input).every(k=>['attemptId','fence','kind'].includes(k))&&['api','web','coordinator','owner'].includes(input.kind),'SUPERVISOR_FIXED_COMMAND_REQUIRED');await coordinator.assertFence(input.attemptId,input.fence);return inspect(input.attemptId,input.kind);}
     if(req.url==='/current-installer')return currentInstaller();
@@ -136,13 +161,13 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
     const command=checkedCommand(req.url,input);commands.set(command.commandId,command);invariant(commands.size<=128,'SUPERVISOR_COMMAND_CONTEXT_LIMIT');
     try{
       await stable.assertCurrent(command);
-      if(req.url==='/retire-candidate'){invariant(input.plan?.qualified===true&&canonical(input.plan.spec)===canonical(command.spec),'SUPERVISOR_RETIREMENT_PLAN_CHANGED');return await candidateRetirement.execute({...command,plan:input.plan});}
+      if(req.url==='/retire-candidate'){invariant(input.plan?.qualified===true&&canonical(input.plan.spec)===canonical(command.spec),'SUPERVISOR_RETIREMENT_PLAN_CHANGED');return await afterStart(await candidateRetirement.execute({...command,plan:input.plan}));}
       const prior=stable.lookup(command);if(prior?.state==='applied')return await afterStart(prior);
       const snapshot=await coordinator.snapshot(input.attemptId);invariant(snapshot.attempt.instanceId===instanceId&&snapshot.plan.planDigest===command.spec.planDigest&&snapshot.plan.package.digest===command.spec.packageDigest,'SUPERVISOR_FROZEN_PLAN_CHANGED');
       const capacity=await stable.capacity(command.spec);
       return await afterStart(await stable.run(command,{execute:async dispatch=>{authorizedDispatches.add(dispatch);dispatch.assertBeforeDispatch=async()=>{await dispatch.assertCurrent();const current=await stable.capacity(command.spec);invariant(canonical(current.plan)===canonical(capacity.plan),'SUPERVISOR_CAPACITY_PLAN_CHANGED');await stable.assertCapacity(command.spec,current);};await dispatch.assertBeforeDispatch();return req.url==='/start'?start(input.attemptId,input.fence,input.kind,dispatch):publish(input.attemptId,input.fence,dispatch);},reconcile:async({row})=>{
         if(req.url==='/start'){const record=await readJson(join(root,'processes',`${input.attemptId}-${input.kind}.json`),null);if(!record)return{state:'definitely-not-applied',result:{dispatched:false}};invariant(record.commandId===command.commandId&&record.specDigest===row.specDigest,'SUPERVISOR_START_IDENTITY_UNKNOWN');invariant(typeof launchAdapter.lookupStart==='function','SUPERVISOR_START_RECONCILIATION_REQUIRED');return launchAdapter.lookupStart(record);}
-        const artifactRoot=join(root,'artifacts',snapshot.plan.package.digest.slice(7)),installed=await readJson(join(artifactRoot,'installed.json'),null);if(!installed)return{state:'unknown',result:{code:'SUPERVISOR_PUBLICATION_OUTCOME_UNKNOWN'}};const bundle=await readJson(join(artifactRoot,'upgrade-artifact.json'));const files=(await treeManifest(artifactRoot)).filter(f=>!['installed.json','upgrade-artifact.json'].includes(f.path));invariant(installed.packageDigest===snapshot.plan.package.digest&&canonical(installed.components)===canonical(snapshot.manifest.components)&&canonical(files)===canonical(bundle.files)&&digest(files)===bundle.treeDigest,'SUPERVISOR_PUBLICATION_PROOF_UNKNOWN');return{state:'applied',result:{root:artifactRoot,packageDigest:installed.packageDigest}};
+        return publicationProof(command,snapshot);
       }}));
     }finally{commands.delete(command.commandId);}
   }
@@ -154,6 +179,7 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
       if(maintenancePath){invariant(controlRuntime&&req.method==='POST'&&req.headers['x-platform-instance-id']===instanceId,'SUPERVISOR_UNAUTHORIZED');let body='';for await(const chunk of req){body+=chunk;invariant(Buffer.byteLength(body)<=8192,'SUPERVISOR_BODY_TOO_LARGE');}const result=controlRuntime.maintenanceRequest(maintenancePath[1],JSON.parse(body||'{}'));res.writeHead(maintenancePath[1]==='status'?200:202,{'content-type':'application/json'});res.end(JSON.stringify(result));return;}
       if(stable)invariant(req.headers['x-platform-instance-id']===instanceId,'SUPERVISOR_UNAUTHORIZED');
       if(req.method==='GET'&&req.url==='/metadata'){res.setHeader('content-type','application/json');res.end(JSON.stringify(await currentInstaller()));return;}
+      if(stable&&req.method==='GET'&&req.url==='/candidate-references'){invariant(referenceCollector,'SUPERVISOR_REFERENCE_PRODUCER_REQUIRED');res.setHeader('content-type','application/json');res.end(JSON.stringify(await referenceCollector.collect()));return;}
       if(stable&&req.method==='GET'&&req.url==='/coordinator-inventory'){res.setHeader('content-type','application/json');res.end(JSON.stringify(await coordinatorInventory()));return;}
       if(stable&&req.method==='GET'&&req.url==='/diagnostics/sample'){const rows=await sampleProvider({maxTargets:16});res.setHeader('content-type','application/json');res.end(JSON.stringify(rows));return;}
       if(req.method==='GET'&&['/retained-readers','/owner-isolation'].includes(req.url)){await refreshInstalledRoles();res.setHeader('content-type','application/json');res.end(JSON.stringify(await(req.url==='/retained-readers'?retirement.readers():retirement.ownerIsolation())));return;}
@@ -172,16 +198,16 @@ export async function createCandidateSupervisor({root,instanceId,key,coordinator
     }catch(e){res.writeHead(e.code==='SUPERVISOR_UNAUTHORIZED'?403:409);res.end(JSON.stringify({code:e.code||'SUPERVISOR_FAILED'}));}
   });
   await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,'127.0.0.1',ok);});
-  return {stableControl:stable,controlRuntime,admitControl:stable?.admit,sampleProvider,ownedProcesses:()=>[...owned.values()],origin:`http://127.0.0.1:${server.address().port}`,server,start,inspect,restartCurrentInstaller,registerInstalledRole:retirement.register,close:()=>new Promise((ok,fail)=>server.close(()=>{Promise.resolve(controlRuntime?.close()).then(()=>{stable?.close();ok();},fail);} ))};
+  return {stableControl:stable,controlRuntime,admitControl:stable?.admit,sampleProvider,ownedProcesses:()=>[...owned.values()],origin:`http://127.0.0.1:${server.address().port}`,server,start,inspect,restartCurrentInstaller,registerInstalledRole:retirement.register,close:()=>new Promise((ok,fail)=>server.close(()=>{Promise.resolve(controlRuntime?.close()).then(async()=>{if(referenceCollector){if(referenceCollector.closeWhenIdle)await referenceCollector.closeWhenIdle();else referenceCollector.close();}stable?.close();ok();}).catch(fail);} ))};
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)readJson(process.argv[2]).then(c=>createCandidateSupervisor({...c,coordinator:c.stableControl?createControlPlaneClient({controlOrigin:c.stableControl.origin,controlKey:c.stableControl.key,coordinatorOrigin:c.coordinatorOrigin,coordinatorKey:c.controllerKey,coordinatorBindingPath:c.coordinatorBindingPath,instanceId:c.instanceId}):createCoordinatorClient({origin:c.coordinatorOrigin,instanceId:c.instanceId,key:c.controllerKey,bindingPath:c.coordinatorBindingPath})})).catch(e=>{process.stderr.write((e.code||'SUPERVISOR_FAILED')+'\n');process.exitCode=1;});
 
 /** Fixed Foundation RPC; command IDs/deadlines are supplied by the independent ledger. */
 export function createSupervisorClient({origin,key,instanceId,commandContext,fetcher=fetch}) {
   const url=new URL(origin);invariant(url.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(url.hostname)&&url.pathname==='/'&&!url.username&&!url.password&&!url.search&&!url.hash&&key?.length>=32,'SUPERVISOR_CLIENT_CONFIG_INVALID');
-  const mutations=new Set(['/start','/publish','/retire-candidate','/retire-reader']);
+  const mutations=new Set(['/capacity-reservation','/start','/publish','/retire-candidate','/retire-reader']);
   async function call(path,input={},command=null){
-    invariant(['/control-admission','/command-result','/start','/publish','/observe','/retire-candidate','/retire-reader','/current-installer'].includes(path),'SUPERVISOR_FORBIDDEN_OPERATION');
+    invariant(['/control-admission','/command-result','/capacity-reservation','/start','/publish','/observe','/retire-candidate','/retire-reader','/current-installer'].includes(path),'SUPERVISOR_FORBIDDEN_OPERATION');
     if(mutations.has(path)){command=command||await commandContext?.({path,input});invariant(command&&command.commandId&&command.spec,'SUPERVISOR_FIXED_COMMAND_REQUIRED');input={...input,command};}
     const serialized=JSON.stringify(input);invariant(Buffer.byteLength(serialized)<=8192,'SUPERVISOR_BODY_TOO_LARGE');
     const timeout=mutations.has(path)?Math.min(command.spec.deadline-Date.now(),command.spec.budget.maxDurationMs):2000;invariant(Number.isSafeInteger(timeout)&&timeout>0,'SUPERVISOR_COMMAND_DEADLINE_EXPIRED');

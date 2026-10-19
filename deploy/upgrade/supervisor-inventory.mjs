@@ -1,7 +1,8 @@
 import * as fs from "node:fs/promises";
 import { join } from "node:path";
-import { invariant, digest } from "./trust.mjs";
+import { invariant } from "./trust.mjs";
 import { readSupervisorFact } from "./supervisor-control.mjs";
+import {validateCoordinatorExitReceipt} from './coordinator-exit-receipt.mjs';
 const CID = /^[a-f0-9]{64}$/,
   HASH = /^sha256:[a-f0-9]{64}$/;
 const safeOrigin = (value) => {
@@ -230,28 +231,9 @@ export function createCoordinatorInventory({
               16384,
             )
           ).value;
-          const { receiptDigest, ...facts } = receipt;
           invariant(
-            receipt.schemaVersion === 1 &&
-              receipt.kind === "coordinator-normal-exit" &&
-              receipt.instanceId === instanceId &&
-              typeof receipt.migrationId === "string" &&
-              receipt.migrationId.length > 0 &&
-              typeof receipt.originalCommandId === "string" &&
-              receipt.originalCommandId.length > 0 &&
-              receiptDigest === digest(facts) &&
-              Number.isFinite(Date.parse(receipt.exitedAt)) &&
-              clock() - Date.parse(receipt.exitedAt) >= 0 &&
-              receipt.target?.containerId === r.containerId &&
-              receipt.target.startIdentity === r.startIdentity &&
-              receipt.target.artifactDigest === r.artifactDigest &&
-              receipt.target.DockerStartedAt === physical.startedAt &&
-              Number.isSafeInteger(physical.restartCount) &&
-              receipt.target.restartCount === physical.restartCount &&
-              receipt.after?.running === false &&
-              receipt.after.hostPid === 0 &&
-              receipt.after.restartPolicy === "no" &&
-              receipt.after.restartCount === physical.restartCount,
+            validateCoordinatorExitReceipt(receipt,{instanceId,target:physical,now:clock()})&&
+              (receipt.operationKind!=='candidate-retirement'||physical.oomKilled===false&&physical.exitCode===receipt.after.exitCode&&physical.finishedAt===receipt.after.finishedAt),
             "COORDINATOR_EXIT_RECEIPT_UNKNOWN",
           );
           const after = await inspect(r.containerId);
@@ -267,7 +249,8 @@ export function createCoordinatorInventory({
             ].every((k) => after[k] === physical[k]) &&
               after.running === false &&
               after.paused === false &&
-              after.restartPolicy === "no",
+              after.restartPolicy === "no"&&
+              (receipt.operationKind!=='candidate-retirement'||after.oomKilled===false&&after.exitCode===receipt.after.exitCode&&after.finishedAt===receipt.after.finishedAt),
             "COORDINATOR_EXIT_PHYSICAL_CHANGED",
           );
           coordinators.push({
