@@ -32,6 +32,8 @@ async function fixture(
     renewError = null,
     terminal = false,
     holdSecondAck = false,
+    progressCapability,
+    checkpointEvidence,
   } = {},
 ) {
   const root = await realpath(
@@ -171,6 +173,8 @@ async function fixture(
       },
     ]),
   );
+  if (checkpointEvidence !== undefined)
+    steps.get(lastStep.stepId).evidence = structuredClone(checkpointEvidence);
   const attempt = {
     instanceId: "progress-instance",
     attemptId: ID,
@@ -200,6 +204,7 @@ async function fixture(
     calls = [];
   const operation = deferred(),
     secondProgress = deferred(),
+    thirdProgress = deferred(),
     progressAck = deferred();
   const stopped = new AbortController();
   let running;
@@ -216,6 +221,9 @@ async function fixture(
         ? 100
         : Math.min(99, Math.floor((100 * fraction) / plan.steps.length));
     return {
+      ...(progressCapability === undefined
+        ? {}
+        : { controllerCapabilities: { progressEvidenceReference: progressCapability } }),
       attempt: { ...attempt, totalWork, completedWork, percent },
       actorId: "operator",
       signedManifest: envelope,
@@ -307,6 +315,14 @@ async function fixture(
           body.payload.completedWork >= row.completedWork &&
             body.payload.completedWork <= step.totalWork,
         );
+        if (Object.hasOwn(body.payload, "evidenceDigest")) {
+          assert.equal(progressCapability, 1);
+          assert.equal(body.kind, "progress");
+          assert.equal(Object.hasOwn(body.payload, "evidence"), false);
+          assert.equal(body.payload.stepId, attempt.stage);
+          assert.equal(body.payload.completedWork, row.completedWork);
+          assert.equal(body.payload.evidenceDigest, digest(row.evidence));
+        }
         if (body.kind === "step-applied") {
           assert.equal(body.payload.completedWork, step.totalWork);
           row.applied = true;
@@ -315,7 +331,8 @@ async function fixture(
           row.receiptDigest = body.payload.receiptDigest;
         } else if (!row.applied) {
           row.completedWork = body.payload.completedWork;
-          row.evidence = body.payload.evidence;
+          if (Object.hasOwn(body.payload, "evidence"))
+            row.evidence = body.payload.evidence;
         }
         attempt.stage = step.stepId;
         attempt.state =
@@ -338,6 +355,10 @@ async function fixture(
         secondProgress.resolve(result);
         if (holdSecondAck) await progressAck.promise;
       }
+      if (
+        body.kind === "progress" &&
+        events.filter((e) => e.kind === "progress").length === 3
+      ) thirdProgress.resolve(result);
       send(result);
     } catch (error) {
       errors.push(error.message);
@@ -407,8 +428,10 @@ async function fixture(
     renewals,
     operation,
     secondProgress,
+    thirdProgress,
     progressAck,
     stopped,
+    setProgressCapability: (value) => { progressCapability = value; },
     run: () => {
       running = controller.runOnce();
       running.catch(() => {});
@@ -439,6 +462,8 @@ test(
       assert.equal(event.kind, "progress");
       assert.equal(event.payload.stepId, "candidate");
       assert.equal(event.payload.completedWork, 1);
+      assert.deepEqual(event.payload.evidence, originalCandidate.evidence);
+      assert.equal(Object.hasOwn(event.payload, "evidenceDigest"), false);
     }
     f.operation.resolve();
     await delay(100);
@@ -461,6 +486,56 @@ test(
       after,
       "finally stops and settles observations; no late progress can overwrite failure",
     );
+  },
+);
+
+test(
+  "fresh Coordinator capability switches unchanged large checkpoints to small digest heartbeats",
+  { timeout: 7000 },
+  async (t) => {
+    const evidence = {
+      immutableCheckpoint: "candidate",
+      observedAt: "2026-10-19T12:50:51.661Z",
+      owner: { operations: [{ history: "x".repeat(1600000) }] },
+    };
+    const f = await fixture(t, {
+      progressCapability: "1", // An unknown version is not an advertised v1 capability.
+      checkpointEvidence: evidence,
+    });
+    const before = f.snapshot(), original = structuredClone(f.steps.get("candidate"));
+    const running = f.run();
+    await f.secondProgress.promise;
+    assert.ok(f.renewals.length >= 2);
+    for (const event of f.events) {
+      assert.deepEqual(event.payload.evidence, evidence);
+      assert.equal(Object.hasOwn(event.payload, "evidenceDigest"), false);
+    }
+    // The accepted/claimed snapshot lacked support. Only a newly read snapshot
+    // may opt into the contract after the Coordinator has changed.
+    f.setProgressCapability(1);
+    const refreshed = await f.thirdProgress.promise;
+    const heartbeat = f.events.at(-1);
+    assert.equal(heartbeat.kind, "progress");
+    assert.deepEqual(heartbeat.payload, {
+      stepId: "candidate",
+      completedWork: original.completedWork,
+      totalWork: 1,
+      evidenceDigest: digest(evidence),
+      stage: before.attempt.state,
+    });
+    assert.ok(Buffer.byteLength(JSON.stringify(heartbeat.payload)) < 512);
+    assert.ok(Buffer.byteLength(JSON.stringify(evidence)) > 1600000);
+    assert.deepEqual(f.steps.get("candidate"), original);
+    for (const field of ["percent", "completedWork", "totalWork", "stage"])
+      assert.equal(refreshed.attempt[field], before.attempt[field]);
+    assert.ok(Date.parse(refreshed.attempt.observedAt) > Date.parse(before.attempt.observedAt));
+    assert.equal(f.steps.get("coordinator-handoff").applied, false);
+    f.operation.resolve();
+    await assert.rejects(running, { code: "EXPECTED_ROUTE_BOUNDARY" });
+    const completion = f.events.find((e) => e.kind === "step-applied");
+    assert.ok(Object.hasOwn(completion.payload, "evidence"));
+    assert.equal(Object.hasOwn(completion.payload, "evidenceDigest"), false);
+    assert.deepEqual(f.errors, []);
   },
 );
 

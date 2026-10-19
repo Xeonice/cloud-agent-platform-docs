@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { createCoordinatorClient } from "./coordinator-client.mjs";
 import { createNativeExecutor } from "./native-executor.mjs";
+import { inspectObservation } from "./circuit-breaker.mjs";
 
 async function receiver(t, handler) {
   const calls = [], errors = [], timers = new Set();
@@ -97,6 +98,7 @@ test("RPC failure receipts contain routing and timing only, retaining the origin
 
 test("normal observation and fallback reads explicitly bound control work without changing request or attachment SLOs", async (t) => {
   const controls = [], policy = { candidateStartupMs: 500, requestDeadlineMs: 2000, attachDeadlineMs: 5000 };
+  const continuity = { qualified: true, observedAt: new Date().toISOString(), baselineDigest: "same-observation-proof" };
   const web = { origin: null, digest: "sha256:" + "a".repeat(64) };
   const f = await receiver(t, async ({ url }) => {
     if (url.pathname === "/binding") return { web };
@@ -107,13 +109,15 @@ test("normal observation and fallback reads explicitly bound control work withou
   web.origin = f.origin;
   const coordinator = {
     async assertFence() {},
-    async observation(id, body, options) { controls.push({ method: "observation", id, body, options }); return { sharedStateHealthy: true }; },
-    async continuity() { return { qualified: true }; },
+    async observation(id, body, options) { controls.push({ method: "observation", id, body, options }); return { sharedStateHealthy: true, continuity }; },
+    async continuity() { assert.fail("normal observation must retain its original continuity proof"); },
     async fallbackEligibility(id, body, options) { controls.push({ method: "fallback", id, body, options }); return { qualified: false }; },
   };
   const executor = createNativeExecutor({ root: "/read-control-contract-only", instanceId: "normal-observation", coordinator, entryOrigin: f.origin, entryKey: "e".repeat(32), supervisorOrigin: f.origin, supervisorKey: "s".repeat(32) });
   const input = { attempt: { attemptId: "original", plan: { policy } }, fence: 7, weight: 0 };
-  assert.equal((await executor.observe(input)).web.qualified, true);
+  const observation = await executor.observe(input);
+  assert.equal(observation.web.qualified, true);
+  assert.equal(observation.continuity, continuity);
   assert.equal((await executor.fallbackEligibility({ ...input, fault: { code: "observed-fault" } })).qualified, false);
   assert.equal(controls.length, 2);
   assert.ok(controls[0].options.timeoutMs > 0 && controls[0].options.timeoutMs <= 500);
@@ -121,3 +125,65 @@ test("normal observation and fallback reads explicitly bound control work withou
   assert.equal(policy.requestDeadlineMs, 2000);
   assert.equal(policy.attachDeadlineMs, 5000);
 });
+
+for (const mode of ["qualified", "unqualified", "missing", "stale"]) {
+  test("observation preserves its single HTTP proof and safety result: " + mode, async (t) => {
+    const policy = {
+      candidateStartupMs: 1000, observationFreshnessMs: 5000,
+      requestDeadlineMs: 2000, attachDeadlineMs: 5000,
+      stageDurationMs: 60000, probeHz: 10, minRequests: 100,
+      softErrorDelta: 0.01, p95Ratio: 2, p95FloorMs: 1000,
+      consecutiveEvaluations: 2,
+    };
+    const observedAt = new Date(Date.now() - (mode === "stale" ? 6000 : 0)).toISOString();
+    const proof = {
+      observedAt, fenceValid: true, ownerGenerationsValid: true,
+      routeGenerationValid: true, sharedStateHealthy: true,
+      coordinatorGeneration: 7, observerEpoch: "original-epoch",
+      invariants: Object.fromEntries([
+        "unauthorizedStops", "resourceRebuilds", "duplicateCommands",
+        "duplicateOccurrences", "writerConflicts", "migrationDifferences", "integrityFailures",
+      ].map((key) => [key, 0])),
+      probes: { known: true, hz: 10, samples: 600, failures: 0, maxLatencyMs: 10, attachMaxMs: 20, windowMs: 60000 },
+      candidateProbes: { known: true, hz: 10, samples: 600, failures: 0, maxLatencyMs: 10, windowMs: 60000 },
+      candidate: { known: true, requests: 600, errorRate: 0, p95Ms: 10, windowMs: 60000 },
+      baseline: { known: true, qualified: true, requests: 600, errorRate: 0, p95Ms: 10, windowMs: 60000 },
+      windowMs: 60000,
+      ...(mode === "missing" ? {} : {
+        continuity: {
+          instanceId: "single-observation", attemptId: "original", fence: 7,
+          qualified: mode !== "unqualified", observedAt,
+          baselineDigest: "original-baseline", reasons: mode === "unqualified" ? ["original-resource-unknown"] : [],
+        },
+      }),
+    };
+    const web = { origin: null, digest: "sha256:" + "a".repeat(64) };
+    const f = await receiver(t, async ({ url, body }) => {
+      if (url.pathname.endsWith("/renew")) {
+        assert.deepEqual(body, { fence: 7, controllerId: null, checkOnly: true });
+        return {};
+      }
+      if (url.pathname === "/internal/upgrades/observation") {
+        assert.equal(url.searchParams.get("attemptId"), "original");
+        assert.equal(url.searchParams.get("fence"), "7");
+        assert.equal(url.searchParams.get("weight"), "25");
+        return proof;
+      }
+      if (url.pathname === "/binding") return { web };
+      if (url.pathname === "/web-process") return { instanceId: "single-observation", artifactDigest: web.digest, webRevision: "b".repeat(40), startIdentity: "fixed-web", pid: process.pid };
+      if (url.pathname === "/web-build") return { webRevision: "b".repeat(40) };
+      assert.fail("Unexpected extra proof request: " + url.pathname);
+    });
+    web.origin = f.origin;
+    const coordinator = createCoordinatorClient({ origin: f.origin, instanceId: "single-observation", key: "k".repeat(32) });
+    const executor = createNativeExecutor({ root: "/single-proof-contract-only", instanceId: "single-observation", coordinator, entryOrigin: f.origin, entryKey: "e".repeat(32), supervisorOrigin: f.origin, supervisorKey: "s".repeat(32) });
+    const result = await executor.observe({ attempt: { attemptId: "original", plan: { policy } }, fence: 7, weight: 25 });
+    assert.deepEqual({ ...result, web: undefined }, { ...proof, web: undefined });
+    assert.equal(result.web.qualified, true);
+    assert.equal(f.calls.filter((c) => c.path === "/internal/upgrades/observation").length, 1);
+    assert.equal(f.calls.filter((c) => c.path === "/internal/upgrades/continuity").length, 0);
+    const inspection = inspectObservation(result, policy);
+    if (mode === "qualified") assert.equal(inspection.qualified, true);
+    else assert.equal(inspection.fault, mode === "stale" ? "OBSERVATION_STALE" : "SHARED_STATE_OR_CONTINUITY_UNKNOWN");
+  });
+}

@@ -67,7 +67,11 @@ export function createInstanceController({root,instanceId,controllerId,startIden
         const durable=await coordinator.step(attempt.attemptId,step.stepId);
         if(observationsStopped||leaseLost||signal?.aborted)return;
         invariant(durable?.stepId===step.stepId&&Number.isFinite(durable.completedWork)&&durable.completedWork>=0&&(step.totalWork===null||durable.completedWork<=step.totalWork),'PROGRESS_OBSERVATION_WORK_INVALID');
-        await commitObserved('progress',{stepId:step.stepId,completedWork:durable.completedWork,totalWork:step.totalWork,evidence:durable.evidence,stage:observed.state},randomUUID());
+        // A new Store can attest the unchanged checkpoint by digest. Negotiate
+        // on this fresh snapshot so an older Coordinator still receives its
+        // existing full-evidence progress contract during a rolling handoff.
+        const proof=fresh.controllerCapabilities?.progressEvidenceReference===1?{evidenceDigest:digest(durable.evidence)}:{evidence:durable.evidence};
+        await commitObserved('progress',{stepId:step.stepId,completedWork:durable.completedWork,totalWork:step.totalWork,...proof,stage:observed.state},randomUUID());
       }
       timer=setInterval(()=>{
         if(observationsStopped||renewalTask)return;
