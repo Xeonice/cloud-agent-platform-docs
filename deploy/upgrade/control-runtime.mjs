@@ -15,6 +15,7 @@ import { createCoordinatorClient } from './coordinator-client.mjs';
 import { createControlInspectorClient } from './control-inspector-client.mjs';
 import { createControlHttpServer } from './control-http.mjs';
 import { createControlDiagnostics } from './control-diagnostics.mjs';
+import { normalRetirementAdmissionBarrier } from './normal-retirement.mjs';
 
 /** No AppModule, business connection, provider registry or SDK is constructed. */
 export async function assembleControlRuntime({ config: c, verifiedPackage, engineIdentity, Database, participantsFactory, executionFactory, contractBusinessFactory, signal, onEvent }) {
@@ -44,6 +45,11 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
   let journal, inspector, stores, participants, execution, listener, metadataTask = null, operationTask = null, stopped = false;
   const recoveryStore = createControlRecoveryStore({ sqlite, instanceId: c.instanceId });
   const authority = createControlAuthority({ sqlite, instanceId: c.instanceId, epochFloor: c.epochFloor ?? 0,
+    validateGrant({operationId,kind,leaseMs}) {
+      const barrier=normalRetirementAdmissionBarrier(sqlite,c.instanceId);
+      invariant(!barrier||kind==='maintenance'&&barrier.operationId===operationId&&leaseMs<=(barrier.state==='expired-unknown'?5000:30000),
+        'CONTROL_RETIREMENT_RECONCILIATION_REQUIRED');
+    },
     validateRecovery(input) {
       const intent = recoveryStore.read(input.operationId);
       invariant(intent && !['blocked', 'recovered'].includes(intent.phase) && intent.deadline > Date.now() && intent.triggeringAttemptId === input.supersedes && intent.epoch === input.epoch, 'CONTROL_RECOVERY_INTENT_SCOPE_INVALID');
@@ -72,6 +78,7 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
     claimGuard() {
       invariant(authority.observe().mode === 'active', 'CONTROL_PASSIVE_EXECUTION_FORBIDDEN');
       invariant(!recoveryStore.active(), 'CONTROL_RECOVERY_ALREADY_ACTIVE');
+      if(normalRetirementAdmissionBarrier(sqlite,c.instanceId))return {stage:'candidate-retirement-reconciliation'};
       return journal.pending().length ? { stage: 'original-command-reconciliation' } : null;
     },
     dataFormatGuard({ coordinatorDataFormats }) {
@@ -102,6 +109,7 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
     request(req, res, command) {
       const principal = security.principal(req, res, c.instanceId);
       if (!stores.operations.replay(principal.actorId, command) && !stores.store.replay(principal.actorId, command)) {
+        invariant(!normalRetirementAdmissionBarrier(sqlite,c.instanceId),'CONTROL_RETIREMENT_RECONCILIATION_REQUIRED');
         releaseTerminalAuthority(); stores.store.assertControlAdmissionAvailable();
       }
       return super.request(req, res, command);
@@ -138,7 +146,10 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
       }
       request(req, res, command) {
         const principal = security.principal(req, res, c.instanceId);
-        if (!this.store.replay(principal.actorId, command)) { releaseTerminalAuthority(); stores.store.assertControlAdmissionAvailable(); }
+        if (!this.store.replay(principal.actorId, command)) {
+          invariant(!normalRetirementAdmissionBarrier(sqlite,c.instanceId),'CONTROL_RETIREMENT_RECONCILIATION_REQUIRED');
+          releaseTerminalAuthority(); stores.store.assertControlAdmissionAvailable();
+        }
         return super.request(req, res, command);
       }
     }
@@ -185,6 +196,7 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
       return authority.assert({ operationId: id, epoch: current.epoch, executorId: current.holderId, kind: 'contract' });
     },
     retireContractReader: body => execution.retireContractReader(body),
+    normalRetirements:{submit:body=>execution.normalRetirements.submit(body),read:id=>execution.normalRetirements.read(id),reconcile:id=>execution.normalRetirements.reconcile(id)},
     recoveryStatus: () => recoveryStore.view(recoveryStore.active() ?? (stores.store.latest() ? recoveryStore.latest(stores.store.latest().attemptId) : null)),
     controlStatus: () => ({ version: verifiedPackage.version, protocolVersion: verifiedPackage.protocolVersion, state: authority.observe().mode === 'active' ? 'ready' : 'passive', observedAt: new Date().toISOString() }),
     diagnosticsStatus: () => execution?.diagnosticStatus?.() ?? null,
@@ -202,6 +214,13 @@ export async function assembleControlRuntime({ config: c, verifiedPackage, engin
   async function tick() {
     if (operationTask || stopped || authority.observe().mode !== 'active') return;
     operationTask = Promise.resolve().then(async () => {
+      const retirement=execution.normalRetirements?.active();
+      if(retirement) {
+        const result=await execution.normalRetirements.advance(retirement.operationId);
+        const current=authority.observe();
+        if(current.kind==='maintenance'&&current.operationId===retirement.operationId&&current.holderId&&current.leaseExpiresAt>Date.now())return result;
+      }
+      if(normalRetirementAdmissionBarrier(sqlite,c.instanceId))return {state:'candidate-retirement-reconciliation'};
       await service.advanceOperation();
       if (contracts) await execution.tickContracts(contracts);
       return execution.runOnce();

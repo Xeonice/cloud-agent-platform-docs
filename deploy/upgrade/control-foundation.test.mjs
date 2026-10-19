@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createRequire } from 'node:module';
-import { mkdtemp, rm, realpath, writeFile, mkdir } from 'node:fs/promises';
+import { mkdtemp, rm, realpath, writeFile, mkdir, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createIndependentFoundation } from './control-foundation.mjs';
@@ -32,6 +32,11 @@ test('independent Foundation restores its listeners with zero business lifecycle
   const paths = Object.fromEntries(['installer', 'entry', 'futureOwners', 'web'].map(name => [name, join(root, name)]));
   await mkdir(paths.web); await writeFile(join(paths.web, 'index.html'), 'web');
   const ledger = join(root, 'ledger'); await mkdir(ledger);
+  const ledgerDb = new Database(join(ledger, 'control.db'));
+  createRequire(new URL('../../api/package.json', import.meta.url))('./apps/api/dist/platform/upgrade/control-store-factory.js').createUpgradeControlStores({
+    sqlite: ledgerDb, instanceId, clock: { now: () => new Date() }, ids: { next: () => '00000000-0000-4000-8000-000000000001' },
+  });
+  ledgerDb.close(); await chmod(join(ledger, 'control.db'), 0o600);
   const capacityPlanPath = join(root, 'capacity.json'), referenceStatePath = join(root, 'references.json'), resourceObservationPath = join(root, 'resources.json');
   for (const file of [capacityPlanPath, referenceStatePath, resourceObservationPath]) await atomicJson(file, {});
   const stableControl = { origin: agent.origin, key: keys.upgradeControl, accessKey: keys.accessAuthority, statePath: join(root, 'supervisor-private/state.db'),

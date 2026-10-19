@@ -14,6 +14,8 @@ import { createNativeExecutor } from './native-executor.mjs';
 import { createInstanceController } from './instance-controller.mjs';
 import { persistedEntryBinding } from './control-entry-context.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
+import { requiredCapacityRoles } from './capacity-reservation.mjs';
+import { createNormalRetirement } from './normal-retirement.mjs';
 
 const ID = /^[a-zA-Z0-9._:-]{1,200}$/;
 const absolute = value => typeof value === 'string' && isAbsolute(value);
@@ -52,7 +54,7 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
   let closed = false, running = null;
   const supervise = createPrivateControlRpc({ origin: c.supervisorOrigin, key: c.supervisorKey, instanceId, fetcher, timeoutMs: 2000 });
   const superSample = createPrivateControlRpc({ origin: c.supervisorOrigin, key: c.supervisorKey, instanceId, fetcher, timeoutMs: 100, maxBytes: 65536 });
-  sqlite.exec('CREATE TABLE IF NOT EXISTS control_execution_faults(attempt_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,fault_id TEXT NOT NULL,code TEXT NOT NULL,phase TEXT NOT NULL,recorded_at TEXT,state TEXT NOT NULL)');
+  sqlite.exec('CREATE TABLE IF NOT EXISTS control_execution_faults(attempt_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,fault_id TEXT NOT NULL,code TEXT NOT NULL,phase TEXT NOT NULL,recorded_at TEXT,state TEXT NOT NULL); CREATE TABLE IF NOT EXISTS control_capacity_deferrals(attempt_id TEXT PRIMARY KEY,instance_id TEXT NOT NULL,reservation_spec_digest TEXT NOT NULL,command TEXT NOT NULL,command_digest TEXT NOT NULL,result TEXT NOT NULL,result_digest TEXT NOT NULL)');
   function grant(expected) {
     invariant(!closed && !stopped.signal.aborted, 'CONTROL_EXECUTION_STOPPED');
     const current = expected ?? authority.observe();
@@ -86,6 +88,30 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
         return { state: row.state === 'applied' ? 'applied' : row.state === 'definitely-not-applied' ? 'definitely-not-applied' : 'unknown', result: row.result };
       } });
   }
+  async function reserveCapacity(attempt, current, timeoutMs) {
+    invariant(Array.isArray(attempt.plan.steps), 'CONTROL_CAPACITY_REQUIRED_ROLES_UNKNOWN');
+    const roles = requiredCapacityRoles(attempt.plan);
+    const commandId = `${attempt.attemptId}:supervisor:capacity-reservation`, key = { operationId: current.operationId, commandId };
+    const prior = journal.lookup(key), capacity = prior ? null : (await readSupervisorFact(c.capacityPlanPath)).value;
+    if (capacity) invariant(capacity.instanceId === instanceId && DIGEST.test(capacity.planDigest) && DIGEST.test(capacity.sourceDigest), 'CONTROL_CAPACITY_PLAN_UNKNOWN');
+    const request = { attemptId: attempt.attemptId, planDigest: attempt.plan.planDigest, packageDigest: attempt.plan.package.digest, roles };
+    const spec = prior?.spec ?? { schemaVersion: 1, kind: 'capacity-reservation', instanceId, request,
+      capacityPlanDigest: capacity.planDigest, sourceDigest: capacity.sourceDigest, deadline: clock() + timeoutMs, budget: { maxDurationMs: timeoutMs } };
+    invariant(spec.kind === 'capacity-reservation' && canonical(spec.request) === canonical(request), 'CONTROL_CAPACITY_RESERVATION_PLAN_CHANGED');
+    const receipt = await foundationCommand({ path: '/capacity-reservation', input: { attemptId: attempt.attemptId, fence: current.epoch },
+      commandId, stepId: 'supervisor:capacity-reservation', spec, scope: current });
+    invariant(receipt?.instanceId === instanceId && receipt.attemptId === attempt.attemptId && receipt.operationId === key.operationId && receipt.commandId === commandId &&
+      receipt.specDigest === digest(spec) && receipt.sourceDigest === spec.sourceDigest && DIGEST.test(receipt.planDigest) && DIGEST.test(receipt.templateDigest) &&
+      receipt.allocationIds && Object.getPrototypeOf(receipt.allocationIds) === Object.prototype, 'CONTROL_CAPACITY_RESERVATION_INVALID');
+    if (receipt.qualified === false) {
+      invariant(['deferred', 'unknown'].includes(receipt.state) && receipt.planDigest === spec.capacityPlanDigest && Object.keys(receipt.allocationIds).length === 0, 'CONTROL_CAPACITY_RESERVATION_INVALID');
+      throw Object.assign(Error('Capacity admission did not permit this upgrade'), { code: receipt.state === 'deferred' ? 'CONTROL_CAPACITY_DEFERRED' : 'CONTROL_CAPACITY_UNKNOWN' });
+    }
+    invariant(receipt.qualified === true && receipt.state === 'admitted' && canonical(Object.keys(receipt.allocationIds).sort()) === canonical(roles) &&
+      Object.values(receipt.allocationIds).every(id => typeof id === 'string' && ID.test(id)) && new Set(Object.values(receipt.allocationIds)).size === roles.length,
+      'CONTROL_CAPACITY_RESERVATION_INVALID');
+    return receipt;
+  }
   const supervisor = {
     async request({ path, attempt, fence, kind, timeoutMs = 120000 }) {
       const current = grant(); invariant(current.kind === 'upgrade' && current.operationId === attempt.attemptId && current.epoch === fence || current.kind === 'recovery' && recoveryStore.read(current.operationId)?.triggeringAttemptId === attempt.attemptId && current.epoch === fence, 'CONTROL_SUPERVISOR_ATTEMPT_SCOPE_INVALID');
@@ -94,11 +120,12 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
       invariant(current.kind === 'upgrade' && ['/start', '/publish'].includes(path) && (path === '/publish' ? kind === 'package' : ['api', 'web', 'coordinator', 'owner'].includes(kind)), 'BUSINESS_RELEASE_CANNOT_REPLACE_CONTROL');
       invariant(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 120000, 'CONTROL_SUPERVISOR_BUDGET_INVALID');
       const commandId = `${attempt.attemptId}:supervisor:${path.slice(1)}:${kind}`, key = { operationId: current.operationId, commandId };
-      const prior = journal.lookup(key), capacity = prior ? null : (await readSupervisorFact(c.capacityPlanPath)).value;
-      if (capacity) invariant(capacity.instanceId === instanceId && DIGEST.test(capacity.planDigest) && DIGEST.test(capacity.sourceDigest), 'CONTROL_CAPACITY_PLAN_UNKNOWN');
+      const prior = journal.lookup(key), reservation = prior ? null : await reserveCapacity(attempt, current, timeoutMs);
+      const capacity = prior ? null : (await readSupervisorFact(c.capacityPlanPath)).value;
+      if (capacity) invariant(capacity.instanceId === instanceId && DIGEST.test(capacity.planDigest) && DIGEST.test(capacity.sourceDigest) && capacity.sourceDigest === reservation.sourceDigest, 'CONTROL_CAPACITY_PLAN_UNKNOWN');
       let allocation;
       if (!prior && path === '/start') {
-        const allocationId = c.capacityAllocationIds?.[kind];
+        const allocationId = reservation.allocationIds[kind];
         const matches = Object.values(capacity.allocations ?? {}).flat().filter(item => item?.id === allocationId && item.resident === false);
         invariant(typeof allocationId === 'string' && matches.length === 1, 'CONTROL_CAPACITY_ALLOCATION_UNKNOWN');
         allocation = { capacityAllocationId: allocationId, resources: structuredClone(matches[0].resources) };
@@ -162,7 +189,7 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
     let active = 0;
     for (const pending of journal.pending()) {
       const row = journal.lookup(pending);
-      if (!['supervisor-start', 'supervisor-publish', 'contract-retire-reader'].includes(row.spec?.kind)) continue;
+      if (!['capacity-reservation', 'supervisor-start', 'supervisor-publish', 'contract-retire-reader'].includes(row.spec?.kind)) continue;
       invariant(row.operationId === context.intent.triggeringAttemptId, 'CONTROL_RECOVERY_FOREIGN_SUPERVISOR_COMMAND');
       let observed;
       try { observed = await supervise('/command-result', { operationId: row.operationId, commandId: row.commandId }); }
@@ -263,8 +290,45 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
   };
   const recoveryDriver = createControlRecoveryDriver({ sqlite, instanceId, store: stores.store, recoveryStore, authority, adapter, diagnostics,
     executorId: c.controllerId ?? `control-recovery-${randomUUID()}`, clock, signal: stopped.signal, sleep: ms => pause(ms, stopped.signal) });
+  function deferKnownCapacity(session, error) {
+    if (!['CONTROL_CAPACITY_DEFERRED', 'CONTROL_CAPACITY_UNKNOWN'].includes(error.code) || typeof stores.store.commitReceipt !== 'function') return null;
+    invariant(stores.store.ledgerSqlite === sqlite, 'CONTROL_CAPACITY_DEFERRAL_LEDGER_CHANGED');
+    const id = session.attempt.attemptId, commandId = `${id}:supervisor:capacity-reservation`;
+    return sqlite.transaction(() => {
+      const row = journal.lookup({ operationId: id, commandId }), decision = row?.result;
+      if (row?.state !== 'applied' || row.spec.kind !== 'capacity-reservation' || row.spec.instanceId !== instanceId || row.spec.request?.attemptId !== id ||
+        decision?.qualified !== false || !['deferred', 'unknown'].includes(decision.state) || decision.instanceId !== instanceId || decision.attemptId !== id ||
+        decision.operationId !== id || decision.commandId !== commandId || decision.specDigest !== row.specDigest || decision.sourceDigest !== row.spec.sourceDigest ||
+        !DIGEST.test(decision.templateDigest) || decision.planDigest !== row.spec.capacityPlanDigest || !decision.allocationIds || Object.getPrototypeOf(decision.allocationIds) !== Object.prototype || Object.keys(decision.allocationIds).length !== 0) return null;
+      const previous = sqlite.prepare('SELECT * FROM control_capacity_deferrals WHERE attempt_id=?').get(id);
+      if (previous) {
+        const command = JSON.parse(previous.command), result = JSON.parse(previous.result), snapshot = stores.store.snapshot(id);
+        invariant(previous.instance_id === instanceId && previous.reservation_spec_digest === row.specDigest && digest(command) === previous.command_digest && digest(result) === previous.result_digest &&
+          snapshot.attempt.state === 'deferred', 'CONTROL_CAPACITY_DEFERRAL_CORRUPT');
+        const replay = stores.store.commitReceipt(id, command);
+        invariant(digest(replay) === previous.result_digest, 'CONTROL_CAPACITY_DEFERRAL_RECEIPT_CHANGED');
+        return { state: 'deferred', attemptId: id, receipt: result };
+      }
+      const current = grant(), snapshot = stores.store.snapshot(id), generation = session.generation ?? session.attempt.generation;
+      if (current.kind !== 'upgrade' || current.operationId !== id || current.epoch !== session.fence || snapshot.fence !== session.fence ||
+        !Number.isSafeInteger(generation) || snapshot.attempt.generation !== generation || snapshot.controllerId !== current.holderId ||
+        !['accepted', 'downloading'].includes(snapshot.attempt.state) || snapshot.plan.planDigest !== row.spec.request.planDigest || snapshot.plan.package.digest !== row.spec.request.packageDigest || canonical(requiredCapacityRoles(snapshot.plan)) !== canonical(row.spec.request.roles) ||
+        !Array.isArray(snapshot.appliedSteps) || snapshot.appliedSteps.some(step => snapshot.plan.steps.find(item => item.stepId === step.stepId)?.kind !== 'download') ||
+        sqlite.prepare('SELECT 1 FROM control_commands WHERE instance_id=? AND operation_id=? AND command_id<>? LIMIT 1').get(instanceId, id, commandId)) return null;
+      stores.store.assertControllerFence(id, session.fence, generation);
+      const command = { fence: session.fence, generation, expectedSequence: snapshot.attempt.sequence,
+        eventId: 'capacity-deferred:' + digest({ instanceId, attemptId: id, reservationSpecDigest: row.specDigest }).slice(7), kind: 'deferred',
+        payload: { reason: decision.state === 'deferred' ? '实例容量不足，升级已延后' : '实例容量待确认，升级已延后',
+          capacityReservation: { commandId, specDigest: row.specDigest, resultDigest: digest(decision), state: decision.state } } };
+      const receipt = stores.store.commitReceipt(id, command);
+      invariant(receipt.instanceId === instanceId && receipt.attemptId === id && receipt.state === 'deferred' && receipt.eventDigest === digest(command), 'CONTROL_CAPACITY_DEFERRAL_RECEIPT_CHANGED');
+      sqlite.prepare('INSERT INTO control_capacity_deferrals VALUES(?,?,?,?,?,?,?)').run(id, instanceId, row.specDigest, canonical(command), digest(command), canonical(receipt), digest(receipt));
+      return { state: 'deferred', attemptId: id, receipt };
+    }).immediate();
+  }
   async function onFault({ session, error }) {
     if (closed || stopped.signal.aborted || safeCode(error) === 'CONTROL_EXECUTION_STOPPED') return { state: 'stopped' };
+    const deferred = deferKnownCapacity(session, error); if (deferred) return deferred;
     const id = session.attempt.attemptId, code = safeCode(error);
     let row = sqlite.prepare('SELECT * FROM control_execution_faults WHERE attempt_id=? AND instance_id=?').get(id, instanceId);
     if (!row) { sqlite.prepare('INSERT INTO control_execution_faults VALUES(?,?,?,?,?,NULL,?)').run(id, instanceId, randomUUID(), code, 'recover', 'unknown'); row = sqlite.prepare('SELECT * FROM control_execution_faults WHERE attempt_id=?').get(id); }
@@ -276,8 +340,27 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
   }
   const controller = createInstanceController({ ...c, controllerId: c.controllerId ?? `control-${randomUUID()}`, startIdentity: engineIdentity.startIdentity,
     coordinator, executor: { ...native, installerCandidate: () => { throw Object.assign(Error('Independent control maintenance is explicit'), { code: 'BUSINESS_RELEASE_CANNOT_REPLACE_CONTROL' }); } }, signal: stopped.signal, onEvent, onFault, fetcher });
+  const normalRetirements=createNormalRetirement({sqlite,instanceId,executorId:`normal-retirement-${randomUUID()}`,store:stores.store,authority,journal,participants,recoveryStore,clock,
+    canRun:()=>!running&&!closed&&!stopped.signal.aborted&&stores.contracts.active().length===0,
+    references:async target=>{
+      const result=await supervise('/candidate-references');
+      invariant(result?.instanceId===instanceId && Array.isArray(result.candidates) && result.candidates.length<=128,'NORMAL_RETIREMENT_REFERENCE_UNKNOWN');
+      const matches=result.candidates.filter(row=>canonical(row.target)===canonical(target));
+      invariant(matches.length===1,'NORMAL_RETIREMENT_REFERENCE_UNKNOWN');return matches[0];
+    },
+    participant:async target=>{
+      const result=await supervise('/coordinator-inventory');
+      invariant(result?.instanceId===instanceId && result.complete===true && Array.isArray(result.coordinators)&&result.coordinators.length<=128,
+        'NORMAL_RETIREMENT_PARTICIPANT_UNKNOWN');
+      const rows=result.coordinators.filter(row=>row.containerId===target.containerId);
+      invariant(rows.length===1 && rows[0].applicationOrigin,'NORMAL_RETIREMENT_PARTICIPANT_UNKNOWN');return rows[0];
+    },
+    census:record=>createPrivateControlRpc({origin:record.managementOrigin??record.applicationOrigin,instanceId,key:c.businessKey,fetcher,maxBytes:65536,timeoutMs:2000})(record.managementOrigin?'/internal/coordinator/retirement':'/internal/application/retirement'),
+    drain:(record,body)=>createPrivateControlRpc({origin:record.managementOrigin??record.applicationOrigin,instanceId,key:c.businessKey,fetcher,maxBytes:65536,timeoutMs:2000})(record.managementOrigin?'/internal/coordinator/retirement-drain':'/internal/application/retirement-drain',body),
+    supervisor:supervise,
+  });
   return {
-    coordinator, executor: native, commands, recoveryDriver, adapter, controller,
+    coordinator, executor: native, commands, recoveryDriver, adapter, controller, normalRetirements,
     ensureContractAuthority: record => contractAuthority.ensure(record),
     async retireContractReader(body) {
       const record = stores.contracts.snapshot(body.contractAttemptId), current = await contractAuthority.ensure(record);
@@ -306,6 +389,6 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
       const row = sqlite.prepare("SELECT fault_id,code,phase,recorded_at FROM control_execution_faults WHERE instance_id=? AND state='persisted' AND recorded_at IS NOT NULL ORDER BY recorded_at DESC LIMIT 1").get(instanceId);
       return row ? { correlationId: row.fault_id, code: row.code, phase: row.phase, recordedAt: row.recorded_at } : null;
     },
-    async close() { if (closed) return; closed = true; stopped.abort(); signal?.removeEventListener('abort', stop); contractAuthority.close(); await running?.catch(() => {}); },
+    async close() { if (closed) return; closed = true; stopped.abort(); signal?.removeEventListener('abort', stop); contractAuthority.close(); await running?.catch(() => {}); await normalRetirements.close(); },
   };
 }

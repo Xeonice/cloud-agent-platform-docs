@@ -38,3 +38,16 @@ test('live authority cannot be stolen by an ordinary new operation or a lower ep
     assert.equal(control.observe().epoch, 1);
   } finally { db.close(); }
 });
+
+test('the synchronous admission guard runs inside the authority transaction before mutation',()=>{
+  const db=new Database(':memory:');let guard=()=>{throw Error('FIXTURE_ADMISSION_FUSED');};
+  try {
+    const authority=createControlAuthority({sqlite:db,instanceId:'guarded',validateGrant:input=>guard(input)});
+    authority.activate({expectedRevision:1,sourceBindingDigest:'sha256:'+'a'.repeat(64)});
+    const before=authority.observe(),request={operationId:'one',epoch:1,executorId:'worker'};
+    assert.throws(()=>authority.grant(request),/FIXTURE_ADMISSION_FUSED/);assert.deepEqual(authority.observe(),before);
+    guard=()=>Promise.resolve();assert.throws(()=>authority.grant(request),/CONTROL_AUTHORITY_GRANT_CHECK_MUST_BE_SYNCHRONOUS/);assert.deepEqual(authority.observe(),before);
+    guard=input=>{assert.equal(input.operationId,'one');assert.equal(input.kind,'upgrade');};
+    assert.equal(authority.grant(request).operationId,'one');
+  }finally{db.close();}
+});

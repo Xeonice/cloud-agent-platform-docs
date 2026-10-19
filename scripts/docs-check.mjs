@@ -1522,6 +1522,7 @@ async function checkDeploymentRoleContract() {
       controlFutureOwnerRoot: '/docs-check/future-owners', controlEntryWebRoots: ['/docs-check/web-code'],
       capacityStateRoot: '/docs-check/capacity-state', controlDownloadRoot: `${root}/installer/downloads`,
       runtimeRoots: [owner], existingRuntimeRoots: [owner], procRoot: '/host/proc', cgroupRoot: '/host/cgroup',
+      stableControl: { controlDbPath: '/docs-check/control-ledger/control.db' },
       controlFoundationEntries: { entry: { configPath: '/docs-check/control-foundation/entry.json' }, supervisor: { configPath: '/docs-check/control-foundation/supervisor.json' } } };
     for (const kind of roles) {
       const mounts = roleMounts(c, { kind, artifactRoot: kind.startsWith('control-') ? c.controlArtifactRoot : '/docs-check/artifacts/installed',
@@ -1538,6 +1539,8 @@ async function checkDeploymentRoleContract() {
           (kind === 'control-supervisor' && db.some(m => m.rw)))
         throw Error(`${kind} 违反业务库／SDK／socket 隔离边界`);
       if (kind === 'control-agent' && mounts.some(m => m.source === '/proc' || m.source === '/sys/fs/cgroup')) throw Error('Agent不得直接观察宿主进程或cgroup');
+      if (kind === 'control-supervisor' && !mounts.some(m=>m.source===c.controlLedgerRoot&&!m.rw)) throw Error('Supervisor必须只读挂载独立控制账本用于真实引用和容量核验');
+      if (kind !== 'control-agent' && mounts.some(m=>m.source===c.controlPrivateRoot)) throw Error('其他角色不得挂载Agent私有访问凭证库');
       if (kind === 'owner' && !mounts.some((m) => m.source === `${c.businessHostPath}/workspaces` && m.rw))
         throw Error('Owner 必须挂实际业务工作区');
     }

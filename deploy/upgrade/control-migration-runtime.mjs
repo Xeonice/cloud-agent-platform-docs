@@ -40,6 +40,7 @@ import { evaluateCapacityAdmission } from "./capacity-admission.mjs";
 import { createMigrationCapacity } from "./control-migration-capacity.mjs";
 import { createContractRetirement } from "./contract-retirement.mjs";
 import { captureProcessIdentity } from "./supervisor-sampler.mjs";
+import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
 const CID = /^[a-f0-9]{64}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const brief = (p) => ({
@@ -66,6 +67,15 @@ const sameBirth = (a, b) =>
     "imageDigest",
     "role",
   ].every((k) => a[k] === b[k]);
+
+/** Read-only signed package selection is exercised separately from physical
+ * migration. Schema 2 stores packages[], not manifest.package. */
+export async function readVerifiedMigrationBusiness(business, { clock = Date.now } = {}) {
+  const envelope=(await readSupervisorFact(business.envelopePath,1048576)).value;
+  const current=(await readSupervisorFact(business.currentSourcePath,1048576)).value;
+  const signed=verifyManifest(envelope,await loadTrustRoot(business.trustRootPath),current,clock());
+  return {envelope,signed};
+}
 function assertStopped(actual, expected) {
   invariant(
     sameBirth(actual, expected) &&
@@ -289,6 +299,7 @@ export async function createControlMigrationRuntime(
       CID.test(c.source?.[role]?.containerId) && c.source[role].role === role,
       "CONTROL_MIGRATION_SOURCE_RECORD_REQUIRED",
     );
+  if (!provided) await assertMigrationRunnerIdentity(input);
   const root = await secureDirectory(c.journalRoot),
     db = new Database(join(root, "migration.db"));
   await fs.chmod(join(root, "migration.db"), 0o600);
@@ -950,25 +961,20 @@ export async function createControlMigrationRuntime(
         engineIdentity: engine,
         clock,
       });
-    const envelope = (await readSupervisorFact(business.envelopePath, 1048576))
-        .value,
-      current = (await readSupervisorFact(business.currentSourcePath, 1048576))
-        .value,
-      roots = await loadTrustRoot(business.trustRootPath),
-      signed = verifyManifest(envelope, roots, current, clock());
+    const { signed } = await readVerifiedMigrationBusiness(business,{clock});
     invariant(
       business.archivePath ===
         join(
           c.adapter.root,
           "installer/artifacts",
-          signed.manifest.package.digest.slice(7) + ".tgz",
+          signed.package.digest.slice(7) + ".tgz",
         ),
       "CONTROL_MIGRATION_ARCHIVE_SCOPE_CHANGED",
     );
     const archive = await fileDigest(business.archivePath);
     invariant(
-      archive.digest === signed.manifest.package.digest &&
-        archive.bytes === signed.manifest.package.bytes,
+      archive.digest === signed.package.digest &&
+        archive.bytes === signed.package.bytes,
       "CONTROL_MIGRATION_ARCHIVE_CHANGED",
     );
     const bundle = await readJson(
@@ -1015,15 +1021,13 @@ export async function createControlMigrationRuntime(
           c.migrationSourcePath,
       "CONTROL_MIGRATION_PROVENANCE_PATH_REQUIRED",
     );
-    const envelope = (
-      await readSupervisorFact(c.businessPackage.envelopePath, 1048576)
-    ).value;
+    const {envelope,signed}=await readVerifiedMigrationBusiness(c.businessPackage,{clock});
     const receipt = {
       schemaVersion: 1,
       instanceId: input.instanceId,
       artifactRoot: c.businessPackage.artifactRoot,
       signedManifest: envelope,
-      packageDigest: envelope.manifest.package.digest,
+      packageDigest: signed.package.digest,
       controlArtifactRoot: c.controlPackage.artifactRoot,
       archivePath: c.businessPackage.archivePath,
     };

@@ -371,6 +371,12 @@ export async function startIndependentUpgradeHarness(input) {
     agentStartIdentity: startIds.control,
     capacityCollectorConfigPath: join(paths.capacity, "collector.json"),
     capacityTransitionRoot: join(paths.capacity, "transitions"),
+    capacityTemplates: Object.fromEntries(
+      ["api", "web", "coordinator", "owner"].map((kind) => [kind, {
+        allocationId: input.capacityAllocationIds?.[kind],
+        resources: input.capacityBudgets?.candidate?.[kind],
+      }]),
+    ),
   };
   const foundationInput = Object.fromEntries(
     Object.entries(input).filter(

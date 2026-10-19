@@ -46,6 +46,7 @@ async function fixture(t) {
   const agent = await createControlHttpServer({ instanceId, key, businessKey: 'b'.repeat(32), access, service, store: { instanceId }, authority: { assert: input => { assert.equal(input.operationId, requestId); assert.equal(input.epoch, 4); return input; } }, schemas,
     verifyEntryRequest: req => verifier.verify(req), claim: () => { controlCalls.push('claim'); }, renew: () => { controlCalls.push('renew'); },
     criticalAuthority: (_id, body) => { controlCalls.push('critical-authority'); return body; },
+    normalRetirements:{submit:body=>{controlCalls.push('retirement-submit');return {operationId:requestId,body};},read:id=>({operationId:id}),reconcile:async id=>{controlCalls.push('retirement-lookup');return {operationId:id};}},
     controlStatus: () => ({ version: 'control-protocol-fixture', protocolVersion: 1, state: 'ready', observedAt: new Date().toISOString() }),
     onSpan: value => spans.push(value) });
   const business = http.createServer((_req, res) => { res.writeHead(200); res.end('business'); });
@@ -62,6 +63,21 @@ async function fixture(t) {
   return { entry, agent, access, requests, spans, controlCalls, cookie: challenge.cookie,
     directHeaders(method, path, extra = {}) { return { host: 'public.example.test', origin: 'http://public.example.test', ...signEntryContext({ instanceId, key: entryKey, remoteAddress: '198.51.100.8', method, path }), ...extra }; } };
 }
+
+test('retirement maintenance stays on the existing private Agent capability and never grants business/browser keys maintenance authority',async t=>{
+  const f=await fixture(t),headers=secret=>({'x-platform-internal-key':secret,'x-platform-instance-id':instanceId,'content-type':'application/json'});
+  const root='/internal/control/retirements',body={acceptedUpgradeId:requestId,target:{}};
+  for(const secret of ['b'.repeat(32),entryKey,'']) {
+    assert.equal((await fetch(f.agent.origin+root,{method:'POST',headers:headers(secret),body:JSON.stringify(body)})).status,403);
+    assert.equal((await fetch(f.agent.origin+root+'/'+requestId,{headers:headers(secret)})).status,403);
+    assert.equal((await fetch(f.agent.origin+root+'/'+requestId+'/reconcile',{method:'POST',headers:headers(secret),body:'{}'})).status,403);
+  }
+  assert.deepEqual(f.controlCalls,[]);
+  assert.equal((await fetch(f.agent.origin+root,{method:'POST',headers:headers(key),body:JSON.stringify(body)})).status,202);
+  assert.equal((await fetch(f.agent.origin+root+'/'+requestId,{headers:headers(key)})).status,200);
+  assert.equal((await fetch(f.agent.origin+root+'/'+requestId+'/reconcile',{method:'POST',headers:headers(key),body:'{}'})).status,200);
+  assert.deepEqual(f.controlCalls,['retirement-submit','retirement-lookup']);
+});
 
 test('real Entry to independent HTTP keeps original session, CSRF, status and same-request lookup available with business listener closed', async t => {
   const f = await fixture(t), origin = f.entry.origin;

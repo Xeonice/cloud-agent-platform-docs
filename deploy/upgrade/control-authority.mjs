@@ -2,7 +2,7 @@ import { invariant } from './trust.mjs';
 const id = value => typeof value === 'string' && /^[a-zA-Z0-9._:-]{1,200}$/.test(value);
 
 /** Independent deployment authority; never grants the business writer lease. */
-export function createControlAuthority({ sqlite, instanceId, epochFloor = 0, clock = Date.now, validateRecovery }) {
+export function createControlAuthority({ sqlite, instanceId, epochFloor = 0, clock = Date.now, validateRecovery, validateGrant }) {
   invariant(sqlite && id(instanceId) && Number.isSafeInteger(epochFloor) && epochFloor >= 0, 'CONTROL_AUTHORITY_CONFIG_INVALID');
   sqlite.exec(`CREATE TABLE IF NOT EXISTS control_authority (
     instance_id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, operation_id TEXT,
@@ -36,6 +36,11 @@ export function createControlAuthority({ sqlite, instanceId, epochFloor = 0, clo
   function grant({ operationId, epoch, executorId, leaseMs = 15000, kind = 'upgrade', supersedes = null }) {
     invariant(id(operationId) && id(executorId) && Number.isSafeInteger(epoch) && epoch > 0 && ['upgrade', 'recovery', 'maintenance', 'contract'].includes(kind) && Number.isSafeInteger(leaseMs) && leaseMs >= 500 && leaseMs <= 120000, 'CONTROL_AUTHORITY_CLAIM_INVALID');
     return sqlite.transaction(() => {
+      if(validateGrant) {
+        invariant(typeof validateGrant==='function','CONTROL_AUTHORITY_GRANT_GUARD_REQUIRED');
+        const checked=validateGrant({operationId,epoch,executorId,leaseMs,kind,supersedes});
+        invariant(!checked||typeof checked.then!=='function','CONTROL_AUTHORITY_GRANT_CHECK_MUST_BE_SYNCHRONOUS');
+      }
       const old = observe(), now = clock();
       invariant(old.mode === 'active' && epoch >= old.epoch, 'CONTROL_AUTHORITY_NOT_ACTIVE');
       if (epoch === old.epoch) {

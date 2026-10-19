@@ -1,5 +1,6 @@
 import { invariant, digest, canonical, DIGEST } from "./trust.mjs";
 import { createPrivateControlRpc } from "./control-rpc.mjs";
+import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 
 /** Only fixed Supervisor inventory + each actual Coordinator's private identity
  * are read. This collector has no business SQLite or Docker capability. */
@@ -54,10 +55,12 @@ export function createControlStabilization({
           const proof = record.retiredPhysical,
             { receiptDigest, observedAt, ...facts } = proof ?? {};
           invariant(
-            proof?.schemaVersion === 1 &&
-              proof.kind === "coordinator-normal-exit" &&
-              proof.instanceId === instanceId &&
-              digest(facts) === receiptDigest &&
+            validateCoordinatorExitReceipt(facts && { ...facts, receiptDigest }, {
+              instanceId,
+              target: { containerId: record.containerId, startIdentity: record.startIdentity,
+                artifactDigest: record.artifactDigest, ...record.physical },
+              now: clock(),
+            }) &&
               fresh(observedAt) &&
               record.physical.hostPid === 0 &&
               record.physical.paused === false &&

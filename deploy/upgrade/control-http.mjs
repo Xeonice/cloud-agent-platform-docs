@@ -33,7 +33,7 @@ export async function createControlHttpServer({
   instanceId, key, businessKey, accessKey = key, access, service, store, authority,
   schemas, verifyEntryRequest, claim, renew, criticalAuthority,
   controlStatus, recoveryStatus = () => null, recoveryAuthority, diagnosticsStatus = () => null,
-  metadata, contractAuthority, retireContractReader,
+  metadata, contractAuthority, retireContractReader, normalRetirements,
   onSpan, host = '127.0.0.1', port = 0, maxRequests = 64,
 }) {
   invariant(instanceId === store?.instanceId && typeof key === 'string' && key.length >= 32 && access && service && schemas && typeof verifyEntryRequest === 'function' && typeof claim === 'function' && typeof renew === 'function', 'CONTROL_HTTP_CONFIG_REQUIRED');
@@ -64,6 +64,21 @@ export async function createControlHttpServer({
           (path === '/internal/control/contracts/retire-reader' || /^\/internal\/upgrades\/[a-f0-9-]{36}\/critical-authority$/.test(path));
         invariant(loopback(req.socket.remoteAddress) && (equal(req.headers['x-platform-internal-key'], key) || businessCallback && businessKey && equal(req.headers['x-platform-internal-key'], businessKey)) && req.headers['x-platform-instance-id'] === instanceId, 'CONTROL_INTERNAL_AUTH');
         if (req.method === 'GET' && path === '/internal/control/authority' && !url.search) { reply(200, authority.observe()); return; }
+        if (req.method === 'POST' && path === '/internal/control/retirements' && !url.search) {
+          invariant(normalRetirements,'NORMAL_RETIREMENT_UNAVAILABLE');
+          const body=shape(await readBody(req,8192),['acceptedUpgradeId','target'],['requestId']);
+          reply(202,normalRetirements.submit(body));return;
+        }
+        const retirement=/^\/internal\/control\/retirements\/([a-f0-9-]{36})$/.exec(path);
+        if(req.method==='GET' && retirement && UUID.test(retirement[1]) && !url.search) {
+          invariant(normalRetirements,'NORMAL_RETIREMENT_UNAVAILABLE');
+          const row=normalRetirements.read(retirement[1]);invariant(row,'NORMAL_RETIREMENT_NOT_FOUND');reply(200,row);return;
+        }
+        const reconcileRetirement=/^\/internal\/control\/retirements\/([a-f0-9-]{36})\/reconcile$/.exec(path);
+        if(req.method==='POST'&&reconcileRetirement&&UUID.test(reconcileRetirement[1])&&!url.search) {
+          invariant(normalRetirements,'NORMAL_RETIREMENT_UNAVAILABLE');shape(await readBody(req,128),[]);
+          reply(200,await normalRetirements.reconcile(reconcileRetirement[1]));return;
+        }
         if (req.method === 'POST' && path === '/internal/control/authority/verify' && !url.search) {
           const body = shape(await readBody(req, 4096), ['epoch', 'operationId', 'executorId']);
           invariant(positive(body.epoch) && typeof body.operationId === 'string' && body.operationId.length <= 200 && typeof body.executorId === 'string' && body.executorId.length <= 200, 'CONTROL_COMMAND_INVALID');

@@ -238,6 +238,7 @@ test('Entry and Supervisor have separate fixed mount capabilities without curren
     controlFutureOwnerRoot: '/fixture/new-owners', existingRuntimeRoots: ['/fixture/original-owner', '/fixture/old-owners'],
     controlEntryWebRoots: ['/fixture/initial-web-code', '/fixture/installer/artifacts'], capacityStateRoot: '/control/capacity',
     catalogFile: '/catalog/catalog.json', trustRootPath: '/trust/root.json', procRoot: '/host/proc', cgroupRoot: '/host/cgroup',
+    stableControl: { controlDbPath: '/control/ledger/control.db' },
     controlFoundationEntries: { entry: { configPath: '/control/foundation/entry.json' }, supervisor: { configPath: '/control/foundation/supervisor.json' } } };
   const entry = roleMounts(c, { kind: 'control-entry', artifactRoot: c.controlArtifactRoot, env: {} });
   assert.ok(entry.some(m => m.source === c.controlEntryRoot && m.rw));
@@ -247,9 +248,14 @@ test('Entry and Supervisor have separate fixed mount capabilities without curren
   assert.ok(supervisor.some(m => m.source === '/proc' && m.destination === '/host/proc' && !m.rw));
   assert.ok(supervisor.some(m => m.source === '/sys/fs/cgroup' && !m.rw));
   assert.ok(supervisor.some(m => m.source === '/business' && !m.rw));
+  assert.ok(supervisor.some(m => m.source === c.controlLedgerRoot && !m.rw));
+  assert.equal(entry.some(m => m.source === c.controlLedgerRoot), false);
   for (const mounts of [entry, supervisor]) {
-    assert.equal(mounts.some(m => m.source === c.controlPrivateRoot || m.source === c.controlLedgerRoot || c.existingRuntimeRoots.includes(m.source)), false);
+    assert.equal(mounts.some(m => m.source === c.controlPrivateRoot || c.existingRuntimeRoots.includes(m.source)), false);
   }
+  const maintenance=roleMounts({...c,stableControl:{...c.stableControl,maintenance:{packages:{old:{artifactRoot:'/control/releases/v1',manifestPath:'/control/foundation/old-manifest.json',configPath:'/control/foundation/old-config.json'}}}}},{kind:'control-supervisor',artifactRoot:c.controlArtifactRoot,env:{}});
+  assert.deepEqual(maintenance.filter(m=>m.source===c.controlLedgerRoot),[{source:c.controlLedgerRoot,destination:c.controlLedgerRoot,rw:true}]);
+  assert.equal(maintenance.some(m=>m.source===c.controlPrivateRoot),false);
   assert.throws(() => roleMounts({ ...c, controlFutureOwnerRoot: '/fixture/old-owners' }, { kind: 'control-supervisor', artifactRoot: c.controlArtifactRoot, env: {} }), /CONTROL_SUPERVISOR_MOUNT_SCOPE_REQUIRED/);
   assert.throws(() => roleMounts({ ...c, controlEntryWebRoots: ['/control/agent-private/auth'] }, { kind: 'control-entry', artifactRoot: c.controlArtifactRoot, env: {} }), /CONTROL_ENTRY_MOUNT_SCOPE_REQUIRED/);
 });

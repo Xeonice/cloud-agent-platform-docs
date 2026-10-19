@@ -204,3 +204,19 @@ test("explicit fresh normal-exit physical proof preserves exitedAt and is includ
     /CONTROL_STABILIZATION_RETIRED_PROOF_UNKNOWN/,
   );
 });
+
+test('ordinary retired coordinator stays a typed non-writer in subsequent stabilization without a fabricated migration id', async t => {
+  const f=fixture(t), target={containerId:'c'.repeat(64),startIdentity:'ordinary-retired-coordinator',artifactDigest:digest('retired-business'),DockerStartedAt:new Date(1000).toISOString(),restartCount:0};
+  const facts={schemaVersion:1,kind:'coordinator-normal-exit',instanceId:'instance',operationKind:'candidate-retirement',operationId:'maintenance',originalCommandId:'maintenance:retire',specDigest:digest('original-spec'),target,
+    after:{running:false,hostPid:0,paused:false,restartPolicy:'no',restartCount:0,oomKilled:false,exitCode:143,finishedAt:new Date(50000).toISOString()},exitedAt:new Date(50000).toISOString()};
+  const row={...target,physical:{running:false,hostPid:0,paused:false,startIdentity:target.startIdentity,DockerStartedAt:target.DockerStartedAt,restartPolicy:'no',restartCount:0},retiredPhysical:{...facts,receiptDigest:digest(facts),observedAt:new Date(99000).toISOString()}};
+  f.inventory.coordinators.push(row);
+  await f.client.capture({recoveryId:'next-upgrade'});
+  const proof=JSON.parse(f.db.prepare('SELECT proof FROM control_stabilization_witnesses').get().proof);
+  assert.equal(proof.coordinators[1].kind,'retired-physical');
+  assert.equal(proof.coordinators[1].exitedAt,facts.after.finishedAt);
+  row.retiredPhysical.after.finishedAt=new Date(100001).toISOString();
+  const {receiptDigest,observedAt,...changed}=row.retiredPhysical;
+  row.retiredPhysical.receiptDigest=digest(changed);
+  await assert.rejects(f.client.capture({recoveryId:'reject-future-exit'}),/CONTROL_STABILIZATION_RETIRED_PROOF_UNKNOWN/);
+});

@@ -14,6 +14,7 @@ import {
   prepareControlMigration,
   controlMigrationStatus,
 } from "./control-migration.mjs";
+import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
 
 async function privateJson(path) {
   const s = await fs.lstat(path);
@@ -58,6 +59,8 @@ export async function runControlMigrationCommand(command, configPath) {
       Object.keys(c).every((k) => required.includes(k) || optional.includes(k)),
     "CONTROL_MIGRATION_CONFIG_INVALID",
   );
+  if (c.runtime && !["plan", "status"].includes(command))
+    await assertMigrationRunnerIdentity(c, { configPath: resolve(configPath) });
   const require = createRequire(join(c.apiRoot, "apps/api/package.json")),
     Database = require("better-sqlite3");
   if (command === "status")

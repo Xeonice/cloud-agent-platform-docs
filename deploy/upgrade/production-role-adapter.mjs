@@ -89,6 +89,8 @@ export function roleMounts(c, { kind, artifactRoot, cwd, ownerHome, env }) {
       bind(join(c.root, 'supervisor-container-records'), join(c.root, 'supervisor-container-records'), true);
       bind(c.controlFutureOwnerRoot, c.controlFutureOwnerRoot, true);
       invariant(allowed(c.capacityStateRoot), 'CONTROL_CAPACITY_STATE_MOUNT_SCOPE_REQUIRED'); bind(c.capacityStateRoot, c.capacityStateRoot, true);
+      invariant(allowed(c.controlLedgerRoot) && c.stableControl?.controlDbPath === join(c.controlLedgerRoot, 'control.db'), 'CONTROL_REFERENCE_LEDGER_SCOPE_REQUIRED');
+      bind(c.controlLedgerRoot);
       if (c.stableControl?.maintenance) {
         invariant(allowed(c.controlLedgerRoot) && c.stableControl.controlDbPath === join(c.controlLedgerRoot, 'control.db'), 'CONTROL_MAINTENANCE_LEDGER_SCOPE_REQUIRED');
         bind(c.controlLedgerRoot, c.controlLedgerRoot, true);
@@ -308,7 +310,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       "--label",
       "agent-platform.role=" + kind,
       "--label", "agent-platform.artifact=" + record.artifactDigest,
-      "--label", "agent-platform.attempt=" + record.attemptId,
+      ...(record.attemptId ? ["--label", "agent-platform.attempt=" + record.attemptId] : []),
       ...(record.commandId ? ['--label', 'agent-platform.command=' + record.commandId, '--label', 'agent-platform.operation=' + record.operationId] : []),
       "--tmpfs",
       "/tmp:rw,nosuid,nodev,size=256m",
