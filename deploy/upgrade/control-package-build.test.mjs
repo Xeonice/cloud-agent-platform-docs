@@ -54,7 +54,7 @@ test('builds an independently signed control artifact from actual compiled impor
   assert.equal(verified.executionEngineDigest, executionEngineDigest);
   assert.equal((await fileDigest(result.archive.path)).digest, result.archive.digest);
   const extracted = join(root, 'extracted'); await fs.mkdir(extracted);
-  await command('tar', ['-xzf', result.archive.path, '-C', extracted]);
+  await command('tar', ['-xzpf', result.archive.path, '-C', extracted, '--no-same-owner']);
   const archiveVerified = await verifyInstalledControlPackage({ artifactRoot: extracted, manifestPath: result.manifestPath,
     trustRootPath, engineIdentity: { artifactDigest: executionEngineDigest } });
   assert.equal(archiveVerified.treeDigest, result.treeDigest);

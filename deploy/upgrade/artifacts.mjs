@@ -40,16 +40,18 @@ export async function unpackVerified(archive, pkg, root, expectedComponents) {
   // Read actual headers rather than parsing human-readable tar output. pnpm's
   // contained links preserve shared DI module identity; only those links are
   // allowed. Validate every chain before extraction can follow any link.
-  const script="import tarfile,json,sys\nwith tarfile.open(sys.argv[1], 'r:gz') as archive:\n members=archive.getmembers()\n if len(members)>100000: raise ValueError('too many entries')\n print(json.dumps([{'name':m.name,'type':'file' if m.isfile() else 'dir' if m.isdir() else 'symlink' if m.issym() else 'other','target':m.linkname} for m in members]))";
+  const script="import tarfile,json,sys\nwith tarfile.open(sys.argv[1], 'r:gz') as archive:\n members=archive.getmembers()\n if len(members)>100000: raise ValueError('too many entries')\n print(json.dumps([{'name':m.name,'mode':m.mode,'type':'file' if m.isfile() else 'dir' if m.isdir() else 'symlink' if m.issym() else 'other','target':m.linkname} for m in members]))";
   const entries=JSON.parse(await command('python3',['-c',script,archive])),named=new Map();
   const safe=n=>typeof n==='string'&&!n.startsWith('/')&&!/[\\\r\n\0]/.test(n)&&!n.split('/').some(x=>x==='..')&&!/^[A-Za-z]:/.test(n);
   invariant(entries.length>0,'UNSAFE_ARCHIVE_PATH');
-  for(const entry of entries){invariant(safe(entry.name),'UNSAFE_ARCHIVE_PATH');const name=posix.normalize(entry.name).replace(/^\.\//,'').replace(/\/+$/,'');invariant(!named.has(name),'DUPLICATE_ARCHIVE_ENTRY');invariant(['file','dir','symlink'].includes(entry.type),'UNSAFE_ARCHIVE_TYPE');if(entry.type==='symlink')invariant(typeof entry.target==='string'&&!posix.isAbsolute(entry.target)&&!/[\\\r\n\0]/.test(entry.target)&&!/^[A-Za-z]:/.test(entry.target),'UNSAFE_ARCHIVE_TYPE');named.set(name,{...entry,name});}
+  for(const entry of entries){invariant(safe(entry.name),'UNSAFE_ARCHIVE_PATH');invariant(Number.isInteger(entry.mode)&&entry.mode>=0&&entry.mode<=0o777,'UNSAFE_ARCHIVE_MODE');const name=posix.normalize(entry.name).replace(/^\.\//,'').replace(/\/+$/,'');invariant(!named.has(name),'DUPLICATE_ARCHIVE_ENTRY');invariant(['file','dir','symlink'].includes(entry.type),'UNSAFE_ARCHIVE_TYPE');if(entry.type==='symlink')invariant(typeof entry.target==='string'&&!posix.isAbsolute(entry.target)&&!/[\\\r\n\0]/.test(entry.target)&&!/^[A-Za-z]:/.test(entry.target),'UNSAFE_ARCHIVE_TYPE');named.set(name,{...entry,name});}
   function resolveLink(path,chain=new Set()){invariant(safe(path),'UNSAFE_ARCHIVE_TYPE');const parts=path.split('/');for(let i=1;i<=parts.length;i++){const prefix=parts.slice(0,i).join('/'),entry=named.get(prefix);if(entry?.type!=='symlink')continue;invariant(!chain.has(prefix),'UNSAFE_ARCHIVE_TYPE');const next=new Set(chain);next.add(prefix);return resolveLink(posix.normalize(posix.join(posix.dirname(prefix),entry.target,...parts.slice(i))),next);}invariant(named.has(path),'DANGLING_ARCHIVE_LINK');return path;}
   for(const [name,entry] of named)if(entry.type==='symlink'){const target=posix.normalize(posix.join(posix.dirname(name),entry.target));resolveLink(target,new Set([name]));}
   const temp = target + '.unpack'; await fs.rm(temp, { recursive: true, force: true }); await secureDirectory(temp);
   try {
-    await command('tar', ['-xzf', archive, '-C', temp, '--no-same-owner']);
+    // Signed file modes must survive a private operator umask. Header checks
+    // above reject all special permission bits before preserving permissions.
+    await command('tar', ['-xzpf', archive, '-C', temp, '--no-same-owner']);
     const bundle = await readJson(join(temp, 'upgrade-artifact.json')); invariant(bundle.schemaVersion === 1 && bundle.platform === pkg.platform && bundle.arch === pkg.arch && canonical(bundle.components) === canonical(expectedComponents), 'ARTIFACT_METADATA_MISMATCH');
     const files = await treeManifest(temp); const payload = files.filter(f => !['upgrade-artifact.json','installed.json'].includes(f.path));
     invariant(digest(payload) === bundle.treeDigest && canonical(payload) === canonical(bundle.files), 'ARTIFACT_TREE_MISMATCH');
