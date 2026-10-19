@@ -22,6 +22,10 @@ import {
   inside,
   fileDigest,
 } from "../upgrade/io.mjs";
+import {
+  publishInitialRoleInventory,
+  createInitialRoleIdentityReader,
+} from "../upgrade/initial-role-inventory.mjs";
 import { createStableEntry } from "../upgrade/stable-entry.mjs";
 import { createIndependentFoundation } from "../upgrade/control-foundation.mjs";
 import { validateBinding } from "../upgrade/stable-entry.mjs";
@@ -794,7 +798,16 @@ export async function createFoundation(
     initialBinding = null,
   },
 ) {
-  if (c.stableControl) return createIndependentFoundation(c, { paths, keys, origin, bindingPath, ownerBindingPath, installedReleasePath, initialBinding });
+  if (c.stableControl)
+    return createIndependentFoundation(c, {
+      paths,
+      keys,
+      origin,
+      bindingPath,
+      ownerBindingPath,
+      installedReleasePath,
+      initialBinding,
+    });
   const root = c.root,
     ports = c.ports;
   const common = {
@@ -1062,6 +1075,14 @@ async function startBootstrap(c, { mode }) {
       instanceId: c.instanceId,
       startIdentity,
       artifactRoot: c.artifactRoot,
+      artifactDigest: release.components[kind].artifactDigest,
+      inputFingerprint: release.components[kind].inputFingerprint,
+      attemptId: null,
+      sourceActivation: {
+        releaseId: release.releaseId,
+        activationGeneration: 1,
+        activationDigest: digest(release),
+      },
       ...extra.record,
     };
     containers[name] = await adapter.launch({
@@ -1179,7 +1200,20 @@ async function startBootstrap(c, { mode }) {
     env: { NODE_ENV: "production", PATH: common.PATH, ...c.runtimeEnv },
     cwd: join(c.artifactRoot, "installer"),
     artifactRoot: c.artifactRoot,
-    record: { startIdentity },
+    record: {
+      kind: "installer",
+      instanceId: c.instanceId,
+      startIdentity,
+      artifactRoot: c.artifactRoot,
+      artifactDigest: release.components.installer.artifactDigest,
+      inputFingerprint: release.components.installer.inputFingerprint,
+      attemptId: null,
+      sourceActivation: {
+        releaseId: release.releaseId,
+        activationGeneration: 1,
+        activationDigest: digest(release),
+      },
+    },
   });
   const installer = await (
     await waitFor(origin("controllerMetadata"), "/metadata", {
@@ -1213,6 +1247,37 @@ async function startBootstrap(c, { mode }) {
       confirmed.activationGeneration === 1,
     "BOOTSTRAP_ACTIVATION_RECEIPT_UNKNOWN",
   );
+  await publishInitialRoleInventory({
+    path: join(root, "supervisor-publication", "initial-role-inventory.json"),
+    instanceId: c.instanceId,
+    activation: confirmed,
+    records: [
+      { ...containers.apiA, kind: "api", origin: origin("apiA") },
+      {
+        ...containers.coordinator,
+        kind: "coordinator",
+        origin: origin("coordinator"),
+      },
+      { ...containers.webA, kind: "web", origin: origin("webA") },
+      {
+        ...containers.installer,
+        kind: "installer",
+        origin: origin("controllerMetadata"),
+      },
+    ].map((record) => ({
+      ...record,
+      instanceId: c.instanceId,
+      artifactRoot: c.artifactRoot,
+      artifactDigest: confirmed.components[record.kind].artifactDigest,
+      inputFingerprint: confirmed.components[record.kind].inputFingerprint,
+    })),
+    inspect: (id) => adapter.inspect(id),
+    readIdentity: createInitialRoleIdentityReader({
+      instanceId: c.instanceId,
+      controlKey: keys.control,
+      controllerKey: keys.controller,
+    }),
+  });
   const previewAfter =
     mode === "preview" ? await observePreviewSource(c, verified) : null;
   if (previewBefore)

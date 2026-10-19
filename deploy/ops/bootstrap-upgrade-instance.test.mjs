@@ -1306,6 +1306,10 @@ test("actual adapter uses private env file, isolated container and scoped worksp
             Running: true,
             Pid: 12345,
             StartedAt: "2026-10-14T00:00:00Z",
+            FinishedAt: "0001-01-01T00:00:00Z",
+            Paused: false,
+            OOMKilled: false,
+            ExitCode: 0,
           },
           Config: {
             Labels: {
@@ -1313,6 +1317,7 @@ test("actual adapter uses private env file, isolated container and scoped worksp
               "agent-platform.installation": digest(c.root),
               "agent-platform.start": "start-owner",
               "agent-platform.role": "owner",
+              "agent-platform.artifact": digest("fixture-owner"),
             },
             Env: ["PLATFORM_COORDINATOR_RPC_KEY=owner-test-key"],
             WorkingDir: c.artifactRoot + "/api",
@@ -1321,7 +1326,13 @@ test("actual adapter uses private env file, isolated container and scoped worksp
               c.artifactRoot + "/api/apps/api/dist/roles/runtime-owner-main.js",
             ],
           },
-          HostConfig: { PidMode: "", NetworkMode: "host", Privileged: true },
+          HostConfig: {
+            PidMode: "",
+            NetworkMode: "host",
+            Privileged: true,
+            RestartPolicy: { Name: "no" },
+          },
+          RestartCount: 0,
           Mounts: [],
         },
       ]);
@@ -1338,7 +1349,16 @@ test("actual adapter uses private env file, isolated container and scoped worksp
     cwd: c.artifactRoot + "/api",
     artifactRoot: c.artifactRoot,
     ownerHome: c.root + "/original-owner",
-    record: { startIdentity: "start-owner" },
+    record: {
+      startIdentity: "start-owner",
+      artifactDigest: digest("fixture-owner"),
+      attemptId: null,
+      sourceActivation: {
+        releaseId: "v0.0.1-fixture",
+        activationGeneration: 1,
+        activationDigest: digest("fixture-activation"),
+      },
+    },
     env: { PLATFORM_COORDINATOR_RPC_KEY: "owner-test-key" },
   });
   assert.equal(envFileRemoved, true);
