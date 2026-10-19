@@ -78,6 +78,13 @@ const VERBOSE = args.includes('--verbose');
 // 业务端点一律走"补进 10 §6 + 补进 27 §2–§9"，不许用排除清单绕过。
 // ---------------------------------------------------------------------------
 const TRANSPORT_ONLY_PATHS = new Map([
+  ...[
+    '/api/internal/upgrades/contract-business', '/api/internal/upgrades/controller-capabilities', '/api/internal/upgrades/inspection',
+    '/api/internal/upgrades/{attemptId}/authority-check', '/api/internal/upgrades/{attemptId}/commit-receipt',
+    '/api/internal/upgrades/{attemptId}/lease-renew', '/api/internal/upgrades/{attemptId}/progress-checkpoint',
+    '/api/internal/upgrades/{attemptId}/recovery-actions', '/api/internal/upgrades/{attemptId}/recovery-admission',
+    '/api/internal/upgrades/{attemptId}/stabilize-current-writer',
+  ].map(path => [path, '独立控制系统固定语义私有RPC；loopback+独立PSK+实例/epoch/原命令校验，不是用户业务能力，见09 §2.4及2026-10-20后端方案']),
   ['/api/mcp', 'MCP Streamable HTTP 传输端点，@rekog/mcp-nest 自动挂载（02 §6）'],
   ['/api/sse', 'MCP HTTP+SSE 传输端点（旧传输的事件流），同上'],
   ['/api/messages', 'MCP HTTP+SSE 传输端点（旧传输的回帖通道），同上'],
@@ -1491,25 +1498,33 @@ async function checkDeploymentRoleContract() {
   };
   try {
     const launch = /async function launch\(spec\) \{([\s\S]*?)const name =/.exec(adapter)?.[1];
-    const guard = launch && /(\[[^\]]+\])\s*\.includes\(kind\)/.exec(launch)?.[1];
-    const roles = guard ? [...guard.matchAll(/["']([a-z]+)["']/g)].map((m) => m[1]) : [];
-    if (roles.length !== 5 || new Set(roles).size !== 5) throw Error('无法解析 adapter 的真实五角色闭集');
+    const guards = launch ? [...launch.matchAll(/(\[[^\]]+\])\s*\.includes\(kind\)/g)].map(m => m[1]) : [];
+    const roleSets = guards.map(guard => [...guard.matchAll(/["']([a-z][a-z-]*)["']/g)].map(m => m[1]));
+    const roles = roleSets.find(roles => ['api', 'web', 'coordinator', 'owner', 'installer'].every(role => roles.includes(role))) ?? [];
+    if (roles.length !== 8 || new Set(roles).size !== 8 || !['control-agent', 'control-entry', 'control-supervisor'].every(role => roles.includes(role))) throw Error('无法解析 adapter 的真实业务／独立控制角色闭集');
     const rows = new Map();
     for (const m of block('deployment-roles').matchAll(/^\|\s*`([a-z][a-z-]*)`\s*\|\s*([^|]+)\|\s*([^|]+)\|\s*([^|]+)\|/gm)) {
       if (rows.has(m[1])) throw Error(`文档角色重复：${m[1]}`);
       rows.set(m[1], { name: m[2].trim(), database: m[3].trim(), sdk: m[4].trim() });
     }
     const expected = [...roles, 'foundation'].sort();
-    if (JSON.stringify([...rows.keys()].sort()) !== JSON.stringify(expected)) throw Error('文档部件集合必须等于真实五角色加 Foundation');
+    if (JSON.stringify([...rows.keys()].sort()) !== JSON.stringify(expected)) throw Error('文档部件集合必须等于 adapter 真实角色加迁移期 Foundation');
     if (!['Foundation', 'StableEntry', 'CandidateSupervisor'].every((n) => rows.get('foundation').name.includes(n)) ||
         !/await createStableEntry\(/.test(bootstrap) || !/await createCandidateSupervisor\(/.test(bootstrap))
       throw Error('文档 Foundation 与 bootstrap 入口／Supervisor 不一致');
     const { roleMounts, bootstrapDataRoot } = await import(pathToFileURL(ROLE_ADAPTER).href);
     const root = '/docs-check/foundation/instance', owner = `${root}/original-owner`;
     const c = { kind: 'idle-first-bootstrap-experiment', root, businessHostPath: '/docs-check/business/business',
-      trustRootPath: `${root}/trust-root.json`, catalogFile: `${root}/catalog.json`, qualificationInstallationPath: `${root}/qualification-installation.json` };
+      trustRootPath: `${root}/trust-root.json`, catalogFile: `${root}/catalog.json`, qualificationInstallationPath: `${root}/qualification-installation.json`,
+      controlArtifactRoot: '/docs-check/control-code', controlAgentArtifactRoot: '/docs-check/control-code',
+      controlPrivateRoot: '/docs-check/control-private', controlLedgerRoot: '/docs-check/control-ledger',
+      controlFoundationRoot: '/docs-check/control-foundation', controlEntryRoot: `${root}/entry`,
+      controlFutureOwnerRoot: '/docs-check/future-owners', controlEntryWebRoots: ['/docs-check/web-code'],
+      capacityStateRoot: '/docs-check/capacity-state', controlDownloadRoot: `${root}/installer/downloads`,
+      runtimeRoots: [owner], existingRuntimeRoots: [owner], procRoot: '/host/proc', cgroupRoot: '/host/cgroup',
+      controlFoundationEntries: { entry: { configPath: '/docs-check/control-foundation/entry.json' }, supervisor: { configPath: '/docs-check/control-foundation/supervisor.json' } } };
     for (const kind of roles) {
-      const mounts = roleMounts(c, { kind, artifactRoot: '/docs-check/artifacts/installed',
+      const mounts = roleMounts(c, { kind, artifactRoot: kind.startsWith('control-') ? c.controlArtifactRoot : '/docs-check/artifacts/installed',
         cwd: kind === 'web' ? `${root}/initial-web-code` : '/docs-check/artifacts/installed/api',
         ownerHome: kind === 'owner' ? owner : undefined, env: {} });
       const db = mounts.filter((m) => ['/data', bootstrapDataRoot(c)].includes(m.destination));
@@ -1518,9 +1533,11 @@ async function checkDeploymentRoleContract() {
       const sdkAccess = sdk.length ? (sdk.some((m) => m.rw) ? '独占' : '只读') : '无';
       if (rows.get(kind).database !== database || rows.get(kind).sdk !== sdkAccess)
         throw Error(`${kind} 文档权限与 roleMounts 不符：业务库=${database}，Owner SDK home=${sdkAccess}`);
-      if ((kind !== 'coordinator' && db.length) || (kind !== 'owner' && sdk.length) ||
-          mounts.some((m) => m.source === '/var/run/docker.sock'))
-        throw Error(`${kind} 违反五角色的业务库／SDK／socket 隔离边界`);
+      if ((!['coordinator', 'control-supervisor'].includes(kind) && db.length) || (kind !== 'owner' && sdk.length) ||
+          (kind !== 'control-supervisor' && mounts.some((m) => m.source === '/var/run/docker.sock')) ||
+          (kind === 'control-supervisor' && db.some(m => m.rw)))
+        throw Error(`${kind} 违反业务库／SDK／socket 隔离边界`);
+      if (kind === 'control-agent' && mounts.some(m => m.source === '/proc' || m.source === '/sys/fs/cgroup')) throw Error('Agent不得直接观察宿主进程或cgroup');
       if (kind === 'owner' && !mounts.some((m) => m.source === `${c.businessHostPath}/workspaces` && m.rw))
         throw Error('Owner 必须挂实际业务工作区');
     }

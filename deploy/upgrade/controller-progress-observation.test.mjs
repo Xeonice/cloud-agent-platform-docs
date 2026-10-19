@@ -489,6 +489,19 @@ test(
   },
 );
 
+test('a delayed progress acknowledgement does not stop independent lease renewal', { timeout: 8000 }, async t => {
+  const f = await fixture(t, { holdSecondAck: true });
+  const running = f.run();
+  await f.secondProgress.promise;
+  const before = f.renewals.length;
+  await delay(2200);
+  assert.ok(f.renewals.length >= before + 2, 'the active lease keeps renewing while the progress response is held');
+  assert.equal(f.events.filter(e => e.kind === 'progress').length, 2, 'slow progress requests remain single flight');
+  f.progressAck.resolve(); f.operation.resolve();
+  await assert.rejects(running, { code: 'EXPECTED_ROUTE_BOUNDARY' });
+  assert.deepEqual(f.errors, []);
+});
+
 test(
   "fresh Coordinator capability switches unchanged large checkpoints to small digest heartbeats",
   { timeout: 7000 },

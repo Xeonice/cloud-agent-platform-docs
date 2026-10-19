@@ -23,6 +23,7 @@ import {
   fileDigest,
 } from "../upgrade/io.mjs";
 import { createStableEntry } from "../upgrade/stable-entry.mjs";
+import { createIndependentFoundation } from "../upgrade/control-foundation.mjs";
 import { validateBinding } from "../upgrade/stable-entry.mjs";
 import { createCandidateSupervisor } from "../upgrade/candidate-supervisor.mjs";
 import { createCoordinatorClient } from "../upgrade/coordinator-client.mjs";
@@ -793,6 +794,7 @@ export async function createFoundation(
     initialBinding = null,
   },
 ) {
+  if (c.stableControl) return createIndependentFoundation(c, { paths, keys, origin, bindingPath, ownerBindingPath, installedReleasePath, initialBinding });
   const root = c.root,
     ports = c.ports;
   const common = {
@@ -1670,7 +1672,7 @@ export async function resumeBootstrapFoundation(c) {
     coordinatorBinding,
   });
   const installed = await privateJson(installedReleasePath),
-    authEnv = await privateJson(c.authEnvPath),
+    authEnv = c.stableControl ? {} : await privateJson(c.authEnvPath),
     origin = (name) => `http://127.0.0.1:${c.ports[name]}`;
   const foundationRuntime = await createFoundation(c, {
     paths,

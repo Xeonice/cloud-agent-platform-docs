@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { invariant, canonical, digest, DIGEST } from './trust.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
+import { entryControlHeaders, entryBindingDigest } from './control-entry-context.mjs';
 function fixedBinding(value) {
   const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;
 }
@@ -15,10 +16,19 @@ function confirmedBindingReceipt(snapshot,current,instanceId) {
   invariant(snapshot.attempt?.state==='activation-confirmed'&&DIGEST.test(snapshot.attempt.targetDigest)&&evidence&&step.receiptDigest===digest(evidence)&&evidence.instanceId===instanceId&&evidence.manifestDigest===snapshot.attempt.targetDigest&&evidence.compatibility?.qualified===true&&evidence.continuity?.qualified===true&&actual?.instanceId===instanceId&&actual.attemptId===snapshot.attempt.attemptId&&current.attemptId===snapshot.attempt.attemptId&&[0,100].includes(actual.weight)&&Number.isSafeInteger(actual.fence)&&actual.fence>0&&Number.isSafeInteger(current.fence)&&current.fence>=actual.fence&&Number.isSafeInteger(actual.routeGeneration)&&actual.routeGeneration>0&&Number.isSafeInteger(current.routeGeneration)&&current.routeGeneration>=actual.routeGeneration&&canonical(servingBinding(actual))===canonical(servingBinding(current)),'CONFIRMED_SOURCE_ACTIVATION_RECEIPT_REQUIRED');
   return {step,evidence};
 }
-export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,entryKey,supervisorOrigin,supervisorKey,fetcher=fetch}) {
+export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,entryKey,supervisorOrigin,supervisorKey,fetcher=fetch,controlContext,entryControllerKey,supervisorClient,ensureControlAdmission}) {
   invariant(supervisorOrigin&&supervisorKey?.length>=32,'SEPARATE_SUPERVISOR_REQUIRED');
-  async function entry(path,body,requestTimeoutMs=5000) { const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':entryKey},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestTimeoutMs)});invariant(r.ok,'ENTRY_RPC_FAILED');return r.json(); }
-  async function supervise(path,attempt,fence,kind,requestTimeoutMs=120000) {const r=await fetcher(supervisorOrigin+path,{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':supervisorKey},body:JSON.stringify({attemptId:attempt.attemptId,fence,kind}),signal:AbortSignal.timeout(requestTimeoutMs)});const result=await r.json();invariant(r.ok,result.code||'SUPERVISOR_RPC_FAILED');return result;}
+  async function entry(path,body,requestTimeoutMs=5000) {
+    const context = body && controlContext?.(), headers = { 'content-type':'application/json','x-platform-internal-key':entryKey };
+    if(context) {
+      invariant(entryControllerKey?.length >= 32, 'ENTRY_INDEPENDENT_CONTROLLER_KEY_REQUIRED');
+      if(ensureControlAdmission)await ensureControlAdmission(context);
+      const current = path === '/binding' ? await entry('/binding', undefined, Math.min(2000,requestTimeoutMs)) : null;
+      Object.assign(headers,entryControlHeaders({key:entryControllerKey,context:{schemaVersion:1,...context,...(current?{expectedBindingDigest:entryBindingDigest(current)}:{})}}));
+    }
+    const r=await fetcher(entryOrigin+path,{method:body?'POST':'GET',headers,body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(requestTimeoutMs)});const result=await r.json();invariant(r.ok,context?(result.code||'ENTRY_RPC_FAILED'):'ENTRY_RPC_FAILED');return result;
+  }
+  async function supervise(path,attempt,fence,kind,requestTimeoutMs=120000) {if(supervisorClient)return supervisorClient.request({path,attempt,fence,kind,timeoutMs:requestTimeoutMs});const r=await fetcher(supervisorOrigin+path,{method:'POST',headers:{'content-type':'application/json','x-platform-internal-key':supervisorKey},body:JSON.stringify({attemptId:attempt.attemptId,fence,kind}),signal:AbortSignal.timeout(requestTimeoutMs)});const result=await r.json();invariant(r.ok,result.code||'SUPERVISOR_RPC_FAILED');return result;}
   const start=(kind,artifact,attempt,fence,requestTimeoutMs)=>supervise('/start',attempt,fence,kind,requestTimeoutMs);
   function remainingStartup(deadline,code='ROLE_PREPARATION_STARTUP_EXCEEDED'){const remaining=deadline-Date.now();invariant(remaining>0,code);return Math.min(120000,remaining);}
   async function boundedObservation(attempt,fence,weight,deadline,code,onStale) {
@@ -248,7 +258,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
   }
   return {
     refreshConfirmedFence,
-    async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT'); await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,'installer'); },
+    async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT'); await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,controlContext?'package':'installer'); },
     async installerIsCurrent({attempt,fence}){const identity=await supervise('/current-installer',attempt,fence,'installer');return identity.artifactDigest===attempt.manifest.components.installer.artifactDigest&&identity.inputFingerprint===attempt.manifest.components.installer.inputFingerprint;},
     async installerCandidate({artifact,attempt,fence}){const record=await start('installer',artifact,attempt,fence);const deadline=Date.now()+120000;while(true){const result=await supervise('/observe',attempt,fence,'installer');if(result.qualified===true)return {...record,...result.identity};invariant(Date.now()<deadline,'INSTALLER_CANDIDATE_STARTUP_EXCEEDED');await new Promise(ok=>setTimeout(ok,100));}},
     async installerHandoff({attempt,fence,operationId,candidate}){const evidence=await coordinator.controllerHandoff(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate,action:'adopt'});invariant(evidence.commitKnown===true&&evidence.authorityTransferred===true,'CONTROLLER_HANDOFF_UNKNOWN');return supervise('/activate-installer',attempt,fence,'installer');},
@@ -293,7 +303,16 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
     async migration({attempt,fence,operationId,action,checkpoint}) {return coordinator.migration(attempt.attemptId,{fence,operationId,action,planDigest:attempt.plan.migrationPath.migrationPlanDigest,checkpoint,policy:attempt.plan.policy},['prepare','status'].includes(action)?{timeoutMs:120000}:undefined);},
     async activationEvidence({attempt,fence}) {if(attempt.plan.apiReused!==true)return changedApiActivation(attempt,fence);await sourceBaseline(attempt,fence);const actual=await entry('/binding'),compatibility=await coordinator.validateSwitch(attempt.attemptId,{fence,actual,manifestDigest:attempt.targetDigest}),continuity=await coordinator.continuity(attempt.attemptId,{fence});const actualInstaller=await supervise('/current-installer',attempt,fence,'installer');return {actual,actualInstaller,compatibility,continuity,observedAt:new Date().toISOString(),manifestDigest:attempt.targetDigest,instanceId};},
     async fallbackEligibility({attempt,fence,fault}) {const deadline=Date.now()+120000;const actual=await entry('/binding'),result=await coordinator.fallbackEligibility(attempt.attemptId,{fence,fault,actual},{timeoutMs:remainingStartup(deadline,'FALLBACK_ELIGIBILITY_COLLECTION_EXCEEDED')});remainingStartup(deadline,'FALLBACK_ELIGIBILITY_COLLECTION_EXCEEDED');return result;},
-    async recover({attempt,fence,recoveryPlan}) {await coordinator.assertFence(attempt.attemptId,fence);if(recoveryPlan.coordinator||recoveryPlan.owner){const transitioned=await coordinator.coordinatorRecovery(attempt.attemptId,{fence,recoveryPlanDigest:recoveryPlan.planDigest});invariant(transitioned.commitKnown===true&&transitioned.qualified===true&&transitioned.originalResourcesPreserved===true,'COORDINATOR_RECOVERY_UNCONFIRMED');}const current=await entry('/binding'),next={...current};delete next.inFlight;delete next.activeWS;delete next.wsByDigest;delete next.httpByDigest;Object.assign(next,{fence,attemptId:attempt.attemptId,routeGeneration:current.routeGeneration+1});if(recoveryPlan.api) {next.oldApi=recoveryPlan.api;next.weight=0;}if(recoveryPlan.web){next.retainedWeb=[current.web,...current.retainedWeb];next.web=recoveryPlan.web;}return entry('/binding',next);},
+    async recover({attempt,fence,recoveryPlan}) {
+      await coordinator.assertFence(attempt.attemptId,fence);
+      if(recoveryPlan.coordinator||recoveryPlan.owner){const transitioned=await coordinator.coordinatorRecovery(attempt.attemptId,{fence,recoveryPlanDigest:recoveryPlan.planDigest});invariant(transitioned.commitKnown===true&&transitioned.qualified===true&&transitioned.originalResourcesPreserved===true,'COORDINATOR_RECOVERY_UNCONFIRMED');}
+      const current=await entry('/binding'),next=fixedBinding(current),independent=controlContext?.()?.kind==='recovery';
+      if(!independent)Object.assign(next,{fence,attemptId:attempt.attemptId});
+      if(recoveryPlan.api) {next.oldApi=recoveryPlan.api;next.weight=0;next.candidateApi=null;}
+      if(recoveryPlan.web){next.retainedWeb=current.web.digest===recoveryPlan.web.digest?current.retainedWeb:[current.web,...current.retainedWeb].filter((w,i,a)=>a.findIndex(x=>x.digest===w.digest)===i);next.web=recoveryPlan.web;}
+      if(canonical(next)===canonical(fixedBinding(current)))return current;
+      next.routeGeneration=current.routeGeneration+1;return entry('/binding',next);
+    },
     // Deliberately no VM lifecycle, whole-volume restore, shell or scheduler method.
   };
 }

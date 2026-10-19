@@ -3,6 +3,9 @@ import * as fs from "node:fs/promises";
 import { join, isAbsolute } from "node:path";
 import { invariant, digest } from "./trust.mjs";
 import { atomicJson, readJson, secureDirectory, inside } from "./io.mjs";
+import { captureProcessIdentity } from "./supervisor-sampler.mjs";
+import { createProtectedRoleLifecycle, fixedRoleName } from "./protected-role-lifecycle.mjs";
+import { roleResourceFlags } from './role-resource-limits.mjs';
 const CID = /^[a-f0-9]{64}$/;
 const PROVIDER_ENV = [
   "SANDBOX_DEFAULT_IMAGE",
@@ -43,35 +46,14 @@ export const bootstrapDataRoot = (c) =>
 
 export async function execute(program, args) {
   return new Promise((ok, fail) => {
-    const child = spawn(program, args, {
-      shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let out = "",
-      bytes = 0;
-    child.stdout.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes > 8_000_000) child.kill();
-      else out += chunk;
-    });
-    // Never forward Docker stderr: env-file paths and authentication details belong in private evidence.
+    const child = spawn(program, args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '', bytes = 0, settled = false;
+    const reject = () => { if (!settled) { settled = true; fail(Object.assign(Error('Bootstrap command failed'), { code: 'BOOTSTRAP_COMMAND_FAILED' })); } };
+    const timer = setTimeout(() => { reject(); try { child.kill('SIGKILL'); } catch {} }, 5000);
+    child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > 8000000) { reject(); try { child.kill('SIGKILL'); } catch {} } else output += chunk; });
     child.stderr.resume();
-    child.once("error", () =>
-      fail(
-        Object.assign(Error("Bootstrap command failed"), {
-          code: "BOOTSTRAP_COMMAND_FAILED",
-        }),
-      ),
-    );
-    child.once("close", (code) =>
-      code === 0 && bytes <= 8_000_000
-        ? ok(out)
-        : fail(
-            Object.assign(Error("Bootstrap command failed"), {
-              code: "BOOTSTRAP_COMMAND_FAILED",
-            }),
-          ),
-    );
+    child.once('error', () => { clearTimeout(timer); reject(); });
+    child.once('close', status => { clearTimeout(timer); if (!settled) { settled = true; status === 0 ? ok(output) : fail(Object.assign(Error('Bootstrap command failed'), { code: 'BOOTSTRAP_COMMAND_FAILED' })); } });
   });
 }
 
@@ -88,7 +70,53 @@ export function roleMounts(c, { kind, artifactRoot, cwd, ownerHome, env }) {
   };
   const installer = join(c.root, "installer"),
     bindings = join(c.root, "bindings");
-  if (kind === "installer") {
+  if (['control-entry', 'control-supervisor'].includes(kind)) {
+    const mode = kind === 'control-entry' ? 'entry' : 'supervisor', installation = c.controlFoundationEntries?.[mode];
+    invariant(installation && c.controlFoundationRoot && inside(c.controlFoundationRoot, installation.configPath) && c.controlArtifactRoot === artifactRoot &&
+      !inside(c.controlPrivateRoot, c.controlFoundationRoot) && !inside(c.controlLedgerRoot, c.controlFoundationRoot), 'CONTROL_FOUNDATION_MOUNT_SCOPE_REQUIRED');
+    const protectedRoots = [c.controlPrivateRoot, ...(c.existingRuntimeRoots ?? [])];
+    const allowed = (path) => isAbsolute(path) && protectedRoots.every(protectedPath => !inside(path, protectedPath) && !inside(protectedPath, path));
+    invariant(Array.isArray(c.existingRuntimeRoots) && c.existingRuntimeRoots.length > 0 && c.existingRuntimeRoots.every(isAbsolute), 'CONTROL_FOUNDATION_EXISTING_RUNTIME_ROOTS_REQUIRED');
+    bind(artifactRoot); bind(installation.configPath);
+    if (mode === 'entry') {
+      invariant(allowed(c.controlEntryRoot) && Array.isArray(c.controlEntryWebRoots) && c.controlEntryWebRoots.length > 0 && c.controlEntryWebRoots.length <= 128 && c.controlEntryWebRoots.every(allowed), 'CONTROL_ENTRY_MOUNT_SCOPE_REQUIRED');
+      bind(c.controlEntryRoot, c.controlEntryRoot, true);
+      for (const path of c.controlEntryWebRoots) bind(path);
+    } else {
+      invariant(allowed(c.controlFoundationRoot) && allowed(installer) && allowed(bindings) && allowed(c.controlFutureOwnerRoot), 'CONTROL_SUPERVISOR_MOUNT_SCOPE_REQUIRED');
+      bind(c.controlFoundationRoot, c.controlFoundationRoot, true); bind(installer, installer, true); bind(bindings, bindings, true);
+      bind(join(c.root, 'supervisor-publication'), join(c.root, 'supervisor-publication'), true);
+      bind(join(c.root, 'supervisor-container-records'), join(c.root, 'supervisor-container-records'), true);
+      bind(c.controlFutureOwnerRoot, c.controlFutureOwnerRoot, true);
+      invariant(allowed(c.capacityStateRoot), 'CONTROL_CAPACITY_STATE_MOUNT_SCOPE_REQUIRED'); bind(c.capacityStateRoot, c.capacityStateRoot, true);
+      if (c.stableControl?.maintenance) {
+        invariant(allowed(c.controlLedgerRoot) && c.stableControl.controlDbPath === join(c.controlLedgerRoot, 'control.db'), 'CONTROL_MAINTENANCE_LEDGER_SCOPE_REQUIRED');
+        bind(c.controlLedgerRoot, c.controlLedgerRoot, true);
+        for (const fixed of Object.values(c.stableControl.maintenance.packages)) {
+          invariant(allowed(fixed.artifactRoot) && isAbsolute(fixed.manifestPath) && isAbsolute(fixed.configPath) &&
+            fixed.configPath !== join(c.controlPrivateRoot, 'access.db') && fixed.configPath.endsWith('.json'), 'CONTROL_MAINTENANCE_FIXED_MOUNT_REQUIRED');
+          bind(fixed.artifactRoot); bind(fixed.manifestPath); bind(fixed.configPath);
+        }
+      }
+      bind(c.businessHostPath, '/data'); if (c.kind === 'idle-first-bootstrap-experiment') bind(c.businessHostPath, bootstrapDataRoot(c));
+      bind(c.catalogFile); bind(c.trustRootPath); bind('/var/run/docker.sock', '/var/run/docker.sock', true);
+      invariant(c.procRoot === '/host/proc' && c.cgroupRoot === '/host/cgroup', 'CONTROL_SUPERVISOR_HOST_OBSERVATION_SCOPE_REQUIRED');
+      bind('/proc', c.procRoot); bind('/sys/fs/cgroup', c.cgroupRoot);
+    }
+    invariant(!Object.keys(env).some(name => /^(?:ACCESS_PASSCODE|PASSCODE_COOKIE_SECRET|UPGRADE_SESSION_SECRET|DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME)$/.test(name)), 'CONTROL_FOUNDATION_EXCESS_AUTHORITY');
+  } else if (kind === 'control-agent') {
+    invariant(c.controlAgentArtifactRoot === artifactRoot && c.controlPrivateRoot && c.controlLedgerRoot && c.controlPrivateRoot && !inside(c.controlPrivateRoot, c.controlLedgerRoot) && !inside(c.controlLedgerRoot, c.controlPrivateRoot) && !inside(c.controlPrivateRoot, c.businessHostPath) && !inside(c.businessHostPath, c.controlPrivateRoot) && !inside(installer, artifactRoot), 'CONTROL_AGENT_MOUNT_SCOPE_REQUIRED');
+    invariant(Array.isArray(c.runtimeRoots) && c.runtimeRoots.length > 0 && c.runtimeRoots.length <= 128 && c.runtimeRoots.every(isAbsolute), 'CONTROL_AGENT_RUNTIME_ROOTS_REQUIRED');
+    const controlPaths = [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot, c.controlDownloadRoot];
+    const protectedPaths = [c.businessHostPath, ...c.runtimeRoots, '/var/run/docker.sock'];
+    invariant(controlPaths.every(path => isAbsolute(path) && protectedPaths.every(protectedPath => !inside(path, protectedPath) && !inside(protectedPath, path))) && controlPaths.every((path, i) => controlPaths.every((other, j) => i === j || !inside(path, other))) && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot].every(path => !inside(path, installer) && !inside(installer, path)), 'CONTROL_AGENT_EXCESS_MOUNT');
+    invariant(c.controlDownloadRoot === join(installer, 'downloads') && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot].every(path => !inside(path, c.controlDownloadRoot) && !inside(c.controlDownloadRoot, path)), 'CONTROL_DOWNLOAD_MOUNT_SCOPE_REQUIRED');
+    bind(c.controlDownloadRoot, c.controlDownloadRoot, true);
+    invariant(isAbsolute(c.capacityStateRoot) && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot, c.controlDownloadRoot, ...protectedPaths].every(path => !inside(path, c.capacityStateRoot) && !inside(c.capacityStateRoot, path)), 'CONTROL_CAPACITY_STATE_MOUNT_SCOPE_REQUIRED');
+    bind(c.capacityStateRoot);
+    bind(artifactRoot); bind(c.controlPrivateRoot, c.controlPrivateRoot, true); bind(c.controlLedgerRoot, c.controlLedgerRoot, true); bind(bindings); bind(c.trustRootPath);
+    invariant(!Object.keys(env).some(k => /^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|BOXLITE_RUNTIME_DIR|RUNTIME_OWNER_HOME)$/.test(k)), 'CONTROL_AGENT_EXCESS_AUTHORITY');
+  } else if (kind === "installer") {
     bind(join(artifactRoot, "installer"));
     bind(installer);
     bind(join(installer, "journals"), join(installer, "journals"), true);
@@ -127,6 +155,10 @@ export function roleMounts(c, { kind, artifactRoot, cwd, ownerHome, env }) {
         "BOOTSTRAP_CONTROL_EXCESS_AUTHORITY",
       );
     } else if (kind === "coordinator") {
+      if (env.UPGRADE_CONTROL_DATABASE_PATH) {
+        invariant(c.stableControl?.controlDbPath === env.UPGRADE_CONTROL_DATABASE_PATH && c.controlLedgerRoot && join(c.controlLedgerRoot, 'control.db') === env.UPGRADE_CONTROL_DATABASE_PATH && c.controlPrivateRoot && !inside(c.controlPrivateRoot, c.controlLedgerRoot) && !inside(c.controlLedgerRoot, c.controlPrivateRoot), 'CONTROL_LEDGER_MOUNT_SCOPE_REQUIRED');
+        bind(c.controlLedgerRoot);
+      }
       bind(c.businessHostPath, "/data", true);
       if (c.kind === "idle-first-bootstrap-experiment") {
         bind(c.businessHostPath, bootstrapDataRoot(c), true);
@@ -198,12 +230,17 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
         row.Config.Labels?.["agent-platform.installation"] === digest(c.root),
       "BOOTSTRAP_CONTAINER_IDENTITY_CHANGED",
     );
+    let birth = {};
+    if (row.State.Running) try { birth = await captureProcessIdentity({ hostPid: row.State.Pid, containerId: id, procRoot: c.procRoot || '/proc' }); } catch {}
     return {
+      ...birth, artifactDigest: row.Config.Labels['agent-platform.artifact'] || null, attemptId: row.Config.Labels['agent-platform.attempt'] || null, operationId: row.Config.Labels['agent-platform.operation'] || null, commandId: row.Config.Labels['agent-platform.command'] || null,
+      paused: row.State.Paused ?? null, restartPolicy: row.HostConfig.RestartPolicy?.Name || 'no', restartCount: row.RestartCount ?? null, oomKilled: row.State.OOMKilled ?? null, exitCode: row.State.ExitCode ?? null,
       containerId: id,
       imageDigest: row.Image,
       pid: 1,
       hostPid: row.State.Pid,
       startedAt: row.State.StartedAt,
+      finishedAt: row.State.FinishedAt,
       running: row.State.Running,
       startIdentity: row.Config.Labels["agent-platform.start"],
       role: row.Config.Labels["agent-platform.role"],
@@ -235,23 +272,23 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       env: suppliedEnv,
     } = spec;
     const env = roleEnvironment(c, kind, suppliedEnv);
+    if (['control-entry', 'control-supervisor'].includes(kind)) {
+      const mode = kind === 'control-entry' ? 'entry' : 'supervisor', expected = c.controlFoundationEntries?.[mode];
+      invariant(expected && spec.stableBootstrap === true && record.commandId && record.startIdentity === expected.startIdentity && artifactRoot === c.controlArtifactRoot &&
+        entry === join(artifactRoot, 'installer/control-foundation.mjs') && args[1] === expected.configPath && env.PLATFORM_PROCESS_ROLE === 'control-foundation', 'CONTROL_FOUNDATION_BOOTSTRAP_IDENTITY_REQUIRED');
+    } else if(kind === 'control-agent') invariant(record.startIdentity === c.controlAgentStartIdentity && artifactRoot === c.controlAgentArtifactRoot && spec.stableBootstrap === true, 'CONTROL_AGENT_BOOTSTRAP_IDENTITY_REQUIRED');
+    else if(c.stableControl) invariant(kind !== 'installer' && record.commandId && typeof spec.assertBeforeDispatch === 'function', 'STABLE_ROLE_FIXED_COMMAND_REQUIRED');
     invariant(
-      ["api", "web", "coordinator", "owner", "installer"].includes(kind) &&
+      ["api", "web", "coordinator", "owner", "installer", "control-agent", "control-entry", "control-supervisor"].includes(kind) &&
         isAbsolute(entry) &&
         args[0] === entry &&
-        args.length === (kind === "installer" ? 2 : 1) &&
+        args.length === (["installer", "control-agent", "control-entry", "control-supervisor"].includes(kind) ? 2 : 1) &&
         (inside(artifactRoot, entry) ||
           (kind === "web" && inside(c.root, entry))) &&
         record.startIdentity,
       "FIXED_BOOTSTRAP_PROCESS_REQUIRED",
     );
-    const name =
-      "upg-" +
-      digest({
-        instance: c.instanceId,
-        start: record.startIdentity,
-        kind,
-      }).slice(7, 35);
+    const name = fixedRoleName(c.instanceId, {...record, kind});
     const argv = [
       "run",
       "--detach",
@@ -270,11 +307,21 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       "agent-platform.start=" + record.startIdentity,
       "--label",
       "agent-platform.role=" + kind,
+      "--label", "agent-platform.artifact=" + record.artifactDigest,
+      "--label", "agent-platform.attempt=" + record.attemptId,
+      ...(record.commandId ? ['--label', 'agent-platform.command=' + record.commandId, '--label', 'agent-platform.operation=' + record.operationId] : []),
       "--tmpfs",
       "/tmp:rw,nosuid,nodev,size=256m",
       "--workdir",
       cwd,
     ];
+    if (['control-agent', 'control-entry', 'control-supervisor'].includes(kind)) {
+      const resources = kind === 'control-agent' ? c.controlAgentResources : c.controlFoundationEntries[kind === 'control-entry' ? 'entry' : 'supervisor'].resources;
+      invariant(resources && Number.isSafeInteger(resources.memoryBytes) && resources.memoryBytes >= 64 * 1024 * 1024 && Number.isSafeInteger(resources.cpuMilliCores) && resources.cpuMilliCores > 0 && Number.isSafeInteger(resources.pidsLimit) && resources.pidsLimit > 0 && resources.pidsLimit <= 65536, 'CONTROL_ROLE_RESOURCE_LIMITS_REQUIRED');
+      argv.push(...roleResourceFlags({ resources, pidsLimit: resources.pidsLimit, ioDevices: c.capacityIoDevices }));
+    } else if (c.stableControl) {
+      argv.push(...roleResourceFlags({ resources: spec.resources, pidsLimit: c.rolePidsLimits?.[kind], ioDevices: c.capacityIoDevices }));
+    }
     if (kind === "owner") argv.push("--device", "/dev/kvm", "--privileged");
     else argv.push("--cap-drop", "ALL", "--security-opt", "no-new-privileges");
     if (kind !== "owner")
@@ -304,6 +351,8 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
     );
     let id;
     try {
+      if(record.commandId) await lifecycle.prepareStart(record);
+      if(spec.assertBeforeDispatch) await spec.assertBeforeDispatch();
       id = (
         await docker([
           ...argv,
@@ -331,6 +380,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       kind,
       instanceId: c.instanceId,
     });
+    await lifecycle.completeStart(record, proof);
     return proof;
   }
   async function signal(id, signal = "SIGTERM") {
@@ -341,6 +391,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       "BOOTSTRAP_CONTAINER_NOT_OWNED",
     );
     const before = await inspect(id);
+    if(c.stableControl) invariant(!['owner', 'control-agent', 'control-entry', 'control-supervisor'].includes(before.role), 'PROTECTED_ROLE_STOP_FORBIDDEN');
     if (!before.running) return before;
     await docker(["kill", "--signal", "SIGTERM", id]);
     const deadline = Date.now() + 5000;
@@ -365,7 +416,10 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
     await docker(["start", id]);
     return inspect(id);
   }
+  const lifecycle = createProtectedRoleLifecycle({instanceId: c.instanceId, registryRoot: records, inspect, signalTerm: signal, findByName: async name => { const ids = (await docker(['ps', '--all', '--no-trunc', '--filter', 'name=^/' + name + '$', '--format', '{{.ID}}'])).trim().split(/\s+/).filter(Boolean); invariant(ids.length <= 1 && ids.every(id => CID.test(id)), 'ROLE_START_LOOKUP_UNKNOWN'); return ids[0] || null; }});
   return {
+    ...lifecycle, launchControlAgent: spec => launch({...spec, kind: 'control-agent', stableBootstrap: true}),
+    launchIndependentFoundation: spec => { invariant(['entry', 'supervisor'].includes(spec.mode), 'CONTROL_FOUNDATION_MODE_INVALID'); return launch({...spec, kind: 'control-' + spec.mode, stableBootstrap: true}); }, procRoot: c.procRoot || '/proc', cgroupRoot: c.cgroupRoot || '/sys/fs/cgroup',
     launch,
     inspect,
     signal,

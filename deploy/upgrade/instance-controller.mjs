@@ -15,7 +15,7 @@ function faultCode(error,fallback='UPGRADE_FAILED') {
   return fallback;
 }
 const sleep=(ms,signal)=>new Promise((ok,fail)=>{if(signal?.aborted){fail(signal.reason||Error('Stopped'));return;}const done=()=>{signal?.removeEventListener('abort',aborted);ok();};const timer=setTimeout(done,ms);const aborted=()=>{clearTimeout(timer);signal?.removeEventListener('abort',aborted);fail(signal.reason||Error('Stopped'));};signal?.addEventListener('abort',aborted,{once:true});});
-export function createInstanceController({root,instanceId,controllerId,startIdentity=controllerId,trustRootPath,coordinator,executor,fetcher=fetch,leaseMs=15000,signal,onEvent}) {
+export function createInstanceController({root,downloadRoot=root,instanceId,controllerId,startIdentity=controllerId,trustRootPath,coordinator,executor,fetcher=fetch,leaseMs=15000,signal,onEvent,onFault}) {
   invariant(controllerId&&instanceId&&coordinator&&executor&&leaseMs>=5000,'CONTROLLER_CONFIG_REQUIRED');
   controllerId = controllerId.slice(0,140) + '-' + randomUUID(); // Restart is a new control incarnation; never reuse a still-live fence.
   let busy=false,mutationTail=Promise.resolve();
@@ -24,10 +24,10 @@ export function createInstanceController({root,instanceId,controllerId,startIden
   }
   const commitMutation=(id,command)=>serializeMutation(()=>coordinator.commit(id,command));
   async function runOnce() {
-    if(busy)return {state:'busy'};busy=true;let timer,session,renewalTask,observationsStopped=false;
+    if(busy)return {state:'busy'};busy=true;let timer,progressTimer,session,renewalTask,progressTask,observationsStopped=false;
     async function stopObservations() {
-      observationsStopped=true;if(timer)clearInterval(timer);
-      await renewalTask?.catch(()=>{});await mutationTail;
+      observationsStopped=true;if(timer)clearInterval(timer);if(progressTimer)clearInterval(progressTimer);
+      await renewalTask?.catch(()=>{});await progressTask?.catch(()=>{});await mutationTail;
     }
     try {
       await secureDirectory(root);const authority=await readJson(join(root,'controller-authority.json'),null);if(authority?.instanceId===instanceId&&authority.attemptId&&authority.startIdentity!==startIdentity)return {state:'controller-handoff',attemptId:authority.attemptId};const pending=await coordinator.pending();const record=pending?.attempt?pending:pending?.attempts?.[0]||pending?.pending;
@@ -55,31 +55,36 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       const commit=(kind,payload,eventId=randomUUID())=>serializeMutation(()=>commitObserved(kind,payload,eventId));
       async function observeDurableProgress() {
         if(observationsStopped||leaseLost||signal?.aborted||session.recovering)return;
-        const fresh=await coordinator.snapshot(attempt.attemptId),observed=fresh.attempt;
+        const checkpoint=await coordinator.progressCheckpoint?.(attempt.attemptId,{fence:session.fence,generation:session.generation});
+        const fresh=checkpoint||await coordinator.snapshot(attempt.attemptId),observed=checkpoint||fresh.attempt;
         if(observationsStopped||leaseLost||signal?.aborted)return;
-        invariant(observed?.instanceId===instanceId&&observed.attemptId===attempt.attemptId&&observed.targetReleaseId===attempt.targetReleaseId&&observed.targetDigest===attempt.targetDigest&&observed.planDigest===plan.planDigest&&fresh.plan?.planDigest===plan.planDigest,'PROGRESS_OBSERVATION_SCOPE_CHANGED');
+        invariant(observed?.instanceId===instanceId&&observed.attemptId===attempt.attemptId&&observed.targetDigest===attempt.targetDigest&&observed.planDigest===plan.planDigest&&(checkpoint||observed.targetReleaseId===attempt.targetReleaseId&&fresh.plan?.planDigest===plan.planDigest),'PROGRESS_OBSERVATION_SCOPE_CHANGED');
         if(TERMINAL.has(observed.state)||fresh.recovery?.state==='recovering')return;
         invariant(fresh.fence===session.fence&&observed.generation===session.generation&&fresh.controllerId===controllerId&&Number.isFinite(fresh.leaseExpiresAt)&&fresh.leaseExpiresAt>Date.now(),'PROGRESS_OBSERVATION_AUTHORITY_CHANGED');
         invariant(observed.sequence===sequence,'UPGRADE_SEQUENCE_CONFLICT');
         // Reobserve the last durable checkpoint, never the future step whose
         // executor is still running or the sum of work across other steps.
         const step=plan.steps.find(s=>s.stepId===observed.stage);if(!step)return;
-        const durable=await coordinator.step(attempt.attemptId,step.stepId);
+        const durable=checkpoint?.step||await coordinator.step(attempt.attemptId,step.stepId);
         if(observationsStopped||leaseLost||signal?.aborted)return;
         invariant(durable?.stepId===step.stepId&&Number.isFinite(durable.completedWork)&&durable.completedWork>=0&&(step.totalWork===null||durable.completedWork<=step.totalWork),'PROGRESS_OBSERVATION_WORK_INVALID');
         // A new Store can attest the unchanged checkpoint by digest. Negotiate
         // on this fresh snapshot so an older Coordinator still receives its
         // existing full-evidence progress contract during a rolling handoff.
-        const proof=fresh.controllerCapabilities?.progressEvidenceReference===1?{evidenceDigest:digest(durable.evidence)}:{evidence:durable.evidence};
+        let proof;
+        if(checkpoint&&typeof durable.evidenceDigest==='string')proof={evidenceDigest:durable.evidenceDigest};
+        else if(checkpoint){const full=await coordinator.step(attempt.attemptId,step.stepId);invariant(full?.stepId===step.stepId&&full.completedWork===durable.completedWork&&full.receiptDigest===durable.receiptDigest,'PROGRESS_CHECKPOINT_CHANGED');proof={evidenceDigest:digest(full.evidence)};}
+        else proof=fresh.controllerCapabilities?.progressEvidenceReference===1?{evidenceDigest:digest(durable.evidence)}:{evidence:durable.evidence};
         await commitObserved('progress',{stepId:step.stepId,completedWork:durable.completedWork,totalWork:step.totalWork,...proof,stage:observed.state},randomUUID());
       }
       timer=setInterval(()=>{
         if(observationsStopped||renewalTask)return;
-        renewalTask=(async()=>{
-          await coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence});
-          await serializeMutation(observeDurableProgress);
-        })().catch(e=>{if(!observationsStopped)leaseLost=e;}).finally(()=>{renewalTask=null;});
+        renewalTask=coordinator.renew(attempt.attemptId,{controllerId,fence:session.fence}).catch(e=>{if(!observationsStopped)leaseLost=e;}).finally(()=>{renewalTask=null;});
       },Math.min(1000,Math.floor(leaseMs/3)));timer.unref();
+      progressTimer=setInterval(()=>{
+        if(observationsStopped||progressTask||leaseLost)return;
+        progressTask=serializeMutation(observeDurableProgress).catch(e=>{if(!observationsStopped)leaseLost=e;}).finally(()=>{progressTask=null;});
+      },1000);progressTimer.unref();
       async function applied(step,evidence,completedWork) {
         const receiptDigest=digest(evidence);const next=await commit('step-applied',{stepId:step.stepId,receiptDigest,completedWork,evidence});journal.steps[step.stepId]={state:'applied',receiptDigest,evidence,completedWork};await atomicJson(journalPath,journal);return next;
       }
@@ -106,7 +111,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
         const operationId=local?.operationId||randomUUID();journal.steps[step.stepId]={state:'applying',operationId,fence:session.fence};await atomicJson(journalPath,journal);
         if(step.kind==='installer-handoff'){artifact ||= journal.steps['package-verify']?.evidence;const candidateInstaller=await executor.installerCandidate({artifact,attempt,fence:session.fence,operationId});invariant(candidateInstaller.artifactDigest===attempt.manifest.components.installer.artifactDigest&&candidateInstaller.inputFingerprint===attempt.manifest.components.installer.inputFingerprint,'INSTALLER_CANDIDATE_IDENTITY_MISMATCH');await applied(step,candidateInstaller,1);await stopObservations();await executor.installerHandoff({attempt,fence:session.fence,operationId,candidate:candidateInstaller});journal.controllerTransferred=true;await atomicJson(journalPath,journal);return {state:'controller-handoff',attemptId:attempt.attemptId};}
         if(step.kind==='download') {
-          download=await downloadVerified(plan.package,root,{fetcher,signal,assertFence,allowedRedirectOrigins:roots.distributionOrigins,onProgress:(completed,total,evidence)=>commit('progress',{stepId:step.stepId,completedWork:completed,totalWork:total,evidence,stage:'downloading'})});await applied(step,download,plan.package.bytes);
+          download=await downloadVerified(plan.package,downloadRoot,{fetcher,signal,assertFence,allowedRedirectOrigins:roots.distributionOrigins,onProgress:(completed,total,evidence)=>commit('progress',{stepId:step.stepId,completedWork:completed,totalWork:total,evidence,stage:'downloading'})});await applied(step,download,plan.package.bytes);
         }else if(step.kind==='verify') {
           download ||= journal.steps['package-download']?.evidence;invariant(download,'DOWNLOAD_RECEIPT_MISSING');artifact=await executor.prepare({download,attempt,fence:session.fence});await applied(step,artifact,1);
         }else if(step.kind==='migration') {
@@ -147,7 +152,7 @@ export function createInstanceController({root,instanceId,controllerId,startIden
       return {state:'activation-confirmed',attemptId:attempt.attemptId};
     }catch(error){
       await stopObservations();
-      if(session&&error.code!=='STALE_FENCE'&&error.code!=='LEASE_EXPIRED'&&error.code!=='UPGRADE_FENCE_EXPIRED'&&error.code!=='CONTROLLER_STOPPED'){
+      if(session&&error.code!=='CONTROLLER_STOPPED'&&(onFault||!['STALE_FENCE','LEASE_EXPIRED','UPGRADE_FENCE_EXPIRED'].includes(error.code))){
         if(session.recovering){try{const fresh=await coordinator.snapshot(session.attempt.attemptId);if(fresh.recovery?.state==='recovering'){await commitMutation(session.attempt.attemptId,{fence:session.fence,generation:session.generation,expectedSequence:fresh.attempt.sequence,eventId:randomUUID(),kind:'recovery-failed',payload:{reason:faultCode(error,'RECOVERY_UNKNOWN'),actual:await executor.actual()}});const path=join(root,'journals',session.attempt.attemptId+'.json'),journal=await readJson(path,{});journal.monitorStopped='recovery-unknown';await atomicJson(path,journal);}}catch{}}
         else await handleFault(session,error).catch(()=>{});
       }
@@ -198,6 +203,10 @@ export function createInstanceController({root,instanceId,controllerId,startIden
     return {state:'idle'};
   }
   async function handleFault(session,error) {
+    // An independent controller supplies its own durable recovery authority.
+    // It must be able to record/reconcile a fault after the old lease expires;
+    // the legacy recovery path below deliberately retains its old contract.
+    if(onFault)return onFault({session,error});
     const id=session.attempt.attemptId;await coordinator.assertFence(id,session.fence);const fresh=await coordinator.snapshot(id);const attempt=fresh.attempt||fresh;const plan=fresh.plan;
     if(!plan)return;const actual=await executor.actual();const confirmed=attempt.state==='activation-confirmed';
     const base={fence:session.fence,generation:session.generation,expectedSequence:attempt.sequence,eventId:randomUUID()};
