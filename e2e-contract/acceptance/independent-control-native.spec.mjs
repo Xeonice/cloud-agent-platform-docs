@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import * as fs from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import { startIndependentUpgradeHarness } from "../server/start-independent-upgrade.mjs";
+import { independentNativeOutcome } from "../server/independent-native-outcome.mjs";
 import {
   startQualificationModel,
   qualificationPrompt,
@@ -292,9 +293,11 @@ for (const scenario of scenarios)
         guestHost: config.localModel?.guestHost ?? "host.boxlite.internal",
       });
       harness = await startIndependentUpgradeHarness(config);
-      const Database = createRequire(
-        join(config.initialRoot, "api/apps/api/package.json"),
-      )("better-sqlite3");
+      const requireApi = createRequire(
+          join(config.initialRoot, "api/apps/api/package.json"),
+        ),
+        Database = requireApi("better-sqlite3"),
+        { UpgradeStatusSchema } = requireApi("@platform/contracts");
       business = new Database(harness.businessDatabasePath, {
         readonly: true,
         fileMustExist: true,
@@ -523,7 +526,7 @@ for (const scenario of scenarios)
         }
       }
       const deadline = Date.now() + 900000;
-      let terminal;
+      let terminal, terminalOutcome;
       while (Date.now() < deadline) {
         const observed = await browserStatus(page);
         evidence.statusReads.push({
@@ -533,34 +536,37 @@ for (const scenario of scenarios)
           recoveryPhase: observed.value.recovery?.phase,
           controlState: observed.value.controlSystem?.state,
         });
-        const status = observed.value;
-        if (status.recovery?.phase === "blocked")
-          throw Object.assign(Error("Actual independent recovery is blocked"), {
-            code: status.recovery.reason ?? "NATIVE_RECOVERY_BLOCKED",
-          });
-        if (
-          status.serviceAvailability?.state === "available" &&
-          status.observation?.state === "fresh" &&
-          (status.attempt?.state === "activation-confirmed" ||
-            status.recovery?.phase === "recovered")
-        ) {
+        const status = UpgradeStatusSchema.parse(observed.value);
+        const outcome = independentNativeOutcome({ scenario, status, command });
+        if (outcome.state === "failed")
+          throw Object.assign(
+            Error(
+              "Actual independent upgrade did not meet this scenario's target",
+            ),
+            { code: outcome.code },
+          );
+        if (outcome.state === "confirmed" || outcome.state === "recovered") {
           terminal = status;
+          terminalOutcome = outcome;
           break;
         }
         await delay(500);
       }
       expect(
         terminal,
-        "actual confirmation or recovery must finish under the original bounded intent",
+        "the scenario-specific confirmation must finish under the original bounded intent",
       ).toBeDefined();
-      if (terminal.recovery) {
+      expect(terminalOutcome).toBeDefined();
+      evidence.terminalOutcome = terminalOutcome;
+      if (terminalOutcome.state === "recovered") {
+        expect(scenario).toBe("business-fault");
         expect(terminal.recovery.phase).toBe("recovered");
         expect(terminal.recovery.confirmedAt).toBeTruthy();
         const proof = ledger
           .prepare(
             "SELECT receipt,receipt_digest FROM control_recovery_confirmations WHERE recovery_id=?",
           )
-          .get(terminal.recovery.recoveryId);
+          .get(terminalOutcome.recoveryId);
         expect(proof).toBeDefined();
         const value = JSON.parse(proof.receipt),
           { receiptDigest, ...facts } = value;
@@ -573,10 +579,13 @@ for (const scenario of scenarios)
           600,
         );
         evidence.recoveryConfirmationDigest = receiptDigest;
-      } else
+      } else {
+        expect(terminalOutcome.state).toBe("confirmed");
+        expect(terminal.attempt.state).toBe("activation-confirmed");
         expect(terminal.confirmedServiceRelease.releaseId).toBe(
           command.targetReleaseId,
         );
+      }
       await page.reload();
       await expect
         .poll(
