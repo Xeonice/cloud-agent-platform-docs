@@ -372,10 +372,13 @@ export async function startIndependentUpgradeHarness(input) {
     capacityCollectorConfigPath: join(paths.capacity, "collector.json"),
     capacityTransitionRoot: join(paths.capacity, "transitions"),
     capacityTemplates: Object.fromEntries(
-      ["api", "web", "coordinator", "owner"].map((kind) => [kind, {
-        allocationId: input.capacityAllocationIds?.[kind],
-        resources: input.capacityBudgets?.candidate?.[kind],
-      }]),
+      ["api", "web", "coordinator", "owner"].map((kind) => [
+        kind,
+        {
+          allocationId: input.capacityAllocationIds?.[kind],
+          resources: input.capacityBudgets?.candidate?.[kind],
+        },
+      ]),
     ),
   };
   const foundationInput = Object.fromEntries(
@@ -608,7 +611,8 @@ export async function startIndependentUpgradeHarness(input) {
     qualificationInstallationPath: qualificationProof,
     controlRoot: paths.control,
     controlLedgerRoot: paths.ledger,
-    downloadRoot: join(paths.installer, "downloads"),
+    // downloadVerified appends /downloads; the Agent mount remains that child only.
+    downloadRoot: paths.installer,
     coordinatorBindingPath: bindingPath,
     capacityStateRoot: paths.capacity,
     capacityPlanPath,

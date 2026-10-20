@@ -363,7 +363,8 @@ export async function prepareMigrationUpgrade(
     qualificationInstallationPath: agentInputs.qualification,
     controlRoot: paths.control,
     controlLedgerRoot: paths.ledger,
-    downloadRoot: join(paths.installer, "downloads"),
+    // downloadVerified appends /downloads; the Agent mount remains that child only.
+    downloadRoot: paths.installer,
     coordinatorBindingPath: bindingPath,
     capacityStateRoot: paths.capacity,
     capacityPlanPath,
