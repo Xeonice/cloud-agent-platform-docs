@@ -317,6 +317,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       "--workdir",
       cwd,
     ];
+    if (kind === 'control-supervisor') argv.push('--cgroupns', 'host');
     if (['control-agent', 'control-entry', 'control-supervisor'].includes(kind)) {
       const resources = kind === 'control-agent' ? c.controlAgentResources : c.controlFoundationEntries[kind === 'control-entry' ? 'entry' : 'supervisor'].resources;
       invariant(resources && Number.isSafeInteger(resources.memoryBytes) && resources.memoryBytes >= 64 * 1024 * 1024 && Number.isSafeInteger(resources.cpuMilliCores) && resources.cpuMilliCores > 0 && Number.isSafeInteger(resources.pidsLimit) && resources.pidsLimit > 0 && resources.pidsLimit <= 65536, 'CONTROL_ROLE_RESOURCE_LIMITS_REQUIRED');
