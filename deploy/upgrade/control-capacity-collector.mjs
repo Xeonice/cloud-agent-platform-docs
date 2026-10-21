@@ -58,6 +58,60 @@ export function linuxDevice(dev) {
   const value = BigInt(dev), major = ((value >> 8n) & 0xfffn) | ((value >> 32n) & ~0xfffn), minor = (value & 0xffn) | ((value >> 12n) & ~0xffn);
   return major + ':' + minor;
 }
+
+/** Docker uses both cgroup-v1 title case and cgroup-v2 lower case operations.
+ * Only an explicit null may request independent kernel evidence. */
+export function parseDockerIoBytes(value) {
+  if (value === null) return null;
+  invariant(Array.isArray(value), 'CAPACITY_CGROUP_IO_UNKNOWN');
+  let bytes = 0, hasReadWrite = false;
+  for (const counter of value) {
+    const op = typeof counter?.op === 'string' ? counter.op.toLowerCase() : '';
+    invariant(['read', 'write', 'sync', 'async', 'total', 'discard'].includes(op) && integer(counter.value), 'CAPACITY_CGROUP_IO_UNKNOWN');
+    if (op === 'read' || op === 'write') {
+      hasReadWrite = true;
+      bytes += counter.value;
+      invariant(integer(bytes), 'CAPACITY_CGROUP_IO_UNKNOWN');
+    }
+  }
+  invariant(value.length === 0 || hasReadWrite, 'CAPACITY_CGROUP_IO_UNKNOWN');
+  return bytes;
+}
+
+/** The null Docker representation is not evidence of zero. Bind its kernel
+ * fallback to the exact container's unified cgroup, never a parent or child. */
+export function kernelIoPath(root, containerId, source) {
+  invariant(isAbsolute(root) && resolve(root) === root && CID.test(containerId), 'CAPACITY_CGROUP_IO_UNKNOWN');
+  const lines = source.trim().split('\n'), match = lines.length === 1 && /^0::(\/[^\r\n]*)$/.exec(lines[0]);
+  invariant(match, 'CAPACITY_CGROUP_IO_UNKNOWN');
+  const parts = match[1].slice(1).split('/');
+  invariant(parts.length > 0 && parts.every(part => /^[a-zA-Z0-9_.:-]+$/.test(part) && part !== '.' && part !== '..') &&
+    [containerId, 'docker-' + containerId + '.scope'].includes(parts.at(-1)), 'CAPACITY_CGROUP_IO_UNKNOWN');
+  return join(root, ...parts, 'io.stat');
+}
+
+export function parseKernelZeroIo(source) {
+  const devices = new Set();
+  for (const line of source.trim() ? source.trim().split('\n') : []) {
+    const [device, ...fields] = line.trim().split(/\s+/), counters = new Map();
+    invariant(DEVICE.test(device) && !devices.has(device) && fields.length >= 2, 'CAPACITY_CGROUP_IO_UNKNOWN');
+    devices.add(device);
+    for (const field of fields) {
+      const match = /^(rbytes|wbytes|rios|wios|dbytes|dios)=(\d+)$/.exec(field);
+      invariant(match && !counters.has(match[1]) && integer(Number(match[2])), 'CAPACITY_CGROUP_IO_UNKNOWN');
+      counters.set(match[1], Number(match[2]));
+    }
+    invariant(counters.get('rbytes') === 0 && counters.get('wbytes') === 0 && [...counters.values()].every(value => value === 0), 'CAPACITY_CGROUP_IO_UNKNOWN');
+  }
+  return 0;
+}
+
+async function kernelZeroIo(c, row, group, signal) {
+  const root = c.hostCgroupRoot ?? '/host/cgroup', path = kernelIoPath(root, row.containerId, group);
+  invariant(await fs.realpath(root) === root && (await fs.statfs(root)).type === 0x63677270 && await fs.realpath(path) === path, 'CAPACITY_CGROUP_IO_UNKNOWN');
+  return parseKernelZeroIo((await boundedFile(path, 65536, signal)).text);
+}
+
 function validPhysical(row) {
   return CID.test(row.containerId) && positive(row.pid) && /^\d+$/.test(row.birthTicks) && DIGEST.test(row.cgroupDigest) && Number.isFinite(Date.parse(row.startedAt)) && integer(row.restartCount) &&
     [row.instanceId, row.role, row.startIdentity, row.artifactDigest].every(value => value === null || typeof value === 'string');
@@ -127,11 +181,11 @@ export async function sampleLinuxCapacity(c, { signal, clock = Date.now, monoton
     const home = join(c.hostProcRoot, String(row.pid));
     const [birthBefore, group, stats] = await Promise.all([boundedFile(join(home, 'stat'), 16384, signal), boundedFile(join(home, 'cgroup'), 16384, signal), dockerJson(c.dockerSocketPath, '/containers/' + row.containerId + '/stats?stream=false&one-shot=true', signal)]);
     invariant(group.text.includes(row.containerId) && stats.id === row.containerId && positive(stats.memory_stats?.usage) && integer(stats.cpu_stats?.cpu_usage?.total_usage), 'CAPACITY_CGROUP_COUNTER_UNKNOWN');
-    const birthTicks = parseProcessBirth(birthBefore.text), birthAfter = parseProcessBirth((await boundedFile(join(home, 'stat'), 16384, signal)).text);
-    invariant(birthTicks === birthAfter, 'CAPACITY_CONTAINER_BIRTH_CHANGED');
-    let ioBytes = 0;
-    invariant(Array.isArray(stats.blkio_stats?.io_service_bytes_recursive), 'CAPACITY_CGROUP_IO_UNKNOWN');
-    for (const counter of stats.blkio_stats.io_service_bytes_recursive) if (['Read', 'Write'].includes(counter.op)) { invariant(integer(counter.value), 'CAPACITY_CGROUP_IO_UNKNOWN'); ioBytes += counter.value; }
+    const birthTicks = parseProcessBirth(birthBefore.text), dockerIo = parseDockerIoBytes(stats.blkio_stats?.io_service_bytes_recursive);
+    const ioBytes = dockerIo === null ? await kernelZeroIo(c, row, group.text, signal) : dockerIo;
+    const [birthAfter, groupAfter] = await Promise.all([boundedFile(join(home, 'stat'), 16384, signal), boundedFile(join(home, 'cgroup'), 16384, signal)]);
+    invariant(birthTicks === parseProcessBirth(birthAfter.text), 'CAPACITY_CONTAINER_BIRTH_CHANGED');
+    invariant(group.text === groupAfter.text, 'CAPACITY_CONTAINER_CGROUP_CHANGED');
     const result = { ...physical({ ...row, birthTicks, cgroupDigest: digest(group.text) }), memoryBytes: stats.memory_stats.usage, cpuNs: stats.cpu_stats.cpu_usage.total_usage, ioBytes, monotonic: monotonic() };
     invariant(validPhysical(result) && integer(ioBytes), 'CAPACITY_CONTAINER_IDENTITY_UNKNOWN'); return result;
   }));
