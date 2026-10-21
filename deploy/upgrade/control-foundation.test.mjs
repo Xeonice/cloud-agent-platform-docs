@@ -17,7 +17,7 @@ async function serve(t, handler) {
   t.after(close); return { origin: `http://127.0.0.1:${server.address().port}`, close };
 }
 
-test('independent Foundation restores its listeners with zero business lifecycle actions and routes control to Agent', async t => {
+test('independent Foundation restores migrated-source listeners with zero business lifecycle actions and routes control to Agent', async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'control-foundation-'))); t.after(() => rm(root, { recursive: true, force: true }));
   const instanceId = 'foundation-test', keys = Object.fromEntries(['owner', 'control', 'controller', 'upgradeControl', 'entry', 'sticky', 'supervisor', 'privateEntry', 'businessProbe', 'accessAuthority'].map((name, i) => [name, String(i).repeat(32)]));
   const verifier = createEntryContextVerifier({ instanceId, key: keys.privateEntry }), calls = [];
@@ -39,7 +39,8 @@ test('independent Foundation restores its listeners with zero business lifecycle
   ledgerDb.close(); await chmod(join(ledger, 'control.db'), 0o600);
   const capacityPlanPath = join(root, 'capacity.json'), referenceStatePath = join(root, 'references.json'), resourceObservationPath = join(root, 'resources.json');
   for (const file of [capacityPlanPath, referenceStatePath, resourceObservationPath]) await atomicJson(file, {});
-  const stableControl = { origin: agent.origin, key: keys.upgradeControl, accessKey: keys.accessAuthority, statePath: join(root, 'supervisor-private/state.db'),
+  const migratedArtifactPath = join(root, 'bindings/migration-source.json');
+  const stableControl = { origin: agent.origin, key: keys.upgradeControl, accessKey: keys.accessAuthority, statePath: join(root, 'supervisor-private/state.db'), migratedArtifactPath,
     capacityPlanPath, referenceStatePath, resourceObservationPath, controlDbPath: join(ledger, 'control.db'), agentStartIdentity: 'control-birth-0001' };
   const c = { root, instanceId, artifactRoot: join(root, 'business-code'), controlArtifactRoot: join(root, 'control-code'), controlLedgerRoot: ledger,
     stableControl, trustRootPath: join(root, 'trust.json'), catalogFile: join(root, 'catalog.json'), publicOrigin: 'http://test.invalid',
@@ -59,6 +60,9 @@ test('independent Foundation restores its listeners with zero business lifecycle
   }
   assert.equal(foundation.controlEnv.UPGRADE_BUSINESS_PROBE_KEY, undefined);
   assert.equal(foundation.coordinatorEnv.UPGRADE_CONTROL_DATABASE_PATH, stableControl.controlDbPath);
+  assert.equal(foundation.coordinatorEnv.UPGRADE_MIGRATED_ARTIFACT_PATH, migratedArtifactPath);
+  assert.equal(foundation.controlEnv.UPGRADE_MIGRATED_ARTIFACT_PATH, undefined);
+  assert.equal(foundation.ownerEnv.UPGRADE_MIGRATED_ARTIFACT_PATH, undefined);
   assert.equal(foundation.coordinatorEnv.UPGRADE_BUSINESS_PROBE_KEY, keys.businessProbe);
   assert.equal(foundation.coordinatorEnv.PLATFORM_ENTRY_CONTROL_KEY, keys.controller);
   assert.equal(foundation.coordinatorEnv.PLATFORM_INSTALLER_SUPERVISOR_KEY, keys.controller);
@@ -76,6 +80,22 @@ test('independent Foundation restores its listeners with zero business lifecycle
   assert.equal(response.status, 200); assert.deepEqual(await response.json(), { agent: true });
   assert.equal(calls.length, 1); assert.equal(calls[0].context.clientIp, '127.0.0.1');
   await foundation.close(); await foundation.close(); assert.equal(lifecycleActions, 0);
+});
+
+test('Foundation rejects migration provenance outside the exact instance binding before role construction', async () => {
+  const root = join(tmpdir(), 'own-foundation-migration-path-rejection');
+  let lifecycleActions = 0;
+  for (const migratedArtifactPath of [
+    join(root, 'bindings/other-source.json'),
+    join(tmpdir(), 'other-instance/bindings/migration-source.json'),
+    'bindings/migration-source.json',
+    root + '/bindings/../bindings/migration-source.json',
+  ]) {
+    await assert.rejects(() => createIndependentFoundation({ root, stableControl: { migratedArtifactPath } }, {
+      adapterFactory: async () => { lifecycleActions++; throw Error('Unexpected role construction'); },
+    }), { code: 'CONTROL_FOUNDATION_MIGRATION_SOURCE_SCOPE_INVALID' });
+  }
+  assert.equal(lifecycleActions, 0);
 });
 
 test('Foundation rejects an Agent global key reused by any business or listener credential before constructing roles', async () => {
