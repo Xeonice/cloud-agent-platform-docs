@@ -11,7 +11,7 @@ pipeline {
     string(name: 'SHA', defaultValue: '', description: 'Pinned API commit; blank resolves the trusted REF before check/publish')
     string(name: 'REF', defaultValue: 'refs/heads/main', description: 'Trusted API branch or refs/tags/sandbox-image-v<version>; never a PR')
     string(name: 'TAG', defaultValue: '', description: 'Immutable OCI version; Git sandbox-image tag must match, blank derives pinned CLI versions + SHA')
-    choice(name: 'MODE', choices: ['check', 'publish'], description: 'Check coordinates and dedicated runtime builder, or explicitly publish both provider tiers')
+    choice(name: 'MODE', choices: ['check', 'publish', 'promote'], description: 'Check, publish immutable versions only, or explicitly promote verified versions to latest')
   }
   environment {
     NODE22 = '/usr/local/bin/node'
@@ -37,6 +37,7 @@ pipeline {
           def result = readJSON(file: 'sandbox-images-result.json')
           currentBuild.description = "${env.IMAGE_SHA.take(12)} · ${params.MODE} · ${result.status}"
           if (params.MODE == 'publish' && result.status != 'published') { error('The two provider images were not both published and verified anonymously') }
+          if (params.MODE == 'promote' && result.status != 'promoted') { error('The two verified provider versions were not both promoted') }
           if (params.MODE == 'check' && result.status != 'checked') { error('Image coordinates or dedicated runtime builder checks failed') }
         }
       }

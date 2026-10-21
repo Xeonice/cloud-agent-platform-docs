@@ -5,6 +5,8 @@
 > **⚠️ 2026-08 再次改写（用户裁决：tmux 升 MUST）**：**B 档（无 tmux ⇒ 网关自持 pty + ring buffer）整体取消**，§6 只剩 tmux 一档；ring buffer 随之退役（判断依据见 §6.3）。轨迹与取代理由见 04 §7 ★ 与 TASK-LAUNCH-DECISIONS T-2。
 > 关联文档：[08 前端 xterm 集成](../frontend/08-前端xterm集成.md) · [04 Contract 体系](./04-Contract与Registry扩展体系.md) · [10 WS 协议类型](../shared/10-接口契约与类型共享.md) · [03 §4.1/§4.2 判定口径定案](./03-Sandbox调度中心.md)
 
+> 本轮新增 [UPG 升级续接需求](../product/requirements/UPG.md)，目标为刷新及控制 API 更新后接回同一运行实例和 tmux 会话。稳定运行 owner、唯一写入／调度所有权与协议的规划见[后端增量方案](./changes/2026-10-10-不停机升级与运行环境分离.md)，当前内嵌 SDK 形态仍以源码为准。
+
 ## 1. 链路总览
 
 ```
@@ -30,7 +32,7 @@
 - **初始任务指令：⚠️ 已挪出网关（S5 裁决 D-15，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**。此前本条写的是「首个会话的 `cmd` 由 adapter 按 `RuntimeTaskSpec.prompt` 组装为带指令启动 CLI」——**该逻辑现在属于 provision workflow 的 `bootstrapAgentSession`**（03 §4.3 ⑤）：agent 会话在 `starting` 段就已经起好并开始执行，与用户有没有点开终端无关。
   - **网关侧的新规则：一律 attach 已存在的 agent 会话**（`tmux attach -t platform-agent`，§6），**不判断「首次」、不调 `buildStartCommand`**。
   - **为什么必须挪**：绑在 `openSession` 上时，① 用户创建完关掉浏览器 ⇒ 指令永不执行；② **MCP `create_sandbox` 根本没有终端 ⇒ 必不执行**，与 02 §5.2 的说明正面矛盾；③ P20 §0「启动时即执行」是产品承诺。
-  - **兜底**：会话意外不存在时（tmux server 被沙箱内进程杀掉、session 名被误删等；**「无 tmux 镜像下平台重启」这条原因已随 B 档取消而消失**，§6），网关按 `buildAttachCommand()` 起一个干净会话并记 warning——**不重放 `initialPrompt`**（消费标记见 23 I-SBX-10）。
+  - **原会话无法续接**：先区分暂时不可达与确证不存在，返回准确恢复状态；不得因刷新或升级自动起一个干净会话替代原会话，也不得重放 `initialPrompt`。原会话真实退出时由用户明确选择新终端或已有业务操作。此项与新增 UPG 连续性目标共同实现并验证（消费标记仍见 23 I-SBX-10）。
 - 网关拿到的是**已解复用的干净字节流**——流头、多路复用、tty 下 stderr 合并全部由 provider 内部消化（04 §2.2 的 spawn 语义），网关不做任何解码。
 
 实现对照（04 §2.2）：

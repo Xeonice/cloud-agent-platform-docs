@@ -8,7 +8,7 @@
  * 各 flows 文件只往注册表里登记：P.views（模板 → refresh / wire）、P.mainTpl（路由 → 模板）、P.actions（data-action）、
  *        P.menus（data-menu）、P.hook / P.emit / P.ask（钩子）、P.scenario.define（场景）、P.clock.ticker（时钟里的进行中对象）。
  *        DOMContentLoaded 时 core 统一 boot（那时所有 defer 脚本都已执行完）。
- * 状态只在内存里（刷新即复原）；主题与侧栏收起记在 localStorage（读写都 try/catch）。
+ * 业务状态只在内存里（刷新即复原）；主题、侧栏收起与治理提示当天关闭记录记在 localStorage（读写都 try/catch）。
  * 标记与静态稿同一套类名：视图 / 弹层的骨架由 tools/build-proto.cjs 从静态稿（pilot 试点、gap/drafts 补全稿）拷进 index.html 的 <template>，
  *        数据由 JS 按同一套类名填进去。
  * 修正轮（原型评审 F1–F15、PF-01–PF-14）的改动保留在原处并用编号标出（来源 pilot/proto/proto.js，逐条处理见 pilot/notes/proto.md §7）。
@@ -872,7 +872,7 @@
         + `</div>`;
       if (open && vis.length) html += `<ul class="tree-group__tasks">${vis.map(treeTask).join('')}</ul>`;
       // 只对就绪的项目给「发起第一个任务」（REQ-PRJ-011 / AC-LCH-001.4：不复现未就绪空组的幽灵弹层）
-      // 第四段（F-WB-LIVE / REQ-WB-014）：离线时这个入口也置灰并说原因（只置灰、不隐藏；实现漏了这一处，原型照 AC-WB-014.5 做全）
+      // 发起入口只按真实项目等条件置灰；联网探测不单独阻断（REQ-WB-014）。
       else if (open && !all.length && p.status === 'ready') {
         const why = P.newTaskBlocked(p);
         html += `<button class="tree-empty" type="button" title="在 ${esc(p.name)} 中发起第一个任务"${why ? ` aria-disabled="true" data-reason="${esc(why)}"` : ''} data-action="new-task" data-project="${pid}" data-fk="pe:${pid}">发起第一个任务<span class="icon icon--14 i-arrow-right" aria-hidden="true"></span></button>`;
@@ -991,7 +991,7 @@
 
   // ---- 工作台顶栏（与 P1 / P6 / f-prj-* / f-lch-* / f-sbx-* 的标记一致）
   const PULL_TIP = (P.PULL_TIP = '只更新项目里的这份代码。已经建好的任务用的是各自建的时候复制的那一份，不会跟着变；下次新建任务才会用到刚拉下来的代码。');
-  // 不能发起任务的原因（顶栏「新任务」、新建任务下拉）：先问钩子（离线等，F-WB-LIVE 接），再按项目状态分两句（REQ-PRJ-016）
+  // 不能发起任务的原因（顶栏「新任务」、新建任务下拉）：保留扩展钩子与真实项目状态，联网诊断不注册全局阻断（REQ-PRJ-016 / REQ-WB-014）。
   P.newTaskBlocked = (p) => {
     const r = P.ask('newTask.blocked', p);
     if (r) return r;
