@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { invariant } from "./trust.mjs";
 import { readSupervisorFact } from "./supervisor-control.mjs";
 import {validateCoordinatorExitReceipt} from './coordinator-exit-receipt.mjs';
+import { loadTrustRoot, canonical } from './trust.mjs';
+import { verifyLegacyCoordinatorInertHistory } from './coordinator-inert-history.mjs';
 const CID = /^[a-f0-9]{64}$/,
   HASH = /^sha256:[a-f0-9]{64}$/;
 const safeOrigin = (value) => {
@@ -119,6 +121,7 @@ export function createCoordinatorInventory({
   retiredRoot,
   inspect,
   readIdentity,
+  legacyTrustRootPath = null,
   clock = Date.now,
   timeoutMs = 2000,
 }) {
@@ -209,7 +212,8 @@ export function createCoordinatorInventory({
         invariant(
           physical.containerId === r.containerId &&
             physical.startIdentity === r.startIdentity &&
-            physical.artifactDigest === r.artifactDigest &&
+            (physical.artifactDigest === r.artifactDigest ||
+              (physical.artifactDigest === null && physical.running === false && legacyTrustRootPath)) &&
             typeof physical.startedAt === "string" &&
             Number.isFinite(Date.parse(physical.startedAt)) &&
             typeof physical.running === "boolean" &&
@@ -225,6 +229,54 @@ export function createCoordinatorInventory({
               physical.restartPolicy === "no",
             "COORDINATOR_PROCESS_UNAVAILABLE",
           );
+          if (physical.artifactDigest === null) {
+            invariant(legacyTrustRootPath, "COORDINATOR_INERT_HISTORY_TRUST_REQUIRED");
+            const receiptPath = join(retiredRoot, r.containerId + ".legacy-inert-history.json");
+            const fact = await readSupervisorFact(receiptPath, 65536);
+            const stat = await fs.lstat(receiptPath);
+            invariant((stat.mode & 0o077) === 0 &&
+              (stat.uid === 0 || stat.uid === process.getuid?.()) &&
+              String(stat.dev) === fact.identity.dev && String(stat.ino) === fact.identity.ino,
+              "COORDINATOR_INERT_HISTORY_PRIVATE_REQUIRED");
+            const roots = await loadTrustRoot(legacyTrustRootPath);
+            signal.throwIfAborted();
+            const proof = verifyLegacyCoordinatorInertHistory(fact.value, {
+              instanceId, record: r, physical, roots, now: clock(),
+            });
+            const after = await inspect(r.containerId);
+            signal.throwIfAborted();
+            verifyLegacyCoordinatorInertHistory(fact.value, {
+              instanceId, record: r, physical: after, roots, now: clock(),
+            });
+            invariant(canonical(after.legacyInertProof) === canonical(physical.legacyInertProof),
+              "COORDINATOR_INERT_HISTORY_CHANGED");
+            coordinators.push({
+              containerId: r.containerId,
+              startIdentity: r.startIdentity,
+              artifactDigest: r.artifactDigest,
+              physical: {
+                containerId: r.containerId,
+                startIdentity: r.startIdentity,
+                artifactDigest: null,
+                declaredEnvArtifactDigest: physical.legacyInertProof.declaredEnvArtifactDigest,
+                legacyInertProof: physical.legacyInertProof,
+                imageDigest: physical.imageDigest,
+                role: "coordinator",
+                oomKilled: false,
+                hostPid: 0,
+                DockerStartedAt: physical.startedAt,
+                startedAt: physical.startedAt,
+                finishedAt: physical.finishedAt,
+                exitCode: physical.exitCode,
+                running: false,
+                paused: false,
+                restartCount: 0,
+                restartPolicy: "no",
+              },
+              retiredPhysical: proof,
+            });
+            continue;
+          }
           const receipt = (
             await readSupervisorFact(
               join(retiredRoot, r.containerId + ".json"),
