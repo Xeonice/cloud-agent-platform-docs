@@ -192,7 +192,7 @@ test("explicit fresh normal-exit physical proof preserves exitedAt and is includ
       f.db.prepare("SELECT proof FROM control_stabilization_witnesses").get()
         .proof,
     ),
-    retired = proof.coordinators.find((c) => c.kind === "retired-physical");
+    retired = proof.coordinators.find((c) => c.kind === "normal-exit");
   assert.equal(retired.exitedAt, facts.exitedAt);
   assert.equal(retired.writerFenceValid, false);
   assert.equal(retired.observedAt, new Date(99000).toISOString());
@@ -213,7 +213,7 @@ test('ordinary retired coordinator stays a typed non-writer in subsequent stabil
   f.inventory.coordinators.push(row);
   await f.client.capture({recoveryId:'next-upgrade'});
   const proof=JSON.parse(f.db.prepare('SELECT proof FROM control_stabilization_witnesses').get().proof);
-  assert.equal(proof.coordinators[1].kind,'retired-physical');
+  assert.equal(proof.coordinators[1].kind,'normal-exit');
   assert.equal(proof.coordinators[1].exitedAt,facts.after.finishedAt);
   row.retiredPhysical.after.finishedAt=new Date(100001).toISOString();
   const {receiptDigest,observedAt,...changed}=row.retiredPhysical;

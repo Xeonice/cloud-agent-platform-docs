@@ -1,6 +1,13 @@
-import { invariant, digest, canonical, DIGEST } from "./trust.mjs";
+import {
+  invariant,
+  digest,
+  canonical,
+  DIGEST,
+  loadTrustRoot,
+} from "./trust.mjs";
 import { createPrivateControlRpc } from "./control-rpc.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
+import { verifyLegacyCoordinatorInertHistoryWire } from "./coordinator-inert-history.mjs";
 
 /** Only fixed Supervisor inventory + each actual Coordinator's private identity
  * are read. This collector has no business SQLite or Docker capability. */
@@ -10,6 +17,7 @@ export function createControlStabilization({
   supervisorOrigin,
   supervisorKey,
   controllerKey,
+  trustRootPath = null,
   fetcher = fetch,
   clock = Date.now,
 }) {
@@ -39,6 +47,7 @@ export function createControlStabilization({
     );
     const coordinators = [],
       writers = [];
+    let legacyRoots;
     // Concurrent bounded reads keep the complete witness within its 5s window;
     // no unknown peer is silently omitted from the inventory.
     const observed = await Promise.all(
@@ -54,13 +63,47 @@ export function createControlStabilization({
         if (record.physical.running === false) {
           const proof = record.retiredPhysical,
             { receiptDigest, observedAt, ...facts } = proof ?? {};
-          invariant(
-            validateCoordinatorExitReceipt(facts && { ...facts, receiptDigest }, {
+          if (proof?.kind === "legacy-coordinator-inert-history") {
+            invariant(
+              trustRootPath,
+              "CONTROL_STABILIZATION_INERT_TRUST_REQUIRED",
+            );
+            legacyRoots ??= loadTrustRoot(trustRootPath);
+            const verified = verifyLegacyCoordinatorInertHistoryWire(record, {
               instanceId,
-              target: { containerId: record.containerId, startIdentity: record.startIdentity,
-                artifactDigest: record.artifactDigest, ...record.physical },
+              roots: await legacyRoots,
               now: clock(),
-            }) &&
+            });
+            return {
+              containerId: record.containerId,
+              startIdentity: record.startIdentity,
+              artifactDigest: record.artifactDigest,
+              generation: null,
+              writerFenceValid: false,
+              kind: "legacy-inert",
+              receiptKind: "legacy-coordinator-inert-history",
+              receiptDigest: verified.receiptDigest,
+              exitedAt: verified.target.finishedAt,
+              exitCode: verified.target.exitCode,
+              recordedAt: verified.recordedAt,
+              artifactLabel: null,
+              observedAt: verified.observedAt,
+            };
+          }
+          invariant(
+            validateCoordinatorExitReceipt(
+              facts && { ...facts, receiptDigest },
+              {
+                instanceId,
+                target: {
+                  containerId: record.containerId,
+                  startIdentity: record.startIdentity,
+                  artifactDigest: record.artifactDigest,
+                  ...record.physical,
+                },
+                now: clock(),
+              },
+            ) &&
               fresh(observedAt) &&
               record.physical.hostPid === 0 &&
               record.physical.paused === false &&
@@ -83,7 +126,8 @@ export function createControlStabilization({
             artifactDigest: record.artifactDigest,
             generation: null,
             writerFenceValid: false,
-            kind: "retired-physical",
+            kind: "normal-exit",
+            receiptKind: "coordinator-normal-exit",
             receiptDigest,
             exitedAt: proof.exitedAt,
             observedAt,
@@ -143,6 +187,7 @@ export function createControlStabilization({
           );
         }
         return {
+          kind: "live",
           containerId: record.containerId,
           startIdentity: record.startIdentity,
           artifactDigest: record.artifactDigest,

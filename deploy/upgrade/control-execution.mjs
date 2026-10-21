@@ -167,7 +167,7 @@ export async function createControlExecution({ c, engineIdentity, sqlite, stores
   const native = createNativeExecutor({ ...c, instanceId, coordinator, supervisorClient: supervisor, fetcher, entryControllerKey: c.privateEntryKey,
     ensureControlAdmission: ensureAdmission, controlContext: () => envelope(grant()) });
   const contractAuthority = createControlContractAuthority({ sqlite, instanceId, authority, contracts: stores.contracts, participants, clock });
-  const stabilization = createControlStabilization({ sqlite, instanceId, supervisorOrigin: c.supervisorOrigin, supervisorKey: c.supervisorKey, controllerKey: c.businessKey, fetcher, clock });
+  const stabilization = createControlStabilization({ sqlite, instanceId, supervisorOrigin: c.supervisorOrigin, supervisorKey: c.supervisorKey, controllerKey: c.businessKey, trustRootPath: c.trustRootPath, fetcher, clock });
   function recoveryHeaders() {
     const context = requestContext?.();
     return context?.recoveryId ? { 'x-platform-recovery-id': context.recoveryId, 'x-platform-recovery-epoch': String(context.epoch), 'x-platform-control-epoch': String(context.epoch) } : {};

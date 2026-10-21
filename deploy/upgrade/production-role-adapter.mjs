@@ -6,6 +6,7 @@ import { atomicJson, readJson, secureDirectory, inside } from "./io.mjs";
 import { captureProcessIdentity } from "./supervisor-sampler.mjs";
 import { createProtectedRoleLifecycle, fixedRoleName } from "./protected-role-lifecycle.mjs";
 import { roleResourceFlags } from './role-resource-limits.mjs';
+import { projectLegacyCoordinatorInertHistory } from './coordinator-inert-history.mjs';
 const CID = /^[a-f0-9]{64}$/;
 const PROVIDER_ENV = [
   "SANDBOX_DEFAULT_IMAGE",
@@ -234,8 +235,10 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
     );
     let birth = {};
     if (row.State.Running) try { birth = await captureProcessIdentity({ hostPid: row.State.Pid, containerId: id, procRoot: c.procRoot || '/proc' }); } catch {}
+    const legacyInertProof = projectLegacyCoordinatorInertHistory(row);
     return {
       ...birth, artifactDigest: row.Config.Labels['agent-platform.artifact'] || null, attemptId: row.Config.Labels['agent-platform.attempt'] || null, operationId: row.Config.Labels['agent-platform.operation'] || null, commandId: row.Config.Labels['agent-platform.command'] || null,
+      ...(legacyInertProof ? { legacyInertProof } : {}),
       paused: row.State.Paused ?? null, restartPolicy: row.HostConfig.RestartPolicy?.Name || 'no', restartCount: row.RestartCount ?? null, oomKilled: row.State.OOMKilled ?? null, exitCode: row.State.ExitCode ?? null,
       containerId: id,
       imageDigest: row.Image,
