@@ -11,6 +11,8 @@ import {
 import {
   createControlMigrationRuntime,
   createMigrationDockerAdapter,
+  migrationCapacityInspectionTarget,
+  waitForMigrationLeaseRelease,
 } from "./control-migration-runtime.mjs";
 import { createControlCommandJournal } from "./control-command-journal.mjs";
 import { freezeCapacityBudget } from "./capacity-admission.mjs";
@@ -21,7 +23,8 @@ import {
   capacityHostIdentity,
 } from "./control-capacity-collector.mjs";
 import { treeManifest } from "./io.mjs";
-async function runtimeFixture(t, { withCollector = false } = {}) {
+import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false } = {}) {
   const f = await fixture(t),
     events = [],
     states = new Map(),
@@ -440,12 +443,18 @@ async function runtimeFixture(t, { withCollector = false } = {}) {
       const old = states.get(r.containerId);
       const next = { ...old, running: false, hostPid: 0, exitCode: 0 };
       states.set(r.containerId, next);
-      if (r.role === "coordinator")
+      if (r.role === "coordinator") {
         f.db
           .prepare(
             "UPDATE platform_role_leases SET expires_at=0 WHERE role='state-coordinator'",
           )
           .run();
+        if (closeOnStop) {
+          f.db.close();
+          for (const suffix of ["-wal", "-shm"]) await assert.rejects(fs.stat(f.args.businessPath + suffix), { code: "ENOENT" });
+          events.push("business-last-writer-closed");
+        }
+      }
       return next;
     },
     restart: async (r) => {
@@ -457,6 +466,8 @@ async function runtimeFixture(t, { withCollector = false } = {}) {
         startedAt: new Date(Date.now() + 1).toISOString(),
       };
       states.set(r.containerId, next);
+      if (r.role === "coordinator")
+        if (!f.db.open) { f.db = new Database(f.args.businessPath); t.after(() => f.db.open && f.db.close()); }
       if (r.role === "coordinator")
         f.db
           .prepare(
@@ -499,6 +510,7 @@ async function runtimeFixture(t, { withCollector = false } = {}) {
       }
       if (spec.kind === "coordinator") {
         targetCoordinator = actual;
+        if (!f.db.open) { f.db = new Database(f.args.businessPath); t.after(() => f.db.open && f.db.close()); }
         f.db
           .prepare(
             "UPDATE platform_role_leases SET holder_id='new-writer',generation=8,fence=8,expires_at=? WHERE role='state-coordinator'",
@@ -918,6 +930,15 @@ test("default fixed Docker migration adapter verifies real code bytes/full birth
       },
     );
   assert.equal((await adapter.inspect(expected)).hostPid, 1234);
+  const { codeFiles, commandDigest: omittedCommand, mountDigest: omittedMount, ...briefRecord } = expected,
+    projection = { ...briefRecord, startedAt: new Date(Date.now()).toISOString(), hostPid: 2345 };
+  row.State.StartedAt = projection.startedAt; row.State.Pid = projection.hostPid;
+  await assert.rejects(adapter.inspect(projection), /CONTROL_MIGRATION_FOUNDATION_CODE_PROOF_REQUIRED/);
+  const enriched = migrationCapacityInspectionTarget(projection, expected), inspected = await adapter.inspect(enriched);
+  assert.equal(inspected.hostPid, 2345); assert.equal(inspected.startedAt, projection.startedAt);
+  assert.deepEqual(enriched.codeFiles, codeFiles);
+  assert.equal(migrationCapacityInspectionTarget({ ...projection, containerId: "9".repeat(64) }, expected).codeFiles, undefined);
+  row.State.StartedAt = expected.startedAt; row.State.Pid = expected.hostPid;
   const actual = await adapter.terminate(expected);
   assert.equal(actual.running, false);
   assert.deepEqual(effects, [["kill", "--signal", "SIGTERM", row.Id]]);
@@ -933,6 +954,83 @@ test("default fixed Docker migration adapter verifies real code bytes/full birth
     /CONTROL_MIGRATION_FOUNDATION_CODE_CHANGED/,
   );
   assert.equal(effects.length, 1);
+});
+test("runtime exports final lease and exact history after the actual last SQLite writer closes and removes both WAL sidecars", async (t) => {
+  const f = await runtimeFixture(t, { closeOnStop: true }), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  t.after(() => runtime.close());
+  assert.equal((await runtime.apply()).state, "migrated");
+  assert.ok(f.events.includes("business-last-writer-closed"));
+  const journal = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  let state;
+  try { state = JSON.parse(journal.prepare("SELECT data FROM control_migration_run").get().data); }
+  finally { journal.close(); }
+  assert.equal(state.readViewPreflight.closedWalProbe, "passed");
+  const frozen = new Database(state.businessReadView.path, { readonly: true });
+  try {
+    assert.equal(frozen.prepare("SELECT expires_at FROM platform_role_leases WHERE role='state-coordinator'").get().expires_at, 0);
+    assert.equal(frozen.prepare("SELECT count(*) n FROM upgrade_attempts").get().n, f.f.db.prepare("SELECT count(*) n FROM upgrade_attempts").get().n);
+  } finally { frozen.close(); }
+  // New-writer proof reads the real reopened database, not the expired view.
+  assert.equal(f.f.db.prepare("SELECT generation FROM platform_role_leases WHERE role='state-coordinator'").get().generation, 8);
+});
+test("a failed closed-read-view preflight rejects before stopping any source", async (t) => {
+  const f = await runtimeFixture(t), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  t.after(() => runtime.close());
+  await fs.chmod(f.input.runtime.journalRoot, 0o755);
+  await assert.rejects(runtime.apply(), /CONTROL_MIGRATION_READ_VIEW_PRIVATE_DIRECTORY_REQUIRED/);
+  assert.deepEqual(f.events, []);
+});
+test("release barrier waits for the real 28.5 second frozen expiry, bounded by the original action/deadline", async () => {
+  let now = 1000, reads = 0;
+  const lease = { instance_id: "instance", holder_id: "original", generation: 9, fence: 9, expires_at: now + 28500 },
+    args = { readLease: () => { reads++; return lease; }, expected: lease, instanceId: "instance", deadline: 121000, clock: () => now, pause: async ms => { now += ms; } };
+  assert.deepEqual(await waitForMigrationLeaseRelease(args), lease);
+  assert.equal(now, lease.expires_at); assert.ok(reads > 120);
+  now = 1000;
+  await assert.rejects(waitForMigrationLeaseRelease({ ...args, deadline: 13000 }), /WRITER_LEASE_NOT_RELEASED/);
+  assert.equal(now, 13000);
+  now = lease.expires_at;
+  await waitForMigrationLeaseRelease(args);
+  await assert.rejects(waitForMigrationLeaseRelease({ ...args, readLease: () => ({ ...lease, generation: 10 }) }), /WRITER_CHANGED/);
+});
+function priorIncarnation(f, migrationId = "older-migration") {
+  const source = f.source.coordinator, oldStart = Date.parse(source.startedAt) - 10000,
+    facts = { schemaVersion: 1, kind: "coordinator-normal-exit", instanceId: f.input.instanceId, migrationId,
+      originalCommandId: migrationId + ":stop-writer", target: { containerId: source.containerId, startIdentity: source.startIdentity,
+        artifactDigest: source.artifactDigest, DockerStartedAt: new Date(oldStart).toISOString(), restartCount: source.restartCount },
+      after: { running: false, hostPid: 0, restartPolicy: "no", restartCount: source.restartCount }, exitedAt: new Date(oldStart + 1000).toISOString() };
+  return { ...facts, receiptDigest: digest(facts) };
+}
+test("same-CID prior incarnation is archived byte-for-byte before current exact-birth exit proof replaces its selector", async t => {
+  const f = await runtimeFixture(t), prior = priorIncarnation(f), raw = JSON.stringify(prior, null, 2) + "\n  \n",
+    currentPath = join(f.input.runtime.retiredCoordinatorRoot, f.source.coordinator.containerId + ".json");
+  await fs.writeFile(currentPath, raw, { mode: 0o600 });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  t.after(() => runtime.close());
+  assert.equal((await runtime.apply()).state, "migrated");
+  assert.equal(await fs.readFile(join(f.input.runtime.retiredCoordinatorRoot, "history", f.source.coordinator.containerId, "older-migration.json"), "utf8"), raw);
+  const current = JSON.parse(await fs.readFile(currentPath, "utf8"));
+  assert.equal(current.migrationId, f.input.migrationId);
+  assert.equal(current.target.DockerStartedAt, f.source.coordinator.startedAt);
+  assert.equal(validateCoordinatorExitReceipt(current, { instanceId: f.input.instanceId, target: f.source.coordinator }), true);
+  assert.equal(validateCoordinatorExitReceipt(prior, { instanceId: f.input.instanceId, target: f.source.coordinator }), false);
+});
+test("corrupt, same-operation changed-birth, or conflicting archived prior exits reject before any source stop", async t => {
+  for (const mode of ["corrupt", "same-operation", "archive-conflict"]) {
+    const f = await runtimeFixture(t), prior = priorIncarnation(f, mode === "same-operation" ? f.input.migrationId : "older-migration"),
+      path = join(f.input.runtime.retiredCoordinatorRoot, f.source.coordinator.containerId + ".json");
+    if (mode === "corrupt") prior.receiptDigest = digest("bad");
+    await fs.writeFile(path, JSON.stringify(prior), { mode: 0o600 });
+    if (mode === "archive-conflict") {
+      const dir = join(f.input.runtime.retiredCoordinatorRoot, "history", f.source.coordinator.containerId);
+      await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+      await fs.writeFile(join(dir, "older-migration.json"), JSON.stringify(prior, null, 2), { mode: 0o600 });
+    }
+    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+    try { await assert.rejects(runtime.apply(), /CONTROL_MIGRATION_EXIT_(RECEIPT_CONFLICT|HISTORY_CHANGED)/); }
+    finally { runtime.close(); }
+    assert.deepEqual(f.events, []);
+  }
 });
 test("actual unsettled execution keeps the persistent actor barrier; no second runner or rollback can overlap", async (t) => {
   const f = await runtimeFixture(t);

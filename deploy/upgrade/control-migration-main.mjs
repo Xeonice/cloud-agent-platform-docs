@@ -69,9 +69,12 @@ export async function runControlMigrationCommand(command, configPath) {
       : controlMigrationStatus({ ...c, Database });
   if (["apply", "resume", "rollback"].includes(command))
     invariant(c.runtime, "CONTROL_MIGRATION_RUNTIME_CONFIG_REQUIRED");
-  const plan = planControlMigration({ ...c, Database });
   if (command === "plan")
-    return { ...plan, runtimeImplemented: Boolean(c.runtime) };
+    return { ...planControlMigration({ ...c, Database }), runtimeImplemented: Boolean(c.runtime) };
+  // Recovery uses the already durable original runtime/config identity. A stopped
+  // WAL-mode business DB on a read-only mount cannot recreate its SHM sidecar.
+  if (!(c.runtime && ["resume", "rollback"].includes(command)))
+    planControlMigration({ ...c, Database });
   for (const path of [c.exportPath, c.controlPath, c.accessPath])
     await secureDirectory(dirname(path));
   const expected = c.sourceCoordinator;

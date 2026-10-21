@@ -1,6 +1,6 @@
 import * as fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   canonical,
   digest,
@@ -41,6 +41,8 @@ import { createMigrationCapacity } from "./control-migration-capacity.mjs";
 import { createContractRetirement } from "./contract-retirement.mjs";
 import { captureProcessIdentity } from "./supervisor-sampler.mjs";
 import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
+import { createClosedBusinessReadView, probeClosedBusinessReadView } from "./closed-business-read-view.mjs";
+import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 const CID = /^[a-f0-9]{64}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const brief = (p) => ({
@@ -67,6 +69,40 @@ const sameBirth = (a, b) =>
     "imageDigest",
     "role",
   ].every((k) => a[k] === b[k]);
+
+/** Capacity journals contain physical projections, not Foundation code proofs.
+ * Add only the exact original Foundation's immutable proof; retain the observed birth. */
+export function migrationCapacityInspectionTarget(record, sourceFoundation) {
+  if (record?.role !== "foundation" || record.containerId !== sourceFoundation?.containerId) return record;
+  return { ...record, ...Object.fromEntries(["codeFiles", "commandDigest", "mountDigest"].map(k => [k, sourceFoundation[k]])) };
+}
+
+export async function waitForMigrationLeaseRelease({ readLease, expected, instanceId, deadline, clock = Date.now, pause = sleep }) {
+  while (true) {
+    invariant(clock() <= deadline, "CONTROL_MIGRATION_WRITER_LEASE_NOT_RELEASED");
+    const actual = await readLease();
+    invariant(clock() <= deadline, "CONTROL_MIGRATION_WRITER_LEASE_NOT_RELEASED");
+    invariant(actual?.instance_id === instanceId && (!expected || ["holder_id", "generation", "fence"].every(k => actual[k] === expected[k])) && Number.isFinite(actual.expires_at), "CONTROL_MIGRATION_WRITER_CHANGED");
+    if (actual.expires_at <= clock()) return actual;
+    invariant(clock() < deadline, "CONTROL_MIGRATION_WRITER_LEASE_NOT_RELEASED");
+    await pause(Math.min(100, actual.expires_at - clock(), deadline - clock()));
+  }
+}
+
+export function classifyMigrationCoordinatorExit(receipt, { instanceId, migrationId, expected, now = Date.now() }) {
+  invariant(validateCoordinatorExitReceipt(receipt, { instanceId, target: receipt?.target, now }) &&
+    /^[a-zA-Z0-9._:-]{1,200}$/.test(receipt.migrationId ?? "") &&
+    receipt.originalCommandId === receipt.migrationId + ":stop-writer" &&
+    ["containerId", "startIdentity", "artifactDigest", "restartCount"].every(k => receipt.target[k] === expected[k]), "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
+  if (receipt.migrationId === migrationId) {
+    invariant(receipt.target.DockerStartedAt === expected.startedAt, "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
+    return "current";
+  }
+  invariant(receipt.target.DockerStartedAt !== expected.startedAt &&
+    Date.parse(receipt.target.DockerStartedAt) < Date.parse(expected.startedAt) &&
+    Date.parse(receipt.exitedAt) <= Date.parse(expected.startedAt), "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
+  return "historical";
+}
 
 /** Read-only signed package selection is exercised separately from physical
  * migration. Schema 2 stores packages[], not manifest.package. */
@@ -491,7 +527,7 @@ export async function createControlMigrationRuntime(
         observationPath: c.capacity.observationPath,
         deadline: c.rollbackDeadline,
         actions,
-        inspect: (r) => adapter.inspect(r),
+        inspect: (r) => adapter.inspect(migrationCapacityInspectionTarget(r, c.source.foundation)),
         ...(capacitySample ? { sample: capacitySample } : {}),
         clock,
       })
@@ -1010,6 +1046,7 @@ export async function createControlMigrationRuntime(
       businessTreeDigest: bundle.treeDigest,
       archiveDigest: archive.digest,
       archiveBytes: archive.bytes,
+      sourceReadMinFreeBytes: signed.manifest.policy.minFreeBytes,
     };
   }
   async function publishSourceProvenance() {
@@ -1093,8 +1130,8 @@ export async function createControlMigrationRuntime(
       factFile: { identity: factFile.identity, digest: factFile.digest },
     };
   }
-  function businessLease() {
-    const source = new Database(input.businessPath, {
+  function businessLease(view) {
+    const source = new Database(view?.path ?? input.businessPath, {
       readonly: true,
       fileMustExist: true,
     });
@@ -1109,26 +1146,40 @@ export async function createControlMigrationRuntime(
       source.close();
     }
   }
-  async function waitReleased(expected) {
-    for (let i = 0; i < 120; i++) {
-      const actual = businessLease();
-      invariant(
-        actual?.instance_id === input.instanceId &&
-          actual.holder_id === expected.holder_id &&
-          actual.generation === expected.generation &&
-          actual.fence === expected.fence,
-        "CONTROL_MIGRATION_WRITER_CHANGED",
-      );
-      if (actual.expires_at <= clock()) return actual;
-      invariant(
-        clock() < c.deadline,
-        "CONTROL_MIGRATION_WRITER_LEASE_NOT_RELEASED",
-      );
-      await sleep(100);
+  function readViewScope(phase) {
+    return { instanceId: input.instanceId, migrationId: input.migrationId, configDigest, phase,
+      sourceBirths: Object.fromEntries(Object.entries(c.source).map(([role, record]) => [role, brief(record)])) };
+  }
+  async function assertClosedBusinessWriters(rollback = false) {
+    for (const [role, expected] of Object.entries(c.source)) {
+      const id = role === "coordinator" ? "stop-writer" : "stop-" + role,
+        stopped = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":" + id });
+      invariant(stopped?.state === "applied" && stopped.spec.targetDigest === digest(expected) && stopped.spec.configDigest === configDigest, "CONTROL_MIGRATION_SOURCE_VIEW_STOP_PROOF_REQUIRED");
+      assertStopped(stopped.result, expected);
+      assertStopped(await adapter.inspect(expected), expected);
     }
-    throw Object.assign(Error("Writer lease still live"), {
-      code: "CONTROL_MIGRATION_WRITER_LEASE_NOT_RELEASED",
-    });
+    const row = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":start-coordinator" });
+    if (!row || ["planned", "definitely-not-applied"].includes(row.state)) return;
+    invariant(rollback && row.state === "applied", "CONTROL_MIGRATION_SOURCE_VIEW_WRITER_UNKNOWN");
+    assertStopped(await adapter.inspect(row.result), row.result);
+  }
+  async function closedReadView(phase = "final-source") {
+    return createClosedBusinessReadView({ Database, businessPath: input.businessPath,
+      directory: join(root, "closed-business-" + phase), scope: readViewScope(phase),
+      assertClosed: () => assertClosedBusinessWriters(phase === "rollback-current"), clock });
+  }
+  async function rollbackBusinessLease() {
+    try { return businessLease(); }
+    catch (error) {
+      if (error.code !== "SQLITE_CANTOPEN") throw error;
+      return businessLease(await closedReadView("rollback-current"));
+    }
+  }
+  async function waitReleased(expected, view) {
+    const row = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":closed-source-view" });
+    invariant(row?.state === "applied", "CONTROL_MIGRATION_READ_VIEW_RECEIPT_REQUIRED");
+    return waitForMigrationLeaseRelease({ readLease: () => businessLease(view), expected, instanceId: input.instanceId,
+      deadline: Math.min(c.deadline, row.createdAt + c.actionBudgetMs), clock });
   }
   async function stop(id, expected, rollback = false) {
     const result = await step(
@@ -1152,6 +1203,10 @@ export async function createControlMigrationRuntime(
     assertStopped(actual, expected);
     const after = await adapter.inspect(expected);
     assertStopped(after, expected);
+    const stopRow = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":stop-writer" });
+    invariant(stopRow?.state === "applied" && stopRow.spec.targetDigest === digest(expected) && stopRow.spec.configDigest === configDigest,
+      "CONTROL_MIGRATION_EXIT_STOP_PROOF_REQUIRED");
+    assertStopped(stopRow.result, expected);
     const facts = {
       schemaVersion: 1,
       kind: "coordinator-normal-exit",
@@ -1173,26 +1228,51 @@ export async function createControlMigrationRuntime(
       },
       exitedAt: new Date(clock()).toISOString(),
     };
-    const path = join(
-        await secureDirectory(c.retiredCoordinatorRoot),
-        expected.containerId + ".json",
-      ),
-      prior = await readJson(path, null);
+    const path = join(await secureDirectory(c.retiredCoordinatorRoot), expected.containerId + ".json"),
+      prior = await priorExitReceipt(expected);
     if (prior) {
-      invariant(
-        prior.migrationId === input.migrationId &&
-          prior.originalCommandId === facts.originalCommandId &&
-          canonical(prior.target) === canonical(facts.target),
-        "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT",
-      );
-      return prior;
+      const kind = classifyMigrationCoordinatorExit(prior.value, { instanceId: input.instanceId, migrationId: input.migrationId, expected, now: clock() });
+      if (kind === "current") return prior.value;
+      const history = await secureDirectory(join(c.retiredCoordinatorRoot, "history", expected.containerId)),
+        archive = join(history, encodeURIComponent(prior.value.migrationId) + ".json");
+      let output;
+      try {
+        output = await fs.open(archive, "wx", 0o600);
+        await output.writeFile(prior.bytes); await output.sync();
+      } catch (error) {
+        if (error.code !== "EEXIST") throw error;
+        await readSupervisorFact(archive, 16384);
+        invariant((await fs.readFile(archive)).equals(prior.bytes), "CONTROL_MIGRATION_EXIT_HISTORY_CHANGED");
+      } finally { if (output) await output.close(); }
+      for (const directory of [history, dirname(history), c.retiredCoordinatorRoot]) {
+        const d = await fs.open(directory, "r"); try { await d.sync(); } finally { await d.close(); }
+      }
+      const current = await priorExitReceipt(expected);
+      invariant(current && current.bytes.equals(prior.bytes), "CONTROL_MIGRATION_EXIT_PUBLICATION_CAS_CHANGED");
     }
     const receipt = { ...facts, receiptDigest: digest(facts) };
     await atomicJson(path, receipt);
     return receipt;
   }
-  async function assertNoPending() {
-    const source = new Database(input.businessPath, {
+  async function priorExitReceipt(expected) {
+    const path = join(c.retiredCoordinatorRoot, expected.containerId + ".json");
+    let fact;
+    try { fact = await readSupervisorFact(path, 16384); }
+    catch (error) { if (error.code === "ENOENT") return null; throw error; }
+    const bytes = await fs.readFile(path);
+    invariant(digest(bytes.toString("utf8")) === fact.digest, "CONTROL_MIGRATION_EXIT_PUBLICATION_CAS_CHANGED");
+    const kind = classifyMigrationCoordinatorExit(fact.value, { instanceId: input.instanceId, migrationId: input.migrationId, expected, now: clock() });
+    if (kind === "historical") {
+      const archive = join(c.retiredCoordinatorRoot, "history", expected.containerId, encodeURIComponent(fact.value.migrationId) + ".json");
+      try {
+        await readSupervisorFact(archive, 16384);
+        invariant((await fs.readFile(archive)).equals(bytes), "CONTROL_MIGRATION_EXIT_HISTORY_CHANGED");
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
+    }
+    return { value: fact.value, bytes };
+  }
+  async function assertNoPending(view) {
+    const source = new Database(view?.path ?? input.businessPath, {
       readonly: true,
       fileMustExist: true,
     });
@@ -1510,28 +1590,44 @@ export async function createControlMigrationRuntime(
           "applying",
         );
     }
+    // Current consumers select <CID>.json by the exact observed birth. Reject a
+    // corrupt/conflicting predecessor before stopping anything; valid old births
+    // are archived only after the new original stop is durably proven.
+    await priorExitReceipt(c.source.coordinator);
+    // Probe and reserve the real source-sized working set before any stop.
+    if (!load().readViewPreflight) {
+      const probe = await probeClosedBusinessReadView({ Database, businessPath: input.businessPath,
+        directory: root, scope: readViewScope("final-source"), minFreeBytes: packageProof.sourceReadMinFreeBytes ?? 0 });
+      save({ readViewPreflight: probe });
+    }
     await stop("stop-foundation", c.source.foundation);
     await stop("stop-installer", c.source.installer);
-    await assertNoPending();
-    const currentSource = await adapter.inspect(c.source.coordinator);
-    if (currentSource.running) {
-      const fresh = await qualifyControlMigrationSource({
-        ...input,
-        Database,
-        sourcePhysical: currentSource,
-      });
-      invariant(
-        canonical(fresh.binding) === canonical(load().qualification.binding) &&
-          ["holder_id", "generation", "fence"].every(
-            (k) => fresh.lease[k] === load().qualification.lease[k],
-          ),
-        "CONTROL_MIGRATION_SOURCE_CHANGED",
-      );
-      save({ lastLiveSourceWitness: fresh });
+    const priorExport = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":final-export" });
+    let businessReadView;
+    // A completed export is immutable history. On resume a new writer may already
+    // own the real DB; never re-run the old writer's lease check against it.
+    if (priorExport?.state !== "applied") {
+      const currentSource = await adapter.inspect(c.source.coordinator);
+      if (currentSource.running) {
+        await assertNoPending();
+        const fresh = await qualifyControlMigrationSource({ ...input, Database, sourcePhysical: currentSource });
+        invariant(canonical(fresh.binding) === canonical(load().qualification.binding) &&
+          ["holder_id", "generation", "fence"].every(k => fresh.lease[k] === load().qualification.lease[k]),
+          "CONTROL_MIGRATION_SOURCE_CHANGED");
+        save({ lastLiveSourceWitness: fresh });
+      }
+      const stopped = await stop("stop-writer", c.source.coordinator);
+      businessReadView = await step("closed-source-view", { scope: readViewScope("final-source") },
+        () => closedReadView(), async () => {
+          try { await fs.lstat(join(root, "closed-business-final-source", "receipt.json")); }
+          catch (error) { if (error.code === "ENOENT") return null; throw error; }
+          return { state: "applied", result: await closedReadView() };
+        });
+      save({ businessReadView });
+      await assertNoPending(businessReadView);
+      await waitReleased(load().qualification.lease, businessReadView);
+      await publishExit(c.source.coordinator, stopped);
     }
-    const stopped = await stop("stop-writer", c.source.coordinator);
-    await waitReleased(load().qualification.lease);
-    await publishExit(c.source.coordinator, stopped);
     const metadata = await step(
       "final-export",
       {
@@ -1544,6 +1640,8 @@ export async function createControlMigrationRuntime(
           ...input,
           Database,
           qualifiedSource: load().qualification,
+          businessReadView,
+          businessReadViewScope: readViewScope("final-source"),
           readStoppedWriter: () => adapter.inspect(c.source.coordinator),
           readAccessEnvironment: async () => {
             const env = await input.readAccessEnvironment();
@@ -1942,17 +2040,10 @@ export async function createControlMigrationRuntime(
     }
     const current = await adapter.inspect(c.source.coordinator);
     if (!current.running) {
-      for (let i = 0; businessLease()?.expires_at > clock() && i < 120; i++) {
-        invariant(
-          clock() < c.rollbackDeadline,
-          "CONTROL_MIGRATION_ROLLBACK_LEASE_UNKNOWN",
-        );
-        await sleep(100);
-      }
-      invariant(
-        businessLease().expires_at <= clock(),
-        "CONTROL_MIGRATION_ROLLBACK_LEASE_UNKNOWN",
-      );
+      const started = load().rollbackLeaseWaitStartedAt ?? clock();
+      if (load().rollbackLeaseWaitStartedAt === undefined) save({ rollbackLeaseWaitStartedAt: started });
+      await waitForMigrationLeaseRelease({ readLease: rollbackBusinessLease, instanceId: input.instanceId,
+        deadline: Math.min(c.rollbackDeadline, started + c.actionBudgetMs), clock });
     }
     const source = await restore("coordinator");
     const oldRpc = createPrivateControlRpc({

@@ -13,6 +13,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { canonical, digest, invariant, DIGEST } from "./trust.mjs";
 import { createControlAccessAuthority } from "./control-access-authority.mjs";
 import { createControlAuthority } from "./control-authority.mjs";
+import { verifyClosedBusinessReadView } from "./closed-business-read-view.mjs";
 
 export const CONTROL_MIGRATION_ROLES = Object.freeze([
   "upgrade-plan",
@@ -595,6 +596,8 @@ export async function exportControlMetadata({
   readAccessEnvironment,
   qualifiedSource,
   readStoppedWriter,
+  businessReadView,
+  businessReadViewScope,
   clock = Date.now,
 }) {
   invariant(
@@ -614,9 +617,16 @@ export async function exportControlMetadata({
   separateDirectories(exportPath, businessPath);
   const sourceIdentity = identity(businessPath),
     api = loadApi(apiRoot);
+  if (qualifiedSource) {
+    invariant(businessReadView?.receipt?.scope?.instanceId === instanceId && businessReadView.receipt.scope.migrationId === migrationId && businessReadView.receipt.scope.phase === "final-source" && DIGEST.test(businessReadViewScope?.configDigest) && canonical(businessReadView.receipt.scope) === canonical(businessReadViewScope), "CONTROL_MIGRATION_CLOSED_READ_VIEW_REQUIRED");
+    await verifyClosedBusinessReadView({ Database, businessPath, view: businessReadView, assertClosed: async () => {
+      const actual = await readStoppedWriter();
+      invariant(actual.running === false && actual.hostPid === 0 && actual.oomKilled === false && [0,143].includes(actual.exitCode) && ["containerId","startIdentity","artifactDigest","startedAt"].every(k => actual[k] === qualifiedSource.sourcePhysical[k]), "CONTROL_MIGRATION_FINAL_WRITER_NOT_STOPPED");
+    } });
+  } else invariant(!businessReadView, "CONTROL_MIGRATION_LIVE_SOURCE_REQUIRES_REAL_DB");
   invariant(!existsSync(exportPath), "CONTROL_MIGRATION_EXPORT_EXISTS");
   secureTarget(exportPath);
-  const source = new Database(businessPath, {
+  const source = new Database(businessReadView?.path ?? businessPath, {
       readonly: true,
       fileMustExist: true,
     }),
@@ -698,6 +708,7 @@ export async function exportControlMetadata({
       migrationId,
       epochFloor,
       business: { ...sourceIdentity, path: businessPath },
+      ...(businessReadView ? { businessReadView: businessReadView.receipt } : {}),
       binding,
       writerObservedAt: sourceCoordinator.observedAt,
       authStateDigest: auth.stateDigest,
