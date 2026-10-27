@@ -337,7 +337,7 @@ git fetch --unshallow                        # 此时才会把所有分支都取
 
 ## 附录 D：部署形态的实测经过（从 11 迁入）
 
-这些条目原写在 11 §1–§1.4 和本地开发清单里。现行规则已收敛到 [11](./shared/11-部署与扩展预留.md)（自托管 compose）与 [CONTRIBUTING](../CONTRIBUTING.md)（本地开发），这里只保留仍在解释现行约束的经过，格式同正文「现象 → 根因 → 落点」。
+这些条目记录开发与运行验证中形成的技术约束。平台实例现行规则见 [统一虚拟化与实例部署](./ops/统一虚拟化与实例部署.md)及 [11](./shared/11-部署与扩展预留.md)，本地开发见 [CONTRIBUTING](../CONTRIBUTING.md)。下文历史观察不构成另一套部署或更新入口，格式同正文「现象 → 根因 → 落点」。
 
 | # | 现象 | 根因 | 现行规则在哪 |
 |---|---|---|---|
@@ -429,7 +429,7 @@ git fetch --unshallow                        # 此时才会把所有分支都取
 - `NEXT_PUBLIC_*` 是构建期烤进 bundle 的，而 WS 基址取决于运行时访问者用的 host。`ws://localhost:3001` 曾被烤进生产 bundle，1001 条测试一条都没红。
 - 「WS 不能走 rewrites」的说法在 Next 15.5.23 上不成立。加上三条 `/socket.io` 规则后 polling 与 websocket 都能经 Next 转发；但必须开 `skipTrailingSlashRedirect`（否则握手被 308，客户端不会跟着重定向再发 upgrade），空 path 的两条规则要把尾斜杠写死在 destination 里（否则 Next 吃掉 `/`，后端 404）。
 - `next start` 默认绑 `0.0.0.0`。`HOSTNAME=127.0.0.1 pnpm start` 静默无效，`pnpm start -- -H 127.0.0.1` 会把 `--` 透传给 next 而启动失败，只有 `pnpm start -H 127.0.0.1` 是对的。
-- 一套 demo 是两个进程，半死的一套最难认：后端被挤掉时前端照常渲染、每个 `/api/*` 都失败；远程用 `nohup` 起的 Next 会被 ssh 断开的 SIGHUP 带走，要用 `setsid`。
+- 本地开发 demo 须同时核对前后端两个进程：后端未运行时前端仍可能渲染，但每个 `/api/*` 都失败。平台实例的服务启动与恢复以 [统一部署指南](./ops/统一虚拟化与实例部署.md) 为准。
 
 **落点**：本地与 compose 形态用 Next rewrites 同源转发、两个 `NEXT_PUBLIC_*_BASE_URL` 留空；后端后来为生产的 Vercel 前端开启了按 `API_ALLOWED_ORIGINS` 精确放行的 credentialed CORS。现行做法见 CONTRIBUTING 与 `web/next.config.mjs` 的注释。
 
@@ -446,7 +446,7 @@ platform-aio-<id>  Up 11 seconds (healthy)  127.0.0.1:45995->8080/tcp
 
 **根因**：两条各自正确的决定撞在一起：agent 端口只发布到宿主 loopback（安全加固），`agentOrigin` 又照着 `HostIp` 拼回调地址。DooD 下端口在宿主的 netns，api 的 `127.0.0.1` 却是容器自己的。实测同一个 `127.0.0.1:18080`：宿主 `curl` 回 401，api 容器内 `fetch` 回 `fetch failed`。
 
-修好之后又撞到另一半：api 裸跑在宿主却配了 `SANDBOX_DOCKER_NETWORK`，`agentOrigin` 是容器名而宿主解析不了，sandbox 卡在 starting 超过 6 分钟，无错误、无超时、无日志。`not attached` 守卫只查沙箱容器在不在网络上，从没查过调用方自己。
+网络声明还必须校验调用方自身：`agentOrigin` 使用容器名时，调用方也必须处于同一网络。仅检查沙箱容器的 `not attached` 守卫不足以证明调用方能解析并连接该地址。
 
 开机自检的判据当时在真 Linux（Docker Engine 28.3.2 / API v1.51）上按生产形态逐条验过：
 
@@ -454,7 +454,7 @@ platform-aio-<id>  Up 11 seconds (healthy)  127.0.0.1:45995->8080/tcp
 |---|---|---|
 | ① | `GET /containers/json?filters={"network":["<net>"]}` | 返回该网络上的容器与它的地址，filter 真的被支持 |
 | ② | 在那个容器里 `ip -o -4 addr` | 与 daemon 报的地址一字不差，交集判定的前提成立 |
-| ③ | 宿主自己的地址表里有没有那个地址 | 没有 ⇒ api 裸跑时判定 not-attached，与实情一致 |
+| ③ | 用不属于该容器网络的地址表作负对照 | 地址交集为空 ⇒ 判定 not-attached，与实情一致 |
 | ④ | 网络名写成 `proj_<net>`（模拟 compose 项目名前缀） | 名单返回 `[]` ⇒ 判定 not-attached，与实情一致 |
 
 同白名单（`CONTAINERS/EXEC/IMAGES/POST`）的 `docker-socket-proxy` 对照：容器列表请求穿得过去，`GET /networks/<net>` 回 403，这是自检不走 `/networks` 的实证理由。

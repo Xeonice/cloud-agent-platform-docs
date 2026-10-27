@@ -14,6 +14,8 @@ const allowedJobs = new Set([
   "agent-platform-contract",
   "agent-platform-mutation",
   "agent-platform-sandbox-images",
+  "agent-platform-instance-package",
+  "agent-platform-upgrade-evidence",
 ]);
 const releaseJob = "agent-platform-release";
 const discoveryJob = "agent-platform-ci-discovery";
@@ -334,6 +336,8 @@ export async function runManagement(
       "web.groovy",
       "mutation.groovy",
       "sandbox-images.groovy",
+      "instance-package.groovy",
+      "upgrade-evidence.groovy",
     ]) {
       const text = await fs.readFile(join(directory, name), "utf8");
       files[name] = Buffer.from(reviewedPipeline(text)).toString("base64");
