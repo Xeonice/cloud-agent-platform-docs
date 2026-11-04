@@ -185,7 +185,7 @@ export function reviewedPipeline(text) {
 
 // O_NOFOLLOW + fstat: the running account's single-link regular file, closed
 // to group and others.
-async function readCredential(path) {
+export async function readCredential(path) {
   const unsafe = () => new Error("Unsafe private API credential");
   const before = await fs.lstat(path);
   if (!before.isFile()) throw unsafe();
