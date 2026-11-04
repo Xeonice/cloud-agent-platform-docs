@@ -24,7 +24,7 @@ import {
 } from "./control-capacity-collector.mjs";
 import { treeManifest } from "./io.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
-async function runtimeFixture(t, { withCollector = false, closeOnStop = false } = {}) {
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {} } = {}) {
   const f = await fixture(t),
     events = [],
     states = new Map(),
@@ -191,6 +191,11 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false } 
       return;
     }
     if (req.url === "/internal/control/identity") {
+      if (failApiReadiness) {
+        states.set(targetApi.containerId, { ...states.get(targetApi.containerId), running: false, hostPid: 0,
+          exitCode: 1, ...apiExitPatch });
+        res.writeHead(503); res.end("{}"); return;
+      }
       res.end(
         JSON.stringify({
           ...targetApi,
@@ -1126,5 +1131,53 @@ test("migration rejects missing/shared global authority or its exposure to busin
     await assert.rejects(runtime.apply());
     assert.deepEqual(f.events, []);
     runtime.close();
+  }
+});
+
+
+test("an exited exact API candidate fails readiness promptly, never relaunches, and rolls back with its real failed-exit capacity receipt", async t => {
+  const f = await runtimeFixture(t, { withCollector: true, failApiReadiness: true });
+  const peak = JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath, "utf8"));
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, capacitySample: f.capacitySample });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_ROLE_EXITED", role: "api", exitCode: 1 });
+  // On resume the collector first closes the changed resident inventory. It must
+  // hold that original operation, never replay the applied API launch.
+  await assert.rejects(runtime.resume(), { code: "CAPACITY_CONTAINER_INVENTORY_CHANGED" });
+  assert.equal(f.events.filter(e => e === "start:api").length, 1);
+  const result = await runtime.rollback();
+  assert.equal(result.state, "rolled-back");
+  assert.equal(f.events.filter(e => e === "start:api").length, 1);
+  assert.equal(f.events.includes("stop:api"), false);
+  assert.equal(f.events.includes("stop:owner"), false);
+  assert.ok(["coordinator", "installer", "foundation"].every(role => f.events.includes("restart:" + role)));
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    const row = db.prepare("SELECT result FROM control_commands WHERE command_id=?").get("migration:rollback-stop-api");
+    const observed = JSON.parse(row.result);
+    assert.equal(observed.exitCode, 1);assert.equal(observed.exitDisposition, "failed-candidate");
+    const capacity = JSON.parse(db.prepare("SELECT receipt FROM control_migration_capacity_receipts WHERE command_id=?").get("migration:rollback-stop-api").receipt);
+    assert.equal(capacity.physical.exitCode, 1);assert.equal(capacity.physical.exitDisposition, "failed-candidate");
+    assert.equal(db.prepare("SELECT count(*) n FROM control_commands WHERE command_id='migration:start-api'").get().n, 1);
+  } finally { db.close(); }
+  const restored = JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath, "utf8"));
+  assert.deepEqual(restored.limits, peak.limits);
+  const reservations = plan => Object.values(plan.allocations).flat().map(r => [r.id, r.resources]).sort(([a], [b]) => a.localeCompare(b));
+  assert.deepEqual(reservations(restored), reservations(peak));
+  assert.equal(restored.allocations.candidate.every(r => !r.resident), true);
+  assert.equal(f.states.get(f.owner.containerId).running, true);
+});
+
+test("failed API rollback still rejects changed birth, OOM, restart count, policy or unrecognized exit", async t => {
+  for (const apiExitPatch of [{ startedAt: new Date(1).toISOString() }, { oomKilled: true }, { restartCount: 1 }, { restartPolicy: "always" }, { exitCode: 137 }]) {
+    const f = await runtimeFixture(t, { failApiReadiness: true, apiExitPatch });
+    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+    try {
+      await assert.rejects(runtime.apply());
+      await assert.rejects(runtime.rollback(), /CONTROL_MIGRATION_(FAILED_CANDIDATE_EXIT_UNPROVEN|NORMAL_EXIT_UNPROVEN)/);
+      assert.equal(f.events.filter(e => e === "start:api").length, 1);
+      assert.equal(f.events.some(e => e.startsWith("restart:")), false);
+      assert.equal(f.events.includes("stop:api"), false);
+    } finally { runtime.close(); }
   }
 });

@@ -70,6 +70,11 @@ const sameBirth = (a, b) =>
     "role",
   ].every((k) => a[k] === b[k]);
 
+/** Publish the complete binding consumed by the API's coordinator resolver. */
+export function migrationCoordinatorBinding({ instanceId, origin, artifactDigest, generation }) {
+  return { instanceId, state: "ready", origin, artifactDigest, generation };
+}
+
 /** Capacity journals contain physical projections, not Foundation code proofs.
  * Add only the exact original Foundation's immutable proof; retain the observed birth. */
 export function migrationCapacityInspectionTarget(record, sourceFoundation) {
@@ -124,6 +129,19 @@ function assertStopped(actual, expected) {
       [0, 143].includes(actual.exitCode),
     "CONTROL_MIGRATION_NORMAL_EXIT_UNPROVEN",
   );
+}
+function stoppedOutcome(actual, expected, allowFailedCandidateExit = false) {
+  // A failed public API candidate is not a normal writer/source exit. Keep
+  // its real exit code and provenance; never signal or relaunch a dead birth.
+  if (allowFailedCandidateExit && expected.role === "api" && actual.exitCode === 1) {
+    invariant(sameBirth(actual, expected) && actual.running === false && actual.hostPid === 0 &&
+      actual.paused === false && actual.restartPolicy === "no" &&
+      actual.restartCount === expected.restartCount && actual.oomKilled === false,
+      "CONTROL_MIGRATION_FAILED_CANDIDATE_EXIT_UNPROVEN");
+    return { ...brief(actual), exitDisposition: "failed-candidate" };
+  }
+  assertStopped(actual, expected);
+  return brief(actual);
 }
 function assertRunning(actual, expected) {
   invariant(
@@ -510,6 +528,7 @@ export async function createControlMigrationRuntime(
         direction: "stop",
         role,
         startCommandId: input.migrationId + ":start-" + role,
+        allowFailedCandidateExit: role === "api",
         allocationId: target.capacityAllocationId,
         deadline: c.rollbackDeadline,
       },
@@ -577,8 +596,8 @@ export async function createControlMigrationRuntime(
             })?.result;
           invariant(target, "CONTROL_MIGRATION_COMMAND_UNKNOWN");
           const actual = await adapter.inspect(target);
-          assertStopped(actual, target);
-          result = brief(actual);
+          result = stoppedOutcome(actual, target, action.allowFailedCandidateExit === true &&
+            action.commandId === input.migrationId + ":rollback-stop-api");
         } else {
           const kind = action.role,
             spec = c.targets[kind];
@@ -1187,13 +1206,16 @@ export async function createControlMigrationRuntime(
       expected,
       async () => {
         await protection();
+        const actual = await adapter.inspect(expected);
+        if (!actual.running) {
+          const failedCandidate = rollback && id === "rollback-stop-api";
+          stoppedOutcome(actual, expected, failedCandidate);
+          return stoppedOutcome(await adapter.inspect(expected), expected, failedCandidate);
+        }
         return adapter.terminate(expected);
       },
-      async () => {
-        const actual = await adapter.inspect(expected);
-        assertStopped(actual, expected);
-        return { state: "applied", result: brief(actual) };
-      },
+      async () => ({ state: "applied", result: stoppedOutcome(await adapter.inspect(expected), expected,
+        rollback && id === "rollback-stop-api") }),
       { rollback },
     );
     await registerCapacity(id);
@@ -1486,19 +1508,32 @@ export async function createControlMigrationRuntime(
       row.spec.deadline,
       row.createdAt + c.actionBudgetMs,
     );
+    async function inspectStartedRole() {
+      const expected = row.result, actual = await adapter.inspect(expected);
+      invariant(sameBirth(actual, expected) && actual.paused === false && actual.restartPolicy === "no" &&
+        actual.restartCount === expected.restartCount, "CONTROL_MIGRATION_PHYSICAL_CHANGED");
+      if (actual.running === false && actual.hostPid === 0)
+        throw Object.assign(Error("Original started role exited before readiness"), {
+          code: "CONTROL_MIGRATION_ROLE_EXITED", role: kind, exitCode: actual.exitCode,
+        });
+      assertRunning(actual, expected);
+    }
     while (true) {
       invariant(
         clock() < deadline,
         "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
       );
+      await inspectStartedRole();
       try {
         const value = await read();
+        await inspectStartedRole();
         invariant(
           clock() <= deadline,
           "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
         );
         return value;
       } catch (error) {
+        await inspectStartedRole();
         if (clock() >= deadline)
           throw Object.assign(Error("Original role readiness budget expired"), {
             code: "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
@@ -1695,12 +1730,12 @@ export async function createControlMigrationRuntime(
         return { state: "applied", result: registered };
       },
     );
-    const binding = {
+    const binding = migrationCoordinatorBinding({
       instanceId: input.instanceId,
       origin: c.targets.coordinator.origin,
       artifactDigest: coordinator.artifactDigest,
       generation: writer.generation,
-    };
+    });
     await step(
       "bind-coordinator",
       { path: c.bindings.coordinatorPath, value: binding },

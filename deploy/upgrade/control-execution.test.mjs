@@ -71,7 +71,7 @@ async function fixture(t, { earlyFailure = false, realStore = false } = {}) {
   const authority = createControlAuthority({ sqlite, instanceId, validateRecovery: value => assert.equal(recoveryStore.read(value.operationId).triggeringAttemptId, value.supersedes) });
   authority.activate({ expectedRevision: 1, sourceBindingDigest: sha('d') }); authority.grant({ operationId: attemptId, epoch: 7, executorId: 'upgrade-seven', leaseMs: 120000 });
   const journal = createControlCommandJournal({ sqlite, instanceId, assertAuthority: value => authority.assert(value) });
-  const calls = [], activeBusiness = new Set(), controls = { lostSupervisorAck: false, lostBusinessAck: false, loseAckWhileRunning: false, workDelay: 0, available: true, businessEffects: 0, supervisorEffects: 0, reservationEffects: 0, lostReservationAck: false, wrongWriterReads: 0, snapshots: new Map() };
+  const calls = [], activeBusiness = new Set(), controls = { lostSupervisorAck: false, lostBusinessAck: false, loseAckWhileRunning: false, workGate: null, available: true, businessEffects: 0, supervisorEffects: 0, reservationEffects: 0, lostReservationAck: false, wrongWriterReads: 0, snapshots: new Map() };
   const plan = accepted?.plan ?? { planDigest: sha('b'), package: { digest: sha('c'), format: 'native-tar' }, policy: { candidateStartupMs: 120000, observationFreshnessMs: 5000 }, steps: [{ kind: 'coordinator-handoff', stepId: 'coordinator-handoff' }] };
   const snapshot = { attempt: { instanceId, attemptId, generation: 1, targetDigest: sha('f'), planDigest: plan.planDigest }, plan, manifest: { components: {} } };
   const contractRecords = new Map();
@@ -89,7 +89,7 @@ async function fixture(t, { earlyFailure = false, realStore = false } = {}) {
     }
     if (req.url === `/internal/upgrades/${attemptId}/coordinator-handoff`) {
       let markEntered; const entered = new Promise(ok => { markEntered = ok; });
-      const work = withBusinessAction(apiStore, { now: () => new Date() }, req.headers, attemptId, 'coordinatorHandoff', input, async () => { controls.businessEffects++; markEntered(); if (controls.workDelay) await new Promise(ok => setTimeout(ok, controls.workDelay)); return { commitKnown: true, stage: input.action === 'prepare' ? 'prepared' : 'quiesced' }; });
+      const work = withBusinessAction(apiStore, { now: () => new Date() }, req.headers, attemptId, 'coordinatorHandoff', input, async () => { controls.businessEffects++; markEntered(); if (controls.workGate) await controls.workGate; return { commitKnown: true, stage: input.action === 'prepare' ? 'prepared' : 'quiesced' }; });
       activeBusiness.add(work); work.then(() => activeBusiness.delete(work), () => activeBusiness.delete(work));
       if (controls.loseAckWhileRunning) { controls.loseAckWhileRunning = false; await Promise.race([entered, work]); res.destroy(); await work; return; }
       const result = await work;
@@ -177,6 +177,7 @@ async function fixture(t, { earlyFailure = false, realStore = false } = {}) {
   let execution = await createControlExecution(args);
   t.after(async () => { await execution.close(); await Promise.allSettled([...activeBusiness]); await diagnostics.close(); await entry.close(); await supervisor.close(); await control.close(); await business.close(); await wrongWriter.close(); sqlite.close(); for (const [name, value] of Object.entries(savedEnv)) { if (value === undefined) delete process.env[name]; else process.env[name] = value; } await fs.rm(directory, { recursive: true, force: true }); });
   return { c, args, controls, calls, plan, snapshot, journal, authority, sqlite, entry, stores, recoveryStore, contractRecords, rawBusiness, withCommandContext,
+    businessCompletion: () => Promise.all([...activeBusiness]),
     get execution() { return execution; }, async restart() { await execution.close(); execution = await createControlExecution(args); },
     async pointAtWrongWriter() { await fs.writeFile(c.coordinatorBindingPath, canonical({ ...coorBinding, generation: 2, origin: wrongWriter.origin }), { mode: 0o600 }); },
     async recovery() { const businessBinding = await execution.adapter.captureBusinessBinding(); let intent = recoveryStore.create({ recoveryId, triggeringAttemptId: attemptId, authorizationPlan: { componentScope: ['coordinator'], businessBinding }, reason: 'ACK_UNKNOWN', deadline: Date.now() + 200000 }); intent = recoveryStore.claim({ recoveryId, epoch: authority.observe().epoch + 1 }); authority.grant({ operationId: recoveryId, epoch: intent.epoch, executorId: 'recovery-process', kind: 'recovery', supersedes: attemptId, leaseMs: 120000 }); const current = authority.observe(); return { intent, authorization: { operationId: recoveryId, epoch: intent.epoch, executorId: current.holderId, expiresAt: current.leaseExpiresAt, kind: 'recovery' } }; } };
@@ -265,16 +266,24 @@ test('production fault handling persists a real whitelisted diagnostic and pins 
 });
 
 test('a real API operation that outlives its lost HTTP acknowledgement remains physically pending then closes by original-ID lookup', async t => {
-  const f = await fixture(t); f.controls.loseAckWhileRunning = true; f.controls.workDelay = 180;
-  await assert.rejects(f.execution.coordinator.coordinatorHandoff(attemptId, { fence: 7, operationId: 'late-quiesce', planDigest: f.plan.planDigest, action: 'quiesce', candidate: identity }));
-  const startedDeadline = Date.now() + 500;
-  while (f.controls.businessEffects === 0 && Date.now() < startedDeadline) await new Promise(ok => setTimeout(ok, 1));
-  assert.equal(f.controls.businessEffects, 1, 'actual API work must enter before its old authority is revoked');
-  const recovery = await f.recovery(); await f.execution.adapter.admitAuthority(recovery);
-  const held = await f.execution.adapter.reconcile(recovery);
-  assert.equal(held.known, false); assert.equal(held.pendingCommands, 1); assert.equal(held.inFlightMutations, 1);
-  assert.equal(f.controls.businessEffects, 1);
-  await new Promise(ok => setTimeout(ok, 220));
+  const f = await fixture(t); f.controls.loseAckWhileRunning = true;
+  let releaseWork;
+  f.controls.workGate = new Promise(ok => { releaseWork = ok; });
+  let recovery, settled;
+  try {
+    await assert.rejects(f.execution.coordinator.coordinatorHandoff(attemptId, { fence: 7, operationId: 'late-quiesce', planDigest: f.plan.planDigest, action: 'quiesce', candidate: identity }));
+    // The HTTP fixture drops its ACK only after the real API action enters.
+    // Keep that action blocked across authority handoff regardless of IO/load.
+    assert.equal(f.controls.businessEffects, 1, 'actual API work must enter before its old authority is revoked');
+    recovery = await f.recovery(); await f.execution.adapter.admitAuthority(recovery);
+    const held = await f.execution.adapter.reconcile(recovery);
+    assert.equal(held.known, false); assert.equal(held.pendingCommands, 1); assert.equal(held.inFlightMutations, 1);
+    assert.equal(f.controls.businessEffects, 1);
+    settled = f.businessCompletion();
+  } finally { releaseWork(); }
+  // withBusinessAction resolves only after its settled fact is durably synced;
+  // a work timer cannot stand in for that fsync/rename/directory-sync boundary.
+  assert.deepEqual(await settled, [{ commitKnown: true, stage: 'quiesced' }]);
   const done = await f.execution.adapter.reconcile(recovery);
   assert.equal(done.known, true); assert.equal(done.inFlightMutations, 0); assert.equal(done.pendingCommands, 0);
   assert.equal(f.controls.businessEffects, 1);

@@ -192,6 +192,15 @@ async function fixture(t) {
       deadline: now + 10000,
     },
     {
+      commandId: "migration:rollback-stop-api",
+      direction: "stop",
+      role: "api",
+      startCommandId: "migration:start-api",
+      allowFailedCandidateExit: true,
+      allocationId: "api",
+      deadline: now + 10000,
+    },
+    {
       commandId: "migration:stop-foundation",
       direction: "stop",
       role: "foundation",
@@ -209,7 +218,7 @@ async function fixture(t) {
         stepId: commandId,
         spec: {
           kind: "migration-action",
-          targetDigest: a.targetDigest,
+          targetDigest: a.targetDigest ?? digest(journal.lookup({ operationId: "migration", commandId: a.startCommandId }).result),
           deadline: a.deadline,
           budget: { maxDurationMs: 1000 },
         },
@@ -373,4 +382,52 @@ test("a crash between plan and collector publications resumes the same pending r
   assert.equal(resumed.status().sequence, 1);
   assert.equal(resumed.status().pending, undefined);
   assert.equal((await f.readPlan()).allocations.source[0].resident, false);
+});
+
+
+test("failed API rollback publication recovers its original marked exit1 receipt without changing the reserved peak", async t => {
+  const f = await fixture(t);
+  await f.book.initialize();
+  f.commit("migration:start-api", f.start());
+  await f.book.register({ operationId: "migration", commandId: "migration:start-api" });
+  const stopped = f.stop(f.newApi);stopped.exitCode = 1;
+  f.commit("migration:rollback-stop-api", { ...stopped, exitDisposition: "failed-candidate" });
+  let failed = false;
+  const book = createMigrationCapacity({ ...f.options, write: async (path, value) => {
+    if (path === f.options.configPath && !failed) {failed = true;throw Error("fixture lost failed-exit publication ACK");}
+    await atomicJson(path, value);
+  } });
+  await assert.rejects(book.register({ operationId: "migration", commandId: "migration:rollback-stop-api" }));
+  assert.equal(book.status().pending.physical.exitCode, 1);
+  assert.equal(book.status().pending.physical.exitDisposition, "failed-candidate");
+  const resumed = createMigrationCapacity(f.options);
+  await resumed.initialize();
+  assert.equal(resumed.status().pending, undefined);
+  const receipt = await resumed.register({ operationId: "migration", commandId: "migration:rollback-stop-api" });
+  assert.equal(receipt.physical.exitCode, 1);assert.equal(receipt.physical.exitDisposition, "failed-candidate");
+  assert.equal(receipt.sequence, 2);
+  const plan = await f.readPlan();
+  assert.equal(plan.allocations.candidate[0].resident, false);
+  assert.deepEqual(plan.allocations.candidate[0].resources, f.plan.allocations.candidate[0].resources);
+  assert.deepEqual(plan.limits, f.plan.limits);
+});
+
+test("exit1 capacity release requires both failed-API rollback authority and explicit failed disposition", async t => {
+  for (const mode of ["missing-disposition", "missing-authority", "source-exit"]) {
+    const f = await fixture(t);
+    await f.book.initialize();
+    let commandId, stopped;
+    if (mode === "source-exit") {
+      commandId = "migration:stop-writer";stopped = f.stop(f.source);
+    } else {
+      f.commit("migration:start-api", f.start());
+      await f.book.register({ operationId: "migration", commandId: "migration:start-api" });
+      commandId = "migration:rollback-stop-api";stopped = f.stop(f.newApi);
+    }
+    stopped.exitCode = 1;
+    const result = { ...stopped, ...(mode === "missing-disposition" ? {} : { exitDisposition: "failed-candidate" }) };
+    if (mode === "missing-authority") f.options.actions.find(a => a.commandId === commandId).allowFailedCandidateExit = false;
+    f.commit(commandId, result);
+    await assert.rejects(f.book.register({ operationId: "migration", commandId }), /CONTROL_MIGRATION_CAPACITY_STOP_UNKNOWN/);
+  }
 });

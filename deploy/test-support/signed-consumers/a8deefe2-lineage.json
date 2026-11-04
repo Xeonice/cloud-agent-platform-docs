@@ -1,0 +1,22 @@
+{
+  "apiComponentDigest": "sha256:134ed8f0bd54a58caba698b251d266d4f4a2851888bc58894db31f2b3834b805",
+  "archiveDigest": "sha256:a8deefe20db1bab43761c6f95c716e31b777662c5fdf7393bea1628f519df947",
+  "files": [
+    {
+      "archiveMember": "api/apps/api/dist/platform/control-rpc/coordinator-routing.js",
+      "bytes": 2578,
+      "file": "a8deefe2-coordinator-routing.cjs",
+      "rawDigest": "sha256:07a261b04b9f6cee2ed134dd81ee728e00448f8c9b8fab1b08c065073e4573bc"
+    },
+    {
+      "archiveMember": "api/apps/api/dist/platform/time/system-clock.js",
+      "bytes": 1165,
+      "file": "a8deefe2-system-clock.cjs",
+      "rawDigest": "sha256:6a7632ae4aae7666223dab98c78874a4c33e5659d0caf991efca807a6ac2a1c6"
+    }
+  ],
+  "kind": "byte-exact-original-signed-api-consumer-test-fixture",
+  "schemaVersion": 1,
+  "sourceBytesModified": false,
+  "zodVersion": "3.25.76"
+}

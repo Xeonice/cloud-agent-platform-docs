@@ -24,18 +24,20 @@ const physical = (x) => Object.fromEntries(physicalKeys.map((k) => [k, x[k]]));
 const inventory = (rows) =>
   rows.map(physical).sort((a, b) => a.containerId.localeCompare(b.containerId));
 const same = (a, b) => canonical(a) === canonical(b);
-const stopped = (p, target) =>
+const stopped = (p, target, failedCandidate = false) =>
   p?.containerId === target.containerId &&
   p.startIdentity === target.startIdentity &&
   p.artifactDigest === target.artifactDigest &&
   p.startedAt === target.startedAt &&
+  p.imageDigest === target.imageDigest &&
+  p.role === target.role &&
   p.running === false &&
   p.paused === false &&
   p.hostPid === 0 &&
   p.restartPolicy === "no" &&
   p.restartCount === target.restartCount &&
   p.oomKilled === false &&
-  [0, 143].includes(p.exitCode);
+  ([0, 143].includes(p.exitCode) || (failedCandidate && target.role === "api" && p.exitCode === 1));
 const limits = (plan) => ({
   limits: plan.limits,
   sourceDigest: plan.sourceDigest,
@@ -223,7 +225,10 @@ export function createMigrationCapacity({
     fresh(current);
     invariant(
       p.direction === "stop"
-        ? [before, after].every((x) => stopped(x, p.target))
+        ? [before, after].every((x) => stopped(x, p.target,
+            p.physical.exitDisposition === "failed-candidate" && actions.some(a =>
+              a.commandId === p.commandId && a.commandId === migrationId + ":rollback-stop-api" &&
+              a.role === "api" && a.allowFailedCandidateExit === true)))
         : [before, after].every(
             (x) =>
               x.running === true &&
@@ -360,10 +365,12 @@ export function createMigrationCapacity({
       "CONTROL_MIGRATION_CAPACITY_ALLOCATION_CHANGED",
     );
     if (action.direction === "stop") {
+      const failedCandidate = action.allowFailedCandidateExit === true && action.role === "api" &&
+        action.commandId === migrationId + ":rollback-stop-api" && row.result.exitDisposition === "failed-candidate";
       invariant(
-        stopped(first, target) &&
-          stopped(second, target) &&
-          stopped(row.result, target),
+        stopped(first, target, failedCandidate) &&
+          stopped(second, target, failedCandidate) &&
+          stopped(row.result, target, failedCandidate),
         "CONTROL_MIGRATION_CAPACITY_STOP_UNKNOWN",
       );
       const before = state.inventory.find(
@@ -405,7 +412,7 @@ export function createMigrationCapacity({
       nextInventory = state.inventory.filter(
         (x) => x.containerId !== target.containerId,
       );
-      observed = first;
+      observed = failedCandidate ? { ...first, exitDisposition: "failed-candidate" } : first;
     } else {
       const found = actual.containers.find(
         (x) => x.containerId === target.containerId,
