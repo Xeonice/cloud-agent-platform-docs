@@ -60,6 +60,17 @@ export async function prepareMigrationUpgrade(
       protectedProcesses.length > 0,
     "MIGRATION_NATIVE_PROTECTION_REQUIRED",
   );
+  if (input.capacityDefaultOwnerSource) {
+    for (const name of ["sourceRef", "recordRef"]) {
+      const ref = input.capacityDefaultOwnerSource[name];
+      invariant(
+        ref && isAbsolute(ref.path ?? "") && /^sha256:[a-f0-9]{64}$/.test(ref.rawDigest ?? ""),
+        "MIGRATION_NATIVE_DEFAULT_OWNER_SOURCE_REF_REQUIRED",
+      );
+      invariant((await fileDigest(ref.path)).digest === ref.rawDigest,
+        "MIGRATION_NATIVE_DEFAULT_OWNER_SOURCE_CHANGED");
+    }
+  }
   const target = input.target;
   invariant(
     target &&
@@ -276,6 +287,9 @@ export async function prepareMigrationUpgrade(
         },
       ]),
     ),
+    ...(input.capacityDefaultOwnerSource
+      ? { capacityDefaultOwnerSource: structuredClone(input.capacityDefaultOwnerSource) }
+      : {}),
   };
   const c = {
     ...input.adapter,

@@ -24,7 +24,8 @@ import {
 } from "./control-capacity-collector.mjs";
 import { treeManifest } from "./io.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
-async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false } = {}) {
+import { createSupervisorControlRuntime } from "./supervisor-control-runtime.mjs";
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false } = {}) {
   const f = await fixture(t),
     events = [],
     states = new Map(),
@@ -533,6 +534,11 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
       if (spec.kind === "api") targetApi = actual;
       if(spec.kind === "control-supervisor" && failSupervisorBeforeRegistration)
         states.set(actual.containerId,{...actual,running:false,hostPid:0,exitCode:1});
+      if(spec.kind === 'control-supervisor' && withNormalHandoff){
+        const path=join(input.runtime.adapter.stableControl.capacityTransitionRoot,'capacity-publication.db');
+        await fs.mkdir(join(path,'..'),{recursive:true,mode:0o700});
+        const mutex=new Database(path);mutex.exec('CREATE TABLE publication_mutex(singleton INTEGER PRIMARY KEY CHECK(singleton=1))');mutex.close();await fs.chmod(path,0o600);
+      }
       if (loseAck === spec.kind) {
         loseAck = null;
         throw Object.assign(Error("fixture dropped acknowledgement"), {
@@ -691,6 +697,33 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     source.installer.capacityAllocationId = "source";
     source.coordinator.capacityAllocationId = "source";
   }
+  let handoffRepairContext,handoffSupervisorReadiness;
+  if(withNormalHandoff){
+    const capacityRoot=join(f.root,'normal-capacity'),sdk=join(f.root,'explicit-sdk');await fs.mkdir(sdk,{mode:0o700});input.runtime.protectedRuntimeRoots=[sdk];
+    Object.assign(input.runtime.adapter,{capacityStateRoot:capacityRoot});
+    Object.assign(input.runtime.adapter.stableControl,{capacityPlanPath:join(capacityRoot,'plan.json'),capacityCollectorConfigPath:join(capacityRoot,'collector.json'),
+      resourceObservationPath:join(capacityRoot,'observation.json'),capacityTransitionRoot:join(capacityRoot,'transitions'),
+      capacityTemplates:{owner:{allocationId:'future-owner-template',resources:{...resources}}}});
+    const identity=part=>({artifactDigest:part.artifactDigest,inputFingerprint:part.inputFingerprint}),
+      targetParts={api:identity(targets.api.record),coordinator:identity(targets.coordinator.record),installer:identity(targets['control-agent'].record),
+        web:{artifactDigest:digest('actual-bound-web'),inputFingerprint:digest('actual-bound-web-input')},
+        owner:{artifactDigest:digest('future-owner'),inputFingerprint:digest('future-owner-input')}};
+    const context={instanceId:'instance',manifestDigest:digest('explicit-verified-package-port'),
+      sourceComponents:{web:targetParts.web,owner:{artifactDigest:owner.artifactDigest,inputFingerprint:digest('old-owner-input')}},targetComponents:targetParts,
+      installedComponents:{api:targetParts.api,coordinator:targetParts.coordinator,installer:targetParts.installer},
+      web:targetParts.web,owner:{artifactDigest:owner.artifactDigest,inputFingerprint:digest('old-owner-input')}};
+    handoffRepairContext=async stage=>{events.push('handoff:'+stage);return structuredClone(context);};
+    handoffSupervisorReadiness=async()=>{
+      events.push('handoff:supervisor-ready');const ledger=new Database(f.controlPath,{readonly:true});
+      try{assert.equal(ledger.prepare('SELECT mode FROM control_authority WHERE instance_id=?').get('instance').mode,'passive');}finally{ledger.close();}
+      const db=new Database(join(f.root,'test-normal-supervisor.db')),stable=input.runtime.adapter.stableControl,
+        consumer=await createSupervisorControlRuntime({instanceId:'instance',config:{capacityPlanPath:stable.capacityPlanPath,capacityCollectorConfigPath:stable.capacityCollectorConfigPath,
+          resourceObservationPath:stable.resourceObservationPath,capacityTransitionRoot:stable.capacityTransitionRoot},supervisor:{assembly:{sqlite:db},journal:{lookup(){}}},Database,
+          sample:capacitySample});
+      try{return {...await consumer.capacityReadiness(),supervisorStartIdentity:targets['control-supervisor'].record.startIdentity};}
+      finally{await consumer.close();db.close();}
+    };
+  }
   return {
     f,
     input,
@@ -703,6 +736,7 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     observationPath,
     release,
     capacitySample,
+    handoffRepairContext,handoffSupervisorReadiness,
     setLoseAck: (k) => {
       loseAck = k;
     },
@@ -714,6 +748,41 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     },
   };
 }
+test('normal repair headroom in the actual runtime rejects before the first source stop',async t=>{
+  const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true});
+  f.input.runtime.adapter.stableControl.capacityTemplates.owner.resources.cpuMilliCores=2500;
+  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample,
+    handoffRepairContext:f.handoffRepairContext,handoffSupervisorReadiness:f.handoffSupervisorReadiness});t.after(()=>runtime.close());
+  await assert.rejects(runtime.apply(),/CAPACITY_BUDGET_INSUFFICIENT/);
+  assert.deepEqual(f.events.filter(x=>x.startsWith('stop:')||x.startsWith('start:')),[]);
+  assert(Object.values(f.source).every(r=>f.states.get(r.containerId).running));
+});
+
+test('the actual migration runtime publishes normal capacity and obtains fresh Supervisor readiness before activate',async t=>{
+  const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true}),runtime=await createControlMigrationRuntime(f.input,{Database,
+    adapter:f.adapter,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,handoffSupervisorReadiness:f.handoffSupervisorReadiness});
+  t.after(()=>runtime.close());assert.equal((await runtime.apply()).state,'migrated');
+  assert(f.events.indexOf('handoff:projected')<f.events.indexOf('stop:foundation'));
+  assert(f.events.indexOf('handoff:actual')>f.events.indexOf('start:control-entry'));
+  assert(f.events.indexOf('handoff:supervisor-ready')>f.events.indexOf('handoff:actual'));
+  const db=new Database(join(f.input.runtime.journalRoot,'migration.db'),{readonly:true});
+  try{const data=JSON.parse(db.prepare('SELECT data FROM control_migration_normal_handoff').get().data);assert.equal(data.ready.supervisor.qualified,true);}
+  finally{db.close();}
+});
+
+test('failed normal readiness and conflicting normal files do not block the original runtime rollback',async t=>{
+  const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true}),runtime=await createControlMigrationRuntime(f.input,{Database,
+    adapter:f.adapter,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,
+    handoffSupervisorReadiness:async()=>{throw Error('explicit normal readiness failure');}});
+  t.after(()=>runtime.close());await assert.rejects(runtime.apply(),/normal readiness failure/);
+  const path=f.input.runtime.adapter.stableControl.capacityCollectorConfigPath;
+  await fs.writeFile(path,JSON.stringify({foreign:true}),{mode:0o600});
+  const checks=f.events.filter(x=>x.startsWith('handoff:')).length;
+  assert.equal((await runtime.rollback()).state,'rolled-back');
+  assert.equal(f.events.filter(x=>x.startsWith('handoff:')).length,checks);
+  assert.deepEqual(JSON.parse(await fs.readFile(path)),{foreign:true});
+  assert.equal(f.states.get(f.owner.containerId).running,true);
+});
 test("SQLite+HTTP with explicit Docker adapter fixture migrates without business DDL or protected lifecycle action, and source proof keeps original time", async (t) => {
   const f = await runtimeFixture(t),
     before = f.f.db

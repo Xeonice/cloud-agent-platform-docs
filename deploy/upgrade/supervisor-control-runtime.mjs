@@ -128,6 +128,12 @@ export async function createSupervisorControlRuntime({ instanceId, config, super
   }
   let closing;
   return { collect: () => serial(collectNow), appliedStart,
+    capacityReadiness: () => serial(async()=>{
+      const observation=await collectNow(),{plan,collector}=await readCapacity(),admission=evaluateCapacityAdmission({plan:plan.value,observation,now:clock()});
+      return {instanceId,planDigest:plan.value.planDigest,configDigest:digest(collector.value),sourceDigest:plan.value.sourceDigest,
+        observationDigest:digest(observation),revision:observation.revision,observedAt:observation.observedAt,
+        qualified:admission.qualified,reason:admission.reason};
+    }),
     reserve: (command,snapshot) => serial(async()=>{invariant(reservations,'SUPERVISOR_CAPACITY_TEMPLATES_REQUIRED');const prior=reservations.lookup(command);if(prior?.row.state==='applied')return prior.receipt;const observation=prior?null:await collectNow();const prepared=await reservations.prepare(command,snapshot,observation);if(prepared.qualified===false)return prepared;return reservations.confirm(command,await collectNow());}),
     reservationStatus: command => {const prior=reservations?.lookup(command);return prior?{state:prior.row.state==='applied'?'applied':'unknown',result:prior.receipt}:{state:'definitely-not-applied',result:{dispatched:false}};},
     maintenanceRequest, capacityState: () => lastCollection,

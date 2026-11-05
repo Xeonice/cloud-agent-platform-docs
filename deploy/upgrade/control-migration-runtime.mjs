@@ -38,6 +38,7 @@ import {
 import { readSupervisorFact } from "./supervisor-control.mjs";
 import { evaluateCapacityAdmission } from "./capacity-admission.mjs";
 import { createMigrationCapacity } from "./control-migration-capacity.mjs";
+import { createMigrationCapacityHandoff, readMigrationDefaultOwner, verifyMigrationDefaultOwnerSource } from "./control-migration-handoff.mjs";
 import { createContractRetirement } from "./contract-retirement.mjs";
 import { captureProcessIdentity } from "./supervisor-sampler.mjs";
 import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
@@ -117,7 +118,7 @@ export async function readVerifiedMigrationBusiness(business, { clock = Date.now
   const envelope=(await readSupervisorFact(business.envelopePath,1048576)).value;
   const current=(await readSupervisorFact(business.currentSourcePath,1048576)).value;
   const signed=verifyManifest(envelope,await loadTrustRoot(business.trustRootPath),current,clock());
-  return {envelope,signed};
+  return {envelope,signed,current};
 }
 function assertStopped(actual, expected) {
   invariant(
@@ -315,9 +316,11 @@ export async function createMigrationDockerAdapter(
 /** One durable migration run, separate from both business and live control stores. */
 export async function createControlMigrationRuntime(
   input,
-  { Database, adapter: provided, capacitySample, clock = Date.now } = {},
+  { Database, adapter: provided, capacitySample, handoffRepairContext, handoffSupervisorReadiness, clock = Date.now } = {},
 ) {
   const c = input.runtime;
+  invariant(provided || !handoffRepairContext && !handoffSupervisorReadiness,
+    'CONTROL_MIGRATION_TEST_PORT_FORBIDDEN');
   invariant(
     c?.targets &&
       c?.source &&
@@ -603,6 +606,85 @@ export async function createControlMigrationRuntime(
         clock,
       })
     : null;
+  const stableCapacity=c.adapter?.stableControl;
+  async function readNormalRepairContext(stage) {
+    const {signed,current}=await readVerifiedMigrationBusiness(c.businessPackage,{clock}),
+      entryConfig=(await readSupervisorFact(c.adapter.controlFoundationEntries.entry.configPath,1048576)).value,
+      planned=entryConfig.context?.initialBinding?.web;
+    invariant(entryConfig.c?.instanceId===input.instanceId && planned && current.components,
+      'CONTROL_MIGRATION_NORMAL_REPAIR_CONTEXT_UNKNOWN');
+    let web=planned;
+    if(stage==='actual'){
+      const rpc=createPrivateControlRpc({origin:c.entryControlOrigin,instanceId:input.instanceId,key:c.keys.entry}),binding=await rpc('/binding');
+      invariant(binding.instanceId===input.instanceId && canonical(binding.web)===canonical(planned),
+        'CONTROL_MIGRATION_NORMAL_WEB_CHANGED');web=binding.web;
+    }
+    const declared=[current.components.web,signed.manifest.components.web].find(part=>part?.artifactDigest===web.digest);
+    invariant(declared && typeof web.root==='string' && typeof web.origin==='string',
+      'CONTROL_MIGRATION_NORMAL_WEB_UNKNOWN');
+    const actualWebFiles=(await treeManifest(web.root)).map(f=>({...f,path:'web/'+f.path}));
+    invariant(digest(actualWebFiles)===declared.artifactDigest,'CONTROL_MIGRATION_NORMAL_WEB_TREE_CHANGED');
+    const response=await fetch(privateLoopbackOrigin(web.origin)+'/web-build',{redirect:'error',signal:AbortSignal.timeout(2000)});
+    invariant(response.ok,'CONTROL_MIGRATION_NORMAL_WEB_UNAVAILABLE');
+    const build=await response.json();invariant(build.webRevision===declared.webRevision,
+      'CONTROL_MIGRATION_NORMAL_WEB_IDENTITY_CHANGED');
+    const {owner,bindingRawDigest,origin:ownerOrigin}=await readMigrationDefaultOwner({env:c.targets.coordinator.env,instanceId:input.instanceId});
+    invariant(owner.instanceId===input.instanceId && typeof owner.ownerId==='string' && typeof owner.startIdentity==='string',
+      'CONTROL_MIGRATION_NORMAL_OWNER_UNKNOWN');
+    const identity=part=>({artifactDigest:part?.artifactDigest,inputFingerprint:part?.inputFingerprint});
+    let ownerSource;
+    if(![current.components.owner,signed.manifest.components.owner].some(p=>p &&
+      p.artifactDigest===owner.artifactDigest && p.inputFingerprint===owner.inputFingerprint)){
+      ownerSource=await verifyMigrationDefaultOwnerSource({reference:stableCapacity.capacityDefaultOwnerSource,
+        trustRootPath:c.businessPackage.trustRootPath,installerRoot:dirname(c.adapter.controlDownloadRoot),
+        instanceId:input.instanceId,owner,bindingRawDigest,origin:ownerOrigin,protectedOwners:c.protectedOwners,
+        inspect:r=>adapter.inspect(r),clock});
+      const after=await readMigrationDefaultOwner({env:c.targets.coordinator.env,instanceId:input.instanceId});
+      invariant(after.bindingRawDigest===bindingRawDigest && after.origin===ownerOrigin &&
+        after.owner.ownerId===owner.ownerId && after.owner.startIdentity===owner.startIdentity &&
+        after.owner.artifactDigest===owner.artifactDigest && after.owner.inputFingerprint===owner.inputFingerprint,
+      'CONTROL_MIGRATION_NORMAL_OWNER_CHANGED');
+    }
+    const installedComponents=Object.fromEntries(['api','coordinator','installer'].map(role=>[role,identity(signed.manifest.components[role])]));
+    for(const [role,kind]of [['api','api'],['coordinator','coordinator'],['installer','control-agent']])
+      invariant(c.targets[kind].record.inputFingerprint===installedComponents[role].inputFingerprint,
+        'CONTROL_MIGRATION_NORMAL_TARGET_INPUT_CHANGED');
+    if(stage==='actual'){
+      for(const [role,kind,path,key]of [['api','api','/internal/control/identity',c.keys.control],
+        ['coordinator','coordinator','/internal/application/identity',c.keys.control],
+        ['installer','control-agent','/metadata',c.keys.upgradeControl]]){
+        const target=c.targets[kind],rpc=createPrivateControlRpc({origin:target.origin,instanceId:input.instanceId,key}),actual=await rpc(path);
+        invariant(actual.instanceId===input.instanceId && actual.startIdentity===target.record.startIdentity &&
+          actual.artifactDigest===installedComponents[role].artifactDigest && actual.inputFingerprint===installedComponents[role].inputFingerprint,
+        'CONTROL_MIGRATION_NORMAL_LIVE_COMPONENT_CHANGED');
+        installedComponents[role]=identity(actual);
+      }
+    }
+    return {instanceId:input.instanceId,manifestDigest:signed.manifestDigest,
+      sourceComponents:Object.fromEntries(Object.entries(current.components).map(([k,v])=>[k,identity(v)])),
+      targetComponents:Object.fromEntries(Object.entries(signed.manifest.components).map(([k,v])=>[k,identity(v)])),
+      installedComponents,web:identity(declared),owner:identity(owner),...(ownerSource?{ownerSource}:{}),
+      webBinding:{root:web.root,origin:web.origin,digest:web.digest,treeDigest:web.treeDigest,webRevision:build.webRevision},
+      defaultOwner:{ownerId:owner.ownerId,startIdentity:owner.startIdentity,bindingRawDigest}};
+  }
+  let normalHandoff=null;
+  function getNormalHandoff(){
+    if(normalHandoff)return normalHandoff;
+    if(!stableCapacity?.capacityTemplates || !capacityBookkeeper){
+      invariant(provided,'CONTROL_MIGRATION_NORMAL_CAPACITY_CONFIG_REQUIRED');return null;
+    }
+    return normalHandoff=createMigrationCapacityHandoff({
+    sqlite:db,Database,journal,instanceId:input.instanceId,migrationId:input.migrationId,configDigest,
+    deadline:c.deadline,rollbackDeadline:c.rollbackDeadline,native:c.capacity,
+    normal:{root:c.adapter.capacityStateRoot,planPath:stableCapacity.capacityPlanPath,
+      configPath:stableCapacity.capacityCollectorConfigPath,observationPath:stableCapacity.resourceObservationPath,
+      transitionRoot:stableCapacity.capacityTransitionRoot,templates:stableCapacity.capacityTemplates},
+    source:c.source,targets:c.targets,protectedRoots:c.protectedRuntimeRoots,
+    capacityStatus:()=>capacityBookkeeper.status(),readRepairContext:provided && handoffRepairContext || readNormalRepairContext,
+    inspect:r=>adapter.inspect(migrationCapacityInspectionTarget(r,c.source.foundation)),
+    ...(capacitySample?{sample:capacitySample}:{}),clock,
+    });
+  }
   async function registerCapacity(id) {
     if (capacityBookkeeper)
       return capacityBookkeeper.register({
@@ -1651,6 +1733,7 @@ export async function createControlMigrationRuntime(
       !state.startsWith("rollback") && state !== "rolled-back",
       "CONTROL_MIGRATION_ALREADY_ROLLING_BACK",
     );
+    getNormalHandoff();
     await validateProductionInputs();
     if(adapter.preflightIndependentFoundation) {
       const runtimeDependencyProof=await adapter.preflightIndependentFoundation(c.targets["control-supervisor"]);
@@ -1667,6 +1750,7 @@ export async function createControlMigrationRuntime(
         canonical(load().packageProof) === canonical(packageProof),
         "CONTROL_MIGRATION_SIGNED_PACKAGE_CHANGED",
       );
+    if(normalHandoff) await normalHandoff.preflight();
     await publishSourceProvenance();
     if (!load().qualification) {
       for (const expected of Object.values(c.source))
@@ -1917,6 +2001,10 @@ export async function createControlMigrationRuntime(
     await health.body?.cancel();
     await protection();
     await verifyWriter(coordinator);
+    if(normalHandoff){
+      await normalHandoff.publish();
+      save({normalCapacityReady:await normalHandoff.assertReady(provided && handoffSupervisorReadiness || (()=>supervisor('/capacity-readiness')))});
+    }
     const sourceBindingDigest = digest({
       migrationId: input.migrationId,
       source: load().qualification.proofDigest,
@@ -2213,6 +2301,7 @@ export async function createControlMigrationRuntime(
     };
   }
   async function prepare() {
+    getNormalHandoff();
     await validateProductionInputs();
     if (!load().qualification) {
       await protection();
@@ -2221,6 +2310,7 @@ export async function createControlMigrationRuntime(
       await assertNoPending();
       await capacity({ collect: true });
       const packageProof = await verifyPackages();
+      if(normalHandoff) await normalHandoff.preflight();
       const physical = await adapter.inspect(c.source.coordinator),
         qualification = await qualifyControlMigrationSource({
           ...input,
