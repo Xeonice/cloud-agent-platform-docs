@@ -59,6 +59,8 @@ const brief = (p) => ({
   exitCode: p.exitCode,
   imageDigest: p.imageDigest,
   role: p.role,
+  ...(p.failedStartInert === true ? { failedStartInert: true, normalExit: false,
+    terminationDispatched: false, failedStartProof: p.failedStartProof } : {}),
 });
 const sameBirth = (a, b) =>
   [
@@ -305,6 +307,8 @@ export async function createMigrationDockerAdapter(
           ? roles.launchIndependentFoundation(spec)
           : roles.launch(spec),
     lookupLaunch: (record) => roles.lookupStart(record),
+    observeFailedSupervisorStart: (record, expected) => roles.observeFailedSupervisorStart(record, expected),
+    preflightIndependentFoundation: (spec) => roles.preflightIndependentFoundation(spec),
   };
 }
 
@@ -534,6 +538,53 @@ export async function createControlMigrationRuntime(
       },
     ]),
   ];
+  const failedStart = { observe: async (expected) => {
+    const id = input.migrationId + ":start-control-supervisor", row = journal.lookup({operationId:input.migrationId,commandId:id}),
+      data = load(), target = c.targets["control-supervisor"], stopId = input.migrationId + ":rollback-stop-control-supervisor";
+    invariant(data.qualification && !data.entryProcess && !data.activation && !data.preActivationControl &&
+      row?.state === "applied" && !live.has(id) && row.specDigest === digest(row.spec) &&
+      row.result?.migrationBudgetExceeded !== true &&
+      row.spec.kind === "migration-start-control-supervisor" && row.spec.configDigest === configDigest &&
+      row.spec.targetDigest === digest(target) && row.spec.deadline === c.deadline &&
+      digest(row.result) === digest(expected) && (!data.supervisorProcess || digest(data.supervisorProcess) === digest(expected)) &&
+      typeof adapter.observeFailedSupervisorStart === "function", "CONTROL_MIGRATION_FAILED_SUPERVISOR_UNPROVEN");
+    for (const suffix of ["start-control-entry", "ready-control-supervisor", "ready-control-entry", "activate"])
+      invariant(!journal.lookup({operationId:input.migrationId,commandId:input.migrationId+":"+suffix}), "CONTROL_MIGRATION_FAILED_SUPERVISOR_PHASE_CHANGED");
+    invariant(!db.prepare("SELECT 1 FROM control_commands WHERE state IN ('planned','executing','unknown','blocked') AND NOT (operation_id=? AND command_id=?) LIMIT 1").get(input.migrationId,stopId),
+      "CONTROL_MIGRATION_FAILED_START_FOREIGN_PENDING");
+    const ledger = new Database(input.controlPath,{readonly:true,fileMustExist:true});
+    let authority;
+    try {
+      ledger.pragma("query_only=ON");
+      authority = ledger.prepare("SELECT * FROM control_authority WHERE instance_id=?").get(input.instanceId);
+      invariant(authority?.mode === "passive" && authority.revision === 1 && authority.operation_id === null &&
+        authority.kind === null && authority.holder_id === null && authority.lease_expires_at === 0 &&
+        authority.source_binding_digest === null && !ledger.prepare("SELECT 1 FROM control_commands LIMIT 1").get(),
+        "CONTROL_MIGRATION_FAILED_SUPERVISOR_AUTHORITY_CHANGED");
+    } finally { ledger.close(); }
+    const statePath = c.adapter?.stableControl?.statePath;
+    invariant(typeof statePath === "string" && statePath !== input.controlPath, "CONTROL_MIGRATION_FAILED_SUPERVISOR_STATE_REQUIRED");
+    const stat = await fs.lstat(statePath).catch(error => { if(error.code === "ENOENT") return null; throw error; });
+    if (stat) {
+      invariant(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o077) === 0 && await fs.realpath(statePath) === statePath,
+        "CONTROL_MIGRATION_FAILED_SUPERVISOR_STATE_REQUIRED");
+      const state = new Database(statePath,{readonly:true,fileMustExist:true});
+      try {
+        state.pragma("query_only=ON");
+        const tables = state.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+        const allowed = ["supervisor_control_admission","supervisor_side_effect","control_commands","supervisor_control_maintenance",
+          "supervisor_control_maintenance_actions","supervisor_capacity_templates","supervisor_capacity_reservations"];
+        invariant(tables.every(({name}) => allowed.includes(name) && !state.prepare('SELECT 1 FROM "'+name+'" LIMIT 1').get()),
+          "CONTROL_MIGRATION_FAILED_SUPERVISOR_SIDE_EFFECT_PRESENT");
+      } finally { state.close(); }
+    }
+    const record = {...target.record,kind:"control-supervisor",instanceId:input.instanceId,attemptId:input.migrationId,
+      operationId:input.migrationId,commandId:id,specDigest:digest(target)}, observed = await adapter.observeFailedSupervisorStart(record,expected);
+    invariant(observed.failedStartInert === true && observed.normalExit === false && observed.terminationDispatched === false,
+      "CONTROL_MIGRATION_FAILED_SUPERVISOR_UNPROVEN");
+    return {...observed,failedStartProof:{...observed.failedStartProof, passiveAuthorityDigest:digest(authority),
+      originalPhaseDigest:digest({qualification:data.qualification.proofDigest,configDigest,startSpecDigest:row.specDigest})}};
+  }};
   const capacityBookkeeper = c.capacity.configPath
     ? createMigrationCapacity({
         sqlite: db,
@@ -547,6 +598,7 @@ export async function createControlMigrationRuntime(
         deadline: c.rollbackDeadline,
         actions,
         inspect: (r) => adapter.inspect(migrationCapacityInspectionTarget(r, c.source.foundation)),
+        failedStart,
         ...(capacitySample ? { sample: capacitySample } : {}),
         clock,
       })
@@ -867,6 +919,8 @@ export async function createControlMigrationRuntime(
         "CONTROL_MIGRATION_TARGET_SPEC_REQUIRED",
       );
     if (provided) return;
+    invariant(c.adapter.trustedRuntimeDockerCli?.schemaVersion === 1,
+      "CONTROL_RUNTIME_DOCKER_DEPENDENCY_UNPROVEN");
     const actor = await ownActor(),
       actorGroup = await fs.readFile(
         join(c.runnerProcRoot || "/proc", String(actor.pid), "cgroup"),
@@ -930,7 +984,9 @@ export async function createControlMigrationRuntime(
           foundationConfig.context?.keys?.upgradeControl ===
             c.keys.upgradeControl &&
           foundationConfig.c?.stableControl?.migratedArtifactPath ===
-            c.migrationSourcePath,
+            c.migrationSourcePath && (mode !== "supervisor" ||
+              (digest(foundationConfig.c.docker) === digest(c.adapter.docker) &&
+               digest(foundationConfig.c.trustedRuntimeDockerCli) === digest(c.adapter.trustedRuntimeDockerCli))),
         "CONTROL_MIGRATION_FOUNDATION_CONFIG_CHANGED",
       );
       invariant(
@@ -1200,7 +1256,11 @@ export async function createControlMigrationRuntime(
     return waitForMigrationLeaseRelease({ readLease: () => businessLease(view), expected, instanceId: input.instanceId,
       deadline: Math.min(c.deadline, row.createdAt + c.actionBudgetMs), clock });
   }
-  async function stop(id, expected, rollback = false) {
+  async function stop(id, expected, rollback = false, {deferCapacity=false} = {}) {
+    const observeStopped = async () => {
+      if(deferCapacity && rollback && id === "rollback-stop-control-supervisor") return failedStart.observe(expected);
+      return stoppedOutcome(await adapter.inspect(expected), expected, rollback && id === "rollback-stop-api");
+    };
     const result = await step(
       id,
       expected,
@@ -1208,17 +1268,17 @@ export async function createControlMigrationRuntime(
         await protection();
         const actual = await adapter.inspect(expected);
         if (!actual.running) {
+          if(deferCapacity) return observeStopped();
           const failedCandidate = rollback && id === "rollback-stop-api";
           stoppedOutcome(actual, expected, failedCandidate);
           return stoppedOutcome(await adapter.inspect(expected), expected, failedCandidate);
         }
         return adapter.terminate(expected);
       },
-      async () => ({ state: "applied", result: stoppedOutcome(await adapter.inspect(expected), expected,
-        rollback && id === "rollback-stop-api") }),
+      async () => ({ state: "applied", result: await observeStopped() }),
       { rollback },
     );
-    await registerCapacity(id);
+    if(!deferCapacity) await registerCapacity(id);
     return result;
   }
   async function publishExit(expected, actual) {
@@ -1592,6 +1652,12 @@ export async function createControlMigrationRuntime(
       "CONTROL_MIGRATION_ALREADY_ROLLING_BACK",
     );
     await validateProductionInputs();
+    if(adapter.preflightIndependentFoundation) {
+      const runtimeDependencyProof=await adapter.preflightIndependentFoundation(c.targets["control-supervisor"]);
+      if(load().runtimeDependencyProof) invariant(digest(runtimeDependencyProof) === digest(load().runtimeDependencyProof),
+        "CONTROL_RUNTIME_DOCKER_DEPENDENCY_CHANGED");
+      else save({runtimeDependencyProof});
+    }
     await protection();
     await reconcileCapacity();
     await capacity({ collect: true });
@@ -1919,7 +1985,8 @@ export async function createControlMigrationRuntime(
     return status();
   }
   async function rollback() {
-    await reconcileCapacity();
+    const unregisteredSupervisor = await capacityBookkeeper?.hasUnregisteredFailedStart();
+    if(!unregisteredSupervisor) await reconcileCapacity();
     invariant(load().qualification, "CONTROL_MIGRATION_NOT_STARTED");
     const names = {
       "control-agent": "agent",
@@ -2014,6 +2081,11 @@ export async function createControlMigrationRuntime(
       controlMigrationStatus({ ...input, Database });
     }
     save({}, "rollback-running");
+    if(unregisteredSupervisor) {
+      await stop("rollback-stop-control-supervisor", before.supervisorProcess, true, {deferCapacity:true});
+      await capacityBookkeeper.closeUnregisteredFailedStart();
+      await reconcileCapacity();
+    }
     for (const [kind, name] of [
       ["control-entry", "entryProcess"],
       ["control-supervisor", "supervisorProcess"],

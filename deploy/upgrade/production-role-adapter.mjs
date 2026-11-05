@@ -7,6 +7,8 @@ import { captureProcessIdentity } from "./supervisor-sampler.mjs";
 import { createProtectedRoleLifecycle, fixedRoleName } from "./protected-role-lifecycle.mjs";
 import { roleResourceFlags } from './role-resource-limits.mjs';
 import { projectLegacyCoordinatorInertHistory } from './coordinator-inert-history.mjs';
+import { observeFailedSupervisorStart } from './failed-supervisor-start.mjs';
+import { preflightRuntimeDockerDependency } from './runtime-docker-dependency.mjs';
 const CID = /^[a-f0-9]{64}$/;
 const PROVIDER_ENV = [
   "SANDBOX_DEFAULT_IMAGE",
@@ -45,16 +47,24 @@ export const bootstrapDataRoot = (c) =>
     ? join(c.root, "business")
     : "/data";
 
+export function safeCommandFailure(error) {
+  const f=error?.commandFailure;
+  if(error?.code !== "BOOTSTRAP_COMMAND_FAILED" || !f || !["spawn","timeout","output-limit","exit"].includes(f.reason)) return null;
+  return {code:error.code,commandFailure:{program:typeof f.program === "string" && /^[A-Za-z0-9_./+-]{1,4096}$/.test(f.program) ? f.program : "redacted",
+    reason:f.reason,...(f.reason === "spawn" && /^[A-Z0-9_]{1,80}$/.test(f.causeCode || "") ? {causeCode:f.causeCode}:{}),
+    ...(f.reason === "exit" ? {exitCode:Number.isInteger(f.exitCode)?f.exitCode:null,signal:/^SIG[A-Z0-9]{1,16}$/.test(f.signal || "")?f.signal:null}:{})}};
+}
+
 export async function execute(program, args) {
   return new Promise((ok, fail) => {
     const child = spawn(program, args, { shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', bytes = 0, settled = false;
-    const reject = () => { if (!settled) { settled = true; fail(Object.assign(Error('Bootstrap command failed'), { code: 'BOOTSTRAP_COMMAND_FAILED' })); } };
-    const timer = setTimeout(() => { reject(); try { child.kill('SIGKILL'); } catch {} }, 5000);
-    child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > 8000000) { reject(); try { child.kill('SIGKILL'); } catch {} } else output += chunk; });
+    const reject = details => { if (!settled) { settled = true; fail(Object.assign(Error('Bootstrap command failed'), { code: 'BOOTSTRAP_COMMAND_FAILED', commandFailure: { program, ...details } })); } };
+    const timer = setTimeout(() => { reject({reason:'timeout'}); try { child.kill('SIGKILL'); } catch {} }, 5000);
+    child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes > 8000000) { reject({reason:'output-limit'}); try { child.kill('SIGKILL'); } catch {} } else output += chunk; });
     child.stderr.resume();
-    child.once('error', () => { clearTimeout(timer); reject(); });
-    child.once('close', status => { clearTimeout(timer); if (!settled) { settled = true; status === 0 ? ok(output) : fail(Object.assign(Error('Bootstrap command failed'), { code: 'BOOTSTRAP_COMMAND_FAILED' })); } });
+    child.once('error', error => { clearTimeout(timer); reject({reason:'spawn',causeCode:/^[A-Z0-9_]+$/.test(error.code || '') ? error.code : 'UNKNOWN'}); });
+    child.once('close', (status, signal) => { clearTimeout(timer); if (status === 0 && !settled) { settled = true; ok(output); } else if (!settled) reject({reason:'exit',exitCode:status,signal}); });
   });
 }
 
@@ -234,7 +244,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       "BOOTSTRAP_CONTAINER_IDENTITY_CHANGED",
     );
     let birth = {};
-    if (row.State.Running) try { birth = await captureProcessIdentity({ hostPid: row.State.Pid, containerId: id, procRoot: c.procRoot || '/proc' }); } catch {}
+    if (row.State.Running) try { birth = await captureProcessIdentity({ hostPid: row.State.Pid, containerId: id, procRoot: c.procRoot || '/proc', includeCgroupPath:true }); } catch {}
     const legacyInertProof = projectLegacyCoordinatorInertHistory(row);
     return {
       ...birth, artifactDigest: row.Config.Labels['agent-platform.artifact'] || null, attemptId: row.Config.Labels['agent-platform.attempt'] || null, operationId: row.Config.Labels['agent-platform.operation'] || null, commandId: row.Config.Labels['agent-platform.command'] || null,
@@ -424,7 +434,10 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
   }
   const lifecycle = createProtectedRoleLifecycle({instanceId: c.instanceId, registryRoot: records, inspect, signalTerm: signal, findByName: async name => { const ids = (await docker(['ps', '--all', '--no-trunc', '--filter', 'name=^/' + name + '$', '--format', '{{.ID}}'])).trim().split(/\s+/).filter(Boolean); invariant(ids.length <= 1 && ids.every(id => CID.test(id)), 'ROLE_START_LOOKUP_UNKNOWN'); return ids[0] || null; }});
   return {
-    ...lifecycle, launchControlAgent: spec => launch({...spec, kind: 'control-agent', stableBootstrap: true}),
+    ...lifecycle,
+    preflightIndependentFoundation: spec => preflightRuntimeDockerDependency({config:c,mounts:roleMounts(c,spec),run}),
+    observeFailedSupervisorStart: (record, expected) => observeFailedSupervisorStart({config:c,registryRoot:records,record,expected,inspect}),
+    launchControlAgent: spec => launch({...spec, kind: 'control-agent', stableBootstrap: true}),
     launchIndependentFoundation: spec => { invariant(['entry', 'supervisor'].includes(spec.mode), 'CONTROL_FOUNDATION_MODE_INVALID'); return launch({...spec, kind: 'control-' + spec.mode, stableBootstrap: true}); }, procRoot: c.procRoot || '/proc', cgroupRoot: c.cgroupRoot || '/sys/fs/cgroup',
     launch,
     inspect,

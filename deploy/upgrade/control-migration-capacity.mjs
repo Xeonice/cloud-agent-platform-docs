@@ -64,6 +64,7 @@ export function createMigrationCapacity({
   deadline,
   actions,
   inspect,
+  failedStart,
   sample = sampleLinuxCapacity,
   clock = Date.now,
   write = atomicJson,
@@ -208,6 +209,16 @@ export function createMigrationCapacity({
     save(current);
     return current;
   }
+  async function provenStopped(actual, target, pending) {
+    if (pending.kind !== "unregistered-supervisor-close") return stopped(actual, target, pending.physical.exitDisposition === "failed-candidate" &&
+      actions.some(a => a.commandId === pending.commandId && a.commandId === migrationId + ":rollback-stop-api" && a.allowFailedCandidateExit));
+    invariant(failedStart, "CONTROL_MIGRATION_FAILED_START_SCOPE_CHANGED");
+    invariant(pending.commandId === migrationId + ":start-control-supervisor" &&
+      pending.companion?.commandId === migrationId + ":rollback-stop-control-supervisor", "CONTROL_MIGRATION_FAILED_START_SCOPE_CHANGED");
+    const observed = await failedStart.observe(target);
+    invariant(same(observed.failedStartProof,pending.physical.failedStartProof), "CONTROL_MIGRATION_FAILED_START_PROOF_CHANGED");
+    return ["containerId", "startIdentity", "artifactDigest", "startedAt", "imageDigest", "role", "hostPid", "running", "paused", "restartPolicy", "restartCount", "oomKilled", "exitCode"].every(k => actual[k] === observed[k]);
+  }
   async function finish(state) {
     const p = state.pending,
       { plan, config } = await files();
@@ -225,10 +236,7 @@ export function createMigrationCapacity({
     fresh(current);
     invariant(
       p.direction === "stop"
-        ? [before, after].every((x) => stopped(x, p.target,
-            p.physical.exitDisposition === "failed-candidate" && actions.some(a =>
-              a.commandId === p.commandId && a.commandId === migrationId + ":rollback-stop-api" &&
-              a.role === "api" && a.allowFailedCandidateExit === true)))
+        ? (await Promise.all([before, after].map(x => provenStopped(x, p.target, p)))).every(Boolean)
         : [before, after].every(
             (x) =>
               x.running === true &&
@@ -272,15 +280,24 @@ export function createMigrationCapacity({
       sequence: state.sequence + 1,
       physical: p.physical,
       observedAt: new Date(current.startedAt).toISOString(),
+      ...(p.kind === "unregistered-supervisor-close" ? {
+        classification: "applied-start-unregistered-at-original-stop", capacityRegistrationCompleted: false,
+        currentInert: true, normalExit: false, originalStopCommandId: p.companion.commandId,
+      } : {}),
     };
+    const companion = p.kind === "unregistered-supervisor-close" ? {
+      ...receipt, commandId: p.companion.commandId, specDigest: p.companion.specDigest,
+      physical: p.companion.physical, oldPlanDigest: p.nextPlan.planDigest, sequence: receipt.sequence + 1,
+      classification: "original-stop-closes-unregistered-start", originalStartCommandId: p.commandId,
+    } : null;
     const next = {
       ...state,
       planHash: digest(p.nextPlan),
       configHash: digest(p.nextConfig),
       planDigest: p.nextPlan.planDigest,
       inventory: p.nextInventory,
-      sequence: receipt.sequence,
-      chainDigest: digest({ prior: state.chainDigest, receipt }),
+      sequence: companion?.sequence ?? receipt.sequence,
+      chainDigest: companion ? digest({prior: digest({prior:state.chainDigest,receipt}),receipt:companion}) : digest({ prior: state.chainDigest, receipt }),
     };
     delete next.pending;
     sqlite
@@ -290,10 +307,106 @@ export function createMigrationCapacity({
             "INSERT OR REPLACE INTO control_migration_capacity_receipts VALUES(?,?,?)",
           )
           .run(p.commandId, p.specDigest, canonical(receipt));
+        if (companion) sqlite.prepare("INSERT OR REPLACE INTO control_migration_capacity_receipts VALUES(?,?,?)")
+          .run(companion.commandId, companion.specDigest, canonical(companion));
         save(next);
       })
       .immediate();
     return receipt;
+  }
+  function failedStartRows() {
+    const startId = migrationId + ":start-control-supervisor", stopId = migrationId + ":rollback-stop-control-supervisor";
+    return {startId, stopId, start: journal.lookup({operationId:migrationId,commandId:startId}),
+      stop: journal.lookup({operationId:migrationId,commandId:stopId}),
+      startReceipt: sqlite.prepare("SELECT * FROM control_migration_capacity_receipts WHERE command_id=?").get(startId),
+      stopReceipt: sqlite.prepare("SELECT * FROM control_migration_capacity_receipts WHERE command_id=?").get(stopId)};
+  }
+  async function hasUnregisteredFailedStart() {
+    if (!failedStart) return false;
+    const r = failedStartRows(), state = load();
+    if (r.startReceipt) {
+      if (JSON.parse(r.startReceipt.receipt).classification === "applied-start-unregistered-at-original-stop")
+        invariant(r.stopReceipt && r.startReceipt.spec_digest === r.start?.specDigest && r.stopReceipt.spec_digest === r.stop?.specDigest,
+          "CONTROL_MIGRATION_FAILED_START_PARTIAL_RECEIPT");
+      return false;
+    }
+    if (r.start?.state !== "applied") return false;
+    invariant(state && !r.stopReceipt, "CONTROL_MIGRATION_FAILED_START_PARTIAL_RECEIPT");
+    const actual = await inspect(r.start.result);
+    if (actual.running || actual.exitCode !== 1) return false;
+    await failedStart.observe(r.start.result);
+    invariant(!state.inventory.some(x => x.containerId === r.start.result.containerId), "CONTROL_MIGRATION_FAILED_START_ALREADY_RESIDENT");
+    for (const action of actions) {
+      if ([r.startId, r.stopId].includes(action.commandId)) continue;
+      const row = journal.lookup({operationId:migrationId,commandId:action.commandId});
+      if (!row || ["planned", "definitely-not-applied"].includes(row.state)) continue;
+      const receipt = sqlite.prepare("SELECT * FROM control_migration_capacity_receipts WHERE command_id=?").get(action.commandId);
+      invariant(row.state === "applied" && receipt?.spec_digest === row.specDigest, "CONTROL_MIGRATION_FAILED_START_FOREIGN_PENDING");
+    }
+    if (state.pending) invariant(state.pending.kind === "unregistered-supervisor-close" ||
+      (state.pending.commandId === r.startId && state.pending.direction === "start" && state.pending.specDigest === r.start.specDigest &&
+       state.pending.oldPlanHash === state.planHash && state.pending.oldConfigHash === state.configHash &&
+       same(state.pending.target, r.start.result) &&
+       same(state.pending.nextInventory.filter(x => x.containerId !== r.start.result.containerId), state.inventory) &&
+       same(limits(state.pending.nextPlan), state.peak)), "CONTROL_MIGRATION_FAILED_START_FOREIGN_PENDING");
+    return true;
+  }
+  async function closeUnregisteredFailedStart() {
+    const r = failedStartRows();
+    if (r.startReceipt) {
+      const receipt = JSON.parse(r.startReceipt.receipt);
+      if (receipt.classification !== "applied-start-unregistered-at-original-stop") return {closed:false};
+      invariant(r.stopReceipt && r.startReceipt.spec_digest === r.start?.specDigest && r.stopReceipt.spec_digest === r.stop?.specDigest,
+        "CONTROL_MIGRATION_FAILED_START_PARTIAL_RECEIPT");
+      return {closed:true};
+    }
+    if (!await hasUnregisteredFailedStart()) return {closed:false};
+    let state = load();
+    const action = actions.find(a => a.commandId === r.startId), stopAction = actions.find(a => a.commandId === r.stopId);
+    invariant(action?.role === "control-supervisor" && action.direction === "start" && stopAction?.direction === "stop" &&
+      stopAction.startCommandId === r.startId && action.allocationId === stopAction.allocationId &&
+      r.start.specDigest === digest(r.start.spec) && r.start.spec.kind === "migration-start-control-supervisor" &&
+      r.start.spec.targetDigest === action.targetDigest && r.start.spec.deadline === action.deadline &&
+      r.stop?.state === "applied" && r.stop.specDigest === digest(r.stop.spec) &&
+      r.stop.spec.kind === "migration-rollback-stop-control-supervisor" && r.stop.spec.targetDigest === digest(r.start.result) &&
+      r.stop.spec.configDigest === r.start.spec.configDigest && same(r.stop.spec.budget, r.start.spec.budget) &&
+      r.stop.spec.deadline === deadline && r.stop.spec.deadline === stopAction.deadline &&
+      r.stop.result.failedStartInert === true && r.stop.result.normalExit === false && r.stop.result.terminationDispatched === false,
+      "CONTROL_MIGRATION_FAILED_START_ORIGINAL_COMMAND_REQUIRED");
+    if (state.pending?.kind === "unregistered-supervisor-close") {
+      invariant(state.pending.commandId === r.startId && state.pending.specDigest === r.start.specDigest &&
+        same(state.pending.target,r.start.result) && state.pending.direction === "stop" &&
+        state.pending.companion?.commandId === r.stopId && state.pending.companion.specDigest === r.stop.specDigest &&
+        same(state.pending.companion.physical,r.stop.result) && same(limits(state.pending.nextPlan),state.peak),
+        "CONTROL_MIGRATION_FAILED_START_SCOPE_CHANGED");
+      await finish(state); return {closed:true};
+    }
+    const {plan, config} = await files(), interrupted = state.pending ?? null;
+    invariant([state.planHash, ...(interrupted ? [digest(interrupted.nextPlan)] : [])].includes(digest(plan)) &&
+      [state.configHash, ...(interrupted ? [digest(interrupted.nextConfig)] : [])].includes(digest(config)),
+      "CONTROL_MIGRATION_CAPACITY_PUBLICATION_CHANGED");
+    const observed = await failedStart.observe(r.start.result);
+    invariant(same(observed.failedStartProof, r.stop.result.failedStartProof), "CONTROL_MIGRATION_FAILED_START_PROOF_CHANGED");
+    const nextPlan = structuredClone(plan), nextConfig = structuredClone(config), all = Object.values(nextPlan.allocations).flat(),
+      allocation = all.find(a => a.id === action.allocationId), bucket = nextConfig.residents.find(b => b.id === action.allocationId);
+    invariant(allocation && allocation.id !== "host-overhead" && (!allocation.resident || interrupted), "CONTROL_MIGRATION_FAILED_START_RESERVATION_CHANGED");
+    if (bucket) {
+      invariant(interrupted && bucket.containers.every(x => x.containerId === r.start.result.containerId), "CONTROL_MIGRATION_FAILED_START_RESERVATION_CHANGED");
+      nextConfig.residents = nextConfig.residents.filter(b => b.id !== bucket.id);
+    }
+    allocation.resident = false;
+    allocation.identityDigest = digest({kind:"control-supervisor",startIdentity:r.start.result.startIdentity,artifactDigest:r.start.result.artifactDigest});
+    const actual = await sample(nextConfig, {signal:signal(nextConfig),clock}); fresh(actual);
+    invariant(same(inventory(actual.containers), state.inventory), "CONTROL_MIGRATION_CAPACITY_INVENTORY_CHANGED");
+    all.find(a => a.id === "host-overhead").identityDigest = capacityHostIdentity(actual, instanceId);
+    const frozen = freezeCapacityBudget(nextPlan);
+    invariant(same(limits(frozen), state.peak), "CONTROL_MIGRATION_CAPACITY_PEAK_CHANGED");
+    validateResidents(frozen, nextConfig, actual);
+    state = {...state, pending:{kind:"unregistered-supervisor-close", commandId:r.startId, specDigest:r.start.specDigest,
+      oldPlanHash:digest(plan),oldConfigHash:digest(config),nextPlan:frozen,nextConfig,nextInventory:state.inventory,
+      target:r.start.result,direction:"stop",physical:observed,
+      companion:{commandId:r.stopId,specDigest:r.stop.specDigest,physical:r.stop.result}}};
+    save(state); await finish(state); return {closed:true};
   }
   async function register({ operationId, commandId }) {
     invariant(
@@ -526,5 +639,5 @@ export function createMigrationCapacity({
     );
     return { planDigest: state.planDigest, sequence: state.sequence };
   }
-  return { initialize: ensure, register, collect, status: () => load() };
+  return { initialize: ensure, register, collect, hasUnregisteredFailedStart, closeUnregisteredFailedStart, status: () => load() };
 }

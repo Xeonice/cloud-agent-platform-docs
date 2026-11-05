@@ -7,7 +7,7 @@ import { createControlPlaneClient } from './control-plane-client.mjs';
 import { createPrivateControlRpc, privateLoopbackOrigin } from './control-rpc.mjs';
 import { createCandidateSupervisor } from './candidate-supervisor.mjs';
 import { createStableEntry } from './stable-entry.mjs';
-import { createProductionRoleAdapter, bootstrapDataRoot } from './production-role-adapter.mjs';
+import { createProductionRoleAdapter, bootstrapDataRoot, safeCommandFailure } from './production-role-adapter.mjs';
 import { createControlAgentLifecycle } from './control-agent-lifecycle.mjs';
 
 /** Stable Foundation does not run an Installer or open private access state.
@@ -100,5 +100,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const stop = new AbortController(); process.once('SIGTERM', () => stop.abort()); process.once('SIGINT', () => stop.abort());
   startIndependentFoundation(process.argv[2], { signal: stop.signal })
     .then(() => process.stdout.write(JSON.stringify({ kind: 'control-foundation-ready' }) + '\n'))
-    .catch(error => { process.stderr.write((/^[A-Z0-9_]{1,100}$/.test(error.code) ? error.code : 'CONTROL_FOUNDATION_START_FAILED') + '\n'); process.exitCode = 1; });
+    .catch(error => { process.stderr.write((safeCommandFailure(error) ? JSON.stringify(safeCommandFailure(error)) : /^[A-Z0-9_]{1,100}$/.test(error.code) ? error.code : 'CONTROL_FOUNDATION_START_FAILED') + '\n'); process.exitCode = 1; });
 }

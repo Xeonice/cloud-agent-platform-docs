@@ -24,7 +24,7 @@ import {
 } from "./control-capacity-collector.mjs";
 import { treeManifest } from "./io.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
-async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {} } = {}) {
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false } = {}) {
   const f = await fixture(t),
     events = [],
     states = new Map(),
@@ -432,6 +432,7 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
       entryControlOrigin: origin,
       entryOrigin: origin,
       entryBindingDigest: digest(entryBinding),
+      adapter:{stableControl:{statePath:join(f.root,"supervisor.db")}},
     },
   };
   let loseAck = null,
@@ -442,6 +443,13 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
   });
   const adapter = {
     inspect: async (r) => structuredClone(states.get(r.containerId)),
+    observeFailedSupervisorStart: async (record,expected) => {
+      const actual=states.get(expected.containerId);
+      assert.equal(record.kind,"control-supervisor");
+      assert.equal(actual.running,false);assert.equal(actual.exitCode,1);assert.equal(actual.oomKilled,false);
+      return {...actual,failedStartInert:true,normalExit:false,terminationDispatched:false,
+        failedStartProof:{kind:"fixture-kernel-and-durable-proof",originalResultDigest:digest(expected)}};
+    },
     terminate: async (r) => {
       events.push("stop:" + r.role);
       assert.notEqual(r.role, "owner");
@@ -523,6 +531,8 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
           .run(Date.now() + 30000);
       }
       if (spec.kind === "api") targetApi = actual;
+      if(spec.kind === "control-supervisor" && failSupervisorBeforeRegistration)
+        states.set(actual.containerId,{...actual,running:false,hostPid:0,exitCode:1});
       if (loseAck === spec.kind) {
         loseAck = null;
         throw Object.assign(Error("fixture dropped acknowledgement"), {
@@ -769,6 +779,58 @@ test("a lost create acknowledgement resumes only the original command and never 
   assert.equal(result.state, "migrated");
   assert.equal(f.events.filter((v) => v === "start:control-agent").length, 1);
   runtime.close();
+});
+
+test("an applied initial Supervisor that exited before admission closes its original start and stop in the real SQLite capacity consumer", async(t)=>{
+  const f=await runtimeFixture(t,{withCollector:true,failSupervisorBeforeRegistration:true}),
+    runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample});
+  t.after(()=>runtime.close());
+  await assert.rejects(runtime.apply(),{code:"CONTROL_MIGRATION_CAPACITY_START_UNKNOWN"});
+  const path=join(f.input.runtime.journalRoot,"migration.db"), read=()=>new Database(path,{readonly:true,fileMustExist:true});
+  let db=read(), state=JSON.parse(db.prepare("SELECT data FROM control_migration_capacity").get().data);
+  const peak=state.peak, original=db.prepare("SELECT * FROM control_commands WHERE command_id='migration:start-control-supervisor'").get();
+  assert.equal(original.state,"applied");assert.equal(state.sequence,6);db.close();
+  const planBefore=JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath,"utf8"));
+  assert.equal((await runtime.rollback()).state,"rolled-back");
+  db=read();t.after(()=>db.close());
+  state=JSON.parse(db.prepare("SELECT data FROM control_migration_capacity").get().data);
+  assert.deepEqual(state.peak,peak);assert.deepEqual(db.prepare("SELECT * FROM control_commands WHERE command_id='migration:start-control-supervisor'").get(),original);
+  const receipt=id=>JSON.parse(db.prepare("SELECT receipt FROM control_migration_capacity_receipts WHERE command_id=?").get(id).receipt),
+    start=receipt("migration:start-control-supervisor"), stop=receipt("migration:rollback-stop-control-supervisor");
+  assert.equal(start.classification,"applied-start-unregistered-at-original-stop");assert.equal(start.capacityRegistrationCompleted,false);
+  assert.equal(start.currentInert,true);assert.equal(start.normalExit,false);assert.equal(stop.sequence,start.sequence+1);
+  assert.equal(stop.classification,"original-stop-closes-unregistered-start");
+  assert.equal(stop.physical.failedStartInert,true);assert.equal(stop.physical.terminationDispatched,false);
+  assert.equal(f.events.filter(x=>x==="start:control-supervisor").length,1);
+  assert.equal(f.events.includes("stop:control-supervisor"),false);assert.equal(f.events.includes("start:control-entry"),false);
+  const after=JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath,"utf8"));
+  for(const [kind,rows] of Object.entries(planBefore.allocations))
+    assert.deepEqual(after.allocations[kind].map(x=>({id:x.id,resources:x.resources})),rows.map(x=>({id:x.id,resources:x.resources})));
+  for(const r of Object.values(f.source))assert.equal(f.states.get(r.containerId).running,true);
+  assert.deepEqual(f.states.get(f.owner.containerId),f.owner);
+  const count=f.events.length;assert.equal((await runtime.rollback()).state,"rolled-back");assert.equal(f.events.length,count);
+});
+
+test("Supervisor closure rejects acquired authority, side effects, later Entry and foreign pending before accounting writes",async(t)=>{
+  for(const change of ["authority","side-effect","entry","pending"]){
+    const f=await runtimeFixture(t,{withCollector:true,failSupervisorBeforeRegistration:true}),
+      runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample});
+    t.after(()=>runtime.close());await assert.rejects(runtime.apply(),{code:"CONTROL_MIGRATION_CAPACITY_START_UNKNOWN"});
+    const db=new Database(join(f.input.runtime.journalRoot,"migration.db"));
+    if(change==="authority") {const ledger=new Database(f.input.controlPath);ledger.exec("UPDATE control_authority SET mode='active',revision=2");ledger.close();}
+    if(change==="side-effect") {const state=new Database(f.input.runtime.adapter.stableControl.statePath);state.exec("CREATE TABLE supervisor_side_effect(singleton INTEGER);INSERT INTO supervisor_side_effect VALUES(1)");state.close();await fs.chmod(f.input.runtime.adapter.stableControl.statePath,0o600);}
+    if(change==="entry") db.exec("UPDATE control_migration_run SET data=json_set(data,'$.entryProcess',json('{}'))");
+    if(change==="pending") db.exec("UPDATE control_commands SET state='unknown' WHERE command_id='migration:bind-coordinator'");
+    const before=db.prepare("SELECT * FROM control_migration_capacity").get(), events=f.events.length;
+    await assert.rejects(runtime.rollback(),error=>/^CONTROL_MIGRATION_(FAILED_SUPERVISOR|FAILED_START_FOREIGN)/.test(error.code));
+    assert.deepEqual(db.prepare("SELECT * FROM control_migration_capacity").get(),before);assert.equal(f.events.length,events);db.close();
+  }
+});
+
+test("runtime dependency preflight rejects before source lifecycle dispatch",async(t)=>{
+  const f=await runtimeFixture(t);f.adapter.preflightIndependentFoundation=async()=>{throw Object.assign(Error("missing runtime Docker"),{code:"CONTROL_RUNTIME_DOCKER_DEPENDENCY_UNPROVEN"});};
+  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter});t.after(()=>runtime.close());
+  await assert.rejects(runtime.apply(),{code:"CONTROL_RUNTIME_DOCKER_DEPENDENCY_UNPROVEN"});assert.deepEqual(f.events,[]);
 });
 test("unknown resource dimensions or changed protected birth hold before any stop/start", async (t) => {
   for (const kind of ["capacity", "owner"]) {

@@ -38,6 +38,7 @@ export async function captureProcessIdentity({
   hostPid,
   containerId,
   procRoot = "/proc",
+  includeCgroupPath = false,
 }) {
   invariant(
     Number.isSafeInteger(hostPid) && hostPid > 1 && CID.test(containerId),
@@ -47,7 +48,13 @@ export async function captureProcessIdentity({
     stat = await boundedFile(join(home, "stat"), 16384),
     cgroup = await boundedFile(join(home, "cgroup"), 16384);
   invariant(cgroup.includes(containerId), "SUPERVISOR_SAMPLE_CGROUP_UNKNOWN");
-  return { birthTicks: parseProcessBirth(stat), cgroupDigest: digest(cgroup) };
+  const identity = { birthTicks: parseProcessBirth(stat), cgroupDigest: digest(cgroup) };
+  if (includeCgroupPath) {
+    const path = /^0::(.+)$/m.exec(cgroup)?.[1];
+    invariant(path?.startsWith("/") && path !== "/" && !path.split("/").includes("..") && path.includes(containerId), "SUPERVISOR_SAMPLE_CGROUP_UNKNOWN");
+    identity.cgroupPath = path;
+  }
+  return identity;
 }
 /** Only frozen exact IDs/PIDs. No Docker exec, process-tree discovery or directory scan. */
 export function createBoundedRoleSampler({

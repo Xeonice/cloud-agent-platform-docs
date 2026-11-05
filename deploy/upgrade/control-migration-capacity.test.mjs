@@ -89,7 +89,9 @@ async function fixture(t) {
   });
   const source = physical(coor),
     oldFoundation = physical(foundation),
-    newApi = physical(target);
+    newApi = physical(target),
+    newSupervisor={...physical(target),containerId:"6".repeat(64),role:"control-supervisor",startIdentity:"supervisor-original-start",artifactDigest:digest("supervisor")};
+  states.set(newSupervisor.containerId,newSupervisor);
   const config = {
     schemaVersion: 1,
     instanceId: "instance",
@@ -217,7 +219,8 @@ async function fixture(t) {
         commandId,
         stepId: commandId,
         spec: {
-          kind: "migration-action",
+          kind: commandId.includes("control-supervisor") ? "migration-"+commandId.slice("migration:".length) : "migration-action",
+          configDigest:digest("original-config"),
           targetDigest: a.targetDigest ?? digest(journal.lookup({ operationId: "migration", commandId: a.startCommandId }).result),
           deadline: a.deadline,
           budget: { maxDurationMs: 1000 },
@@ -265,6 +268,7 @@ async function fixture(t) {
     config,
     source,
     newApi,
+    newSupervisor,
     oldFoundation,
     states,
     commit,
@@ -312,6 +316,36 @@ test("real command journal normal exits preserve peak budgets; exact starts cons
     one,
   );
   assert.equal(f.book.status().initialPlanDigest, f.plan.planDigest);
+});
+
+test("unregistered Supervisor paired publication survives a write interruption without replay or losing reservations",async(t)=>{
+  const f=await fixture(t),startId="migration:start-control-supervisor",stopId="migration:rollback-stop-control-supervisor",
+    target={kind:"control-supervisor"};
+  f.options.actions.push({commandId:startId,direction:"start",role:"control-supervisor",targetDigest:digest(target),allocationId:"control",deadline:1010000},
+    {commandId:stopId,direction:"stop",role:"control-supervisor",startCommandId:startId,allocationId:"control",deadline:1020000});
+  f.options.failedStart={observe:async expected=>{
+    const actual=await f.options.inspect(expected);
+    assert.equal(actual.running,false);assert.equal(actual.exitCode,1);
+    return {...actual,failedStartInert:true,normalExit:false,terminationDispatched:false,
+      failedStartProof:{originalResultDigest:digest(expected),kernelInert:true}};
+  }};
+  const book=createMigrationCapacity(f.options);await book.initialize();const original=book.status();
+  f.commit(startId,f.newSupervisor);
+  const terminal={...f.newSupervisor,running:false,hostPid:0,exitCode:1};f.states.set(terminal.containerId,terminal);
+  f.commit(stopId,await f.options.failedStart.observe(f.newSupervisor));
+  let wrote=0;
+  const crashing=createMigrationCapacity({...f.options,write:async(path,value)=>{
+    await atomicJson(path,value);if(++wrote===1)throw Object.assign(Error("fixture crash after plan rename"),{code:"FIXTURE_WRITE_INTERRUPTION"});
+  }});
+  await assert.rejects(crashing.closeUnregisteredFailedStart(),{code:"FIXTURE_WRITE_INTERRUPTION"});
+  assert.equal(crashing.status().sequence,0);assert.equal(crashing.status().pending.kind,"unregistered-supervisor-close");
+  const resumed=createMigrationCapacity(f.options);assert.equal((await resumed.closeUnregisteredFailedStart()).closed,true);
+  assert.equal(resumed.status().sequence,2);assert.deepEqual(resumed.status().peak,original.peak);assert.deepEqual(resumed.status().inventory,original.inventory);
+  const receipt=await resumed.register({operationId:"migration",commandId:startId});assert.equal(receipt.capacityRegistrationCompleted,false);
+  assert.equal(receipt.physical.exitCode,1);assert.equal(receipt.normalExit,false);
+  assert.equal((await resumed.closeUnregisteredFailedStart()).closed,true);assert.equal(resumed.status().sequence,2);
+  for(const [kind,rows] of Object.entries(f.plan.allocations))
+    assert.deepEqual((await f.readPlan()).allocations[kind].map(x=>({id:x.id,resources:x.resources})),rows.map(x=>({id:x.id,resources:x.resources})));
 });
 test("the unlabeled legacy Foundation may change only its exact measured host-overhead membership, retaining that whole reservation", async (t) => {
   const f = await fixture(t);

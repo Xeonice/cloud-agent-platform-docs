@@ -4,6 +4,7 @@ import {
 } from "./control-migration-runtime.mjs";
 import { createRequire } from "node:module";
 import * as fs from "node:fs/promises";
+import { safeCommandFailure } from "./production-role-adapter.mjs";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { invariant, DIGEST } from "./trust.mjs";
@@ -200,13 +201,14 @@ if (
   runControlMigrationCommand(process.argv[2], process.argv[3])
     .then((result) => process.stdout.write(JSON.stringify(result) + "\n"))
     .catch((error) => {
-      // SQLite/HTTP messages may contain source values. Emit only a bounded code.
+      // SQLite/HTTP messages may contain source values. Command diagnostics
+      // contain only the program and bounded outcome, never args, stderr or Env.
       const code =
         typeof error.code === "string" &&
         /^[A-Z][A-Z0-9_]{0,127}$/.test(error.code)
           ? error.code
           : "CONTROL_MIGRATION_FAILED";
-      process.stderr.write(JSON.stringify({ error: { code } }) + "\n");
+      process.stderr.write(JSON.stringify({ error: safeCommandFailure(error) ?? { code } }) + "\n");
       process.exitCode = 1;
     });
 }
