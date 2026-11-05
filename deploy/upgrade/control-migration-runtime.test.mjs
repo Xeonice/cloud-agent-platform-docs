@@ -13,6 +13,7 @@ import {
   createMigrationDockerAdapter,
   migrationCapacityInspectionTarget,
   waitForMigrationLeaseRelease,
+  migrationActionBudgetMs,
 } from "./control-migration-runtime.mjs";
 import { createControlCommandJournal } from "./control-command-journal.mjs";
 import { freezeCapacityBudget } from "./capacity-admission.mjs";
@@ -749,6 +750,116 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     },
   };
 }
+test("only the original writer stop receives its declared grace in the real runtime journal", async t => {
+  const f = await runtimeFixture(t, { withCollector: true });
+  f.input.runtime.actionBudgetMs = 2000;
+  f.input.runtime.sourceCoordinatorStopBudgetMs = 300000;
+  const terminate = f.adapter.terminate;
+  let originalWriterSignals = 0;
+  f.adapter.terminate = async record => {
+    if (record.containerId === f.source.coordinator.containerId) {
+      originalWriterSignals++;
+      await new Promise(done => setTimeout(done, 2200));
+    }
+    return terminate(record);
+  };
+  const runtime = await createControlMigrationRuntime(f.input, {
+    Database, adapter: f.adapter, capacitySample: f.capacitySample,
+  });
+  t.after(() => runtime.close());
+  assert.equal((await runtime.apply()).state, "migrated");
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    const rows = db.prepare("SELECT * FROM control_commands").all();
+    const writer = rows.find(row => row.step_id === "stop-writer");
+    assert.equal(JSON.parse(writer.spec).budget.maxDurationMs, 300000);
+    assert.equal(JSON.parse(writer.result).migrationBudgetExceeded, false);
+    assert.ok(rows.filter(row => row.step_id !== "stop-writer")
+      .every(row => JSON.parse(row.spec).budget.maxDurationMs === 2000));
+  } finally { db.close(); }
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+  assert.equal(originalWriterSignals, 1);
+  assert.deepEqual(f.states.get(f.owner.containerId), f.owner);
+});
+
+test("an undeclared writer grace keeps the original timeout and rollback reconciles its late normal exit", async t => {
+  const f = await runtimeFixture(t, { withCollector: true });
+  f.input.runtime.actionBudgetMs = 200;
+  const terminate = f.adapter.terminate;
+  let completed;
+  const exited = new Promise(done => { completed = done; });
+  f.adapter.terminate = async record => {
+    if (record.role === "coordinator") await new Promise(done => setTimeout(done, 350));
+    const result = await terminate(record);
+    if (record.role === "coordinator") completed();
+    return result;
+  };
+  const runtime = await createControlMigrationRuntime(f.input, {
+    Database, adapter: f.adapter, capacitySample: f.capacitySample,
+  });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
+  await exited;
+  await new Promise(done => setTimeout(done, 0));
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    const row = db.prepare("SELECT * FROM control_commands WHERE step_id='stop-writer'").get();
+    assert.equal(JSON.parse(row.spec).budget.maxDurationMs, 200);
+    assert.equal(JSON.parse(row.result).migrationBudgetExceeded, true);
+    assert.equal(db.prepare("SELECT count(*) n FROM control_commands WHERE step_id LIKE 'start-%'").get().n, 0);
+  } finally { db.close(); }
+  assert.equal(f.events.filter(event => event === "stop:coordinator").length, 1);
+  assert.deepEqual(f.states.get(f.owner.containerId), f.owner);
+});
+
+test("writer grace cannot extend the original primary deadline or other action budgets", async t => {
+  const f = await runtimeFixture(t);
+  f.input.runtime.actionBudgetMs = 200;
+  f.input.runtime.sourceCoordinatorStopBudgetMs = 300000;
+  f.input.runtime.deadline = Date.now() + 1000;
+  const terminate = f.adapter.terminate;
+  let completed;
+  const exited = new Promise(done => { completed = done; });
+  f.adapter.terminate = async record => {
+    if (record.role === "coordinator") await new Promise(done => setTimeout(done, 1500));
+    const result = await terminate(record);
+    if (record.role === "coordinator") completed();
+    return result;
+  };
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
+  await exited;
+  await new Promise(done => setTimeout(done, 0));
+  assert.equal(migrationActionBudgetMs(f.input.runtime, "start-coordinator"), 200);
+  assert.equal(migrationActionBudgetMs(f.input.runtime, "rollback-coordinator"), 200);
+  assert.equal(migrationActionBudgetMs(f.input.runtime, "validate-control-stabilization"), 200);
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    const row = db.prepare("SELECT * FROM control_commands WHERE step_id='stop-writer'").get();
+    assert.equal(JSON.parse(row.spec).budget.maxDurationMs, 300000);
+    assert.equal(JSON.parse(row.spec).deadline, f.input.runtime.deadline);
+    assert.equal(row.state, "unknown");
+  } finally { db.close(); }
+});
+
+test("invalid writer grace is refused before opening the migration journal", async t => {
+  const f = await runtimeFixture(t);
+  for (const value of [null, 0, 1999, 300001, 240000.5, "300000"]) {
+    f.input.runtime.sourceCoordinatorStopBudgetMs = value;
+    await assert.rejects(createControlMigrationRuntime(f.input, { Database, adapter: f.adapter }),
+      { code: "CONTROL_MIGRATION_ACTION_BUDGET_INVALID" });
+  }
+  await assert.rejects(fs.stat(join(f.input.runtime.journalRoot, "migration.db")), { code: "ENOENT" });
+  assert.deepEqual(f.events, []);
+  assert.equal(migrationActionBudgetMs({ actionBudgetMs: 120000 }, "stop-writer"), 120000);
+  assert.equal(migrationActionBudgetMs({ actionBudgetMs: 120000, sourceCoordinatorStopBudgetMs: 240000 }, "stop-writer"), 240000);
+  assert.equal(migrationActionBudgetMs({ actionBudgetMs: 120000, sourceCoordinatorStopBudgetMs: 300000 }, "stop-writer"), 300000);
+  assert.equal(migrationActionBudgetMs({ actionBudgetMs: 120000, sourceCoordinatorStopBudgetMs: 300000 }, "start-coordinator"), 120000);
+  assert.throws(() => migrationActionBudgetMs({ actionBudgetMs: 300000 }, "stop-writer"),
+    { code: "CONTROL_MIGRATION_ACTION_BUDGET_INVALID" });
+});
 test('normal repair headroom in the actual runtime rejects before the first source stop',async t=>{
   const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true});
   f.input.runtime.adapter.stableControl.capacityTemplates.owner.resources.cpuMilliCores=2500;

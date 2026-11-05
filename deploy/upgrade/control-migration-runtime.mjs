@@ -313,6 +313,16 @@ export async function createMigrationDockerAdapter(
   };
 }
 
+/** Only the original source writer may declare a longer normal-stop grace. */
+export function migrationActionBudgetMs(runtime, stepId) {
+  const grace = runtime.sourceCoordinatorStopBudgetMs;
+  invariant(Number.isSafeInteger(runtime.actionBudgetMs) && runtime.actionBudgetMs > 0 &&
+    runtime.actionBudgetMs <= 120000 && (grace === undefined ||
+      (Number.isSafeInteger(grace) && grace >= runtime.actionBudgetMs && grace <= 300000)),
+  "CONTROL_MIGRATION_ACTION_BUDGET_INVALID");
+  return stepId === "stop-writer" ? (grace ?? runtime.actionBudgetMs) : runtime.actionBudgetMs;
+}
+
 /** One durable migration run, separate from both business and live control stores. */
 export async function createControlMigrationRuntime(
   input,
@@ -355,6 +365,7 @@ export async function createControlMigrationRuntime(
       c.protectedProcesses.length > 0,
     "CONTROL_MIGRATION_RUNTIME_CONFIG_REQUIRED",
   );
+  migrationActionBudgetMs(c, "stop-writer");
   for (const role of ["foundation", "installer", "coordinator"])
     invariant(
       CID.test(c.source?.[role]?.containerId) && c.source[role].role === role,
@@ -784,7 +795,7 @@ export async function createControlMigrationRuntime(
             ...result,
             migrationBudgetExceeded:
               clock() >
-              Math.min(row.spec.deadline, row.createdAt + c.actionBudgetMs),
+              Math.min(row.spec.deadline, row.createdAt + row.spec.budget.maxDurationMs),
           },
         });
         row = journal.lookup(key);
@@ -820,7 +831,7 @@ export async function createControlMigrationRuntime(
       kind: "migration-" + id,
       targetDigest: digest(target),
       deadline,
-      budget: { maxDurationMs: c.actionBudgetMs },
+      budget: { maxDurationMs: migrationActionBudgetMs(c, id) },
       configDigest,
     };
     let row = journal.lookup(key);
@@ -859,7 +870,7 @@ export async function createControlMigrationRuntime(
           ...result.result,
           migrationBudgetExceeded:
             clock() >
-            Math.min(row.spec.deadline, row.createdAt + c.actionBudgetMs),
+            Math.min(row.spec.deadline, row.createdAt + row.spec.budget.maxDurationMs),
         };
         journal.record({
           ...key,
@@ -882,7 +893,7 @@ export async function createControlMigrationRuntime(
       authorization: authorization(),
     });
     invariant(
-      clock() < Math.min(row.spec.deadline, row.createdAt + c.actionBudgetMs),
+      clock() < Math.min(row.spec.deadline, row.createdAt + row.spec.budget.maxDurationMs),
       "CONTROL_MIGRATION_ACTION_BUDGET_EXCEEDED",
     );
     journal.begin({ ...key, authorization: authorization() });
@@ -908,7 +919,7 @@ export async function createControlMigrationRuntime(
               ),
             Math.max(
               1,
-              Math.min(row.createdAt + c.actionBudgetMs, deadline) - clock(),
+              Math.min(row.createdAt + row.spec.budget.maxDurationMs, deadline) - clock(),
             ),
           );
         }),
@@ -917,7 +928,7 @@ export async function createControlMigrationRuntime(
         ...result,
         migrationBudgetExceeded:
           clock() >
-          Math.min(row.spec.deadline, row.createdAt + c.actionBudgetMs),
+          Math.min(row.spec.deadline, row.createdAt + row.spec.budget.maxDurationMs),
       };
       journal.record({
         ...key,
@@ -1357,7 +1368,7 @@ export async function createControlMigrationRuntime(
     const row = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":closed-source-view" });
     invariant(row?.state === "applied", "CONTROL_MIGRATION_READ_VIEW_RECEIPT_REQUIRED");
     return waitForMigrationLeaseRelease({ readLease: () => businessLease(view), expected, instanceId: input.instanceId,
-      deadline: Math.min(c.deadline, row.createdAt + c.actionBudgetMs), clock });
+      deadline: Math.min(c.deadline, row.createdAt + row.spec.budget.maxDurationMs), clock });
   }
   async function stop(id, expected, rollback = false, {deferCapacity=false} = {}) {
     const observeStopped = async () => {
@@ -1669,7 +1680,7 @@ export async function createControlMigrationRuntime(
     );
     const deadline = Math.min(
       row.spec.deadline,
-      row.createdAt + c.actionBudgetMs,
+      row.createdAt + row.spec.budget.maxDurationMs,
     );
     async function inspectStartedRole() {
       const expected = row.result, actual = await adapter.inspect(expected);

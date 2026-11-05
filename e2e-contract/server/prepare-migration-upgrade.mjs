@@ -32,6 +32,7 @@ import {
   evaluateCapacityAdmission,
 } from "../../deploy/upgrade/capacity-admission.mjs";
 import { assertMigrationNativeIdentity } from "./start-migration-upgrade.mjs";
+import { migrationActionBudgetMs } from "../../deploy/upgrade/control-migration-runtime.mjs";
 
 const CONTROLS = ["control-agent", "control-supervisor", "control-entry"],
   BUSINESS = ["api", "coordinator"];
@@ -53,6 +54,7 @@ export async function prepareMigrationUpgrade(
   { protectedProcesses },
 ) {
   assertMigrationNativeIdentity(input);
+  migrationActionBudgetMs(input, "stop-writer");
   invariant(
     h.instanceId === input.instanceId &&
       h.provisionReceipt.nativeResult === "not-run" &&
@@ -591,6 +593,8 @@ export async function prepareMigrationUpgrade(
       deadline,
       rollbackDeadline,
       actionBudgetMs: input.actionBudgetMs,
+      ...(input.sourceCoordinatorStopBudgetMs === undefined ? {} :
+        { sourceCoordinatorStopBudgetMs: input.sourceCoordinatorStopBudgetMs }),
       journalRoot: paths.journal,
       source,
       targets,
