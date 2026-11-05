@@ -25,6 +25,7 @@ import {
 import { treeManifest } from "./io.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 import { createSupervisorControlRuntime } from "./supervisor-control-runtime.mjs";
+import { createProtectedRoleLifecycle } from "./protected-role-lifecycle.mjs";
 async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false } = {}) {
   const f = await fixture(t),
     events = [],
@@ -1238,6 +1239,145 @@ test("migration runtime joins actual command journal with capacity collector tra
     f.events.some((x) => x === "stop:owner"),
     false,
   );
+});
+
+async function undispatchedCapacityFailure(t, kind = "control-agent") {
+  const f = await runtimeFixture(t, { withCollector: true });
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"));
+  t.after(() => db.close());
+  let overBudget = false, forcedClock;
+  const runtime = await createControlMigrationRuntime(f.input, {
+    Database,
+    adapter: f.adapter,
+    clock: () => forcedClock ?? Date.now(),
+    capacitySample: async (...args) => {
+      // Let the actual source stops and their collector receipts complete.
+      // Exceed the resident host budget only inside the selected target command,
+      // before the runtime can call adapter.launch(). Keep that excess during
+      // rollback so restoring the reserved source cannot depend on readmission.
+      if (db.prepare("SELECT state FROM control_commands WHERE command_id=?")
+        .get("migration:start-" + kind)?.state === "executing") overBudget = true;
+      const sample = await f.capacitySample(...args);
+      return overBudget
+        ? { ...sample, memory: { ...sample.memory, free: 800, available: 800 } }
+        : sample;
+    },
+  });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), { code: "CAPACITY_RESIDENT_BUDGET_EXCEEDED" });
+  assert.equal(overBudget, true);
+  assert.equal(f.events.includes("start:" + kind), false);
+  const command = () => db.prepare("SELECT * FROM control_commands WHERE command_id=?")
+    .get("migration:start-" + kind);
+  assert.equal(command().state, "unknown");
+  assert.deepEqual(JSON.parse(command().result), { code: "CAPACITY_RESIDENT_BUDGET_EXCEEDED" });
+  const capacity = () => JSON.parse(db.prepare("SELECT data FROM control_migration_capacity").get().data);
+  const receipts = kind === "control-agent" ? 3 : 4;
+  assert.equal(capacity().sequence, receipts);
+  assert.equal(Boolean(capacity().pending), false);
+  assert.equal(db.prepare("SELECT count(*) n FROM control_migration_capacity_receipts").get().n, receipts);
+  return { ...f, runtime, db, command, capacity, expire: () => { forcedClock = f.input.runtime.rollbackDeadline + 1; } };
+}
+
+test("rollback closes a proven undispatched target under its original command ID without registering target capacity", async t => {
+  const f = await undispatchedCapacityFailure(t);
+  const original = f.command(), plan = JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath, "utf8"));
+  const lifecycle = createProtectedRoleLifecycle({ instanceId: "instance", registryRoot: join(f.f.root, "legacy") });
+  f.adapter.lookupLaunch = async record => {
+    assert.equal(record.commandId, "migration:start-control-agent");
+    assert.equal(record.startIdentity, f.input.runtime.targets["control-agent"].record.startIdentity);
+    return lifecycle.lookupStart(record);
+  };
+  const result = await f.runtime.rollback(), closed = f.command();
+  assert.equal(result.state, "rolled-back");
+  assert.deepEqual(result.pending, []);
+  for (const field of ["operation_id", "command_id", "step_id", "spec", "spec_digest", "created_at"])
+    assert.equal(closed[field], original[field]);
+  assert.equal(closed.state, "definitely-not-applied");
+  assert.deepEqual(JSON.parse(closed.result), {
+    dispatched: false,
+    originalState: "unknown",
+    originalUnknownResult: JSON.parse(original.result),
+  });
+  assert.equal(f.db.prepare("SELECT count(*) n FROM control_commands WHERE command_id=?")
+    .get("migration:start-control-agent").n, 1);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM control_migration_capacity_receipts WHERE command_id=?")
+    .get("migration:start-control-agent").n, 0);
+  assert.equal(f.capacity().sequence, 6);
+  assert.equal(Boolean(f.capacity().pending), false);
+  assert.equal(f.events.some(e => e.startsWith("start:")), false);
+  assert.equal(f.events.some(e => e.startsWith("stop:control-")), false);
+  assert.ok(["coordinator", "installer", "foundation"].every(role => f.events.includes("restart:" + role)));
+  assert.deepEqual(f.states.get(f.owner.containerId), f.owner);
+  const restored = JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath, "utf8"));
+  const reservations = p => Object.values(p.allocations).flat().map(({ id, resources }) => [id, resources])
+    .sort(([a], [b]) => a.localeCompare(b));
+  assert.deepEqual(reservations(restored), reservations(plan));
+  assert.deepEqual(restored.limits, plan.limits);
+  const events = [...f.events];
+  assert.equal((await f.runtime.rollback()).state, "rolled-back");
+  assert.deepEqual(f.events, events);
+});
+
+test("the same negative-start reconciliation works for a later business-role target", async t => {
+  const f = await undispatchedCapacityFailure(t, "coordinator"), lookup = f.adapter.lookupLaunch;
+  const lifecycle = createProtectedRoleLifecycle({ instanceId: "instance", registryRoot: join(f.f.root, "legacy") });
+  f.adapter.lookupLaunch = async record => record.kind === "coordinator"
+    ? lifecycle.lookupStart(record)
+    : lookup(record);
+  assert.equal((await f.runtime.rollback()).state, "rolled-back");
+  assert.equal(f.command().state, "definitely-not-applied");
+  assert.equal(f.events.includes("start:coordinator"), false);
+  assert.equal(f.events.filter(e => e === "start:control-agent").length, 1);
+  assert.equal(f.events.filter(e => e === "stop:control-agent").length, 1);
+  assert.equal(f.db.prepare("SELECT count(*) n FROM control_migration_capacity_receipts WHERE command_id=?")
+    .get("migration:start-coordinator").n, 0);
+});
+
+test("rollback retains an unknown start when lookup cannot prove that dispatch never occurred", async t => {
+  for (const found of [
+    { state: "unknown", result: { code: "target-or-dispatch-unknown" } },
+    { state: "definitely-not-applied", result: { dispatched: true } },
+    { state: "definitely-not-applied", result: {} },
+  ]) await t.test(JSON.stringify(found), async t => {
+    const f = await undispatchedCapacityFailure(t), command = f.command(), capacity = f.capacity(), events = [...f.events];
+    f.adapter.lookupLaunch = async () => found;
+    await assert.rejects(f.runtime.rollback(), { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
+    assert.deepEqual(f.command(), command);
+    assert.deepEqual(f.capacity(), capacity);
+    assert.deepEqual(f.events, events);
+    assert.equal(f.db.prepare("SELECT count(*) n FROM control_migration_capacity_receipts").get().n, 3);
+  });
+});
+
+test("an existing launch intent and conflicting target physical identity cannot become a negative start", async t => {
+  const f = await undispatchedCapacityFailure(t), command = f.command(), capacity = f.capacity(), events = [...f.events];
+  const spec = f.input.runtime.targets["control-agent"], record = {
+    ...spec.record, kind: "control-agent", instanceId: "instance", attemptId: "migration",
+    operationId: "migration", commandId: "migration:start-control-agent", specDigest: digest(spec),
+  };
+  const lifecycle = createProtectedRoleLifecycle({
+    instanceId: "instance", registryRoot: join(f.f.root, "legacy"),
+    findByName: async () => "5".repeat(64),
+    inspect: async containerId => ({ ...record, containerId, role: record.kind, running: true,
+      artifactDigest: digest("a-conflicting-container-already-exists") }),
+  });
+  await lifecycle.prepareStart(record);
+  f.adapter.lookupLaunch = lifecycle.lookupStart;
+  await assert.rejects(f.runtime.rollback(), { code: "ROLE_START_PHYSICAL_IDENTITY_UNKNOWN" });
+  assert.deepEqual(f.command(), command);
+  assert.deepEqual(f.capacity(), capacity);
+  assert.deepEqual(f.events, events);
+});
+
+test("an undispatched start cannot be reconciled after the original rollback deadline", async t => {
+  const f = await undispatchedCapacityFailure(t), command = f.command(), events = [...f.events];
+  // The persisted configuration stays identical; only the injected clock moves.
+  f.expire();
+  f.adapter.lookupLaunch = async () => ({ state: "definitely-not-applied", result: { dispatched: false } });
+  await assert.rejects(f.runtime.rollback(), { code: "CONTROL_MIGRATION_DEADLINE_EXPIRED" });
+  assert.deepEqual(f.command(), command);
+  assert.deepEqual(f.events, events);
 });
 
 test("migration rejects missing/shared global authority or its exposure to business roles before any lifecycle action", async (t) => {

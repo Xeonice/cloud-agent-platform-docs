@@ -749,6 +749,27 @@ export async function createControlMigrationRuntime(
               specDigest: digest(spec),
             },
             found = await adapter.lookupLaunch(record);
+          if (found?.state === "definitely-not-applied") {
+            invariant(
+              found.result?.dispatched === false,
+              "CONTROL_MIGRATION_COMMAND_UNKNOWN",
+            );
+            invariant(clock() < c.rollbackDeadline, "CONTROL_MIGRATION_DEADLINE_EXPIRED");
+            // Admission can fail before the adapter dispatches a start. Close
+            // that original command without inventing a resident/receipt, and
+            // retain the error that made its outcome unknown.
+            journal.record({
+              ...key,
+              authorization: authorization(),
+              state: "definitely-not-applied",
+              result: {
+                ...found.result,
+                originalState: row.state,
+                originalUnknownResult: row.result,
+              },
+            });
+            continue;
+          }
           invariant(
             found?.state === "applied",
             "CONTROL_MIGRATION_COMMAND_UNKNOWN",
