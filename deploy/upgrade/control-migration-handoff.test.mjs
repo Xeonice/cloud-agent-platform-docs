@@ -22,8 +22,9 @@ const identity=n=>({artifactDigest:digest('artifact-'+n),inputFingerprint:digest
 
 /** Actual SQLite journals/bookkeepers/collector/admission, with explicit physical
  * and monotonic counter ports. No Native, SDK, Guest, network or real admission. */
-async function fixture(t,{cpu=12000,write}={}) {
+async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
   const root=await fs.realpath(await fs.mkdtemp(join(tmpdir(),'migration-handoff-')));
+  const protectedRuntimeRoots=typeof protectedRoots==='function'?protectedRoots(root):protectedRoots;
   await fs.chmod(root,0o700);t.after(()=>fs.rm(root,{recursive:true,force:true}));
   let now=Date.parse('2026-11-05T12:00:00Z'),mono=1000,tick=0;
   const instanceId='instance',migrationId='migration',configDigest=digest('frozen-migration-config'),
@@ -93,6 +94,7 @@ async function fixture(t,{cpu=12000,write}={}) {
     web:identity('web'),owner:identity('owner'),webBinding:{root:'/explicit-fixture/web'},defaultOwner:{ownerId:'retained-owner'}};
   let actualContext=structuredClone(context),writes=[];
   const create=()=>createMigrationCapacityHandoff({sqlite:db,Database,journal,instanceId,migrationId,configDigest,deadline,rollbackDeadline,native,normal,source,targets,
+    protectedRoots:protectedRuntimeRoots,
     capacityStatus:()=>capacity.status(),readRepairContext:async stage=>structuredClone(stage==='actual'?actualContext:context),
     inspect:async r=>states.get(r.containerId),sample,clock:()=>now,monotonic:()=>{mono+=250;return mono;},
     write:async(p,v)=>{writes.push(p);if(write)await write(p,v);else await atomicJson(p,v);}});
@@ -123,6 +125,24 @@ async function fixture(t,{cpu=12000,write}={}) {
   return {root,db,journal,capacity,native,normal,initial,context,targets,source,writes,migrate,readiness,
     get handoff(){return handoff;},reopen(){handoff=create();},mutateContext(fn){fn(actualContext);}};
 }
+
+test('Owner roots outside the control mount namespace remain unread and absent through preflight and publication',async t=>{
+  let ownerRoot;
+  const f=await fixture(t,{protectedRoots:root=>[ownerRoot=join(root,'owner-namespace-not-mounted')]});
+  await assert.rejects(fs.lstat(ownerRoot),{code:'ENOENT'});
+  await f.handoff.preflight();await f.migrate();await f.handoff.publish();
+  assert.equal((await f.handoff.assertReady(f.readiness)).supervisor.qualified,true);
+  await assert.rejects(fs.lstat(ownerRoot),{code:'ENOENT'});
+});
+
+test('protected Owner exclusions reject relative, noncanonical and both directions of normal-root overlap',async t=>{
+  for(const protectedRoots of [root=>[join(root,'normal')],root=>[join(root,'normal','owner')],root=>[root],
+    root=>[root+'/owner/../owner'],root=>[root+'/owner/'],()=>['relative-owner']]){
+    let fixtureRoot;
+    await assert.rejects(fixture(t,{protectedRoots:root=>{fixtureRoot=root;return protectedRoots(root);}}),/MIGRATION_NORMAL_HANDOFF_PATH_SCOPE_INVALID/);
+    await assert.rejects(fs.lstat(join(fixtureRoot,'normal')),{code:'ENOENT'});
+  }
+});
 
 test('missing normal Owner headroom refuses before any source stop and leaves original Native files and Guest reservations unchanged',async t=>{
   const f=await fixture(t,{cpu:7750}),before=await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p)));

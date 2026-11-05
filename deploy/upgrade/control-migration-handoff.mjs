@@ -153,7 +153,8 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
     normal.planPath === join(normal.root,'plan.json') && normal.configPath === join(normal.root,'collector.json') &&
     normal.observationPath === join(normal.root,'observation.json') && normal.transitionRoot === join(normal.root,'transitions') &&
     [native.planPath,native.configPath,native.observationPath,...protectedRoots].every(p =>
-      isAbsolute(p) && !inside(normal.root,p) && !inside(p,normal.root)),
+      isAbsolute(p) && !inside(normal.root,p) && !inside(p,normal.root)) &&
+    protectedRoots.every(p => resolve(p) === p),
   'MIGRATION_NORMAL_HANDOFF_PATH_SCOPE_INVALID');
   sqlite.exec('CREATE TABLE IF NOT EXISTS control_migration_normal_handoff(singleton INTEGER PRIMARY KEY CHECK(singleton=1),instance_id TEXT NOT NULL,migration_id TEXT NOT NULL,config_digest TEXT NOT NULL,data TEXT NOT NULL)');
   const load = () => {
@@ -184,7 +185,9 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
       const s=await fs.lstat(p);
       invariant(await fs.realpath(p)===p && (!process.getuid || s.uid===process.getuid()),'MIGRATION_NORMAL_HANDOFF_PATH_CHANGED');
     }
-    for (const p of [native.planPath,native.configPath,native.observationPath,...protectedRoots])
+    // Owner data is deliberately outside the control container's mount namespace.
+    // Protected roots are canonical exclusion boundaries, not readable inputs.
+    for (const p of [native.planPath,native.configPath,native.observationPath])
       invariant(await fs.realpath(p)===p,'MIGRATION_NORMAL_HANDOFF_PATH_CHANGED');
   }
   async function collect(plan,config,publicationLock) {
