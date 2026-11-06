@@ -27,9 +27,61 @@ export async function waitFor(origin, path, headers = {}, timeoutMs = 120000) {
   }
   throw Object.assign(new Error('Acceptance role readiness timed out'), { code: 'ROLE_NOT_READY' });
 }
+const BOOTSTRAP_ERROR_CODES = new Set([
+  'INVALID_INITIAL_GENERATION', 'INSTANCE_ALREADY_REGISTERED',
+  'INITIAL_ACTIVATION_UNKNOWN', 'INSECURE_INITIAL_ACTIVATION',
+  'INITIAL_ACTIVATION_UNCONFIRMED', 'INITIAL_COMPONENTS_UNCONFIRMED',
+  'UPGRADE_INTERNAL_ONLY', 'UPGRADE_INTERNAL_AUTH', 'UPGRADE_INSTANCE_MISMATCH',
+  'ENTRY_CONTROL_KEY_REQUIRED', 'ENTRY_BINDING_UNAVAILABLE', 'ENTRY_INSTANCE_MISMATCH',
+  'CANDIDATE_NOT_READY', 'CONTROL_IDENTITY_MISMATCH', 'INSTALLER_OBSERVER_REQUIRED',
+  'ACTUAL_INSTALLER_UNKNOWN', 'ACTUAL_OWNER_UNKNOWN', 'INTERNAL',
+]);
+
+/** Error responses are untrusted: retain only a fixed machine-code allowlist.
+ * Never attach the response, headers, URL, message or raw body to the error.
+ * Successful bodies remain unread for the frozen migration driver's receipt. */
+export async function assertInitialBootstrapResponse(response) {
+  if (response.ok) return response;
+  let bootstrapCode, timer, reader;
+  try {
+    reader = response.body?.getReader();
+    if (reader) {
+      bootstrapCode = await Promise.race([
+        (async () => {
+          const chunks = []; let bytes = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            bytes += value.byteLength;
+            if (bytes > 4096) return undefined;
+            chunks.push(value);
+          }
+          const value = JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));
+          return value && !Array.isArray(value) && Object.hasOwn(value, 'code') &&
+            BOOTSTRAP_ERROR_CODES.has(value.code) ? value.code : undefined;
+        })(),
+        new Promise(resolve => { timer = setTimeout(resolve, 1000); }),
+      ]);
+    }
+  } catch { /* Malformed/unreadable diagnostics must not hide the HTTP failure. */ }
+  finally {
+    clearTimeout(timer);
+    if (reader) {
+      try { void reader.cancel().catch(() => {}); } catch {}
+      try { reader.releaseLock(); } catch {}
+    }
+  }
+  const httpStatus = response.status;
+  throw Object.assign(new Error('INITIAL_PHYSICAL_BOOTSTRAP_FAILED (HTTP ' + httpStatus +
+    (bootstrapCode ? '; ' + bootstrapCode : '') + ')'), {
+    code: 'INITIAL_PHYSICAL_BOOTSTRAP_FAILED', httpStatus,
+    ...(bootstrapCode ? { bootstrapCode } : {}),
+  });
+}
 /** Fresh real installation. Every process runs immutable package entrypoints. */
 export async function startUpgradeHarness(config) {
   invariant(Number(process.versions.node.split('.')[0]) === 22, 'NODE22_REQUIRED');
+  invariant(config?.initialRelease?.activationGeneration === 1, 'FRESH_INITIAL_ACTIVATION_REQUIRED');
   invariant(isAbsolute(config.root) && isAbsolute(config.initialRoot), 'ABSOLUTE_TEST_ROOT_REQUIRED');
   if (config.sameInstanceQa !== undefined) invariant(config.legacyProvided === true, 'SAME_SIGNED_LEGACY_RUNTIME_REQUIRED');
   await assertQualificationIsolation(config);
@@ -96,7 +148,7 @@ export async function startUpgradeHarness(config) {
   const controllerConfigPath=join(paths.installer,'controller-config.json');
   async function startController(){const startIdentity=randomUUID();await atomicJson(controllerConfigPath,{...controllerConfig,startIdentity});const child=await launch('controller',join(config.initialRoot,'installer/controller-main.mjs'),{},join(config.initialRoot,'installer'),'installer',{args:[controllerConfigPath],startIdentity});const r=await waitFor(origin('controllerMetadata'),'/metadata',{'x-platform-internal-key':keys.controller});const identity=await r.json();invariant(identity.instanceId===config.instanceId&&identity.artifactDigest===release.components.installer.artifactDigest&&identity.inputFingerprint===release.components.installer.inputFingerprint&&identity.startIdentity===startIdentity,'INITIAL_CONTROLLER_ACTUAL_IDENTITY_MISMATCH');return child;}
   await startController();
-  const bootstrap=await fetch(origin('coordinator')+'/internal/upgrades/bootstrap',{method:'POST',headers:{'x-platform-internal-key':keys.controller,'x-platform-instance-id':config.instanceId},signal:AbortSignal.timeout(120000)});invariant(bootstrap.ok,'INITIAL_PHYSICAL_BOOTSTRAP_FAILED');
+  const bootstrap=await fetch(origin('coordinator')+'/internal/upgrades/bootstrap',{method:'POST',headers:{'x-platform-internal-key':keys.controller,'x-platform-instance-id':config.instanceId},signal:AbortSignal.timeout(120000)});await assertInitialBootstrapResponse(bootstrap);
   const info={instanceId:config.instanceId,root,entryOrigin:entry.origin,coordinatorOrigin:coordinator.origin,initialRoot:config.initialRoot,ports,pids:Object.fromEntries([...children].map(([n,c])=>[n,c.pid])),native:process.platform==='linux'&&process.arch==='arm64',isolation:adapter?'containers':'processes',roleContainers,bindingPath,ownerBindingPath,controllerConfigPath};
   await atomicJson(join(root,'harness.json'),info);
   async function stopOwned(name,signal){const child=children.get(name);invariant(child,'OWNED_ROLE_REQUIRED');if(child.container){await adapter.signal(child.containerId,signal);return;}if(child.exitCode!==null||child.signalCode!==null)return;await new Promise(ok=>{child.once('exit',ok);child.kill(signal);});}
