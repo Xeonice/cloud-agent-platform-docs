@@ -229,7 +229,7 @@
 
 
     <section class="section" id="macmini-build-and-history" aria-labelledby="macmini-build-and-history-title">
-      <div class="section-head"><span class="section-number">13</span><h2 id="macmini-build-and-history-title">首次真实N01在setup失败，生产仍未升级</h2></div>
+      <div class="section-head"><span class="section-number">13</span><h2 id="macmini-build-and-history-title">两次真实验收记录：生产仍未升级</h2></div>
       <p class="section-intro">兼容A已发布v0.3.16-experiment.macmini.20261107.1，原.15校验器和匿名HTTPS摘要核验通过。随后面向N01／I01／I02执行唯一真实run n01-r1：75.336秒exit1，retry0，无TERM，在setup报INITIAL_PHYSICAL_BOOTSTRAP_FAILED；没有进入业务任务或升级阶段。</p>
       <div class="split">
         <article class="card"><div class="mini-label">真实QA · 失败现场保留</div><h3>fresh输入冲突已由只读核对确认</h3><p>旧.15 bootstrap要求fresh初始activation=1，而QA输入复制了线上generation=8；实际DB为generation0、confirmed=null、schema29。fixture为synthetic keys，5个角色的mounts／DB inode一致。原run的tasks、业务sandboxes和upgrade attempts均为0。</p></article>
@@ -245,10 +245,12 @@
       </div>
       <div class="callout amber" style="margin-top:17px"><h3>保留原失败，新run仍待派发</h3><p>配置冲突依据原字节与实测输入／DB确认；旧harness未保存HTTP response，实际status／code未捕获，不能声称原请求返回409。业务sandbox0不等于Guest0：SDK只读观测有1台running登录helper。随后仅本轮5个QA角色各一次TERM，均exit0／PID0／OOM false／restart0；原Owner2579及含helper VMM3293（birth189589）的全部后代均不存在，无额外信号。SDK仍保留running／pid65历史行，不宣称持久settled。正常rm这5个退出容器已授权但实际结果仍待确认，不带-v，保留home、DB、SDK、cache、volume和原证据。</p><p style="margin-top:10px">下一run必须用新namespace、fresh DB与全新home，不能复用原失败库或原SDK；Q2尚未派发。真实沙箱升级、任务／终端连续性、故障恢复与独立Control迁移仍pending，也不把首次构建的4GiB保护停止套作本次QA原因。</p></div>
       <p class="note">验收工具修正511c3d7已提交：角色启动前要求fresh generation1；失败body最多4KiB／1秒，仅保留HTTP status与白名单机器code，取消reader且不输出原响应，成功body留给原driver。Node22相关4文件26/26通过、0跳过、1.168秒；这不改A包、生产或原签名，A源仍c917。实验发布upgradeQualified=false，完整Native与正式五类evidence仍未通过；原run及历史统计保留，本次setup失败不计作生产升级。</p>
+      <div class="callout amber" style="margin-top:17px"><h3>第二次真实run：初始化通过，验收接口契约不匹配</h3><p>全新Q2／fresh generation1执行280.733秒exit1，retry0，runner未收到TERM；真实业务sandbox running2、Agent task running1，升级请求实际202受理。前端使用正式async接口，返回UpgradeOperation及finalTargetDigest；旧验收脚本按technical attempt读取targetDigest，断言得到undefined。尚未丢弃实际202，未知ACK恢复不能记为通过。完整响应未保存，结论依据原实现与实际持久operation／attempt映射，不能冒认捕获全部响应字段。</p><p style="margin-top:10px">独立1秒磁盘观测最低6,772,994,048字节，高于4GiB保护线；没有因磁盘终止。Installer已exit0，其余4个本轮角色各一次正常TERM，最终全exit0／PID0／OOM false／restart0、全VM KVM fd0；未改SDK历史状态。收尾脚本曾因label摘要算法误设进入HOLD，保留原记录后仅修正该算法并核对其余身份门，再完成正常关闭。</p></div>
+      <p class="note">首次失败的5个退出容器已正常rm（不带-v），原Guest写盘、DB与证据保留；仅公开再生image缓存清理实际回收约2.70GB。公开源包、A包和固定bundle已完整SHA校验后归档到公司机器私有cache，不含业务数据或密钥，也未更新公司服务。本轮build VM及两个idle CI节点临时维护，仍需验收后恢复。接下来修正整段async／legacy验收契约，不改变已发布A包，不关闭实际UI的async路径绕过验证。</p>
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#9-追加首次真实n01在setup失败保留现场待诊断">首次真实run、两条磁盘观测与保留现场 ↗</a><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#8-追加实验包实际构建与发布完成">实际构建、发布与原始证据 ↗</a><a href="https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.3.16-experiment.macmini.20261107.1">已发布的实验包 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 首次QA setup失败，fresh输入冲突已核实</span></footer>
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 第二次QA受理后验收契约断言失败</span></footer>
   </main>
 </div>
 <script>
