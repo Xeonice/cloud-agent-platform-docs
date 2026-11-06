@@ -219,7 +219,7 @@
       <p class="section-intro">已按要求清理指定构建中间目录和一个可回收缓存，保留原包、沙箱与回退材料。宿主可用空间由约10.4GiB增至约13.4GiB；后续构建与QA环境会消耗新空间，继续按实际余量准入。</p>
       <div class="split">
         <article class="card"><div class="mini-label">已实现 · 局部真实HTTP／SQLite</div><h3>先冻结旧控制，再接只读账本</h3><p>固定签名目标、原writer和原截止；冻结后等待原异步工作，旧statement与异步epoch不能借新账本。接入编排持久记录派发，未知ACK只查原命令；完成仍passive，不开放Entry或普通升级。</p></article>
-        <article class="card"><div class="mini-label">真实旧版兼容 · 尚未上线</div><h3>兼容版本A，再验证控制接入</h3><p>实际旧升级器只识别business-only摘要与schema29。A明确交付经原包逐字节核对的29份迁移，新增默认Owner承接新任务，全部旧Owner／Guest保留。隔离演练加载原.15的真实启动器，并保持目标签名body与URL。</p></article>
+        <article class="card"><div class="mini-label">真实旧版兼容 · 尚未上线</div><h3>兼容版本A，再验证控制接入</h3><p>实际旧升级器只识别business-only摘要与schema29。A交付经原包逐字节核对的29份迁移，显式保留原签名Web，新增默认Owner承接新任务，全部旧Owner／Guest保留。隔离演练加载原.15启动器，目标签名body与URL保持一致。</p></article>
       </div>
       <p class="note">原.15签名与94,392,668字节tar已核验；独立Linux arm64构建环境、6CPU／8GiB专用QA和KVM已准备。还需完成最终产物的实际演练，再执行实例更新；本节没有将兼容A、局部合同或QA启动写成完整无感资格。</p>
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#5-追加更新前磁盘清理">实际清理、兼容准备与证据 ↗</a><a href="../../backend/changes/2026-11-06-旧入口首次控制接入协议PoC.md#8-11月7日接入实现与真实旧版本兼容路径">接入实现与A版本的准确边界 ↗</a></div>

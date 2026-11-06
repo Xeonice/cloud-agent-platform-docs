@@ -24,8 +24,19 @@ export function packagedOwnerComponent(apiComponent, protocols, ownerPolicy = 'p
   invariant(['package', 'reuse-installed'].includes(ownerPolicy), 'INVALID_PACKAGE_OWNER_POLICY');
   return ownerPolicy === 'reuse-installed' ? undefined : { ...apiComponent, protocol: protocols.owner || protocols.api };
 }
-export async function packagePinnedInstance({workspace,commits,releaseId,channel,distributionOrigin,protocols,previousBundle=null,migrationPlan=null,purpose='release',sourceRepositories=null,sourceBundles=null,controlVersion=null,ownerPolicy='package',migrationProfile='current',run=command}) {
+export function selectPackagedWebReuse({ purpose, policy, revision, fingerprint, previousManifest, previousFiles }) {
+  invariant(['matching-input', 'retain-installed'].includes(policy), 'INVALID_PACKAGE_WEB_POLICY');
+  if (policy === 'matching-input') return previousManifest?.components.web.inputFingerprint === fingerprint;
+  invariant(purpose === 'qualification' && previousManifest?.components.web.sourceRevision === revision &&
+    Array.isArray(previousFiles) && digest(previousFiles.filter(f => f.path.startsWith('web/'))) === previousManifest.components.web.artifactDigest,
+  'RETAINED_WEB_SIGNED_ARTIFACT_REQUIRED');
+  // Retain the original signed identity; never relabel its FP as a fresh build.
+  return true;
+}
+export async function packagePinnedInstance({workspace,commits,releaseId,channel,distributionOrigin,protocols,previousBundle=null,migrationPlan=null,purpose='release',sourceRepositories=null,sourceBundles=null,controlVersion=null,ownerPolicy='package',migrationProfile='current',webPolicy='matching-input',run=command}) {
   invariant(['package','reuse-installed'].includes(ownerPolicy),'INVALID_PACKAGE_OWNER_POLICY');
+  invariant(['matching-input','retain-installed'].includes(webPolicy) &&
+    (webPolicy==='matching-input'||purpose==='qualification'&&previousBundle),'INVALID_PACKAGE_WEB_POLICY');
   invariant(['current',LEGACY_CONTROL_BOOTSTRAP_SCHEMA_29].includes(migrationProfile) &&
     (migrationProfile==='current'||purpose==='qualification'&&previousBundle&&migrationPlan===null),'INVALID_BOOTSTRAP_MIGRATION_PROFILE');
   invariant(['project','api','web'].every(k=>SHA.test(commits[k])),'PINNED_COMMITS_REQUIRED');
@@ -42,7 +53,7 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   const webFingerprint = digest({platform:process.platform,arch:process.arch,nodeMajor:22,publicApiBase:'',publicWsBase:'',files:webInputs});
   const apiFingerprint=await runtimeFingerprint(api,project,{builderVersion:process.platform==='linux'?'node22-pnpm9-rocky8-glibc228-source':'node22-pnpm9',behavior:{protocols:{api:protocols.api,coordinator:protocols.coordinator||protocols.api,owner:protocols.owner||protocols.api},migrationProfile}});
   let prior=null,reuseApi=false,reuseWeb=false;
-  if(previousBundle){const roots=await loadTrustRoot(previousBundle.trustRootPath),envelope=await readJson(previousBundle.manifestPath);if(purpose==='release')invariant((roots.purpose||'release')==='release'&&(envelope.manifest.purpose||'release')==='release','PRODUCTION_QUALIFICATION_REUSE_FORBIDDEN');verifySignedManifest(envelope,roots);const bundle=await readJson(join(previousBundle.root,'upgrade-artifact.json'));const priorFiles=(await treeManifest(previousBundle.root)).filter(f=>!['upgrade-artifact.json','installed.json'].includes(f.path));invariant(bundle.platform===process.platform&&bundle.arch===process.arch&&canonical(bundle.components)===canonical(envelope.manifest.components)&&canonical(priorFiles)===canonical(bundle.files)&&digest(priorFiles)===bundle.treeDigest,'REUSE_ARTIFACT_NOT_VERIFIED');prior={...envelope,root:previousBundle.root};reuseApi=prior.manifest.components.api.inputFingerprint===apiFingerprint;reuseWeb=prior.manifest.components.web.inputFingerprint===webFingerprint;}
+  if(previousBundle){const roots=await loadTrustRoot(previousBundle.trustRootPath),envelope=await readJson(previousBundle.manifestPath);if(purpose==='release')invariant((roots.purpose||'release')==='release'&&(envelope.manifest.purpose||'release')==='release','PRODUCTION_QUALIFICATION_REUSE_FORBIDDEN');verifySignedManifest(envelope,roots);const bundle=await readJson(join(previousBundle.root,'upgrade-artifact.json'));const priorFiles=(await treeManifest(previousBundle.root)).filter(f=>!['upgrade-artifact.json','installed.json'].includes(f.path));invariant(bundle.platform===process.platform&&bundle.arch===process.arch&&canonical(bundle.components)===canonical(envelope.manifest.components)&&canonical(priorFiles)===canonical(bundle.files)&&digest(priorFiles)===bundle.treeDigest,'REUSE_ARTIFACT_NOT_VERIFIED');prior={...envelope,root:previousBundle.root};reuseApi=prior.manifest.components.api.inputFingerprint===apiFingerprint;reuseWeb=selectPackagedWebReuse({purpose,policy:webPolicy,revision:commits.web,fingerprint:webFingerprint,previousManifest:prior.manifest,previousFiles:priorFiles});}
   const webRevision = webFingerprint.slice(7,47), builtAt = new Date().toISOString();
   const cleanEnv={...process.env,NEXT_PUBLIC_WEB_REVISION:webRevision,WEB_RELEASE_ID:releaseId,WEB_BUILT_AT:builtAt,NEXT_PUBLIC_API_BASE_URL:'',NEXT_PUBLIC_WS_BASE_URL:'',API_ORIGIN:'http://127.0.0.1:3001'};
   if(process.platform==='linux')cleanEnv.npm_config_build_from_source='true';
@@ -99,6 +110,6 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
   }
   // Old direct/qualification fixtures remain business-only. A formal release
   // caller explicitly requests the independent Control package and must gate it.
-  const result={purpose,sourceWitness,ownerPolicy,artifactMigrationProfile,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn,outputRoot,...(control?{control}:{})};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
+  const result={purpose,sourceWitness,ownerPolicy,artifactMigrationProfile,migrationPlanDigest:migration?.planDigest||null,reuse:{api:reuseApi,web:reuseWeb,webPolicy,computedWebSourceFingerprint:webFingerprint,sourceManifestDigest:prior?.manifestDigest||null},schemaVersion:1,releaseId,channel,commits,components,package:pkg,builtOn,outputRoot,...(control?{control}:{})};await atomicJson(join(outputRoot,'bundle-receipt.json'),result);return result;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){readJson(process.argv[2]).then(packagePinnedInstance).then(r=>process.stdout.write(JSON.stringify(r)+'\n'),e=>{process.stderr.write((e.code||'INSTANCE_PACKAGE_FAILED')+'\n');process.exitCode=1;});}
