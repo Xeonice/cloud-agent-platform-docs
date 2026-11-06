@@ -27,9 +27,11 @@ import { treeManifest } from "./io.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 import { createSupervisorControlRuntime } from "./supervisor-control-runtime.mjs";
 import { createProtectedRoleLifecycle } from "./protected-role-lifecycle.mjs";
-async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false } = {}) {
+import { createCoordinatorIdentityReader, createCoordinatorInventory } from "./supervisor-inventory.mjs";
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false, apiReadinessFailureCodes = [] } = {}) {
   const f = await fixture(t),
     events = [],
+    preStopInventoryCalls = [],
     states = new Map(),
     started = new Map();
   const now = Date.now(),
@@ -194,6 +196,14 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
       return;
     }
     if (req.url === "/internal/control/identity") {
+      if (apiReadinessFailureCodes.length) {
+        const code = apiReadinessFailureCodes[Math.min(
+          events.filter(event => event.startsWith("api-readiness:")).length,
+          apiReadinessFailureCodes.length - 1,
+        )];
+        events.push("api-readiness:" + code);
+        res.writeHead(503); res.end(JSON.stringify({ code })); return;
+      }
       if (failApiReadiness) {
         states.set(targetApi.containerId, { ...states.get(targetApi.containerId), running: false, hostPid: 0,
           exitCode: 1, ...apiExitPatch });
@@ -457,7 +467,7 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
       events.push("stop:" + r.role);
       assert.notEqual(r.role, "owner");
       const old = states.get(r.containerId);
-      const next = { ...old, running: false, hostPid: 0, exitCode: 0 };
+      const next = { ...old, running: false, hostPid: 0, exitCode: 0, finishedAt: new Date().toISOString() };
       states.set(r.containerId, next);
       if (r.role === "coordinator") {
         f.db
@@ -739,6 +749,15 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     release,
     capacitySample,
     handoffRepairContext,handoffSupervisorReadiness,
+    preStopInventoryCalls,
+    preStopInventory: async ({ runtime, lease }) => {
+      assert.equal(runtime, input.runtime);
+      assert.equal(lease.generation, 7);
+      assert.equal(states.get(source.coordinator.containerId).running, true);
+      assert.ok(!events.some(event => event.startsWith("stop:")));
+      preStopInventoryCalls.push({ lease, source: structuredClone(states.get(source.coordinator.containerId)) });
+      return { kind: "explicit-local-test-inventory-port", sourceContainerId: source.coordinator.containerId };
+    },
     setLoseAck: (k) => {
       loseAck = k;
     },
@@ -755,8 +774,16 @@ test("only the original writer stop receives its declared grace in the real runt
   f.input.runtime.actionBudgetMs = 2000;
   f.input.runtime.sourceCoordinatorStopBudgetMs = 300000;
   const terminate = f.adapter.terminate;
+  const stopDeadlines = [];
   let originalWriterSignals = 0;
-  f.adapter.terminate = async record => {
+  f.adapter.terminate = async (record, options) => {
+    const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+    try {
+      const row = db.prepare("SELECT * FROM control_commands WHERE state='executing'").get();
+      const spec = JSON.parse(row.spec);
+      assert.equal(options.deadline, Math.min(spec.deadline, row.created_at + spec.budget.maxDurationMs));
+      stopDeadlines.push({ id: row.step_id, budget: spec.budget.maxDurationMs });
+    } finally { db.close(); }
     if (record.containerId === f.source.coordinator.containerId) {
       originalWriterSignals++;
       await new Promise(done => setTimeout(done, 2200));
@@ -764,7 +791,7 @@ test("only the original writer stop receives its declared grace in the real runt
     return terminate(record);
   };
   const runtime = await createControlMigrationRuntime(f.input, {
-    Database, adapter: f.adapter, capacitySample: f.capacitySample,
+    Database, adapter: f.adapter, preStopInventory: f.preStopInventory, capacitySample: f.capacitySample,
   });
   t.after(() => runtime.close());
   assert.equal((await runtime.apply()).state, "migrated");
@@ -779,6 +806,8 @@ test("only the original writer stop receives its declared grace in the real runt
   } finally { db.close(); }
   assert.equal((await runtime.rollback()).state, "rolled-back");
   assert.equal(originalWriterSignals, 1);
+  assert.equal(stopDeadlines.find(row => row.id === "stop-writer").budget, 300000);
+  assert.ok(stopDeadlines.filter(row => row.id !== "stop-writer").every(row => row.budget === 2000));
   assert.deepEqual(f.states.get(f.owner.containerId), f.owner);
 });
 
@@ -795,7 +824,7 @@ test("an undeclared writer grace keeps the original timeout and rollback reconci
     return result;
   };
   const runtime = await createControlMigrationRuntime(f.input, {
-    Database, adapter: f.adapter, capacitySample: f.capacitySample,
+    Database, adapter: f.adapter, preStopInventory: f.preStopInventory, capacitySample: f.capacitySample,
   });
   t.after(() => runtime.close());
   await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
@@ -827,7 +856,7 @@ test("writer grace cannot extend the original primary deadline or other action b
     if (record.role === "coordinator") completed();
     return result;
   };
-  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
   t.after(() => runtime.close());
   await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
   await exited;
@@ -848,7 +877,7 @@ test("invalid writer grace is refused before opening the migration journal", asy
   const f = await runtimeFixture(t);
   for (const value of [null, 0, 1999, 300001, 240000.5, "300000"]) {
     f.input.runtime.sourceCoordinatorStopBudgetMs = value;
-    await assert.rejects(createControlMigrationRuntime(f.input, { Database, adapter: f.adapter }),
+    await assert.rejects(createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory }),
       { code: "CONTROL_MIGRATION_ACTION_BUDGET_INVALID" });
   }
   await assert.rejects(fs.stat(join(f.input.runtime.journalRoot, "migration.db")), { code: "ENOENT" });
@@ -863,16 +892,47 @@ test("invalid writer grace is refused before opening the migration journal", asy
 test('normal repair headroom in the actual runtime rejects before the first source stop',async t=>{
   const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true});
   f.input.runtime.adapter.stableControl.capacityTemplates.owner.resources.cpuMilliCores=2500;
-  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample,
+  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,preStopInventory:f.preStopInventory,capacitySample:f.capacitySample,
     handoffRepairContext:f.handoffRepairContext,handoffSupervisorReadiness:f.handoffSupervisorReadiness});t.after(()=>runtime.close());
   await assert.rejects(runtime.apply(),/CAPACITY_BUDGET_INSUFFICIENT/);
   assert.deepEqual(f.events.filter(x=>x.startsWith('stop:')||x.startsWith('start:')),[]);
   assert(Object.values(f.source).every(r=>f.states.get(r.containerId).running));
 });
 
+test("a failed public inventory gate cannot create a first stop command or signal any source", async t => {
+  const f = await runtimeFixture(t), failure = Object.assign(Error("Actual public receipt is absent"),
+    { code: "CONTROL_MIGRATION_PUBLIC_INVENTORY_UNPROVEN" });
+  let calls = 0;
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter,
+    preStopInventory: async ({ lease, runtime }) => {
+      calls++;
+      assert.equal(lease.generation, 7);
+      assert.equal(runtime, f.input.runtime);
+      assert.ok(Object.values(f.source).every(row => f.states.get(row.containerId).running));
+      throw failure;
+    } });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), error => error === failure);
+  assert.equal(calls, 1); assert.deepEqual(f.events, []);
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    assert.equal(db.prepare("SELECT count(*) n FROM control_commands").get().n, 0);
+    assert.equal(db.prepare("SELECT count(*) n FROM control_migration_actor").get().n, 0);
+  } finally { db.close(); }
+});
+
+test("the public inventory test port must be explicit and cannot be installed on the production path", async t => {
+  const f = await runtimeFixture(t);
+  await assert.rejects(createControlMigrationRuntime(f.input, { Database, adapter: f.adapter }),
+    { code: "CONTROL_MIGRATION_PUBLIC_INVENTORY_PORT_REQUIRED" });
+  await assert.rejects(createControlMigrationRuntime(f.input, { Database, preStopInventory: f.preStopInventory }),
+    { code: "CONTROL_MIGRATION_TEST_PORT_FORBIDDEN" });
+  await assert.rejects(fs.stat(join(f.input.runtime.journalRoot, "migration.db")), { code: "ENOENT" });
+});
+
 test('the actual migration runtime publishes normal capacity and obtains fresh Supervisor readiness before activate',async t=>{
   const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true}),runtime=await createControlMigrationRuntime(f.input,{Database,
-    adapter:f.adapter,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,handoffSupervisorReadiness:f.handoffSupervisorReadiness});
+    adapter:f.adapter,preStopInventory:f.preStopInventory,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,handoffSupervisorReadiness:f.handoffSupervisorReadiness});
   t.after(()=>runtime.close());assert.equal((await runtime.apply()).state,'migrated');
   assert(f.events.indexOf('handoff:projected')<f.events.indexOf('stop:foundation'));
   assert(f.events.indexOf('handoff:actual')>f.events.indexOf('start:control-entry'));
@@ -884,7 +944,7 @@ test('the actual migration runtime publishes normal capacity and obtains fresh S
 
 test('failed normal readiness and conflicting normal files do not block the original runtime rollback',async t=>{
   const f=await runtimeFixture(t,{withCollector:true,withNormalHandoff:true}),runtime=await createControlMigrationRuntime(f.input,{Database,
-    adapter:f.adapter,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,
+    adapter:f.adapter,preStopInventory:f.preStopInventory,capacitySample:f.capacitySample,handoffRepairContext:f.handoffRepairContext,
     handoffSupervisorReadiness:async()=>{throw Error('explicit normal readiness failure');}});
   t.after(()=>runtime.close());await assert.rejects(runtime.apply(),/normal readiness failure/);
   const path=f.input.runtime.adapter.stableControl.capacityCollectorConfigPath;
@@ -902,7 +962,7 @@ test("SQLite+HTTP with explicit Docker adapter fixture migrates without business
       .all(),
     runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
   t.after(() => runtime.close());
   const result = await runtime.apply();
@@ -952,7 +1012,7 @@ test("a lost create acknowledgement resumes only the original command and never 
   f.setLoseAck("control-agent");
   const runtime = await createControlMigrationRuntime(f.input, {
     Database,
-    adapter: f.adapter,
+    adapter: f.adapter, preStopInventory: f.preStopInventory,
   });
   await assert.rejects(runtime.apply(), /fixture dropped acknowledgement/);
   assert.equal(runtime.status().pending.length, 1);
@@ -964,7 +1024,7 @@ test("a lost create acknowledgement resumes only the original command and never 
 
 test("an applied initial Supervisor that exited before admission closes its original start and stop in the real SQLite capacity consumer", async(t)=>{
   const f=await runtimeFixture(t,{withCollector:true,failSupervisorBeforeRegistration:true}),
-    runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample});
+    runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,preStopInventory:f.preStopInventory,capacitySample:f.capacitySample});
   t.after(()=>runtime.close());
   await assert.rejects(runtime.apply(),{code:"CONTROL_MIGRATION_CAPACITY_START_UNKNOWN"});
   const path=join(f.input.runtime.journalRoot,"migration.db"), read=()=>new Database(path,{readonly:true,fileMustExist:true});
@@ -995,7 +1055,7 @@ test("an applied initial Supervisor that exited before admission closes its orig
 test("Supervisor closure rejects acquired authority, side effects, later Entry and foreign pending before accounting writes",async(t)=>{
   for(const change of ["authority","side-effect","entry","pending"]){
     const f=await runtimeFixture(t,{withCollector:true,failSupervisorBeforeRegistration:true}),
-      runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,capacitySample:f.capacitySample});
+      runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,preStopInventory:f.preStopInventory,capacitySample:f.capacitySample});
     t.after(()=>runtime.close());await assert.rejects(runtime.apply(),{code:"CONTROL_MIGRATION_CAPACITY_START_UNKNOWN"});
     const db=new Database(join(f.input.runtime.journalRoot,"migration.db"));
     if(change==="authority") {const ledger=new Database(f.input.controlPath);ledger.exec("UPDATE control_authority SET mode='active',revision=2");ledger.close();}
@@ -1010,7 +1070,7 @@ test("Supervisor closure rejects acquired authority, side effects, later Entry a
 
 test("runtime dependency preflight rejects before source lifecycle dispatch",async(t)=>{
   const f=await runtimeFixture(t);f.adapter.preflightIndependentFoundation=async()=>{throw Object.assign(Error("missing runtime Docker"),{code:"CONTROL_RUNTIME_DOCKER_DEPENDENCY_UNPROVEN"});};
-  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter});t.after(()=>runtime.close());
+  const runtime=await createControlMigrationRuntime(f.input,{Database,adapter:f.adapter,preStopInventory:f.preStopInventory});t.after(()=>runtime.close());
   await assert.rejects(runtime.apply(),{code:"CONTROL_RUNTIME_DOCKER_DEPENDENCY_UNPROVEN"});assert.deepEqual(f.events,[]);
 });
 test("unknown resource dimensions or changed protected birth hold before any stop/start", async (t) => {
@@ -1024,7 +1084,7 @@ test("unknown resource dimensions or changed protected birth hold before any sto
     else f.states.get(f.owner.containerId).hostPid++;
     const runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
     await assert.rejects(runtime.apply());
     assert.deepEqual(f.events, []);
@@ -1047,7 +1107,7 @@ test("each migration role has its own exact frozen allocation; borrowed or modif
       target.record.artifactDigest = digest("changed-code");
     const runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
     await assert.rejects(runtime.apply(), {
       code: "CONTROL_MIGRATION_CAPACITY_ALLOCATION_CHANGED",
@@ -1069,7 +1129,7 @@ test("capacity observation replaced during create is rejected by the final physi
   };
   const runtime = await createControlMigrationRuntime(f.input, {
     Database,
-    adapter: f.adapter,
+    adapter: f.adapter, preStopInventory: f.preStopInventory,
   });
   await assert.rejects(runtime.apply(), {
     code: "CONTROL_MIGRATION_CAPACITY_CAS_CHANGED",
@@ -1084,7 +1144,7 @@ test("explicit rollback stops only newly introduced control roles, preserves his
   const f = await runtimeFixture(t),
     runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
   t.after(() => runtime.close());
   await runtime.apply();
@@ -1094,6 +1154,155 @@ test("explicit rollback stops only newly introduced control roles, preserves his
   assert.ok(f.events.includes("restart:installer"));
   assert.ok(f.events.includes("restart:foundation"));
   assert.equal(f.states.get(f.owner.containerId).running, true);
+});
+
+test("rollback publishes the registered Coordinator's exact normal stop for the next real public inventory, after restoring sources", async t => {
+  const f = await runtimeFixture(t);
+  await fs.writeFile(join(f.input.runtime.legacyProcessRoot, "original-coordinator.json"),
+    JSON.stringify({ ...f.source.coordinator, kind: "coordinator", state: "started", instanceId: "instance",
+      metadataPath: "/internal/application/identity" }), { mode: 0o600 });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
+  t.after(() => runtime.close());
+  await runtime.apply();
+  const target = [...f.states.values()].find(row => row.role === "coordinator" && row.containerId !== f.source.coordinator.containerId),
+    receiptPath = join(f.input.runtime.retiredCoordinatorRoot, target.containerId + ".json");
+  // Publication failure must not delay restoration. The same rollback can finish
+  // publication from its applied stop without sending any signal a second time.
+  await fs.mkdir(receiptPath);
+  await assert.rejects(runtime.rollback());
+  assert.ok(Object.values(f.source).every(row => f.states.get(row.containerId).running));
+  const priorEvents = [...f.events];
+  await fs.rmdir(receiptPath);
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+  assert.deepEqual(f.events, priorEvents);
+  const receipt = JSON.parse(await fs.readFile(receiptPath, "utf8"));
+  assert.equal(receipt.originalCommandId, "migration:rollback-stop-coordinator");
+  assert.equal(receipt.migrationId, "migration");
+  assert.equal(Object.hasOwn(receipt, "operationKind"), false);
+  assert.equal(receipt.exitedAt, f.states.get(target.containerId).finishedAt);
+  assert.equal(validateCoordinatorExitReceipt(receipt, { instanceId: "instance", target }), true);
+  const inventory = await createCoordinatorInventory({ instanceId: "instance",
+    processRoot: f.input.runtime.legacyProcessRoot,
+    registryPath: join(f.input.runtime.installedRolesRoot, "installed-roles.json"),
+    retiredRoot: f.input.runtime.retiredCoordinatorRoot,
+    inspect: containerId => f.adapter.inspect({ containerId }),
+    readIdentity: createCoordinatorIdentityReader({ instanceId: "instance",
+      controlKey: f.input.runtime.keys.control, controllerKey: f.input.runtime.keys.controller }) })();
+  assert.equal(inventory.complete, true);
+  assert.equal(inventory.coordinators.length, 2);
+  assert.equal(inventory.coordinators.filter(row => row.actualIdentity?.writerFenceValid).length, 1);
+  assert.equal(inventory.coordinators.find(row => row.containerId === target.containerId).retiredPhysical.originalCommandId,
+    "migration:rollback-stop-coordinator");
+  const raw = await fs.readFile(receiptPath);
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+  assert.deepEqual(await fs.readFile(receiptPath), raw);
+  assert.deepEqual(f.events, priorEvents);
+});
+
+test("an abnormal Coordinator exit never becomes a public normal-exit receipt", async t => {
+  const f = await runtimeFixture(t), runtime = await createControlMigrationRuntime(f.input,
+    { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
+  t.after(() => runtime.close());
+  await runtime.apply();
+  const target = [...f.states.values()].find(row => row.role === "coordinator" && row.containerId !== f.source.coordinator.containerId);
+  f.states.set(target.containerId, { ...target, running: false, hostPid: 0, exitCode: 1 });
+  await assert.rejects(runtime.rollback(), { code: "CONTROL_MIGRATION_NORMAL_EXIT_UNPROVEN" });
+  await assert.rejects(fs.stat(join(f.input.runtime.retiredCoordinatorRoot, target.containerId + ".json")), { code: "ENOENT" });
+  assert.equal(f.events.filter(event => event === "stop:coordinator").length, 1); // The original source only.
+});
+
+async function targetStopAdapter({ exitsAt = Infinity, terminal = {}, changed = {}, inspectMs = 0 } = {}) {
+  let now = 0, signalled = false;
+  const record = {
+    containerId: "a".repeat(64), startIdentity: "original-control-agent-start",
+    artifactDigest: digest("agent"), imageDigest: digest("runtime-image"),
+    startedAt: "2026-11-06T00:00:00.000Z", hostPid: 1234, role: "control-agent",
+    running: true, paused: false, restartPolicy: "no", restartCount: 0,
+    oomKilled: false, exitCode: 0,
+  }, signals = [];
+  const adapter = await createMigrationDockerAdapter({
+    actionBudgetMs: 120000, sourceCoordinatorStopBudgetMs: 300000,
+    adapter: { docker: { cli: "docker", args: [] } },
+  }, {
+    clock: () => now,
+    pause: async ms => { now += ms; },
+    adapterFactory: async () => ({ inspect: async id => {
+      assert.equal(id, record.containerId);
+      now += inspectMs;
+      return signalled && now >= exitsAt
+        ? { ...record, running: false, hostPid: 0, ...terminal }
+        : { ...record, ...(signalled ? changed : {}) };
+    } }),
+    run: async (_program, args) => { signals.push(args); signalled = true; return ""; },
+  });
+  return { adapter, record, signals, now: () => now };
+}
+
+test("target Docker stop waits for a slow normal exit within the original 120 second budget after exactly one SIGTERM", async () => {
+  const f = await targetStopAdapter({ exitsAt: 90000 });
+  const result = await f.adapter.terminate(f.record);
+  assert.equal(result.running, false);
+  assert.equal(result.exitCode, 0);
+  assert.equal(f.now(), 90000);
+  assert.deepEqual(f.signals, [["kill", "--signal", "SIGTERM", f.record.containerId]]);
+});
+
+test("target Docker stop cannot inherit the source writer's 300 second grace or reset an existing command deadline", async () => {
+  const f = await targetStopAdapter();
+  await assert.rejects(f.adapter.terminate(f.record), { code: "CONTROL_MIGRATION_EXIT_UNKNOWN" });
+  assert.equal(f.now(), 120000);
+  assert.deepEqual(f.signals, [["kill", "--signal", "SIGTERM", f.record.containerId]]);
+  await assert.rejects(f.adapter.terminate(f.record, { deadline: 120000 }),
+    { code: "CONTROL_MIGRATION_ACTION_BUDGET_EXCEEDED" });
+  assert.equal(f.signals.length, 1);
+
+  const remaining = await targetStopAdapter({ inspectMs: 100, exitsAt: 2000 });
+  await assert.rejects(remaining.adapter.terminate(remaining.record, { deadline: 350 }),
+    { code: "CONTROL_MIGRATION_EXIT_UNKNOWN" });
+  assert.ok(remaining.now() <= 450); // An in-flight inspect cannot grant another grace.
+  assert.equal(remaining.signals.length, 1);
+});
+
+test("target Docker stop rejects changed births, restarts and abnormal terminal outcomes without a second signal", async t => {
+  for (const [name, options, code] of [
+    ["birth changed while running", { changed: { startedAt: "2026-11-06T00:00:01.000Z" } }, "CONTROL_MIGRATION_PHYSICAL_CHANGED"],
+    ["PID changed while running", { changed: { hostPid: 2345 } }, "CONTROL_MIGRATION_PHYSICAL_CHANGED"],
+    ["automatic restart", { changed: { restartCount: 1 } }, "CONTROL_MIGRATION_PHYSICAL_CHANGED"],
+    ["OOM terminal", { exitsAt: 100, terminal: { oomKilled: true } }, "CONTROL_MIGRATION_NORMAL_EXIT_UNPROVEN"],
+    ["failed terminal", { exitsAt: 100, terminal: { exitCode: 1 } }, "CONTROL_MIGRATION_NORMAL_EXIT_UNPROVEN"],
+  ]) await t.test(name, async () => {
+    const f = await targetStopAdapter(options);
+    await assert.rejects(f.adapter.terminate(f.record), { code });
+    assert.deepEqual(f.signals, [["kill", "--signal", "SIGTERM", f.record.containerId]]);
+  });
+});
+
+test("rollback reconciles a target's unknown stop by original CID lookup without dispatching SIGTERM again", async t => {
+  const f = await runtimeFixture(t, { withCollector: true });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory, capacitySample: f.capacitySample });
+  t.after(() => runtime.close());
+  await runtime.apply();
+  const terminate = f.adapter.terminate;
+  let agentSignals = 0;
+  f.adapter.terminate = async (record, options) => {
+    const result = await terminate(record, options);
+    if (record.role === "control-agent") {
+      agentSignals++;
+      throw Object.assign(Error("Normal stop acknowledgement unavailable"), { code: "CONTROL_MIGRATION_EXIT_UNKNOWN" });
+    }
+    return result;
+  };
+  await assert.rejects(runtime.rollback(), { code: "CONTROL_MIGRATION_EXIT_UNKNOWN" });
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+  assert.equal(agentSignals, 1);
+  const db = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true });
+  try {
+    const row = db.prepare("SELECT * FROM control_commands WHERE step_id='rollback-stop-control-agent'").get();
+    assert.equal(row.state, "applied");
+    assert.equal(JSON.parse(row.spec).budget.maxDurationMs, f.input.runtime.actionBudgetMs);
+    assert.equal(JSON.parse(row.result).migrationBudgetExceeded, false);
+  } finally { db.close(); }
+  assert.deepEqual(f.states.get(f.owner.containerId), f.owner);
 });
 
 test("default fixed Docker migration adapter verifies real code bytes/full birth and sends SIGTERM only to the exact Foundation", async (t) => {
@@ -1204,7 +1413,7 @@ test("default fixed Docker migration adapter verifies real code bytes/full birth
   assert.equal(effects.length, 1);
 });
 test("runtime exports final lease and exact history after the actual last SQLite writer closes and removes both WAL sidecars", async (t) => {
-  const f = await runtimeFixture(t, { closeOnStop: true }), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  const f = await runtimeFixture(t, { closeOnStop: true }), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
   t.after(() => runtime.close());
   assert.equal((await runtime.apply()).state, "migrated");
   assert.ok(f.events.includes("business-last-writer-closed"));
@@ -1222,7 +1431,7 @@ test("runtime exports final lease and exact history after the actual last SQLite
   assert.equal(f.f.db.prepare("SELECT generation FROM platform_role_leases WHERE role='state-coordinator'").get().generation, 8);
 });
 test("a failed closed-read-view preflight rejects before stopping any source", async (t) => {
-  const f = await runtimeFixture(t), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  const f = await runtimeFixture(t), runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
   t.after(() => runtime.close());
   await fs.chmod(f.input.runtime.journalRoot, 0o755);
   await assert.rejects(runtime.apply(), /CONTROL_MIGRATION_READ_VIEW_PRIVATE_DIRECTORY_REQUIRED/);
@@ -1253,7 +1462,7 @@ test("same-CID prior incarnation is archived byte-for-byte before current exact-
   const f = await runtimeFixture(t), prior = priorIncarnation(f), raw = JSON.stringify(prior, null, 2) + "\n  \n",
     currentPath = join(f.input.runtime.retiredCoordinatorRoot, f.source.coordinator.containerId + ".json");
   await fs.writeFile(currentPath, raw, { mode: 0o600 });
-  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
   t.after(() => runtime.close());
   assert.equal((await runtime.apply()).state, "migrated");
   assert.equal(await fs.readFile(join(f.input.runtime.retiredCoordinatorRoot, "history", f.source.coordinator.containerId, "older-migration.json"), "utf8"), raw);
@@ -1274,7 +1483,7 @@ test("corrupt, same-operation changed-birth, or conflicting archived prior exits
       await fs.mkdir(dir, { recursive: true, mode: 0o700 });
       await fs.writeFile(join(dir, "older-migration.json"), JSON.stringify(prior, null, 2), { mode: 0o600 });
     }
-    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
     try { await assert.rejects(runtime.apply(), /CONTROL_MIGRATION_EXIT_(RECEIPT_CONFLICT|HISTORY_CHANGED)/); }
     finally { runtime.close(); }
     assert.deepEqual(f.events, []);
@@ -1285,14 +1494,14 @@ test("actual unsettled execution keeps the persistent actor barrier; no second r
   f.setHold("control-agent");
   const runtime = await createControlMigrationRuntime(f.input, {
     Database,
-    adapter: f.adapter,
+    adapter: f.adapter, preStopInventory: f.preStopInventory,
   });
   const first = runtime.apply();
   while (!f.events.includes("start:control-agent"))
     await new Promise((r) => setTimeout(r, 1));
   const other = await createControlMigrationRuntime(f.input, {
     Database,
-    adapter: f.adapter,
+    adapter: f.adapter, preStopInventory: f.preStopInventory,
   });
   await assert.rejects(other.resume(), /CONTROL_MIGRATION_ACTOR_STILL_RUNNING/);
   await assert.rejects(first, { code: "CONTROL_MIGRATION_COMMAND_UNKNOWN" });
@@ -1317,7 +1526,7 @@ test("migration runtime joins actual command journal with capacity collector tra
   const f = await runtimeFixture(t, { withCollector: true }),
     runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
       capacitySample: f.capacitySample,
     });
   t.after(() => runtime.close());
@@ -1359,7 +1568,7 @@ async function undispatchedCapacityFailure(t, kind = "control-agent") {
   let overBudget = false, forcedClock;
   const runtime = await createControlMigrationRuntime(f.input, {
     Database,
-    adapter: f.adapter,
+    adapter: f.adapter, preStopInventory: f.preStopInventory,
     clock: () => forcedClock ?? Date.now(),
     capacitySample: async (...args) => {
       // Let the actual source stops and their collector receipts complete.
@@ -1508,7 +1717,7 @@ test("migration rejects missing/shared global authority or its exposure to busin
         f.input.runtime.keys.supervisor;
     const runtime = await createControlMigrationRuntime(f.input, {
       Database,
-      adapter: f.adapter,
+      adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
     await assert.rejects(runtime.apply());
     assert.deepEqual(f.events, []);
@@ -1517,12 +1726,34 @@ test("migration rejects missing/shared global authority or its exposure to busin
 });
 
 
+test("readiness timeout preserves the last actual RPC failure while keeping its original start budget", async t => {
+  const f = await runtimeFixture(t, { apiReadinessFailureCodes: ["FIRST_READINESS_FAILURE", "LAST_READINESS_FAILURE"] });
+  f.input.runtime.actionBudgetMs = 600;
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), error => {
+    assert.equal(error.code, "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED");
+    assert.equal(error.cause?.code, "LAST_READINESS_FAILURE");
+    assert.equal(error.cause?.status, 503);
+    return true;
+  });
+  assert.ok(f.events.filter(event => event.startsWith("api-readiness:")).length >= 2);
+  assert.equal(f.events.filter(event => event === "start:api").length, 1);
+  assert.equal(f.events.includes("start:control-supervisor"), false);
+  assert.equal((await runtime.rollback()).state, "rolled-back");
+});
+
 test("an exited exact API candidate fails readiness promptly, never relaunches, and rolls back with its real failed-exit capacity receipt", async t => {
   const f = await runtimeFixture(t, { withCollector: true, failApiReadiness: true });
   const peak = JSON.parse(await fs.readFile(f.input.runtime.capacity.planPath, "utf8"));
-  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, capacitySample: f.capacitySample });
+  const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory, capacitySample: f.capacitySample });
   t.after(() => runtime.close());
-  await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_ROLE_EXITED", role: "api", exitCode: 1 });
+  await assert.rejects(runtime.apply(), error => {
+    assert.equal(error.code, "CONTROL_MIGRATION_ROLE_EXITED");
+    assert.equal(error.role, "api"); assert.equal(error.exitCode, 1);
+    assert.equal(error.cause?.code, "CONTROL_PRIVATE_RPC_FAILED");
+    return true;
+  });
   // On resume the collector first closes the changed resident inventory. It must
   // hold that original operation, never replay the applied API launch.
   await assert.rejects(runtime.resume(), { code: "CAPACITY_CONTAINER_INVENTORY_CHANGED" });
@@ -1553,7 +1784,7 @@ test("an exited exact API candidate fails readiness promptly, never relaunches, 
 test("failed API rollback still rejects changed birth, OOM, restart count, policy or unrecognized exit", async t => {
   for (const apiExitPatch of [{ startedAt: new Date(1).toISOString() }, { oomKilled: true }, { restartCount: 1 }, { restartPolicy: "always" }, { exitCode: 137 }]) {
     const f = await runtimeFixture(t, { failApiReadiness: true, apiExitPatch });
-    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter });
+    const runtime = await createControlMigrationRuntime(f.input, { Database, adapter: f.adapter, preStopInventory: f.preStopInventory });
     try {
       await assert.rejects(runtime.apply());
       await assert.rejects(runtime.rollback(), /CONTROL_MIGRATION_(FAILED_CANDIDATE_EXIT_UNPROVEN|NORMAL_EXIT_UNPROVEN)/);

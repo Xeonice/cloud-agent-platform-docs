@@ -44,6 +44,7 @@ import { captureProcessIdentity } from "./supervisor-sampler.mjs";
 import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
 import { createClosedBusinessReadView, probeClosedBusinessReadView } from "./closed-business-read-view.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
+import { assertMigrationPreStopInventory } from "./migration-pre-stop-inventory.mjs";
 const CID = /^[a-f0-9]{64}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const brief = (p) => ({
@@ -100,7 +101,7 @@ export async function waitForMigrationLeaseRelease({ readLease, expected, instan
 export function classifyMigrationCoordinatorExit(receipt, { instanceId, migrationId, expected, now = Date.now() }) {
   invariant(validateCoordinatorExitReceipt(receipt, { instanceId, target: receipt?.target, now }) &&
     /^[a-zA-Z0-9._:-]{1,200}$/.test(receipt.migrationId ?? "") &&
-    receipt.originalCommandId === receipt.migrationId + ":stop-writer" &&
+    ["stop-writer", "rollback-stop-coordinator"].some(id => receipt.originalCommandId === receipt.migrationId + ":" + id) &&
     ["containerId", "startIdentity", "artifactDigest", "restartCount"].every(k => receipt.target[k] === expected[k]), "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
   if (receipt.migrationId === migrationId) {
     invariant(receipt.target.DockerStartedAt === expected.startedAt, "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
@@ -162,7 +163,7 @@ function assertRunning(actual, expected) {
 /** No arbitrary shell, pruning, removal or forced container termination exists here. */
 export async function createMigrationDockerAdapter(
   c,
-  { run = execute, adapterFactory = createProductionRoleAdapter } = {},
+  { run = execute, adapterFactory = createProductionRoleAdapter, clock = Date.now, pause = sleep } = {},
 ) {
   const roles = await adapterFactory(c.adapter),
     docker = (args) =>
@@ -250,7 +251,7 @@ export async function createMigrationDockerAdapter(
       role: "foundation",
     };
   }
-  async function terminate(record) {
+  async function terminate(record, { deadline = clock() + (c.actionBudgetMs ?? 120000) } = {}) {
     invariant(
       [
         "foundation",
@@ -265,14 +266,17 @@ export async function createMigrationDockerAdapter(
     );
     const before = await inspect(record);
     assertRunning(before, record);
+    invariant(Number.isFinite(deadline) && clock() < deadline,
+      "CONTROL_MIGRATION_ACTION_BUDGET_EXCEEDED");
     await docker(["kill", "--signal", "SIGTERM", record.containerId]);
-    for (let i = 0; i < 40; i++) {
+    while (clock() <= deadline) {
       const actual = await inspect(record);
       if (!actual.running) {
         assertStopped(actual, record);
-        return brief(actual);
-      }
-      await sleep(50);
+        if (clock() <= deadline) return brief(actual);
+      } else assertRunning(actual, record);
+      if (clock() >= deadline) break;
+      await pause(Math.min(100, deadline - clock()));
     }
     throw Object.assign(Error("Normal exit outcome is unknown"), {
       code: "CONTROL_MIGRATION_EXIT_UNKNOWN",
@@ -326,11 +330,13 @@ export function migrationActionBudgetMs(runtime, stepId) {
 /** One durable migration run, separate from both business and live control stores. */
 export async function createControlMigrationRuntime(
   input,
-  { Database, adapter: provided, capacitySample, handoffRepairContext, handoffSupervisorReadiness, clock = Date.now } = {},
+  { Database, adapter: provided, capacitySample, handoffRepairContext, handoffSupervisorReadiness, preStopInventory, clock = Date.now } = {},
 ) {
   const c = input.runtime;
-  invariant(provided || !handoffRepairContext && !handoffSupervisorReadiness,
+  invariant(provided || !handoffRepairContext && !handoffSupervisorReadiness && !preStopInventory,
     'CONTROL_MIGRATION_TEST_PORT_FORBIDDEN');
+  invariant(!provided || typeof preStopInventory === "function",
+    "CONTROL_MIGRATION_PUBLIC_INVENTORY_PORT_REQUIRED");
   invariant(
     c?.targets &&
       c?.source &&
@@ -1387,7 +1393,11 @@ export async function createControlMigrationRuntime(
           stoppedOutcome(actual, expected, failedCandidate);
           return stoppedOutcome(await adapter.inspect(expected), expected, failedCandidate);
         }
-        return adapter.terminate(expected);
+        const row = journal.lookup({ operationId: input.migrationId,
+          commandId: input.migrationId + ":" + id });
+        return adapter.terminate(expected, {
+          deadline: Math.min(row.spec.deadline, row.createdAt + row.spec.budget.maxDurationMs),
+        });
       },
       async () => ({ state: "applied", result: await observeStopped() }),
       { rollback },
@@ -1395,20 +1405,26 @@ export async function createControlMigrationRuntime(
     if(!deferCapacity) await registerCapacity(id);
     return result;
   }
-  async function publishExit(expected, actual) {
+  async function publishExit(expected, actual, stopId = "stop-writer") {
+    invariant(["stop-writer", "rollback-stop-coordinator"].includes(stopId) && expected.role === "coordinator",
+      "CONTROL_MIGRATION_EXIT_STOP_PROOF_REQUIRED");
     assertStopped(actual, expected);
     const after = await adapter.inspect(expected);
     assertStopped(after, expected);
-    const stopRow = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":stop-writer" });
-    invariant(stopRow?.state === "applied" && stopRow.spec.targetDigest === digest(expected) && stopRow.spec.configDigest === configDigest,
+    const stopRow = journal.lookup({ operationId: input.migrationId, commandId: input.migrationId + ":" + stopId });
+    invariant(stopRow?.state === "applied" && stopRow.spec.kind === "migration-" + stopId &&
+      stopRow.spec.targetDigest === digest(expected) && stopRow.spec.configDigest === configDigest,
       "CONTROL_MIGRATION_EXIT_STOP_PROOF_REQUIRED");
     assertStopped(stopRow.result, expected);
+    const exitedAt = stopId === "rollback-stop-coordinator" ? after.finishedAt : new Date(clock()).toISOString();
+    invariant(Number.isFinite(Date.parse(exitedAt)) && Date.parse(exitedAt) >= Date.parse(expected.startedAt) &&
+      Date.parse(exitedAt) <= clock(), "CONTROL_MIGRATION_EXIT_STOP_PROOF_REQUIRED");
     const facts = {
       schemaVersion: 1,
       kind: "coordinator-normal-exit",
       instanceId: input.instanceId,
       migrationId: input.migrationId,
-      originalCommandId: input.migrationId + ":stop-writer",
+      originalCommandId: input.migrationId + ":" + stopId,
       target: {
         containerId: expected.containerId,
         startIdentity: expected.startIdentity,
@@ -1422,13 +1438,17 @@ export async function createControlMigrationRuntime(
         restartPolicy: "no",
         restartCount: actual.restartCount,
       },
-      exitedAt: new Date(clock()).toISOString(),
+      exitedAt,
     };
     const path = join(await secureDirectory(c.retiredCoordinatorRoot), expected.containerId + ".json"),
       prior = await priorExitReceipt(expected);
     if (prior) {
       const kind = classifyMigrationCoordinatorExit(prior.value, { instanceId: input.instanceId, migrationId: input.migrationId, expected, now: clock() });
-      if (kind === "current") return prior.value;
+      if (kind === "current") {
+        invariant(prior.value.originalCommandId === facts.originalCommandId,
+          "CONTROL_MIGRATION_EXIT_RECEIPT_CONFLICT");
+        return prior.value;
+      }
       const history = await secureDirectory(join(c.retiredCoordinatorRoot, "history", expected.containerId)),
         archive = join(history, encodeURIComponent(prior.value.migrationId) + ".json");
       let output;
@@ -1682,38 +1702,42 @@ export async function createControlMigrationRuntime(
       row.spec.deadline,
       row.createdAt + row.spec.budget.maxDurationMs,
     );
+    let lastError;
+    const readinessExpired = () => Object.assign(
+      Error("Original role readiness budget expired", { cause: lastError }),
+      { code: "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED" },
+    );
     async function inspectStartedRole() {
-      const expected = row.result, actual = await adapter.inspect(expected);
-      invariant(sameBirth(actual, expected) && actual.paused === false && actual.restartPolicy === "no" &&
-        actual.restartCount === expected.restartCount, "CONTROL_MIGRATION_PHYSICAL_CHANGED");
-      if (actual.running === false && actual.hostPid === 0)
-        throw Object.assign(Error("Original started role exited before readiness"), {
-          code: "CONTROL_MIGRATION_ROLE_EXITED", role: kind, exitCode: actual.exitCode,
-        });
-      assertRunning(actual, expected);
+      try {
+        const expected = row.result, actual = await adapter.inspect(expected);
+        invariant(sameBirth(actual, expected) && actual.paused === false && actual.restartPolicy === "no" &&
+          actual.restartCount === expected.restartCount, "CONTROL_MIGRATION_PHYSICAL_CHANGED");
+        if (actual.running === false && actual.hostPid === 0)
+          throw Object.assign(Error("Original started role exited before readiness"), {
+            code: "CONTROL_MIGRATION_ROLE_EXITED", role: kind, exitCode: actual.exitCode,
+          });
+        assertRunning(actual, expected);
+      } catch (error) {
+        if (lastError && error.cause === undefined) error.cause = lastError;
+        throw error;
+      }
     }
     while (true) {
-      invariant(
-        clock() < deadline,
-        "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
-      );
+      if (clock() >= deadline) throw readinessExpired();
       await inspectStartedRole();
+      let value;
       try {
-        const value = await read();
-        await inspectStartedRole();
-        invariant(
-          clock() <= deadline,
-          "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
-        );
-        return value;
+        value = await read();
       } catch (error) {
+        lastError = error;
         await inspectStartedRole();
-        if (clock() >= deadline)
-          throw Object.assign(Error("Original role readiness budget expired"), {
-            code: "CONTROL_MIGRATION_READINESS_BUDGET_EXCEEDED",
-          });
+        if (clock() >= deadline) throw readinessExpired();
         await sleep(Math.min(100, deadline - clock()));
+        continue;
       }
+      await inspectStartedRole();
+      if (clock() > deadline) throw readinessExpired();
+      return value;
     }
   }
   async function verifyWriter(record) {
@@ -1816,6 +1840,15 @@ export async function createControlMigrationRuntime(
       const probe = await probeClosedBusinessReadView({ Database, businessPath: input.businessPath,
         directory: root, scope: readViewScope("final-source"), minFreeBytes: packageProof.sourceReadMinFreeBytes ?? 0 });
       save({ readViewPreflight: probe });
+    }
+    const priorFirstStop = journal.lookup({ operationId: input.migrationId,
+      commandId: input.migrationId + ":stop-foundation" });
+    if (!priorFirstStop || ["planned", "definitely-not-applied"].includes(priorFirstStop.state)) {
+      const proof = await (provided ? preStopInventory : assertMigrationPreStopInventory)({
+        runtime: c, instanceId: input.instanceId, lease: load().qualification.lease,
+        inspect: record => adapter.inspect(record), clock,
+      });
+      save({ preStopPublicInventory: proof });
     }
     await stop("stop-foundation", c.source.foundation);
     await stop("stop-installer", c.source.installer);
@@ -2306,6 +2339,12 @@ export async function createControlMigrationRuntime(
       protectedAfter.digest === before.protectedBefore.digest,
       "CONTROL_MIGRATION_PROTECTED_SCOPE_CHANGED",
     );
+    const coordinatorStop = journal.lookup({ operationId: input.migrationId,
+      commandId: input.migrationId + ":rollback-stop-coordinator" });
+    if (before.coordinator && coordinatorStop?.state === "applied" &&
+        [0, 143].includes(coordinatorStop.result?.exitCode) &&
+        coordinatorStop.result?.failedStartInert !== true && coordinatorStop.result?.normalExit !== false)
+      await publishExit(before.coordinator, coordinatorStop.result, "rollback-stop-coordinator");
     save(
       {
         rollbackSource: brief(source),
