@@ -9,6 +9,7 @@ import { roleResourceFlags } from './role-resource-limits.mjs';
 import { projectLegacyCoordinatorInertHistory } from './coordinator-inert-history.mjs';
 import { observeFailedSupervisorStart } from './failed-supervisor-start.mjs';
 import { preflightRuntimeDockerDependency } from './runtime-docker-dependency.mjs';
+import { isLegacyControlAttachmentLedger } from './control-adoption-layout.mjs';
 const CID = /^[a-f0-9]{64}$/;
 const PROVIDER_ENV = [
   "SANDBOX_DEFAULT_IMAGE",
@@ -118,11 +119,14 @@ export function roleMounts(c, { kind, artifactRoot, cwd, ownerHome, env }) {
     }
     invariant(!Object.keys(env).some(name => /^(?:ACCESS_PASSCODE|PASSCODE_COOKIE_SECRET|UPGRADE_SESSION_SECRET|DATA_ROOT|DATABASE_URL|BOXLITE_HOME|RUNTIME_OWNER_HOME)$/.test(name)), 'CONTROL_FOUNDATION_EXCESS_AUTHORITY');
   } else if (kind === 'control-agent') {
+    const legacyAttachmentLedger = isLegacyControlAttachmentLedger(c);
     invariant(c.controlAgentArtifactRoot === artifactRoot && c.controlPrivateRoot && c.controlLedgerRoot && c.controlPrivateRoot && !inside(c.controlPrivateRoot, c.controlLedgerRoot) && !inside(c.controlLedgerRoot, c.controlPrivateRoot) && !inside(c.controlPrivateRoot, c.businessHostPath) && !inside(c.businessHostPath, c.controlPrivateRoot) && !inside(installer, artifactRoot), 'CONTROL_AGENT_MOUNT_SCOPE_REQUIRED');
     invariant(Array.isArray(c.runtimeRoots) && c.runtimeRoots.length > 0 && c.runtimeRoots.length <= 128 && c.runtimeRoots.every(isAbsolute), 'CONTROL_AGENT_RUNTIME_ROOTS_REQUIRED');
     const controlPaths = [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot, c.controlDownloadRoot];
     const protectedPaths = [c.businessHostPath, ...c.runtimeRoots, '/var/run/docker.sock'];
-    invariant(controlPaths.every(path => isAbsolute(path) && protectedPaths.every(protectedPath => !inside(path, protectedPath) && !inside(protectedPath, path))) && controlPaths.every((path, i) => controlPaths.every((other, j) => i === j || !inside(path, other))) && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot].every(path => !inside(path, installer) && !inside(installer, path)), 'CONTROL_AGENT_EXCESS_MOUNT');
+    invariant(controlPaths.every(path => isAbsolute(path) && protectedPaths.every(protectedPath => !inside(path, protectedPath) && !inside(protectedPath, path))) && controlPaths.every((path, i) => controlPaths.every((other, j) => i === j || !inside(path, other))), 'CONTROL_AGENT_EXCESS_MOUNT');
+    invariant([artifactRoot, c.controlPrivateRoot].every(path => !inside(path, installer) && !inside(installer, path)) &&
+      (legacyAttachmentLedger || !inside(c.controlLedgerRoot, installer) && !inside(installer, c.controlLedgerRoot)), 'CONTROL_AGENT_EXCESS_MOUNT');
     invariant(c.controlDownloadRoot === join(installer, 'downloads') && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot].every(path => !inside(path, c.controlDownloadRoot) && !inside(c.controlDownloadRoot, path)), 'CONTROL_DOWNLOAD_MOUNT_SCOPE_REQUIRED');
     bind(c.controlDownloadRoot, c.controlDownloadRoot, true);
     invariant(isAbsolute(c.capacityStateRoot) && [artifactRoot, c.controlPrivateRoot, c.controlLedgerRoot, c.controlDownloadRoot, ...protectedPaths].every(path => !inside(path, c.capacityStateRoot) && !inside(c.capacityStateRoot, path)), 'CONTROL_CAPACITY_STATE_MOUNT_SCOPE_REQUIRED');

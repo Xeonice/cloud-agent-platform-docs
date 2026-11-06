@@ -656,6 +656,9 @@ for (const scenario of scenarios)
       };
       evidence.business = businessBefore;
       evidence.controlPackageDigest = harness.controlPackageDigest;
+      evidence.executionEngineDigest = harness.controlExecutionEngineDigest;
+      evidence.businessTargetDigest = command.targetDigest;
+      evidence.businessTargetReleaseId = command.targetReleaseId;
       await api(
         request,
         origin,

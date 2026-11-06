@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="100.73.71.22 无感升级失败审计、架构问题、服务改造计划与上线验收门槛。">
+  <title>无感升级失败审计与改造计划 · 2026-11-06</title>
+  <style>
+    :root{--bg:#f5f6f8;--paper:#fff;--ink:#17212f;--muted:#5c6778;--line:#dfe4eb;--blue:#244ec7;--blue-bg:#eef3ff;--red:#a62c35;--red-bg:#fff2f2;--amber:#926118;--amber-bg:#fff8e9;--green:#256b55;--radius:14px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:30px}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--blue);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}button,input{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #7fa3ff;outline-offset:4px}h1,h2,h3,p{margin:0}h1{font-size:clamp(30px,3.2vw,46px);line-height:1.25;letter-spacing:-1.4px;font-weight:750}h2{font-size:24px;line-height:1.4;letter-spacing:-.5px}h3{font-size:17px;line-height:1.6}p+p{margin-top:10px}strong{font-weight:680}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em;overflow-wrap:anywhere}ul,ol{padding-left:22px;margin:10px 0 0}li+li{margin-top:7px}small{font-size:12px}.muted{color:var(--muted)}.eyebrow{font-size:11px;letter-spacing:2px;font-weight:750;color:var(--muted);text-transform:uppercase}.badge{display:inline-flex;align-items:center;gap:7px;border:1px solid #efc3c6;color:var(--red);background:var(--red-bg);border-radius:30px;padding:4px 11px;font-size:12px;font-weight:650;white-space:nowrap}.badge:before{content:"";width:6px;height:6px;background:currentColor;border-radius:50%}.pill{display:inline-block;border-radius:5px;padding:1px 7px;background:#edf0f4;color:#526074;font-size:11px;white-space:nowrap}.pill.pending{background:var(--amber-bg);color:var(--amber)}.pill.recovered{background:#edf7f2;color:var(--green)}
+    .shell{max-width:1470px;margin:auto;display:grid;grid-template-columns:224px minmax(0,1fr);gap:44px;padding:40px 42px 80px}.sidebar{position:sticky;top:34px;align-self:start;height:calc(100vh - 68px);display:flex;flex-direction:column;min-height:540px}.brand{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700}.brand-mark{width:32px;height:32px;background:var(--ink);color:white;display:grid;place-items:center;border-radius:8px;font-size:14px}.side-rule{height:1px;background:var(--line);margin:25px 0}.sidebar nav{display:grid;gap:5px}.sidebar nav a{display:flex;align-items:center;gap:14px;color:var(--muted);text-decoration:none;padding:9px 10px;border-radius:7px;font-size:13px}.sidebar nav a:hover,.sidebar nav a.active{background:#e8edf7;color:var(--blue)}.nav-number{font:11px ui-monospace,monospace;color:#909bad}.side-bottom{margin-top:auto;padding-top:30px;color:var(--muted);font-size:11px;line-height:1.8}.side-bottom strong{display:block;font-size:12px;color:var(--ink)}.print-button{width:100%;margin-top:14px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 11px;font-size:12px;text-align:left}.print-button:hover{border-color:#9da9bc}.main{min-width:0;max-width:1090px}.hero{padding:8px 0 26px;border-bottom:1px solid var(--line)}.hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:22px}.hero h1{margin-bottom:16px}.hero-lede{font-size:16px;max-width:780px;color:var(--muted)}.meta{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:22px;font-size:12px;color:var(--muted)}.meta span+span{position:relative}.section{margin-top:42px;scroll-margin-top:28px}.section-head{display:flex;align-items:baseline;gap:12px;margin-bottom:17px}.section-number{font:12px ui-monospace,monospace;color:var(--blue)}.section-intro{color:var(--muted);margin:-6px 0 20px;max-width:850px}.callout{border:1px solid var(--line);border-left:3px solid var(--blue);border-radius:0 10px 10px 0;padding:18px 21px;background:var(--paper)}.callout.danger{border-color:#efd2d5;border-left-color:var(--red);background:var(--red-bg)}.callout.amber{border-color:#efdfb9;border-left-color:#bf8c31;background:var(--amber-bg)}.callout h3{margin-bottom:5px}.callout p{font-size:14px}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}.stat{background:var(--paper);padding:21px;border:1px solid var(--line);border-radius:var(--radius)}.stat-label{font-size:12px;color:var(--muted)}.stat-value{font-size:38px;line-height:1.3;letter-spacing:-1.5px;font-weight:730;margin:9px 0 5px;font-variant-numeric:tabular-nums}.stat-value.red{color:var(--red)}.stat-foot{font-size:11px;color:var(--muted);line-height:1.6}.split{display:grid;grid-template-columns:1fr 1fr;gap:16px}.card{border:1px solid var(--line);border-radius:var(--radius);padding:22px;background:var(--paper);min-width:0}.card p,.card li{font-size:14px;color:var(--muted)}.card h3{margin-bottom:8px}.mini-label{font-size:11px;font-weight:650;letter-spacing:1px;color:var(--blue);margin-bottom:10px}.note{color:var(--muted);font-size:12px;margin-top:12px;line-height:1.8}.toolbar{display:flex;gap:14px;align-items:center;justify-content:space-between;margin:20px 0 12px}.search-label{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}.search-label input{background:var(--paper);border:1px solid #cdd5e0;border-radius:7px;padding:8px 11px;width:255px;color:var(--ink);font-size:13px}.row-count{font-size:12px;color:var(--muted);white-space:nowrap}.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--paper)}table{width:100%;border-collapse:collapse;text-align:left;font-size:13px}th{font-size:11px;color:#667286;letter-spacing:.2px;background:#f8f9fb;font-weight:650}th,td{padding:13px 16px;border-bottom:1px solid #e8ecf2;vertical-align:top}tr:last-child td{border-bottom:0}td:first-child{font-weight:600}tbody tr:hover{background:#fbfcfe}.audit-table th:first-child{width:108px}.audit-table th:last-child{width:150px}.empty{display:none;text-align:center;padding:25px;color:var(--muted)}.chart{margin-top:21px;display:grid;gap:14px}.chart-row{display:grid;grid-template-columns:110px 1fr 132px;align-items:center;gap:16px;font-size:12px}.chart-track{height:9px;background:#edf0f5;border-radius:20px;overflow:hidden}.chart-bar{height:100%;background:#b95a63;border-radius:20px}.chart-value{font-variant-numeric:tabular-nums;text-align:right;color:var(--muted)}.chart-row:first-child .chart-bar{background:#873d47}.chart-caption{display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:11px;margin:17px 0 4px}.cause-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.cause-index{font:12px ui-monospace,monospace;color:var(--red);margin-bottom:8px}.architecture{background:#17212f;color:#f7f9fc;padding:26px;border-radius:var(--radius);margin-bottom:18px}.architecture .eyebrow{color:#aab7cf}.arch-line{display:grid;grid-template-columns:100px 1fr;align-items:start;gap:20px;padding-top:19px;margin-top:19px;border-top:1px solid #344051}.arch-line h3{font-size:14px;font-weight:650;color:#c5d8ff}.arch-nodes{display:flex;gap:8px;flex-wrap:wrap}.arch-node{border:1px solid #56647b;border-radius:6px;padding:5px 11px;font-size:12px}.arch-desc{color:#b3bfd1;font-size:12px;margin-top:8px;line-height:1.8}.flow-panel{border:1px solid var(--line);border-radius:var(--radius);background:var(--paper);padding:23px}.flow-panel+.flow-panel{margin-top:14px}.flow-label{display:flex;align-items:center;gap:10px;margin-bottom:17px;font-weight:650;font-size:14px}.dot{height:7px;width:7px;border-radius:50%;background:var(--red)}.dot.blue{background:var(--blue)}.flow{display:flex;align-items:stretch;gap:8px}.step{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:12px 10px;font-size:12px;line-height:1.6;background:#fafbfc}.step strong{display:block;margin-bottom:5px;font-size:12px}.step span{display:block;color:var(--muted);font-size:11px}.step.bad{border-color:#e7b8bd;background:var(--red-bg)}.step.good{border-color:#bdcef5;background:var(--blue-bg)}.arrow{align-self:center;color:#8b98aa;font-size:15px}.flow-note{font-size:12px;color:var(--muted);margin-top:14px}.phases{display:grid;grid-template-columns:1fr 1fr;gap:16px}.phase{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:22px;position:relative}.phase-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;gap:8px}.phase-id{font:12px ui-monospace,monospace;color:var(--blue)}.phase h3{margin-bottom:11px}.phase p,.phase li{font-size:13px;color:var(--muted)}.phase dl{margin:14px 0 0;border-top:1px solid var(--line);padding-top:12px;font-size:12px}.phase dt{font-weight:650;margin-top:7px}.phase dd{margin:3px 0 0;color:var(--muted)}.gate-list{display:grid;grid-template-columns:1fr 1fr;gap:13px}.gate{display:flex;align-items:flex-start;gap:12px;padding:17px;border:1px solid var(--line);border-radius:10px;background:#fff;font-size:13px}.gate-icon{width:23px;height:23px;flex:0 0 auto;border:1px solid #8c9ab0;border-radius:50%;display:grid;place-items:center;font-size:11px;color:#58677e}.gate strong{display:block;margin-bottom:4px}.gate p{font-size:12px;color:var(--muted)}details{margin-top:14px;border:1px solid var(--line);border-radius:10px;background:var(--paper);padding:15px 18px}summary{cursor:pointer;font-size:13px;font-weight:650}details .detail-body{margin-top:14px;font-size:13px;color:var(--muted)}.references{display:grid;gap:8px;margin-top:18px;font-size:13px}.hash{word-break:break-all;color:var(--muted);font-size:11px;margin-top:6px}.footer{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:20px;color:var(--muted);font-size:11px}.skip{position:absolute;left:15px;top:-60px;background:#fff;padding:10px;z-index:9}.skip:focus{top:15px}[hidden]{display:none!important}
+    @media(max-width:1100px){.shell{gap:26px;padding:28px 25px 60px;grid-template-columns:185px minmax(0,1fr)}.sidebar nav a{font-size:12px;padding:8px 5px}.stat{padding:16px}.stat-value{font-size:33px}.flow{gap:5px}.step{padding:10px 8px}.arrow{font-size:12px}}
+    @media(max-width:820px){html{scroll-padding-top:15px}.shell{display:block;padding:20px 20px 55px}.sidebar{position:static;height:auto;min-height:0;display:block;margin-bottom:25px}.sidebar .side-rule,.side-bottom{display:none}.sidebar nav{display:flex;overflow-x:auto;gap:4px;margin-top:15px;padding-bottom:8px}.sidebar nav a{flex:0 0 auto;padding:7px 9px;white-space:nowrap}.nav-number{display:none}.hero-top{align-items:flex-start}.hero{padding-top:2px}.hero h1{font-size:34px}.stats{gap:10px}.section{margin-top:34px}.cause-grid,.phases{gap:12px}.flow{flex-wrap:wrap}.step{flex:1 1 27%}.flow .arrow{display:none}.chart-row{grid-template-columns:88px 1fr 120px;gap:11px}.architecture{padding:21px}.arch-line{grid-template-columns:85px 1fr;gap:12px}}
+    @media(max-width:540px){body{font-size:14px}.shell{padding:17px 16px 45px}.hero-top{display:block;margin-bottom:17px}.hero-top .badge{margin-top:10px}.hero h1{font-size:30px;letter-spacing:-.8px}.hero-lede{font-size:14px}.meta{font-size:11px;gap:5px 12px}.stats{grid-template-columns:1fr 1fr}.stat{padding:17px}.stat-value{font-size:34px}.split,.cause-grid,.phases,.gate-list{grid-template-columns:1fr}.card,.phase{padding:19px}.section-head{gap:9px}h2{font-size:21px}.toolbar{display:block}.search-label{display:block}.search-label input{display:block;width:100%;margin-top:6px}.row-count{display:block;margin-top:7px}.audit-table{min-width:620px}th,td{padding:11px 12px}.chart-row{grid-template-columns:76px 1fr 112px;gap:8px;font-size:11px}.chart-value{font-size:10px}.arch-line{grid-template-columns:1fr;gap:9px}.flow-panel{padding:17px}.step{flex-basis:44%}.footer{display:block}.footer span{display:block}.callout{padding:16px}.callout p{font-size:13px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+    @media print{html{scroll-behavior:auto}body{background:white;font-size:10pt;color:#101827}.shell{display:block;max-width:none;padding:0}.sidebar,.toolbar,.print-button,.skip{display:none}.main{max-width:none}.hero{padding-top:0}.hero h1{font-size:28pt}.hero-lede{font-size:11pt}.section{margin-top:22pt;scroll-margin:0}.section-head{margin-bottom:10pt}h2{font-size:17pt}.section-intro{font-size:10pt}.stat{padding:12pt}.stat-value{font-size:25pt}.stats,.split,.cause-grid,.phases,.gate-list{gap:10pt}.card,.phase,.flow-panel{padding:12pt;break-inside:avoid}.architecture{background:#f0f3f8;color:#17212f;border:1px solid #ccd4e0}.architecture .eyebrow,.arch-line h3,.arch-desc{color:#33435c}.arch-node{border-color:#99a9bf}.arch-line{border-color:#ccd4e0}.table-wrap{overflow:visible}table{font-size:9pt}.audit-table{min-width:0}th,td{padding:7pt 8pt}thead{display:table-header-group}tr{break-inside:avoid}.callout,.gate,.stat{break-inside:avoid}.chart-bar{print-color-adjust:exact;-webkit-print-color-adjust:exact}.badge,.pill{print-color-adjust:exact;-webkit-print-color-adjust:exact}.footer{font-size:9pt}details:not([open])>.detail-body{display:block}a{color:inherit}p{orphans:3;widows:3}@page{size:A4;margin:15mm 13mm}}
+  </style>
+</head>
+<body>
+<a class="skip" href="#main">跳到报告正文</a>
+<div class="shell">
+  <aside class="sidebar" aria-label="报告导航">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">A</span><span>Agent 管理平台<br><small class="muted">工程审计与改造计划</small></span></div>
+    <div class="side-rule"></div>
+    <nav aria-label="报告章节">
+      <a href="#summary" class="active"><span class="nav-number">01</span>结论与统计口径</a>
+      <a href="#audit"><span class="nav-number">02</span>失败与服务影响</a>
+      <a href="#causes"><span class="nav-number">03</span>共同根因</a>
+      <a href="#architecture"><span class="nav-number">04</span>服务修改范围</a>
+      <a href="#flow"><span class="nav-number">05</span>首迁与日常升级</a>
+      <a href="#plan"><span class="nav-number">06</span>分阶段修改计划</a>
+      <a href="#gates"><span class="nav-number">07</span>上线验收门槛</a>
+      <a href="#evidence"><span class="nav-number">08</span>证据与状态边界</a>
+      <a href="#implementation"><span class="nav-number">09</span>修正与验证进展</a>
+      <a href="#refactor-update"><span class="nav-number">10</span>11月7日改造增量</a>
+      <a href="#macmini-experiment"><span class="nav-number">11</span>Mac mini现场实验</a>
+    </nav>
+    <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
+  </aside>
+  <main class="main" id="main">
+    <header class="hero">
+      <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">未达标 · 线上切换暂停</span></div>
+      <h1>无感升级失败审计<br>与服务改造计划</h1>
+      <p class="hero-lede">本轮迁移暴露了切换顺序、完整链路验证和失败恢复的设计缺口。下一步先证明可行的交接方案，再实现和验收；当前报告不代表修改已经上线。</p>
+      <div class="meta"><span>对象：公司电脑部署实例</span><span>范围：独立升级控制迁移</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
+    </header>
+
+    <section class="section" id="summary" aria-labelledby="summary-title">
+      <div class="section-head"><span class="section-number">01</span><h2 id="summary-title">结论：现有路径无法保证无感迁移</h2></div>
+      <div class="callout danger"><h3>旧服务在新服务准备好之前就被停止。</h3><p>此前首迁先停旧 Foundation、Installer 和 Coordinator，再导出业务状态、启动并验证新角色。停服之后仍有大量耗时和失败点，即使修完具体报错，也缺少服务连续性的架构保障。</p></div>
+      <div class="stats" aria-label="迁移统计">
+        <div class="stat"><div class="stat-label">现存迁移批次</div><div class="stat-value">23</div><div class="stat-foot">按不同 migrationId 计数</div></div>
+        <div class="stat"><div class="stat-label">触及旧服务、未迁移成功</div><div class="stat-value red">15</div><div class="stat-foot">14 次回退 + 1 次历史中断</div></div>
+        <div class="stat"><div class="stat-label">未执行停服命令</div><div class="stat-value">8</div><div class="stat-foot">planned，命令数为零</div></div>
+        <div class="stat"><div class="stat-label">迁移完成</div><div class="stat-value red">0</div><div class="stat-foot">没有 migrated 终态</div></div>
+      </div>
+      <div class="split">
+        <div class="card"><div class="mini-label">统计范围</div><h3>仅本轮控制迁移账本</h3><p>2026-11-06 07:44:42Z 只读核对远端 Operator 下全部现存迁移账本。它不代表平台历史全部普通升级，也不包含全部构建、预检和脚本执行次数。同一批次的重复调用不重复计轮数。</p></div>
+        <div class="card"><div class="mini-label">结果边界</div><h3>恢复可用不等于升级完成</h3><p>业务最后确认版本仍为 <code>v0.3.18-experiment.iflytek.20261018.1</code>。保住 Owner 进程、完成回退、CI 或启动测试通过，都不能替代业务版本确认及原任务连续性验收。</p></div>
+      </div>
+      <p class="note">15 个批次均至少执行过停止旧 Foundation；不能写成 15 个 writer 都已停止。历史 <code>94c0cd12</code> 由宿主重启中断，已另行恢复服务，原 prepared / unknown 记录按事实保留。另有 1 次 N11 构建失败，未改动线上，不计入上述 15 次。</p>
+    </section>
+
+    <section class="section" id="audit" aria-labelledby="audit-title">
+      <div class="section-head"><span class="section-number">02</span><h2 id="audit-title">15 个实际触及旧服务的批次</h2></div>
+      <p class="section-intro">每行对应一个不同迁移批次。直接错误与共同根因分开说明；具体占用者、未覆盖时间段等未知项保持未知。</p>
+      <div class="toolbar"><label class="search-label" for="failure-search">筛选记录<input type="search" id="failure-search" placeholder="搜索批次、原因或结果" autocomplete="off"></label><span class="row-count" id="failure-count" aria-live="polite">显示 15 / 15 条</span></div>
+      <div class="table-wrap" tabindex="0" aria-label="逐轮失败记录，可横向滚动">
+        <table class="audit-table"><thead><tr><th scope="col">批次前缀</th><th scope="col">已核实的直接原因</th><th scope="col">终态与说明</th></tr></thead><tbody id="failure-rows">
+          <tr><td><code>94c0cd12</code></td><td>Foundation 已停，Installer 停止回执未知；随后宿主重启、Docker 不可用，原期限过期。</td><td><span class="pill">历史中断</span><br>经独立操作恢复；原未知记录保留。</td></tr>
+          <tr><td><code>8f8660bf</code></td><td>三源停止后 WAL/SHM 清理，只读业务挂载无法满足普通 SQLite 重开所需 SHM，报 <code>SQLITE_CANTOPEN</code>。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>19836314</code></td><td>Coordinator 的 <code>DATA_ROOT</code> 使用宿主路径，容器实际挂载为 <code>/data</code>，创建日志目录报 <code>ENOENT</code>。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>3ee4abaf</code></td><td>停源后的大库导出超过 Operator 192 MiB 限制，触发 OOM，退出码 137。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>a450bf8c</code></td><td>发布的 Coordinator binding 缺少真实 API resolver 要求的 <code>state</code>，API 退出。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>799e012c</code></td><td>前置排障消耗原执行窗口后继续停源，API 未在原主期限内就绪。</td><td><span class="pill recovered">回退完成</span><br>此前两次零命令拒绝不另计。</td></tr>
+          <tr><td><code>6efc3dfa</code></td><td>API 完整树验证约 126.71 秒，实际就绪 127.794 秒，超过原 120 秒预算。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>52dd2757</code></td><td>Supervisor 运行镜像未提供 Docker CLI；仅挂载 daemon socket 不足以执行命令，进程退出。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>59f78508</code></td><td>大库导出后的宿主 RAM 工作集比冻结声明高约 54.18 MB，在派发首个新角色前拒绝。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>658a6685</code></td><td>Supervisor 配置混入其不消费的字段，签名 schema 拒绝；退出又触发容量库存变化。</td><td><span class="pill recovered">回退完成</span><br>回退对账也曾受阻。</td></tr>
+          <tr><td><code>7541b63a</code></td><td>旧 Coordinator 正常排空退出耗时 136.621 秒，超过该批次原 120 秒，停止结果一度未知。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>8912bc62</code></td><td>新 Coordinator 监听 <code>127.0.0.1:41322</code> 报 <code>EADDRINUSE</code>；具体占用者未取得实证。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>fea14dd9</code></td><td>五份正常退出收据仅在私有目录，实际 Supervisor 消费的公共目录缺失；旧退出等待逻辑又阻碍回退。</td><td><span class="pill recovered">回退完成</span><br>人工恢复拉长影响。</td></tr>
+          <tr><td><code>8424b69d</code></td><td>迁移探测 Entry <code>/health</code> 得到 404，真实健康路径 <code>/api/health</code> 为 200。</td><td><span class="pill recovered">回退完成</span></td></tr>
+          <tr><td><code>18628448</code></td><td>M3 通过后，容量交接按单进程 CPU 363m / 350m 拒绝；整机有效需求有余量，RAM、IO、磁盘均通过。</td><td><span class="pill recovered">回退完成</span><br>激活前失败。</td></tr>
+        </tbody></table><div class="empty" id="failure-empty" role="status">没有匹配的记录，请调整搜索内容。</div>
+      </div>
+      <details><summary>单独记录：1 次未影响线上的构建失败</summary><div class="detail-body">N11 首次实际构建因公开信任文件经 Docker 复制后归属 UID 501、执行进程为 UID 0，被原 <code>TRUST_ROOT_OWNER</code> 校验拒绝。失败发生在依赖安装及 API 编译之前，属于构建准备遗漏。R1 证据保留；R2 仅准备就绪，尚未执行。</div></details>
+      <div class="card" style="margin-top:22px">
+        <h3>HTTP 失败采样段：已有观测足以证明分钟级影响</h3>
+        <p>以下统一展示首页 <code>/</code> 的“首个失败请求开始 → 随后首个 200 请求开始”跨度。多段观测时按段合计，不是逐毫秒测得的连续停机时长。</p>
+        <div class="chart" role="img" aria-label="六个批次首页失败采样段合计，最长 fea14dd9 为31分24.787秒，最短18628448为5分51.453秒">
+          <div class="chart-row"><code>fea14dd9</code><div class="chart-track"><div class="chart-bar" style="width:100%"></div></div><span class="chart-value">31 分 24.787 秒</span></div>
+          <div class="chart-row"><code>658a6685</code><div class="chart-track"><div class="chart-bar" style="width:42.79%"></div></div><span class="chart-value">13 分 26.548 秒</span></div>
+          <div class="chart-row"><code>8912bc62</code><div class="chart-track"><div class="chart-bar" style="width:35.47%"></div></div><span class="chart-value">11 分 8.486 秒</span></div>
+          <div class="chart-row"><code>7541b63a</code><div class="chart-track"><div class="chart-bar" style="width:31.69%"></div></div><span class="chart-value">9 分 57.234 秒</span></div>
+          <div class="chart-row"><code>8424b69d</code><div class="chart-track"><div class="chart-bar" style="width:24.11%"></div></div><span class="chart-value">7 分 34.357 秒</span></div>
+          <div class="chart-row"><code>18628448</code><div class="chart-track"><div class="chart-bar" style="width:18.65%"></div></div><span class="chart-value">5 分 51.453 秒</span></div>
+        </div>
+        <div class="chart-caption"><span>按失败采样段合计排序</span><span>各轮覆盖不完整，不能据此计算全部迁移的精确总停机。</span></div>
+      </div>
+      <p class="note"><strong>观测纠正：</strong><code>fea14dd9</code> 的 36 分 28.837 秒是总影响观察包络，中间约 5 分钟双端点采样持续 200；实际失败样本分为两段。<code>658a6685</code> 观察器之间约 13 分 43 秒空档，<code>8912bc62</code> 约 10 秒空档。API 健康端点存在毫秒或一个样本的边界差异。早期批次缺少完整 HTTP 覆盖，缺失不能记成零停机。</p>
+    </section>
+
+    <section class="section" id="causes" aria-labelledby="causes-title">
+      <div class="section-head"><span class="section-number">03</span><h2 id="causes-title">共同根因：设计、验证与执行同时失守</h2></div>
+      <div class="cause-grid">
+        <article class="card"><div class="cause-index">CAUSE 01</div><h3>首迁顺序与连续性目标冲突</h3><p>旧入口和写者退出后，仍需进行导出、冷启动、完整树验证和控制交接。用户可见服务承担了整个关键路径的耗时与风险。</p></article>
+        <article class="card"><div class="cause-index">CAUSE 02</div><h3>局部测试没有覆盖实际整条链路</h3><p>模块与隔离启动分别通过，没有一起验证同一签名包、真实数据量、实际镜像依赖、公共收据、最终配置及切换后的业务行为。</p></article>
+        <article class="card"><div class="cause-index">CAUSE 03</div><h3>多处手工派生扩大了错误面</h3><p>路径、角色数量、身份、模块选择散落在多层适配件。单处修复未覆盖下游消费者。历史证据应保留，活动执行定义需要统一。</p></article>
+        <article class="card"><div class="cause-index">CAUSE 04</div><h3>失败后缺少及时止损</h3><p>修复眼前报错后继续生产尝试，回退自身也发生阻碍。线上实例承担了最终集成测试，恢复成功被当作继续尝试的起点。</p></article>
+      </div>
+      <p class="note">执行责任：应在前几次暴露基础集成错误与真实入口中断时暂停生产尝试，先重新验证方案。增加超时、扩容和单项补丁只能局部缓解，不能补足错误的切换顺序。</p>
+    </section>
+
+    <section class="section" id="architecture" aria-labelledby="architecture-title">
+      <div class="section-head"><span class="section-number">04</span><h2 id="architecture-title">目标：把服务按生命周期拆清楚</h2></div>
+      <p class="section-intro">保留现有角色中可复用的能力，集中重构首迁、升级、恢复与对应状态展示。下图是拟议职责划分，尚未完成实现和完整验证。</p>
+      <div class="architecture" aria-label="拟议三层服务职责">
+        <div class="eyebrow">Target architecture · Planned</div>
+        <div class="arch-line"><h3>稳定底座</h3><div><div class="arch-nodes"><span class="arch-node">公共入口 Entry</span><span class="arch-node">升级 Control Agent</span><span class="arch-node">受控 Supervisor</span></div><p class="arch-desc">业务包不替换底座；底座使用独立版本和维护流程。查询、执行与恢复的控制权不依赖待替换业务 API 存活。</p></div></div>
+        <div class="arch-line"><h3>业务服务</h3><div><div class="arch-nodes"><span class="arch-node">API / Web A</span><span class="arch-node">API / Web B</span><span class="arch-node">唯一写者 Coordinator</span></div><p class="arch-desc">旧新版本可在兼容窗口共存；候选先准备、再验证、再交接。只替换实际发生变化的组件。</p></div></div>
+        <div class="arch-line"><h3>运行层</h3><div><div class="arch-nodes"><span class="arch-node">原 RuntimeOwner</span><span class="arch-node">原沙箱 / Guest / PTY</span><span class="arch-node">新 Owner → 新分配</span></div><p class="arch-desc">原任务与原会话保持归属；新镜像及 CLI 用于新沙箱。旧 Owner 的资源、环境和连接仍被引用时继续保留。</p></div></div>
+      </div>
+      <div class="table-wrap" tabindex="0" aria-label="组件修改范围，可横向滚动"><table><thead><tr><th scope="col">部分</th><th scope="col">计划修改</th><th scope="col">必须证明</th></tr></thead><tbody>
+        <tr><td>公共入口</td><td>常规升级不停止入口；binding 更新只切新请求，保留旧连接并按后端统计在途。</td><td>候选失败仍由旧服务接请求；入口自身替换单独验证。</td></tr>
+        <tr><td>升级控制与恢复</td><td>独立控制账本与持久计划；恢复不要求原失败执行器重新存活。固定动作支持原结果查询。</td><td>执行器崩溃、ACK 丢失、租约过期后仍能核对实际结果，且不重复发命令。</td></tr>
+        <tr><td>API / Web</td><td>候选提前启动并验证业务；保留旧 Web 资源、访问会话和兼容窗口。</td><td>新旧 Web/API 四组组合均可用；失败回切不丢新版已接纳的数据。</td></tr>
+        <tr><td>Coordinator</td><td>无副作用初始化前移；排空事务后进行单 writer 的 generation / fence 交接。</td><td>无双写者、无重复调度；实测写暂停上界满足请求时限。</td></tr>
+        <tr><td>Owner / 沙箱</td><td>维持 sandbox → 原 Owner 映射；新 Owner 只接新分配。</td><td>原进程、任务轮次、终端身份与持续输出保持，升级不触发任务停止。</td></tr>
+        <tr><td>数据库</td><td>保留同一业务文件；兼容扩展、分批回填、读切换，最后独立收缩。</td><td>旧版能处理新写数据；恢复不使用旧快照覆盖当前业务数据。</td></tr>
+        <tr><td>前端</td><td>沿用低打扰提示；展示真实阶段、失败及当前组合，确认完成才显示 100%。</td><td>刷新只续接原任务；失败不误报完成，不强制刷新或重新创建任务。</td></tr>
+        <tr><td>CD / 发布链</td><td>统一正式构建、演练、签名与发布；业务包、控制包和执行引擎一起绑定资格。</td><td>演练与线上执行字节一致；CD 只发包，实例由用户决定升级时机。</td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="section" id="flow" aria-labelledby="flow-title">
+      <div class="section-head"><span class="section-number">05</span><h2 id="flow-title">先解决首迁，再统一日常升级</h2></div>
+      <div class="flow-panel"><div class="flow-label"><span class="dot" aria-hidden="true"></span>当前首迁：风险最大的步骤发生在停旧服务之后</div><div class="flow"><div class="step bad"><strong>停止旧服务</strong><span>公共入口先退出</span></div><span class="arrow" aria-hidden="true">→</span><div class="step"><strong>导出状态</strong><span>真实大库和临时占用</span></div><span class="arrow" aria-hidden="true">→</span><div class="step"><strong>启动新角色</strong><span>依赖与冷初始化</span></div><span class="arrow" aria-hidden="true">→</span><div class="step"><strong>验证与交接</strong><span>此时仍可能拒绝</span></div></div></div>
+      <div class="flow-panel"><div class="flow-label"><span class="dot blue" aria-hidden="true"></span>拟议日常升级：旧服务持续服务，候选验证后才交接</div><div class="flow"><div class="step"><strong>固定升级计划</strong><span>兼容、容量、回切资格</span></div><span class="arrow" aria-hidden="true">→</span><div class="step good"><strong>旁路准备候选</strong><span>下载、验证、预热</span></div><span class="arrow" aria-hidden="true">→</span><div class="step good"><strong>业务验证</strong><span>认证、读写、原任务</span></div><span class="arrow" aria-hidden="true">→</span><div class="step good"><strong>交接与观察</strong><span>必要写权交接、切流</span></div><span class="arrow" aria-hidden="true">→</span><div class="step"><strong>确认与排空</strong><span>先确认，后退役旧版</span></div></div><p class="flow-note">准备、验证及切换观察期间保留健康服务组合。长期 WebSocket 可保持旧 API，或按明确协议重新附着原终端；不声称把 TCP 连接直接迁移给另一个进程。</p></div>
+      <div class="callout amber" style="margin-top:18px"><h3>首要可行性关口：旧入口不重启时，能否合法接入新控制面？</h3><p>现网入口是 Mac <code>:3000</code> → Linux <code>:3181</code>。旧入口没有新控制协议要求的全部路由、签名和 epoch 接口；旧 Supervisor 也不能仅靠“不再调用”证明退权。优先验证保留旧入口的兼容接入，但目前尚不能判定直接可用。</p><ul><li>用真实、合法的旧 binding / fence 协议验证新 HTTP 与旧 WebSocket 的分流。</li><li>验证真实授权能够委托新控制面，保持访问会话和签名校验，不伪造升级记录。</li><li>验证旧执行器全部变更入口及历史请求均不能重新取得执行权。</li></ul><p style="margin-top:10px">同端口监听权和既有连接的接管能力通过隔离验证，是确定首迁实施方案的前提。这里仍是待解决的设计难点。</p></div>
+      <details><summary>数据库写权交接与失败恢复的具体边界</summary><div class="detail-body"><ol><li>新版 Coordinator 先以 prepared 状态完成无副作用初始化，不启动写者和后台调度。</li><li>旧写者停止接新变更并排空在途事务；读请求尽量持续，必要写请求在原操作标识下有界等待。</li><li>在同一业务数据库的事务守卫中交接 generation / fence，确认旧异步回调无法继续写，再让新写者接管。</li><li>新写者 ready、路由和业务确认后才排空旧进程；写暂停时限必须实测，不能用增加超时替代连续性验收。</li><li>切流前失败保留旧服务；切流后先验证旧版兼容当前数据，再最小回切。新写者已经提交数据时，回退通过兼容写权交接完成，不能恢复过期数据库覆盖新写。</li></ol></div></details>
+    </section>
+
+    <section class="section" id="plan" aria-labelledby="plan-title">
+      <div class="section-head"><span class="section-number">06</span><h2 id="plan-title">六个交付阶段，逐关收敛</h2></div>
+      <p class="section-intro">下列阶段现已进入实施：文档基线已更新，停服路径拦截、候选预热和正式资格链已开始修正。首迁协议与完整 Native 仍未通过，不能标记架构修复或线上升级完成。</p>
+      <div class="phases">
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 01</span><span class="pill recovered">基线已更新</span></div><h3>统一需求与当前方案</h3><p>更新现有 UPG PRD、后端方案、前端状态说明和独立测试计划；明确首迁、日常升级、底座维护的连续性要求与完成条件。</p><dl><dt>交付物</dt><dd>统一职责边界、升级/恢复状态与验收映射，清除相互矛盾的当前描述。</dd><dt>通过条件</dt><dd>每一步说明谁仍提供服务、谁持有写权、失败时保留什么。</dd></dl></article>
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 02</span><span class="pill pending">验证中 · 未通过</span></div><h3>隔离验证两项可行性</h3><p>验证旧入口不停时的新控制面接入及旧执行权撤销；验证真实大库下 prepared 写者交接和各持久阶段故障恢复。</p><dl><dt>交付物</dt><dd>可复现的原型与测量结果，列出旧二进制能力缺口。</dd><dt>通过条件</dt><dd>合法交接、不绕过授权、不双写；请求与任务连续性达到门槛。</dd></dl></article>
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 03</span><span class="pill pending">修正中</span></div><h3>收敛正式升级执行链</h3><p>复用现有正式 CLI、持久账本和受控执行器。启动、探测、切流、恢复共用一份实例配置和固定计划；取消逐轮私有脚本的活动执行入口。</p><dl><dt>交付物</dt><dd>仓库内统一配置、执行状态和原结果查询能力。</dd><dt>通过条件</dt><dd>历史证据只作审计，不需要重新加载历次失败的私有代码才能升级。</dd></dl></article>
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 04</span><span class="pill pending">局部实现</span></div><h3>补齐后端交接与前端状态</h3><p>完善候选预热、写权交接、阶段容量和安全回切；前端只消费真实状态，支持原任务重连并区分服务版本、目标和页面版本。</p><dl><dt>交付物</dt><dd>可独立更新的组件、可查询恢复结果及对应界面。</dd><dt>通过条件</dt><dd>不终止原沙箱任务、不重复提交原指令；全部确认后才显示完成。</dd></dl></article>
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 05</span><span class="pill pending">门禁修正中</span></div><h3>将真实整链演练纳入发布门禁</h3><p>在隔离的同构环境用最终安装包，从当前旧版本组合实际运行到升级确认，并验证失败回切、控制器崩溃和原终端续接。</p><dl><dt>交付物</dt><dd>与产物摘要绑定的成功、故障恢复及连续性报告。</dd><dt>通过条件</dt><dd>必需场景全部实测；mock、跳过和 not-run 不能替代真实验收。</dd></dl></article>
+        <article class="phase"><div class="phase-top"><span class="phase-id">PHASE 06</span><span class="pill pending">前置门禁未满足</span></div><h3>恢复单实例线上验证</h3><p>前述门禁通过后，用已经演练的不可变安装包和同一正式入口执行；现场只做必要的新鲜检查与持续监测。</p><dl><dt>交付物</dt><dd>实际服务确认、原资源连续性和回退保留记录。</dd><dt>通过条件</dt><dd>运行中不修改脚本、字段或配置求通过；异常停止推进，先恢复并复盘。</dd></dl></article>
+      </div>
+      <details><summary>代码修改落点：优先复用已有正式能力</summary><div class="detail-body"><div class="table-wrap" tabindex="0" aria-label="计划修改入口"><table><thead><tr><th scope="col">范围</th><th scope="col">现有入口</th><th scope="col">计划重点</th></tr></thead><tbody><tr><td>入口与首迁</td><td><code>stable-entry.mjs</code><br><code>control-migration-runtime.mjs</code></td><td>分离入口接管与业务升级，补齐兼容、真实授权及旧执行权撤销验证。</td></tr><tr><td>写者交接</td><td><code>coordinator-handoff.ts</code><br><code>coordinator-lease.ts</code><br><code>coordinator-prepared-main.ts</code></td><td>初始化前移、唯一写者、短交接、逐阶段崩溃恢复及请求时限。</td></tr><tr><td>资源与恢复</td><td><code>capacity-admission.mjs</code><br><code>control-migration-handoff.mjs</code><br><code>control-recovery-driver.mjs</code></td><td>统一阶段峰值、原结果查询和兼容回切，保留首拒原因与实际数值。</td></tr><tr><td>正式发布</td><td><code>release.groovy</code><br><code>instance-package.mjs</code><br><code>control-package-build.mjs</code><br><code>upgrade-evidence.mjs</code></td><td>控制包分离构建/签名；业务包和控制包纳入同一资格输入，完整首迁纳入真实演练。</td></tr></tbody></table></div></div></details>
+    </section>
+
+    <section class="section" id="gates" aria-labelledby="gates-title">
+      <div class="section-head"><span class="section-number">07</span><h2 id="gates-title">以用户连续性决定能否上线</h2></div>
+      <p class="section-intro">以下为既有 UPG 要求及本轮必须补齐的交付门槛，属于目标，尚未由新方案证明通过。</p>
+      <div class="gate-list">
+        <div class="gate"><span class="gate-icon" aria-hidden="true">1</span><div><strong>业务请求连续</strong><p>受控同构环境持续每秒 10 次合法读/幂等写请求；升级不引入请求失败，单次响应不超过 2 秒。</p></div></div>
+        <div class="gate"><span class="gate-icon" aria-hidden="true">2</span><div><strong>原任务持续运行</strong><p>真实沙箱进程、Owner、Provider 实例、任务轮次及输出序号保持；停止、重启和重复执行均为零。</p></div></div>
+        <div class="gate"><span class="gate-icon" aria-hidden="true">3</span><div><strong>终端回到原会话</strong><p>需要重连时 5 秒内自动附着原终端/运行身份；不新建任务、不重新执行初始指令，不重放断线输入。</p></div></div>
+        <div class="gate"><span class="gate-icon" aria-hidden="true">4</span><div><strong>写权唯一、数据不倒退</strong><p>交接期旧异步写被 fence 阻挡，后台任务不重复；回切保留最新业务写入、游标、取消意图和幂等记录。</p></div></div>
+        <div class="gate"><span class="gate-icon" aria-hidden="true">5</span><div><strong>失败恢复真正执行过</strong><p>覆盖启动失败、健康错误、资源不足、交接中断、ACK 丢失和执行器崩溃；每个结果未知分支均核对原动作。</p></div></div>
+        <div class="gate"><span class="gate-icon" aria-hidden="true">6</span><div><strong>演练与生产是同一套字节</strong><p>业务包、控制包、执行引擎、真实配置和受测升级路径绑定；现场不另换私有 adapter 或未验收脚本。</p></div></div>
+      </div>
+      <div class="callout" style="margin-top:17px"><h3>资源不足应在影响旧服务之前拒绝</h3><p>阶段峰值覆盖旧新进程重叠、原 Owner/Guest、WAL、备份、临时产物与回退保留。只读预热与大库准备提前完成；正式交接窗口内不临时扩 VM 或清理原任务来求准入。</p></div>
+      <p class="note">验收区分底层 Shell/PTY 连续性和真实 Agent/无头任务执行语义。替身可验证局部协议与故障分支，不能把未运行的真实场景标为通过。一次明确用户升级意图只对应本实例的一次活动升级，CD 发布不自动触发实例安装。</p>
+    </section>
+
+    <section class="section" id="evidence" aria-labelledby="evidence-title">
+      <div class="section-head"><span class="section-number">08</span><h2 id="evidence-title">证据、口径与当前状态</h2></div>
+      <div class="split"><div class="card"><div class="mini-label">已核实</div><h3>失败审计完成</h3><p>23 份远端账本、15 个触停批次与各轮直接原因已经交叉核对；HTTP 观测按端点与采样边界表达，纠正了 F4 的连续中断表述。</p></div><div class="card"><div class="mini-label">待验证</div><h3>新方案尚未实施上线</h3><p>旧入口兼容接入、旧执行权撤销、写权交接时限和完整恢复路径仍需隔离验证。新构建 R2 未执行，下一次线上切换停止推进。</p></div></div>
+      <div class="references"><a href="2026-11-06-无感升级失败审计.md">失败审计原文：统计口径、15 轮原因、HTTP 观测</a><a href="2026-10-20-独立升级控制实现与资格准备.md">历史实施与资格记录：保留失败、回退及未验收事实</a><a href="../../product/requirements/UPG.md">UPG 产品需求：9 条需求 / 52 条验收条件</a><a href="../../backend/changes/2026-10-20-独立升级控制系统.md">现有独立控制系统方案：本轮后续修订对象</a><a href="../changes/2026-10-20-独立升级控制与恢复测试计划.md" id="test-plan-link">独立升级控制与恢复测试计划</a></div>
+      <details><summary>原始只读证据标识与统计时间</summary><div class="detail-body"><p>远端账本快照：<code>all-operator-attempts.actual-r1.json</code>，54,680 B；读取时间 <code>2026-11-06T07:44:42.983305Z</code>。该次读取全部迁移 actor 数为零，SQL 写入和生命周期动作均为零。</p><p class="hash">SHA-256：675b701c81991f68125e61b46877028c00cc9489773873ed9424687d2bea357b</p><p>该文件与统计投影 <code>failure-counts.actual-r1.json</code> 保存在本机操作目录的 <code>20261104-r1/failure-audit-20261106-r1/</code>。本 HTML 为离线报告快照，不查询实时生产状态，不包含口令、token 或私钥。</p></div></details>
+    </section>
+    <section class="section" id="implementation" aria-labelledby="implementation-title">
+      <div class="section-head"><span class="section-number">09</span><h2 id="implementation-title">本轮修正与验证进展</h2></div>
+      <p class="section-intro">以下保留11月6日的本地实施记录；11月7日增量见下一节。尚未部署，完整首迁、原生连续性与回退未取得通过结论。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">已落本地代码</div><h3>先阻止再次先停旧服务</h3><p>正式 CLI 和默认 runtime 拒绝旧 stop-first 的 apply/resume，发生在取得执行权或派发命令之前。历史状态查询、准备与原回滚保留；配置自称支持在线接入无法绕过。</p></article>
+        <article class="card"><div class="mini-label">已落本地代码</div><h3>候选端口预热与交接只读</h3><p>prepared Coordinator 提前绑定真实端口，保留 HTTP/WS admission gate，取得唯一 writer 前不跑启动钩子。旧 writer 交接期间仅放行固定健康与项目只读，鉴权和 fence 继续校验。</p></article>
+        <article class="card"><div class="mini-label">本地门禁已验证</div><h3>控制包与业务目标共同验收</h3><p>控制包构建、实际归档验证、签名分离，联合资格纳入真实 Control、engine 和业务目标。正式测试必须发现首迁及独立控制的五个场景，缺失、跳过、重试掩盖或清理失败均拒绝放行。</p></article>
+        <article class="card"><div class="mini-label">关键阻断仍在</div><h3>旧入口接入和两秒写者交接</h3><p>同端口嵌套转发和原WS保留已通过局部实验；仍需证明旧命令排空、正式委托、Web资源与会话贯通。配额扫描已移到ready后；任务恢复、逐Owner交接和终端检查仍有耗时。尚无完整时限证明，线上切换继续暂停。</p></article>
+      </div>
+      <div class="callout amber" style="margin-top:17px"><h3>已执行的检查与未执行的资格分开记录</h3><p>最终部署回归1283通过、0失败、6跳过；API全套1013通过、0失败、7跳过，其中协议41文件254项全过。Web类型检查与45项升级client/model回归通过。Playwright实际发现26场景，包含此前被漏掉的5个首迁／独立控制场景；这是发现检查，不能写成真实Native已通过。旧入口数据面另有4项局部实验通过，未混入此前完整回归数量。跳过项、局部合同和完整资格分别记录。</p></div>
+      <div class="references"><a href="./2026-11-06-无感升级架构修正与本地验证.md">本轮实际改动、完整回归结果与未通过项目 ↗</a><a href="../../backend/changes/2026-11-06-旧入口首次控制接入协议PoC.md">首次接入协议 PoC：可行方向、旧协议限制和未闭合条件 ↗</a><a href="../../product/changes/2026-10-20-独立升级控制与失败恢复.md">已更新的产品路径与发布边界 ↗</a><a href="../changes/2026-10-20-独立升级控制与恢复测试计划.md">独立测试计划：新增门禁与真实验收要求 ↗</a></div>
+    </section>
+
+    <section class="section" id="refactor-update" aria-labelledby="refactor-update-title">
+      <div class="section-head"><span class="section-number">10</span><h2 id="refactor-update-title">11月7日：继续收紧交接与旧控制边界</h2></div>
+      <p class="section-intro">本轮继续整体改造，完成以下本地实现与回归。未提交、未发布，也未连接生产；线上历史快照不作为本轮实时健康结论。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">已实现 · 本地验证</div><h3>恢复移出窗口，交接共享原截止</h3><p>任务恢复在实际 ready 后启动，先续接已知 job，未知启动只查原结果。Owner 交接并行汇总；部分或未知释放保持 releasing，不重复 claim 或直接恢复 ready。完整连续性条件保留，终端检查限4并发。</p></article>
+        <article class="card"><div class="mini-label">已实现 · 失败分支已验证</div><h3>迟到结果不能重新打开服务</h3><p>release、adopt、初始化、探测和绑定共同消费原 quiesce 截止。超时原 Promise 仍参与退休计数；旧 writer epoch、关闭监听或迟到初始化不能恢复 HTTP/WS ready。prepared 强制关闭启动孤儿清理，保护原 Guest。</p></article>
+        <article class="card"><div class="mini-label">实际历史实现 · 本地HTTP</div><h3>关闭旧控制器后续变更链</h3><p>运行未改写的历史 Supervisor，经实际新 Nest 控制器与只读 SQLite，验证启动、发布、激活 Installer、退休 reader 均在副作用前拒绝。authority 文件未变，生命周期调用零；新的业务参与接口保留原授权检查。</p></article>
+        <article class="card"><div class="mini-label">只读前置 · 不授权接入</div><h3>逐原操作核对结果</h3><p>实际读取旧 schema、journal、process、authority、retirement 与 Inspector 观测。缺结果、独立恢复未结束、未知派发或过期观测均阻断。旧二进制没有全局 drain；结算前置不等于已证明全部在途工作结束。</p></article>
+      </div>
+      <div class="callout amber" style="margin-top:17px"><h3>最新全量检查通过，完整无感资格仍未通过</h3><p>部署114文件：1301通过、0失败、6跳过。API147文件：1039通过、0失败、7跳过，其中协议46文件280项全过。冻结后的首迁前置专项21/21，有界交接专项37/37，类型、相关lint与格式检查通过。跳过项没有计入通过，局部合同没有替代真实Native。</p><p style="margin-top:10px">仍需闭合旧入口正式受限委托、真实运行闭包和原在途结算，测量历史数据规模下整个交接≤2秒，并验证同一最终产物的原任务连续性与故障恢复。Node同步数据库／文件操作无法被硬抢占；设置截止不能把真实超时变成无感成功。线上切换继续保持阻断。</p></div>
+      <div class="references"><a href="./2026-11-06-无感升级架构修正与本地验证.md#5-2026-11-07-整体改造增量">本轮具体改动、结果和日志位置 ↗</a><a href="../../backend/changes/2026-11-06-旧入口首次控制接入协议PoC.md">旧控制撤权、只读结算与尚缺的正式接入协议 ↗</a></div>
+    </section>
+
+    <section class="section" id="macmini-experiment" aria-labelledby="macmini-experiment-title">
+      <div class="section-head"><span class="section-number">11</span><h2 id="macmini-experiment-title">Mac mini现场验证：更新未通过准入</h2></div>
+      <p class="section-intro">本节针对当前本机 Mac mini；与公司电脑100.73.71.22的历史审计分开。现场只读确认本机仍为v0.3.15、activation8、confirmed／ready、schema29，未执行版本切换。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">真实旧入口 · 实际鉴权GET</div><h3>入口能力阻断已复现</h3><p>当前预检实际读取5次metadata/binding/epoch；control-epoch返回409 ENTRY_BUSY_OR_METHOD。正式委托、公开控制路由、旧撤权与原结果结算仍缺证明，预检如实blocked。不是增加超时或扩容就能解除。</p></article>
+        <article class="card"><div class="mini-label">39/39局部协议 · 没有更新</div><h3>原实例保持当前版本</h3><p>旧入口、撤权、结算与停服拒绝的39项局部实验通过。前后26个运行角色、其中7个Owner的容器身份未变；基础health为200。这不是可安装新包或真实Guest/PTY/模型任务Native通过。</p></article>
+      </div>
+      <p class="note">宿主内存压力等级2、磁盘约10GiB可用；runtime Docker文件系统仅约5.26GB可用。未启动完整候选、重启VM、清理原资源或停止旧服务。首要阻断仍是首次接入执行器尚未完成；资源准备不能替代接入资格。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md">Mac mini实际版本、实验结果、阻断与原始证据 ↗</a></div>
+    </section>
+
+    <section class="section" id="macmini-upgrade-preparation" aria-labelledby="macmini-upgrade-preparation-title">
+      <div class="section-head"><span class="section-number">12</span><h2 id="macmini-upgrade-preparation-title">追加执行：先清理，再做真实旧版升级演练</h2></div>
+      <p class="section-intro">已按要求清理指定构建中间目录和一个可回收缓存，保留原包、沙箱与回退材料。宿主可用空间由约10.4GiB增至约13.4GiB；后续构建与QA环境会消耗新空间，继续按实际余量准入。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">已实现 · 局部真实HTTP／SQLite</div><h3>先冻结旧控制，再接只读账本</h3><p>固定签名目标、原writer和原截止；冻结后等待原异步工作，旧statement与异步epoch不能借新账本。接入编排持久记录派发，未知ACK只查原命令；完成仍passive，不开放Entry或普通升级。</p></article>
+        <article class="card"><div class="mini-label">真实旧版兼容 · 尚未上线</div><h3>兼容版本A，再验证控制接入</h3><p>实际旧升级器只识别business-only摘要与schema29。A明确交付经原包逐字节核对的29份迁移，新增默认Owner承接新任务，全部旧Owner／Guest保留。隔离演练加载原.15的真实启动器，并保持目标签名body与URL。</p></article>
+      </div>
+      <p class="note">原.15签名与94,392,668字节tar已核验；独立Linux arm64构建环境、6CPU／8GiB专用QA和KVM已准备。还需完成最终产物的实际演练，再执行实例更新；本节没有将兼容A、局部合同或QA启动写成完整无感资格。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#5-追加更新前磁盘清理">实际清理、兼容准备与证据 ↗</a><a href="../../backend/changes/2026-11-06-旧入口首次控制接入协议PoC.md#8-11月7日接入实现与真实旧版本兼容路径">接入实现与A版本的准确边界 ↗</a></div>
+    </section>
+
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 磁盘清理完成，实际升级演练准备中</span></footer>
+  </main>
+</div>
+<script>
+  (() => {
+    'use strict';
+    const search = document.getElementById('failure-search');
+    const rows = Array.from(document.querySelectorAll('#failure-rows tr'));
+    const count = document.getElementById('failure-count');
+    const empty = document.getElementById('failure-empty');
+    function filterRows() {
+      const query = search.value.trim().toLocaleLowerCase('zh-CN');
+      let visible = 0;
+      for (const row of rows) {
+        row.hidden = !row.textContent.toLocaleLowerCase('zh-CN').includes(query);
+        if (!row.hidden) visible++;
+      }
+      count.textContent = `显示 ${visible} / ${rows.length} 条`;
+      empty.style.display = visible ? 'none' : 'block';
+    }
+    search.addEventListener('input', filterRows);
+    document.getElementById('print-report').addEventListener('click', () => window.print());
+    let printQuery;
+    window.addEventListener('beforeprint', () => { printQuery = search.value; search.value = ''; filterRows(); });
+    window.addEventListener('afterprint', () => { search.value = printQuery ?? ''; filterRows(); });
+    const links = Array.from(document.querySelectorAll('nav a[href^="#"]'));
+    if ('IntersectionObserver' in window) {
+      const observer = new IntersectionObserver(entries => {
+        const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (!visible.length) return;
+        const hash = '#' + visible[0].target.id;
+        for (const link of links) { const active = link.getAttribute('href') === hash; link.classList.toggle('active', active); if (active) link.setAttribute('aria-current', 'location'); else link.removeAttribute('aria-current'); }
+      }, { rootMargin: '-5% 0px -55% 0px', threshold: 0 });
+      for (const section of document.querySelectorAll('main section[id]')) observer.observe(section);
+    }
+  })();
+</script>
+</body>
+</html>

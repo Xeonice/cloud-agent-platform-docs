@@ -1,3 +1,4 @@
+import { validateControlPackage } from './control-package-manifest.mjs';
 import { createHash, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
 import { readFile, lstat } from 'node:fs/promises';
 import { permitsImageRuntimeVersionsPath } from './additive-migration-recipe.mjs';
@@ -49,12 +50,28 @@ export function validateManifest(m, { purpose = 'release' } = {}) {
     invariant(!names.has(p.name) && !platforms.has(p.platform + ':' + p.arch), 'DUPLICATE_PACKAGE'); names.add(p.name); platforms.add(p.platform + ':' + p.arch);
     const url = new URL(p.url); invariant(url.protocol === 'https:' && !url.username && !url.password && !url.hash, 'UNTRUSTED_PACKAGE_URL');
   }
+  if (m.controlPackage !== undefined) {
+    const control = m.controlPackage, cm = validateControlPackage(control?.manifest), cp = control?.package;
+    invariant(Object.keys(control).sort().join(',') === 'manifest,manifestDigest,package' && control.manifestDigest === digest(cm) &&
+      cm.apiRevision === m.commits.api && cm.projectRevision === m.commits.project &&
+      cm.executionEngineDigest === m.components.installer.artifactDigest &&
+      cm.executionEngineDigest === m.components.installer.inputFingerprint, 'RELEASE_CONTROL_ENGINE_MISMATCH');
+    invariant(cp && ['linux','darwin'].includes(cp.platform) && ['arm64','x64'].includes(cp.arch) && NAME.test(cp.name) &&
+      DIGEST.test(cp.digest) && positive(cp.bytes) && cp.format === 'native-tar' &&
+      m.packages.every(p => p.platform === cp.platform && p.arch === cp.arch), 'RELEASE_CONTROL_PACKAGE_INVALID');
+    const url = new URL(cp.url);
+    invariant(url.protocol === 'https:' && !url.username && !url.password && !url.hash, 'UNTRUSTED_PACKAGE_URL');
+  }
   invariant(Array.isArray(m.upgradePaths) && m.upgradePaths.length > 0 && m.upgradePaths.every(p => RELEASE.test(p.fromRelease) && Number.isSafeInteger(p.minSchema) && p.minSchema >= 0 && Number.isSafeInteger(p.maxSchema) && p.maxSchema >= p.minSchema && Number.isSafeInteger(p.targetSchema) && p.targetSchema >= 0 && Array.isArray(p.bridgeReleases) && p.bridgeReleases.every(RELEASE.test.bind(RELEASE)) && (p.migrationPlanDigest === null || DIGEST.test(p.migrationPlanDigest))), 'INVALID_UPGRADE_PATH');
   validatePolicy(m.policy,{purpose});
   if(m.contractPlans!==undefined){invariant(Array.isArray(m.contractPlans)&&m.contractPlans.length<=16,'INVALID_CONTRACT_PLANS');const ids=new Set();for(const plan of m.contractPlans){validateContractPlan(plan);invariant(!ids.has(plan.planDigest),'DUPLICATE_CONTRACT_PLAN');ids.add(plan.planDigest);invariant(plan.artifactInputFingerprint===runInputFingerprint(m)&&m.upgradePaths.some(p=>p.migrationPlanDigest===plan.expandPlanDigest),'CONTRACT_PLAN_INPUT_MISMATCH');}}
   if (purpose === 'release') {
     invariant(Array.isArray(m.evidence) && ['build','contracts','four-combinations','native-continuity','fault-recovery'].every(kind => m.evidence.some(e => e.kind === kind && e.result === 'passed' && DIGEST.test(e.inputFingerprint) && DIGEST.test(e.reportDigest) && NAME.test(e.runId) && Number.isFinite(Date.parse(e.recordedAt)))), 'RELEASE_GATES_MISSING');
     if (m.upgradePaths.some(p => p.migrationPlanDigest)) invariant(m.evidence.some(e => e.kind === 'online-migration' && e.result === 'passed' && e.maxDataTested === true && e.forwardOnlyTested === true && DIGEST.test(e.reportDigest)), 'MIGRATION_GATES_MISSING');
+    if (m.controlPackage) invariant(m.evidence.some(e => e.kind === 'independent-control' && e.result === 'passed' &&
+      e.inputFingerprint === runInputFingerprint(m) && e.controlPackageDigest === m.controlPackage.manifestDigest &&
+      e.executionEngineDigest === m.controlPackage.manifest.executionEngineDigest &&
+      e.controlArchiveDigest === m.controlPackage.package.digest && DIGEST.test(e.reportDigest)), 'INDEPENDENT_CONTROL_GATES_MISSING');
   } else invariant(Array.isArray(m.evidence) && m.evidence.every(e => ['qualification','not-run','passed'].includes(e.result) && DIGEST.test(e.inputFingerprint) && DIGEST.test(e.reportDigest)), 'INVALID_QUALIFICATION_EVIDENCE');
   for(const plan of m.contractPlans||[])invariant(m.evidence.some(e=>e.kind==='semantic-contract'&&e.contractPlanDigest===plan.planDigest&&e.inputFingerprint===plan.artifactInputFingerprint&&DIGEST.test(e.reportDigest)&&(e.result==='passed'||(purpose==='qualification'&&e.result==='not-run'))),'SEMANTIC_CONTRACT_GATES_MISSING');
 
@@ -69,7 +86,7 @@ function signForPurpose(manifest, keyId, privatePem, purpose) {
 export const signManifest = (manifest,keyId,privatePem) => signForPurpose(manifest,keyId,privatePem,'release');
 export const signQualificationManifest = (manifest,keyId,privatePem) => signForPurpose(manifest,keyId,privatePem,'qualification');
 export function runInputFingerprint(manifest) {
-  return digest({commits:manifest.commits,components:manifest.components,packages:manifest.packages.map(({platform,arch,digest,bytes,format,unpackedBytes})=>({platform,arch,digest,bytes,format,...(unpackedBytes===undefined?{}:{unpackedBytes})})),upgradePaths:manifest.upgradePaths,policy:{...manifest.policy,fallbacks:manifest.policy.fallbacks.map(({rehearsed,...identity})=>identity)}});
+  return digest({commits:manifest.commits,components:manifest.components,packages:manifest.packages.map(({platform,arch,digest,bytes,format,unpackedBytes})=>({platform,arch,digest,bytes,format,...(unpackedBytes===undefined?{}:{unpackedBytes})})),upgradePaths:manifest.upgradePaths,policy:{...manifest.policy,fallbacks:manifest.policy.fallbacks.map(({rehearsed,...identity})=>identity)},...(manifest.controlPackage===undefined?{}:{controlPackage:manifest.controlPackage})});
 }
 export function verifySignedManifest(envelope,roots,now=Date.now()) {
   invariant(roots?.schemaVersion === 1 && Array.isArray(roots.keys) && roots.keys.length && Array.isArray(roots.distributionOrigins) && roots.distributionOrigins.length, 'TRUST_ROOT_MISSING');
@@ -80,7 +97,7 @@ export function verifySignedManifest(envelope,roots,now=Date.now()) {
   const key = createPublicKey(trusted.publicKey); invariant(key.asymmetricKeyType === 'ed25519', 'INVALID_TRUST_KEY');
   const bytes = canonical(manifest);
   invariant(DIGEST.test(manifestDigest) && digest(bytes) === manifestDigest && verify(null, Buffer.from(bytes), key, Buffer.from(signature.value, 'base64')), 'SIGNATURE_OR_MANIFEST_DIGEST_INVALID');
-  const purpose=roots.purpose||'release';invariant((manifest.purpose||'release')===purpose,'WRONG_TRUST_DOMAIN');validateManifest(manifest,{purpose});invariant(manifest.channel===roots.channel,'WRONG_CHANNEL');for(const p of manifest.packages)invariant(roots.distributionOrigins.includes(new URL(p.url).origin),'UNTRUSTED_DISTRIBUTION_ORIGIN');return {manifest,manifestDigest,purpose};
+  const purpose=roots.purpose||'release';invariant((manifest.purpose||'release')===purpose,'WRONG_TRUST_DOMAIN');validateManifest(manifest,{purpose});invariant(manifest.channel===roots.channel,'WRONG_CHANNEL');for(const p of [...manifest.packages,...(manifest.controlPackage?[manifest.controlPackage.package]:[])])invariant(roots.distributionOrigins.includes(new URL(p.url).origin),'UNTRUSTED_DISTRIBUTION_ORIGIN');return {manifest,manifestDigest,purpose};
 }
 export function verifyManifest(envelope, roots, current, now = Date.now()) {
   const {manifest,manifestDigest}=verifySignedManifest(envelope,roots,now);

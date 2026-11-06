@@ -1,5 +1,5 @@
 import * as fs from 'node:fs/promises';
-import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
+import { dirname, join, relative, resolve, isAbsolute, posix } from 'node:path';
 import { createPrivateKey, sign } from 'node:crypto';
 import { command } from './artifacts.mjs';
 import { atomicJson, fileDigest, inside, secureDirectory, treeManifest } from './io.mjs';
@@ -186,13 +186,12 @@ export async function probeControlEntrypoint(artifactRoot, { run = command, node
   return { entry: 'installer/control-main.mjs', startsListeners: false, opensBusinessDatabase: false, initializesSdk: false };
 }
 
-/** Only frozen source inputs are accepted. The descriptor and build receipts
- * remain outside the immutable artifact, so neither can exclude its own bytes. */
-export async function buildControlPackage({ apiRoot, installerRoot, outputRoot, version, apiRevision, projectRevision,
-  apiSourceRoot, projectSourceRoot, expectedApiClosureDigest, expectedInstallerDigest, keyId, privateKeyPath,
+/** Stage immutable unsigned bytes without accepting or reading a signing key.
+ * The same closure/ABI/entry probes are used by the compatible build+sign API. */
+export async function stageControlPackage({ apiRoot, installerRoot, outputRoot, version, apiRevision, projectRevision,
+  apiSourceRoot, projectSourceRoot, expectedApiClosureDigest, expectedInstallerDigest,
   run = command, node = process.execPath }) {
   invariant(DIGEST.test(expectedApiClosureDigest) && DIGEST.test(expectedInstallerDigest), 'CONTROL_BUILD_INPUT_DIGEST_REQUIRED');
-  invariant(typeof keyId === 'string' && /^[a-zA-Z0-9._-]{1,128}$/.test(keyId), 'CONTROL_BUILD_SIGNING_KEY_ID_INVALID');
   const sources = { api: await frozenSource(apiSourceRoot, apiRevision, run), project: await frozenSource(projectSourceRoot, projectRevision, run) };
   const proof = await probeControlImportClosure(apiRoot, { run, node });
   invariant(proof.closureDigest === expectedApiClosureDigest, 'CONTROL_API_BUILD_INPUT_CHANGED');
@@ -203,17 +202,11 @@ export async function buildControlPackage({ apiRoot, installerRoot, outputRoot, 
   const engineFiles = installerFiles.map(file => ({ ...file, path: 'installer/' + file.path }));
   invariant(digest(engineFiles) === expectedInstallerDigest, 'CONTROL_EXECUTION_ENGINE_INPUT_CHANGED');
   const output = await secureDirectory(outputRoot), artifactRoot = join(output, 'artifact');
-  invariant(!inside(artifactRoot, resolve(privateKeyPath)) && !inside(proof.apiRoot, output) && !inside(installerRoot, output), 'CONTROL_BUILD_OUTPUT_OVERLAP');
+  invariant(!inside(proof.apiRoot, output) && !inside(installerRoot, output), 'CONTROL_BUILD_OUTPUT_OVERLAP');
   invariant(!(await fs.lstat(artifactRoot).catch(error => { if (error.code === 'ENOENT') return null; throw error; })), 'IMMUTABLE_CONTROL_ARTIFACT_EXISTS');
-  const keyStat = await fs.lstat(privateKeyPath);
-  invariant(keyStat.isFile() && !keyStat.isSymbolicLink() && (keyStat.mode & 0o077) === 0 && keyStat.size <= 16384, 'INSECURE_RELEASE_SIGNING_KEY');
-  const key = createPrivateKey(await fs.readFile(privateKeyPath, 'utf8'));
-  invariant(key.asymmetricKeyType === 'ed25519', 'INVALID_SIGNING_KEY');
   await fs.mkdir(artifactRoot, { mode: 0o700 });
   const dependencies = await copyApiClosure(proof, join(artifactRoot, 'api'));
   for (const file of installerFiles) await copyFile(join(installerRoot, file.path), join(artifactRoot, 'installer', file.path));
-  // Re-import the physical output, not the checkout's node_modules. An omitted
-  // dependency, escaped link, native ABI mismatch or side effect fails here.
   const actualProof = await probeControlImportClosure(join(artifactRoot, 'api'), { run, node });
   invariant(canonical(actualProof.dependencyPackages) === canonical(dependencies), 'CONTROL_DEPENDENCY_COPY_CHANGED');
   const entryImport = await probeControlEntrypoint(artifactRoot, { run, node });
@@ -221,27 +214,170 @@ export async function buildControlPackage({ apiRoot, installerRoot, outputRoot, 
   invariant(digest(actualEngine) === expectedInstallerDigest, 'CONTROL_EXECUTION_ENGINE_COPY_CHANGED');
   const manifest = validateControlPackage({ schemaVersion: 1, kind: 'upgrade-control', version, protocolVersion: 1,
     apiRevision: sources.api.revision, projectRevision: sources.project.revision, treeDigest: digest(files), executionEngineDigest: expectedInstallerDigest });
-  // Recheck clean source and original compiled bytes after copying/signing input
-  // collection. This is a build gate; runtime authority RPCs never hash trees.
   await frozenSource(sources.api.repository, apiRevision, run); await frozenSource(sources.project.repository, projectRevision, run);
   invariant((await probeControlImportClosure(proof.apiRoot, { run, node })).closureDigest === expectedApiClosureDigest, 'CONTROL_API_BUILD_INPUT_CHANGED');
   invariant(digest((await treeManifest(installerRoot)).filter(file => file.path.endsWith('.mjs') && !file.path.endsWith('.test.mjs')).map(file => ({ ...file, path: 'installer/' + file.path }))) === expectedInstallerDigest, 'CONTROL_EXECUTION_ENGINE_INPUT_CHANGED');
-  const manifestDigest = digest(manifest), envelope = { manifest, manifestDigest, signature: { algorithm: 'Ed25519', keyId,
-    value: sign(null, Buffer.from(canonical(manifest)), key).toString('base64') } };
-  const manifestPath = join(output, 'control-package.signed.json'), receiptPath = join(output, 'control-package.build.json');
-  invariant(!(await fs.lstat(manifestPath).catch(() => null)) && !(await fs.lstat(receiptPath).catch(() => null)), 'IMMUTABLE_CONTROL_DESCRIPTOR_EXISTS');
-  await atomicJson(manifestPath, envelope);
+  const manifestDigest = digest(manifest), unsignedManifestPath = join(output, 'control-package.unsigned.json');
+  await exclusiveJson(unsignedManifestPath, manifest);
   const archivePath = join(output, `agent-upgrade-control-${version}-${process.platform}-${process.arch}.tgz`);
   invariant(!(await fs.lstat(archivePath).catch(() => null)), 'IMMUTABLE_CONTROL_ARCHIVE_EXISTS');
-  await run('tar', ['-czf', archivePath, '-C', artifactRoot, '.']);
+  // macOS copyfile metadata is outside the signed payload tree. Suppress its
+  // AppleDouble entries as well as extended attributes, without changing modes.
+  await run('tar', ['--no-xattrs', '-czf', archivePath, '-C', artifactRoot, '.'],
+    { env: { PATH: process.env.PATH || '/usr/bin:/bin', COPYFILE_DISABLE: '1' } });
   await fs.chmod(archivePath, 0o600);
   const archive = { path: archivePath, ...(await fileDigest(archivePath)) };
-  const receipt = { schemaVersion: 1, kind: 'control-package-build', artifactRoot, manifestPath, manifestDigest,
+  const receipt = { schemaVersion: 1, kind: 'control-package-unsigned-stage', outputRoot: output, artifactRoot, unsignedManifestPath, manifestDigest,
+    platform: process.platform, arch: process.arch,
     apiRevision, projectRevision, executionEngineDigest: expectedInstallerDigest, treeDigest: manifest.treeDigest,
     sourceClosureDigest: proof.closureDigest, installedClosureDigest: actualProof.closureDigest, nativeAbi: actualProof.nativeAbi,
     entries: files.filter(file => file.path === 'installer/control-main.mjs' || ENTRIES.some(entry => file.path === 'api/' + entry)),
     dependencyPackages: dependencies, fileCount: files.length,
-    importClosure: { startsListeners: false, opensBusinessDatabase: false, initializesSdk: false }, entryImport, sources, archive };
-  await atomicJson(receiptPath, receipt);
+    importClosure: { startsListeners: false, opensBusinessDatabase: false, initializesSdk: false }, entryImport, sources, archive,
+    signed: false, privateKeyAccessed: false };
+  const receiptPath = join(output, 'control-package.staged.json');await exclusiveJson(receiptPath, receipt);
   return { ...receipt, receiptPath };
+}
+
+async function exclusiveJson(path, value) {
+  const handle = await fs.open(path, 'wx', 0o600);
+  try { await handle.writeFile(canonical(value) + '\n'); await handle.sync(); } finally { await handle.close(); }
+}
+async function readStagedFile(path, maximumBytes = Number.MAX_SAFE_INTEGER) {
+  const stat = await fs.lstat(path);
+  invariant(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && (stat.mode & 0o022) === 0 && stat.size <= maximumBytes,
+    'CONTROL_STAGED_FILE_INVALID');
+  return JSON.parse(await fs.readFile(path, 'utf8'));
+}
+
+/** Read the archive payload itself, without executing or extracting its code.
+ * This lets the separately-owned publisher verify Linux bytes before signing. */
+export async function verifyStagedControlArchive({ archivePath, manifest, expectedArchiveDigest, run = command }) {
+  validateControlPackage(manifest);
+  invariant(DIGEST.test(expectedArchiveDigest), 'CONTROL_STAGED_INPUT_DIGEST_REQUIRED');
+  const stat = await fs.lstat(archivePath), before = await fileDigest(archivePath);
+  invariant(stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 && (stat.mode & 0o022) === 0 &&
+    before.digest === expectedArchiveDigest, 'CONTROL_STAGED_ARCHIVE_CHANGED');
+  const script = `import sys,tarfile,hashlib,json
+with tarfile.open(sys.argv[1], 'r:gz') as archive:
+ members=archive.getmembers()
+ if len(members)>100000: raise ValueError('too many entries')
+ rows=[]
+ for m in members:
+  row={'name':m.name,'mode':m.mode,'type':'file' if m.isfile() else 'dir' if m.isdir() else 'symlink' if m.issym() else 'other'}
+  if m.issym(): row['link']=m.linkname
+  if m.isfile():
+   h=hashlib.sha256();n=0
+   with archive.extractfile(m) as f:
+    while True:
+     b=f.read(1048576)
+     if not b: break
+     n+=len(b);h.update(b)
+   row.update(digest='sha256:'+h.hexdigest(),bytes=n)
+  rows.append(row)
+ print(json.dumps(rows))`;
+  const rows = JSON.parse(await run('python3', ['-c', script, archivePath], { env: { PATH: process.env.PATH || '/usr/bin:/bin' } })), named = new Map();
+  const safe = name => typeof name === 'string' && !posix.isAbsolute(name) && !/[\\\r\n\0]/.test(name) &&
+    !name.split('/').includes('..') && !/^[A-Za-z]:/.test(name);
+  for (const row of rows) {
+    invariant(safe(row.name) && Number.isInteger(row.mode) && row.mode >= 0 && row.mode <= 0o777 &&
+      ['file', 'dir', 'symlink'].includes(row.type), 'CONTROL_ARCHIVE_UNSAFE');
+    const name = posix.normalize(row.name).replace(/^\.\//, '').replace(/\/+$/, '') || '.';
+    invariant(name !== '.' || row.type === 'dir', 'CONTROL_ARCHIVE_UNSAFE');
+    invariant(!named.has(name), 'CONTROL_ARCHIVE_UNSAFE');named.set(name, { ...row, name });
+  }
+  for (const entry of named.values()) {
+    const parent = posix.dirname(entry.name);
+    invariant(parent === '.' || named.get(parent)?.type === 'dir', 'CONTROL_ARCHIVE_UNSAFE');
+  }
+  function resolveLink(path, chain = new Set()) {
+    invariant(safe(path), 'CONTROL_ARCHIVE_UNSAFE');const parts = path.split('/');
+    for (let i = 1; i <= parts.length; i++) {
+      const prefix = parts.slice(0, i).join('/'), entry = named.get(prefix);
+      if (entry?.type !== 'symlink') continue;
+      invariant(!chain.has(prefix) && typeof entry.link === 'string' && !posix.isAbsolute(entry.link) &&
+        !/[\\\r\n\0]/.test(entry.link), 'CONTROL_ARCHIVE_UNSAFE');
+      return resolveLink(posix.normalize(posix.join(posix.dirname(prefix), entry.link, ...parts.slice(i))), new Set([...chain, prefix]));
+    }
+    invariant(named.has(path), 'CONTROL_ARCHIVE_UNSAFE');return path;
+  }
+  for (const entry of named.values()) if (entry.type === 'symlink') resolveLink(entry.name);
+  // Match treeManifest's directory traversal order, including a directory whose
+  // name sorts before a sibling such as "module.js"; flat path sorting differs.
+  const files = [];
+  function visit(folder) {
+    for (const entry of [...named.values()].filter(r => r.name !== '.' && posix.dirname(r.name) === (folder || '.')).sort((a,b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) {
+      if (entry.type === 'dir') visit(entry.name);
+      else files.push(entry.type === 'symlink' ? { path: entry.name, mode: entry.mode, link: entry.link } :
+        { path: entry.name, mode: entry.mode, digest: entry.digest, bytes: entry.bytes });
+    }
+  }
+  visit('');
+  invariant(files.length > 0 && digest(files) === manifest.treeDigest &&
+    digest(files.filter(file => file.path.startsWith('installer/'))) === manifest.executionEngineDigest,
+    'CONTROL_STAGED_TREE_CHANGED');
+  const after = await fileDigest(archivePath);invariant(canonical(before) === canonical(after), 'CONTROL_STAGED_ARCHIVE_CHANGED');
+  return { files, archive: before };
+}
+
+export async function unpackStagedControlPackage({ archivePath, manifest, expectedArchiveDigest, artifactRoot, run = command }) {
+  const proof = await verifyStagedControlArchive({ archivePath, manifest, expectedArchiveDigest, run });
+  artifactRoot = resolve(artifactRoot);
+  invariant(!(await fs.lstat(artifactRoot).catch(error => { if (error.code === 'ENOENT') return null; throw error; })), 'IMMUTABLE_CONTROL_ARTIFACT_EXISTS');
+  await secureDirectory(artifactRoot);
+  const space = await fs.statfs(artifactRoot);
+  invariant(space.bavail * space.bsize > proof.files.reduce((n, file) => n + (file.bytes || 0), 0), 'INSUFFICIENT_UNPACK_CAPACITY');
+  await run('tar', ['-xzpf', archivePath, '-C', artifactRoot, '--no-same-owner']);
+  invariant(canonical(await treeManifest(artifactRoot)) === canonical(proof.files), 'CONTROL_STAGED_TREE_CHANGED');
+  return { artifactRoot, manifestDigest: digest(manifest), executionEngineDigest: manifest.executionEngineDigest };
+}
+
+/** Sign exactly the independently staged descriptor/archive selected by the
+ * caller. All public bytes are rechecked before any private-key access. */
+export async function signStagedControlPackage({ stageReceiptPath, expectedManifestDigest, expectedArchiveDigest,
+  keyId, privateKeyPath, unsignedManifestPath, archivePath, outputRoot, run = command }) {
+  invariant(DIGEST.test(expectedManifestDigest) && DIGEST.test(expectedArchiveDigest), 'CONTROL_STAGED_INPUT_DIGEST_REQUIRED');
+  invariant(typeof keyId === 'string' && /^[a-zA-Z0-9._-]{1,128}$/.test(keyId), 'CONTROL_BUILD_SIGNING_KEY_ID_INVALID');
+  stageReceiptPath = resolve(stageReceiptPath);
+  const staged = await readStagedFile(stageReceiptPath, 262144), output = await secureDirectory(outputRoot ?? dirname(stageReceiptPath));
+  invariant(stageReceiptPath.endsWith('/control-package.staged.json') && staged.schemaVersion === 1 &&
+    staged.kind === 'control-package-unsigned-stage' && staged.signed === false && staged.privateKeyAccessed === false &&
+    isAbsolute(staged.outputRoot) && staged.artifactRoot === join(staged.outputRoot, 'artifact') &&
+    staged.unsignedManifestPath === join(staged.outputRoot, 'control-package.unsigned.json'), 'CONTROL_STAGED_RECEIPT_INVALID');
+  const relocated = unsignedManifestPath !== undefined || archivePath !== undefined;
+  invariant(!relocated || typeof unsignedManifestPath === 'string' && typeof archivePath === 'string', 'CONTROL_STAGED_RELOCATION_INCOMPLETE');
+  const manifest = validateControlPackage(await readStagedFile(unsignedManifestPath ?? staged.unsignedManifestPath, 16384));
+  invariant(digest(manifest) === expectedManifestDigest && staged.manifestDigest === expectedManifestDigest &&
+    manifest.apiRevision === staged.apiRevision && manifest.projectRevision === staged.projectRevision &&
+    manifest.treeDigest === staged.treeDigest && manifest.executionEngineDigest === staged.executionEngineDigest,
+    'CONTROL_STAGED_DESCRIPTOR_CHANGED');
+  if (!relocated) invariant(digest(await treeManifest(staged.artifactRoot)) === manifest.treeDigest, 'CONTROL_STAGED_TREE_CHANGED');
+  invariant(['linux', 'darwin'].includes(staged.platform) && ['arm64', 'x64'].includes(staged.arch) &&
+    staged.archive?.path === join(staged.outputRoot, `agent-upgrade-control-${manifest.version}-${staged.platform}-${staged.arch}.tgz`) &&
+    staged.archive.digest === expectedArchiveDigest, 'CONTROL_STAGED_ARCHIVE_CHANGED');
+  const proof = await verifyStagedControlArchive({ archivePath: archivePath ?? staged.archive.path, manifest, expectedArchiveDigest, run }), archive = proof.archive;
+  invariant(archive.digest === expectedArchiveDigest && archive.bytes === staged.archive.bytes, 'CONTROL_STAGED_ARCHIVE_CHANGED');
+  const manifestPath = join(output, 'control-package.signed.json'), receiptPath = join(output, 'control-package.build.json');
+  invariant(!(await fs.lstat(manifestPath).catch(() => null)) && !(await fs.lstat(receiptPath).catch(() => null)), 'IMMUTABLE_CONTROL_DESCRIPTOR_EXISTS');
+  invariant(!inside(staged.artifactRoot, resolve(privateKeyPath)), 'CONTROL_BUILD_OUTPUT_OVERLAP');
+  const keyStat = await fs.lstat(privateKeyPath);
+  invariant(keyStat.isFile() && !keyStat.isSymbolicLink() && (keyStat.mode & 0o077) === 0 && keyStat.size <= 16384, 'INSECURE_RELEASE_SIGNING_KEY');
+  const key = createPrivateKey(await fs.readFile(privateKeyPath, 'utf8'));
+  invariant(key.asymmetricKeyType === 'ed25519', 'INVALID_SIGNING_KEY');
+  const envelope = { manifest, manifestDigest: expectedManifestDigest, signature: { algorithm: 'Ed25519', keyId,
+    value: sign(null, Buffer.from(canonical(manifest)), key).toString('base64') } };
+  await exclusiveJson(manifestPath, envelope);
+  const { outputRoot: stagedOutput, unsignedManifestPath: stagedManifest, signed, privateKeyAccessed, ...original } = staged;
+  const receipt = { ...original, kind: 'control-package-build', manifestPath, archive: { ...archive, path: archivePath ?? staged.archive.path } };
+  await exclusiveJson(receiptPath, receipt);
+  return { ...receipt, receiptPath };
+}
+
+/** Backward-compatible build+sign entry; callers needing qualification before
+ * signing use stageControlPackage then signStagedControlPackage explicitly. */
+export async function buildControlPackage(input) {
+  invariant(typeof input.keyId === 'string' && /^[a-zA-Z0-9._-]{1,128}$/.test(input.keyId), 'CONTROL_BUILD_SIGNING_KEY_ID_INVALID');
+  const staged = await stageControlPackage(input);
+  return signStagedControlPackage({ stageReceiptPath: staged.receiptPath, expectedManifestDigest: staged.manifestDigest,
+    expectedArchiveDigest: staged.archive.digest, keyId: input.keyId, privateKeyPath: input.privateKeyPath });
 }

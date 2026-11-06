@@ -4,12 +4,21 @@ import { pathToFileURL } from 'node:url';
 import { validateManifest, digest, invariant,verifySignedManifest,loadTrustRoot } from './trust.mjs';
 import { readJson, fileDigest, atomicJson,secureDirectory } from './io.mjs';
 import { unpackVerified } from './artifacts.mjs';
+import { verifyControlPackageSignature } from './control-package.mjs';
 export async function publishDistribution({root,repository='Xeonice/cloud-agent-platform-docs',token,trustRootPath='/run/agent-platform/jenkins-tools/release-trust-root.json',reuseCacheRoot='/srv/agent-platform/component-reuse',fetcher=fetch}) {
   invariant(repository==='Xeonice/cloud-agent-platform-docs'&&token?.length>0,'PUBLISHER_CREDENTIAL_REQUIRED');
   const roots=await loadTrustRoot(trustRootPath);invariant((roots.purpose||'release')==='release','PRODUCTION_PUBLICATION_TRUST_REQUIRED');
   const catalog=await readJson(join(root,'catalog.json'));invariant(catalog.schemaVersion===1&&catalog.releases?.length,'VERIFIED_CATALOG_REQUIRED');
   const files=new Set(['catalog.json']);let releaseId,projectRevision;
   for(const r of catalog.releases){const envelope=r.envelope;verifySignedManifest(envelope,roots);invariant(r.manifestDigest===envelope.manifestDigest&&digest(envelope.manifest)===envelope.manifestDigest,'SIGNED_DISTRIBUTION_CHANGED');
+    const control=envelope.manifest.controlPackage;invariant(control,'COMPLETE_RELEASE_CONTROL_PACKAGE_REQUIRED');
+    const controlEnvelope=await readJson(join(root,'control-package.signed.json'));
+    const controlManifest=verifyControlPackageSignature(controlEnvelope,roots);
+    invariant(digest(controlManifest)===control.manifestDigest&&digest(controlManifest)===digest(control.manifest), 'RELEASE_CONTROL_INPUT_CHANGED');
+    invariant(basename(control.package.name)===control.package.name,'INVALID_ASSET_NAME');
+    const controlArchive=await fileDigest(join(root,control.package.name));
+    invariant(controlArchive.digest===control.package.digest&&controlArchive.bytes===control.package.bytes,'PUBLISHED_CONTROL_PACKAGE_CHANGED');
+    files.add('control-package.signed.json');files.add(control.package.name);
     releaseId ||= r.releaseId;projectRevision ||= envelope.manifest.commits.project;invariant(r.releaseId===releaseId&&envelope.manifest.commits.project===projectRevision,'MIXED_DISTRIBUTION_RELEASE');
     for(const p of envelope.manifest.packages){invariant(basename(p.name)===p.name,'INVALID_ASSET_NAME');const actual=await fileDigest(join(root,p.name));invariant(actual.digest===p.digest&&actual.bytes===p.bytes,'PUBLISHED_PACKAGE_CHANGED');files.add(p.name);}
   }

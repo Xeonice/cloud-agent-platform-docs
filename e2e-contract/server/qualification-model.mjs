@@ -1,5 +1,6 @@
 import { createServer } from "node:http";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
+import { assertQualificationIsolation } from './qualification-isolation.mjs';
 
 const MARKER = /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/;
 export const qualificationPrompt = (id) => {
@@ -71,10 +72,16 @@ export async function startQualificationModel({
   host = "127.0.0.1",
   guestHost = "host.boxlite.internal",
   port = 0,
+  qualificationInput,
 }) {
+  if (qualificationInput?.sameInstanceQa !== undefined) {
+    if (qualificationInput.instanceId !== instanceId || qualificationInput.isolated !== isolated)
+      throw new Error('DEDICATED_QUALIFICATION_INSTANCE_REQUIRED');
+    await assertQualificationIsolation(qualificationInput);
+  }
   if (
     isolated !== true ||
-    !/^upgrade-acceptance-[a-zA-Z0-9._-]+$/.test(instanceId)
+    (!/^upgrade-acceptance-[a-zA-Z0-9._-]+$/.test(instanceId) && qualificationInput?.sameInstanceQa === undefined)
   )
     throw new Error("DEDICATED_QUALIFICATION_INSTANCE_REQUIRED");
   const secret = "sk-ant-upg-qualification-" + randomBytes(24).toString("hex");

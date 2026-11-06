@@ -1,11 +1,12 @@
 import * as fs from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { generateKeyPairSync } from 'node:crypto';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { digest, canonical, signManifest, signQualificationManifest, runInputFingerprint, validateManifest, invariant } from './trust.mjs';
 import { treeManifest, fileDigest, atomicJson, secureDirectory, readJson } from './io.mjs';
 import { command } from './artifacts.mjs';
 import { nativeBuildEnvironment } from './native-build-environment.mjs';
+import { signStagedControlPackage } from './control-package-build.mjs';
 const ENTRY_FILES=['apps/api/dist/roles/coordinator-main.js','apps/api/dist/roles/coordinator-prepared-main.js','apps/api/dist/roles/control-api-main.js','apps/api/dist/roles/runtime-owner-main.js'];
 export async function probeProductionControlDependencies(apiRoot,{run=command,node=process.execPath}={}) {
   // The transport main is guarded by require.main===module. Loading it in a
@@ -96,7 +97,8 @@ export async function buildNativeBundle({builtRoot,outputRoot,platform,arch,comp
     return {platform,arch,name,url:new URL(releaseId+'/'+name,u.href.endsWith('/')?u.href:u.href+'/').href,...hash,unpackedBytes:files.reduce((n,f)=>n+(f.bytes||0),0),format:'native-tar'};
   }finally{await fs.rm(stage,{recursive:true,force:true});}
 }
-export async function buildSignedDistribution({manifest,outputRoot,keyId,privateKeyPath,gateReportPaths}) {
+export async function buildSignedDistribution({manifest,outputRoot,keyId,privateKeyPath,gateReportPaths,controlStage}) {
+  invariant(manifest.controlPackage && controlStage, 'COMPLETE_RELEASE_CONTROL_PACKAGE_REQUIRED');
   const output=await secureDirectory(outputRoot),s=await fs.lstat(privateKeyPath);invariant(s.isFile()&&!s.isSymbolicLink()&&(s.mode&0o077)===0,'INSECURE_RELEASE_SIGNING_KEY');
   invariant(manifest.runInputFingerprint===runInputFingerprint(manifest),'SIGNED_INPUT_FINGERPRINT_MISMATCH');
   const evidence=[];
@@ -105,6 +107,10 @@ export async function buildSignedDistribution({manifest,outputRoot,keyId,private
   }
   const fixed={...manifest,evidence};validateManifest(fixed);
   for(const pkg of fixed.packages){const actual=await fileDigest(join(output,pkg.name));invariant(actual.digest===pkg.digest&&actual.bytes===pkg.bytes,'DISTRIBUTION_PACKAGE_CHANGED');}
+  const control = fixed.controlPackage;
+  invariant(controlStage.expectedManifestDigest === control.manifestDigest && controlStage.expectedArchiveDigest === control.package.digest &&
+    resolve(controlStage.archivePath) === join(output,control.package.name), 'RELEASE_CONTROL_INPUT_CHANGED');
+  await signStagedControlPackage({...controlStage,outputRoot:output,keyId,privateKeyPath});
   const signed=signManifest(fixed,keyId,await fs.readFile(privateKeyPath,'utf8'));const signedPath=join(output,'signed-release.json');
   invariant(!(await fs.lstat(signedPath).catch(()=>null)),'IMMUTABLE_MANIFEST_EXISTS');await atomicJson(signedPath,signed);
   const catalogue={schemaVersion:1,channel:fixed.channel,releases:[{releaseId:fixed.releaseId,manifestDigest:signed.manifestDigest,envelope:signed}]};await atomicJson(join(output,'catalog.json'),catalogue);
@@ -114,6 +120,7 @@ export async function buildQualificationDistribution({manifest,outputRoot,instan
   // This key is never exported to or accepted by the production signing domain.
   const output=await secureDirectory(outputRoot),keyId='qualification-'+runId;
   for(const pkg of manifest.packages){const actual=await fileDigest(join(output,pkg.name));invariant(actual.digest===pkg.digest&&actual.bytes===pkg.bytes,'QUALIFICATION_PACKAGE_CHANGED');}
+  if(manifest.controlPackage){const pkg=manifest.controlPackage.package,actual=await fileDigest(join(output,pkg.name));invariant(actual.digest===pkg.digest&&actual.bytes===pkg.bytes,'QUALIFICATION_CONTROL_PACKAGE_CHANGED');}
   const inputFingerprint=runInputFingerprint(manifest),evidence=[];
   for(const kind of ['build','contracts','four-combinations','native-continuity','fault-recovery',...(manifest.upgradePaths.some(p=>p.migrationPlanDigest)?['online-migration']:[])]) {
     const pending={kind,result:'not-run',inputFingerprint,runId,recordedAt:new Date().toISOString(),reason:'Isolated qualification has not yet executed this gate.'};const path=join(output,'qualification-'+kind+'.json');await atomicJson(path,pending);evidence.push({...pending,reportDigest:(await fileDigest(path)).digest});
@@ -121,9 +128,13 @@ export async function buildQualificationDistribution({manifest,outputRoot,instan
   for(const plan of manifest.contractPlans||[]){const pending={kind:'semantic-contract',result:'not-run',contractPlanDigest:plan.planDigest,inputFingerprint,runId,recordedAt:new Date().toISOString(),reason:'This independent semantic contract has not yet executed in the isolated installation.'};const path=join(output,'qualification-semantic-contract-'+plan.planDigest.slice(7)+'.json');await atomicJson(path,pending);evidence.push({...pending,reportDigest:(await fileDigest(path)).digest});}
   const keys=generateKeyPairSync('ed25519'),qualified={...manifest,policy:{...manifest.policy,fallbacks:manifest.policy.fallbacks.map(f=>({...f,rehearsed:false}))},purpose:'qualification',qualification:{instanceId,inputFingerprint},runInputFingerprint:inputFingerprint,evidence};
   const envelope=signQualificationManifest(qualified,keyId,keys.privateKey.export({format:'pem',type:'pkcs8'}));
-  const trustRoot={schemaVersion:1,purpose:'qualification',qualificationInstanceId:instanceId,channel:qualified.channel,distributionOrigins:[...new Set(qualified.packages.map(p=>new URL(p.url).origin))],keys:[{id:keyId,publicKey:keys.publicKey.export({format:'pem',type:'spki'})}]};
+  let controlEnvelope;
+  if(qualified.controlPackage){const control=qualified.controlPackage;controlEnvelope={manifest:control.manifest,manifestDigest:control.manifestDigest,
+    signature:{algorithm:'Ed25519',keyId,value:sign(null,Buffer.from(canonical(control.manifest)),keys.privateKey).toString('base64')}};
+    await atomicJson(join(output,'qualification-control-package.json'),controlEnvelope);}
+  const trustRoot={schemaVersion:1,purpose:'qualification',qualificationInstanceId:instanceId,channel:qualified.channel,distributionOrigins:[...new Set([...qualified.packages,...(qualified.controlPackage?[qualified.controlPackage.package]:[])].map(p=>new URL(p.url).origin))],keys:[{id:keyId,publicKey:keys.publicKey.export({format:'pem',type:'spki'})}]};
   await atomicJson(join(output,'qualification-trust-root.json'),trustRoot);await atomicJson(join(output,'qualification-catalog.json'),{schemaVersion:1,channel:qualified.channel,releases:[{releaseId:qualified.releaseId,manifestDigest:envelope.manifestDigest,envelope}]});await atomicJson(join(output,'qualification-release.json'),envelope);
-  return {purpose:'qualification',instanceId,inputFingerprint,envelope,trustRoot};
+  return {purpose:'qualification',instanceId,inputFingerprint,envelope,trustRoot,...(controlEnvelope?{controlEnvelope}:{})};
 }
 export async function runtimeFingerprint(apiRoot,rootCheckout,{platform=process.platform,arch=process.arch,nodeMajor=22,builderVersion='node22-pnpm9',behavior={}}={}) {
   const {prepareApiContext}=await import('../containers/api-context.mjs');const context=await prepareApiContext(apiRoot,rootCheckout);

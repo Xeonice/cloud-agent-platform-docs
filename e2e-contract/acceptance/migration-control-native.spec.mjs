@@ -27,6 +27,8 @@ import {
 } from "../server/qualification-model.mjs";
 import { digest, invariant } from "../../deploy/upgrade/trust.mjs";
 import { atomicJson } from "../../deploy/upgrade/io.mjs";
+import { actualInstallerIdentity } from "../../deploy/upgrade/installer-identity.mjs";
+import { verifyInstalledControlPackage } from "../../deploy/upgrade/control-package.mjs";
 
 function legacyRows(db, instanceId) {
   const query = {
@@ -106,6 +108,14 @@ test("legacy v20 → independent control → ordinary B: original Owner/Guest/KV
     );
     config = JSON.parse(await fs.readFile(path, "utf8"));
     assertMigrationNativeIdentity(config);
+    const installedControl = await verifyInstalledControlPackage({
+      artifactRoot: config.target.controlArtifactRoot,
+      manifestPath: config.target.controlManifestPath,
+      trustRootPath: config.qa.trustRootPath,
+      engineIdentity: await actualInstallerIdentity({ instanceId: config.instanceId,
+        startIdentity: 'migration-qualification-engine-readback',
+        root: join(config.target.artifactRoot, 'installer') }),
+    });
     invariant(
       config.modelMode === "local-protocol-test",
       "MIGRATION_NATIVE_REAL_CLI_PROTOCOL_SERVICE_REQUIRED",
@@ -378,6 +388,10 @@ test("legacy v20 → independent control → ordinary B: original Owner/Guest/KV
     continuous(counterBefore, counterAfter);
     evidence.result = "passed";
     evidence.nativeQualified = true;
+    evidence.controlPackageDigest = installedControl.packageDigest;
+    evidence.executionEngineDigest = installedControl.executionEngineDigest;
+    evidence.businessTargetDigest = command.targetDigest;
+    evidence.businessTargetReleaseId = command.targetReleaseId;
     evidence.migrationId = prepared.migrationId;
     evidence.migrationConfigDigest = applied.configDigest;
     evidence.oldSourceManifestDigest = h.provisionReceipt.sourceManifestDigest;

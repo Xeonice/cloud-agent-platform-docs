@@ -9,7 +9,7 @@ import {
   apiRoot,
 } from "../test-support/control-migration-fixtures.mjs";
 import {
-  createControlMigrationRuntime,
+  createControlMigrationRuntime as createRuntimeUnderTest,
   createMigrationDockerAdapter,
   migrationCapacityInspectionTarget,
   waitForMigrationLeaseRelease,
@@ -28,6 +28,10 @@ import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 import { createSupervisorControlRuntime } from "./supervisor-control-runtime.mjs";
 import { createProtectedRoleLifecycle } from "./protected-role-lifecycle.mjs";
 import { createCoordinatorIdentityReader, createCoordinatorInventory } from "./supervisor-inventory.mjs";
+// These historical algorithm fixtures exercise recovery and old command
+// reconciliation. They do not qualify the disabled production stop-first path.
+const createControlMigrationRuntime = (input, ports) => createRuntimeUnderTest(input,
+  { ...ports, ...(ports.adapter ? { allowDisruptiveFixture: true } : {}) });
 async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false, apiReadinessFailureCodes = [], entryApiHealthStatus = 200 } = {}) {
   const f = await fixture(t),
     events = [],
@@ -779,6 +783,26 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     },
   };
 }
+test("default runtime rejects stop-first apply/resume with zero lifecycle commands and preserves recovery", async t => {
+  const f = await runtimeFixture(t, { withCollector: true });
+  const originalStates = structuredClone(f.states);
+  const runtime = await createRuntimeUnderTest(f.input, { Database, adapter: f.adapter,
+    preStopInventory: f.preStopInventory, capacitySample: f.capacitySample });
+  t.after(() => runtime.close());
+  for (const command of ['apply', 'resume']) {
+    assert.throws(() => runtime[command](), { code: 'CONTROL_MIGRATION_STOP_FIRST_DISABLED' });
+    assert.deepEqual(f.events, []);
+    assert.deepEqual(f.states, originalStates);
+  }
+  const db = new Database(join(f.input.runtime.journalRoot, 'migration.db'), { readonly: true });
+  try {
+    assert.equal(db.prepare('SELECT count(*) n FROM control_commands').get().n, 0);
+    assert.equal(db.prepare('SELECT count(*) n FROM control_migration_actor').get().n, 0);
+    assert.equal(db.prepare('SELECT state FROM control_migration_run').get().state, 'planned');
+  } finally { db.close(); }
+  assert.equal(typeof runtime.rollback, 'function');
+});
+
 test("only the original writer stop receives its declared grace in the real runtime journal", async t => {
   const f = await runtimeFixture(t, { withCollector: true });
   f.input.runtime.actionBudgetMs = 2000;

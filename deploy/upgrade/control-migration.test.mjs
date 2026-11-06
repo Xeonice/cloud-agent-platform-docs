@@ -282,7 +282,7 @@ test("streaming export/import never calls all() on history, even with many indep
   assert.ok(manifest.bytes > 8 * 1024 * 1024);
   assert.ok(iterations >= 14);
 });
-test("prepare is exact-idempotent, cannot change immutable inputs, and apply requires a complete fixed runtime", async (t) => {
+test("prepare is exact-idempotent, cannot change immutable inputs, and production apply cannot use stop-first", async (t) => {
   const f = await fixture(t),
     args = { ...f.args, controlPath: f.controlPath };
   const first = await prepareControlMigration(args),
@@ -306,7 +306,7 @@ test("prepare is exact-idempotent, cannot change immutable inputs, and apply req
   );
   await assert.rejects(
     runControlMigrationCommand("apply", configPath),
-    /CONTROL_MIGRATION_RUNTIME_CONFIG_REQUIRED/,
+    /CONTROL_MIGRATION_STOP_FIRST_DISABLED/,
   );
 });
 test("auth or source identity changes, overlapping ledger/auth directories, and active authority reject import", async (t) => {

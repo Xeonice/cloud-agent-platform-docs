@@ -18,6 +18,7 @@ import {
   verifySignedManifest,
 } from "../../deploy/upgrade/trust.mjs";
 import { command } from "../../deploy/upgrade/artifacts.mjs";
+import { assertQualificationIsolation, qualificationInstanceAllowed } from './qualification-isolation.mjs';
 import {
   createProductionRoleAdapter,
   execute,
@@ -107,7 +108,7 @@ export async function startIndependentUpgradeHarness(input) {
   );
   invariant(
     input.isolated === true &&
-      ID.test(input.instanceId) &&
+      (input.sameInstanceQa === undefined ? ID.test(input.instanceId) : qualificationInstanceAllowed(input)) &&
       input.docker?.dedicated === true &&
       [
         "root",
@@ -127,6 +128,7 @@ export async function startIndependentUpgradeHarness(input) {
       ),
     "INDEPENDENT_NATIVE_FROZEN_INPUT_REQUIRED",
   );
+  await assertQualificationIsolation(input);
   const root = await secureDirectory(input.root);
   await reserve(root);
   const startFile = await fs.open(
@@ -822,6 +824,7 @@ export async function startIndependentUpgradeHarness(input) {
     paths,
     agentConfigPath,
     controlPackageDigest: verifiedControl.packageDigest,
+    controlExecutionEngineDigest: verifiedControl.executionEngineDigest,
     coldReceiptDigest: receiptDigest,
   };
   await atomicJson(join(root, "independent-harness.json"), info);

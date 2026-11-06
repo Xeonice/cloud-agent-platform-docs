@@ -1,0 +1,194 @@
+{
+  "schemaVersion": 1,
+  "kind": "historical-legacy-settlement-schema-and-factory-fixture",
+  "apiCommit": "17e2ad52bfacea49ec9834d4f98693e3e66fbd79",
+  "modified": false,
+  "productionPackageExcluded": true,
+  "files": [
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-store.ts",
+      "rawDigest": "sha256:51cd37a67cb038d1eaf5b28616e30d3b3bc5c7995f45d103106a51186f2172d5",
+      "bytes": 36032
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-contract-store.ts",
+      "rawDigest": "sha256:00bf7a85c6c938b1daccccdb338968c9f3001e638b0fe735eda458dd24b211f0",
+      "bytes": 9374
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-trust.ts",
+      "rawDigest": "sha256:8a957afb9618c46bc225604941d95520e18e534354b1f0553474c56460b54e5c",
+      "bytes": 12003
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-contract-authority.ts",
+      "rawDigest": "sha256:ea8ab5b1a4937e6c3faceaaf78a1294191d0b14bff2cce2700491a1c1d4fedc5",
+      "bytes": 730
+    },
+    {
+      "path": "packages/contracts/src/upgrade.contract.ts",
+      "rawDigest": "sha256:15a33aa25b21f37b1fce7a530171055996dbeb75fdde31a1d301bdc1b47de162",
+      "bytes": 13331
+    },
+    {
+      "path": "drizzle/0000_certain_groot.sql",
+      "rawDigest": "sha256:831fb17aa13f66075085d3c190649a9af4945e3c4b63caac8d7b7870c0860b0c",
+      "bytes": 1983
+    },
+    {
+      "path": "drizzle/0001_moaning_maximus.sql",
+      "rawDigest": "sha256:59e2232de58223772aaee36a48c08db3f8cc0fe11217b2464f8306778b8a6bff",
+      "bytes": 67
+    },
+    {
+      "path": "drizzle/0002_sturdy_warlock.sql",
+      "rawDigest": "sha256:43af077b5c35c4bd3d3dfcf4d664f7a3edd5a1ed18fbc93a3ceba4949d2b95c8",
+      "bytes": 58
+    },
+    {
+      "path": "drizzle/0003_keen_doctor_faustus.sql",
+      "rawDigest": "sha256:d912d6d09c08905beb9205c5248598c12b0e140912afa285ffbf0e359e17a50b",
+      "bytes": 1528
+    },
+    {
+      "path": "drizzle/0004_real_crusher_hogan.sql",
+      "rawDigest": "sha256:197b84ee3da6d82424ac567a6552430c4df8d748dabae7358c2fcd553b697c5e",
+      "bytes": 2355
+    },
+    {
+      "path": "drizzle/0005_cheerful_emma_frost.sql",
+      "rawDigest": "sha256:c638d85331e2bb518beffe765c585f3ee671230fae627e89ba71d6aa0b1233a9",
+      "bytes": 1043
+    },
+    {
+      "path": "drizzle/0006_smiling_zarek.sql",
+      "rawDigest": "sha256:b1b4c7736f9460554fd7cd807cfe7aba4f4739c48b9dd2ac33b1693b50b13d09",
+      "bytes": 52
+    },
+    {
+      "path": "drizzle/0007_woozy_scream.sql",
+      "rawDigest": "sha256:b8f73890e12d138506a7d452312fd94968431485c589b33aa3eabde7db05f700",
+      "bytes": 4858
+    },
+    {
+      "path": "drizzle/0008_mysterious_madripoor.sql",
+      "rawDigest": "sha256:70cbcd1c0b72a78981e4248cb0d1935087a1237143fac1405b8092927503acea",
+      "bytes": 48
+    },
+    {
+      "path": "drizzle/0009_public_turbo.sql",
+      "rawDigest": "sha256:88d798f1c491c84eaf85a11c4dab74899feada1d6ce0ba3715453a47e76a03f4",
+      "bytes": 1388
+    },
+    {
+      "path": "drizzle/0010_cuddly_screwball.sql",
+      "rawDigest": "sha256:8eccb63881a95915af6fe87f76795a97f1b87cb3a84d3ee14036024dd786fd92",
+      "bytes": 4608
+    },
+    {
+      "path": "drizzle/0011_stormy_tusk.sql",
+      "rawDigest": "sha256:27df0b4b71d559c1e8b2ca72d40689962e8075d3142ed839dddd4e11a47cc9e5",
+      "bytes": 1445
+    },
+    {
+      "path": "drizzle/0012_wealthy_psynapse.sql",
+      "rawDigest": "sha256:ebfa53b2102f1e0f02a1b74be6d201e20eb2fa79882672882a664a4115323b86",
+      "bytes": 3817
+    },
+    {
+      "path": "drizzle/0013_clumsy_maria_hill.sql",
+      "rawDigest": "sha256:d79057834784ea38e785d9d49b15f2a0c01e5b1af9a300a90dcc090fd617f7e7",
+      "bytes": 2939
+    },
+    {
+      "path": "drizzle/0014_optimal_lady_mastermind.sql",
+      "rawDigest": "sha256:82de9deea64baa0bb7037d82bda3960caa93b5070fa1ccb0bcb15ed4609d0714",
+      "bytes": 1097
+    },
+    {
+      "path": "drizzle/0015_sticky_flatman.sql",
+      "rawDigest": "sha256:097f1918a9cfbf62a4b3411817abfc5f034633cacf3c21d99143326f5cfcb12c",
+      "bytes": 472
+    },
+    {
+      "path": "drizzle/0016_dizzy_captain_cross.sql",
+      "rawDigest": "sha256:3da485564cd3af1e04401dc6286ba1f770ce1f1aae099e5d14fe5e2b37eee4bc",
+      "bytes": 72
+    },
+    {
+      "path": "drizzle/0017_flawless_zarda.sql",
+      "rawDigest": "sha256:7dbe1d3946e4fdbd19d63af51114acf67d830cb1821905e363f26f52ee56ab07",
+      "bytes": 1024
+    },
+    {
+      "path": "drizzle/0018_hesitant_bushwacker.sql",
+      "rawDigest": "sha256:41057ff6fd457f92f5bfe0d8526364bf1eb26b88fd85d3a5eb036add82f0beb2",
+      "bytes": 3451
+    },
+    {
+      "path": "drizzle/0019_abnormal_carmella_unuscione.sql",
+      "rawDigest": "sha256:ba058cb183ce01a0aabc40bc0fffdcc2199d4f37a7c6b7e412b54588db5f09c2",
+      "bytes": 1153
+    },
+    {
+      "path": "drizzle/0020_bitter_vanisher.sql",
+      "rawDigest": "sha256:ea1afb6a2cdb9fb9cb500f9205b29747e1e3119bb25d48e482189785261ebd2a",
+      "bytes": 2316
+    },
+    {
+      "path": "drizzle/0021_same_stephen_strange.sql",
+      "rawDigest": "sha256:36d6a7c249673c40af4f459c7c236ea348f6ce8aaa790ce971519924a4666a1d",
+      "bytes": 53
+    },
+    {
+      "path": "drizzle/0022_hot_iron_patriot.sql",
+      "rawDigest": "sha256:ee28ef29dbd04b16a5e6c89da959e6226e68e0812e4e215f6bb93230d3991016",
+      "bytes": 648
+    },
+    {
+      "path": "drizzle/0023_exotic_stingray.sql",
+      "rawDigest": "sha256:1d4d681afe13ec21fe656c173b63983694ca37e88dd6af86c163eb53a97ad655",
+      "bytes": 193
+    },
+    {
+      "path": "drizzle/0024_equal_rocket_raccoon.sql",
+      "rawDigest": "sha256:3672ca90ece2aace9f55fe10c661855f6ff3609730abb588cc07b632a9f4ca55",
+      "bytes": 38
+    },
+    {
+      "path": "drizzle/0025_instance_upgrades.sql",
+      "rawDigest": "sha256:5ec032e41ee0614763aedd662a756334e10d0264679cbb38402159fffd9d4ed1",
+      "bytes": 7228
+    },
+    {
+      "path": "drizzle/0026_automation_launch_intents.sql",
+      "rawDigest": "sha256:12f40a3ae15bf3f9ad8fd4a3b31338979da5a909b651a55cb86a900a66c8a682",
+      "bytes": 1579
+    },
+    {
+      "path": "drizzle/0027_upgrade_online_projection_and_recovery.sql",
+      "rawDigest": "sha256:6b3477bdef34a90b7f342d191e6eca804ad2ee3b63e0389ae800ffabe0b1a885",
+      "bytes": 2558
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-role-handoffs.ts",
+      "rawDigest": "sha256:a1f55b381555fc2197e4bb53438b6c1acf54e6fcaec5e914a01016b8f9d13999",
+      "bytes": 8782
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/coordinator-handoff.ts",
+      "rawDigest": "sha256:ddda0944cb8ff7218cc35f0baca21d235f09abccd8e4d579c553a4714de9c86b",
+      "bytes": 12493
+    },
+    {
+      "path": "apps/api/src/platform/upgrade/upgrade-atomic-file.ts",
+      "rawDigest": "sha256:c1b4be03e9878d7c3a412f62beb458f09d1d9f88268f4a6445302133bee4daf2",
+      "bytes": 986
+    },
+    {
+      "path": "apps/api/src/platform/time/uuid-id-generator.ts",
+      "rawDigest": "sha256:a5f7611ac53de81f8c2c9383b3181e46af1ee6318fa80595249a4c5f5205f851",
+      "bytes": 426
+    }
+  ]
+}

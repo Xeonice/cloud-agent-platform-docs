@@ -14,6 +14,9 @@ import { pathToFileURL } from "node:url";
 import { userInfo } from "node:os";
 import { digest as upgradeDigest, invariant as upgradeInvariant, runInputFingerprint } from "../upgrade/trust.mjs";
 import { unpackVerified } from "../upgrade/artifacts.mjs";
+import { validateControlPackage } from "../upgrade/control-package.mjs";
+import { unpackStagedControlPackage } from "../upgrade/control-package-build.mjs";
+import { buildQualificationDistribution } from "../upgrade/build-distribution.mjs";
 import { validateManifest as validateWebManifest } from "./jenkins-web.mjs";
 import {
   LINUX_DEPLOY,
@@ -58,6 +61,21 @@ export const JOBS = Object.freeze({
   instance: "agent-platform-instance-package",
   evidence: "agent-platform-upgrade-evidence",
 });
+// A business-only legacy/fixture package remains readable, but cannot enter the
+// formal release/evidence path as a complete independent-control installation.
+export function releaseControlPackage(receipt) {
+  const control = receipt?.control;
+  upgradeInvariant(control?.kind === 'control-package-unsigned-stage' && control.signed === false &&
+    control.privateKeyAccessed === false, 'COMPLETE_RELEASE_CONTROL_PACKAGE_REQUIRED');
+  const manifest = validateControlPackage(control.manifest), pkg = control.package;
+  upgradeInvariant(control.manifestDigest === upgradeDigest(manifest) && manifest.apiRevision === receipt.commits.api &&
+    manifest.projectRevision === receipt.commits.project && manifest.executionEngineDigest === receipt.components.installer.artifactDigest &&
+    manifest.executionEngineDigest === receipt.components.installer.inputFingerprint && pkg?.digest === control.archive?.digest &&
+    pkg.bytes === control.archive.bytes && pkg.platform === receipt.package.platform && pkg.arch === receipt.package.arch &&
+    pkg.format === 'native-tar' && basename(pkg.name) === pkg.name && pkg.name === basename(control.archive.path),
+    'RELEASE_CONTROL_INPUT_CHANGED');
+  return { manifest, manifestDigest: control.manifestDigest, package: pkg };
+}
 const ARCHIVES = Object.freeze({
   "prebuilt.tar.gz": ASSETS[1],
   "source.tar.gz": ASSETS[2],
@@ -883,6 +901,22 @@ export function createReleaseRunner(overrides = {}) {
     if (size !== expected.size || hash.digest("hex") !== expected.sha256)
       throw new Error("Jenkins artifact digest differs from verified manifest");
   }
+  async function controlInputs(instance, receipt, outputRoot) {
+    const control = releaseControlPackage(receipt), inputRoot = join(outputRoot, 'control-inputs');
+    await fs.mkdir(inputRoot, { recursive: true, mode: 0o700 });
+    const original = await instance.get('artifact/instance-package/control/control-package.staged.json');
+    const { manifest, package: pkg, receiptPath, ...expected } = receipt.control;
+    upgradeInvariant(upgradeDigest(original) === upgradeDigest(expected), 'RELEASE_CONTROL_STAGE_RECEIPT_CHANGED');
+    const body = await instance.get('artifact/instance-package/control/control-package.unsigned.json');
+    upgradeInvariant(upgradeDigest(body) === control.manifestDigest, 'RELEASE_CONTROL_INPUT_CHANGED');
+    const unsignedManifestPath = join(inputRoot, 'control-package.unsigned.json'), stageReceiptPath = join(inputRoot, 'control-package.staged.json');
+    await writeJson(unsignedManifestPath, body);await writeJson(stageReceiptPath, original);
+    const archivePath = join(outputRoot, control.package.name);
+    await download(instance, 'artifact/instance-package/control/' + control.package.name,
+      { size: control.package.bytes, sha256: control.package.digest.slice(7) }, archivePath);
+    return { binding: control, archivePath, unsignedManifestPath, stageReceiptPath,
+      expectedManifestDigest: control.manifestDigest, expectedArchiveDigest: control.package.digest };
+  }
   async function downloadApi(proof, plan, target, expectedImageId) {
     const manifest = validateApiPackage(
       await proof.get("artifact/api-package.json"),
@@ -1532,7 +1566,8 @@ export function createReleaseRunner(overrides = {}) {
       await download(instance,"artifact/instance-package/distribution/"+pkg.name,{size:pkg.bytes,sha256:pkg.digest.slice(7)},join(packageRoot,pkg.name));
       const policy=await readJson(join(tools,"upgrade-distribution-policy.json"));
       upgradeInvariant(policy.upgradePaths.every(path=>path.migrationPlanDigest===null||path.migrationPlanDigest===receipt.migrationPlanDigest),"MIGRATION_PACKAGE_POLICY_MISMATCH");
-      const manifest={schemaVersion:2,releaseId:planRecord.tag,channel:policy.channel,publishedAt:now(),commits,components:receipt.components,packages:[pkg],upgradePaths:policy.upgradePaths,policy:policy.policy};
+      const control = await controlInputs(instance,receipt,packageRoot);
+      const manifest={schemaVersion:2,releaseId:planRecord.tag,channel:policy.channel,publishedAt:now(),commits,components:receipt.components,packages:[pkg],upgradePaths:policy.upgradePaths,policy:policy.policy,controlPackage:control.binding};
       manifest.runInputFingerprint=runInputFingerprint(manifest);
       const sourceRoot=join(workspace,"upgrade-source");await fs.mkdir(sourceRoot,{mode:0o700});
       await run("git",["init"],sourceRoot);await run("git",["fetch","--depth=1","https://github.com/"+REPOSITORIES.project.name+".git",commits.project],sourceRoot);await run("git",["checkout","--detach","FETCH_HEAD"],sourceRoot);
@@ -1543,11 +1578,21 @@ export function createReleaseRunner(overrides = {}) {
       upgradeInvariant(fixedStat.isFile()&&!fixedStat.isSymbolicLink()&&(fixedStat.mode&0o022)===0,"INSECURE_QUALIFICATION_INPUTS");
       const fixedInputs=await readJson(fixedInputsPath);
       upgradeInvariant(fixedInputs.isolated===true&&isAbsolute(fixedInputs.initialRoot||'')&&isAbsolute(fixedInputs.legacyRoot||'')&&fixedInputs.docker?.dedicated===true&&fixedInputs.runtimeCredential&&fixedInputs.headlessPrompt&&fixedInputs.automationInput,"REAL_QUALIFICATION_BASELINE_REQUIRED");
-      const acceptanceConfigPath=join(packageRoot,"acceptance-input.json"),acceptanceRoot=join(workspace,'qualification-installation-'+randomUUID());
-      await writeJson(acceptanceConfigPath,{...fixedInputs,root:acceptanceRoot,instanceId:'upgrade-acceptance-cd-'+randomUUID(),archiveRoot:packageRoot,targetRoot:bundle.root,targetManifest:manifest,isolated:true,isolation:'containers'});
+      const acceptanceConfigPath=join(packageRoot,"acceptance-input.json"),acceptanceRoot=join(workspace,'qualification-installation-'+randomUUID()), instanceId='upgrade-acceptance-cd-'+randomUUID();
+      const qualified=await buildQualificationDistribution({manifest,outputRoot:packageRoot,instanceId,runId:'ci-'+randomUUID()});
+      const controlArtifactRoot=join(packageRoot,'control-artifact');
+      await unpackStagedControlPackage({archivePath:control.archivePath,manifest:control.binding.manifest,
+        expectedArchiveDigest:control.binding.package.digest,artifactRoot:controlArtifactRoot,
+        run:(program,args,options={})=>run(program,args,options.cwd)});
+      await writeJson(acceptanceConfigPath,{...fixedInputs,root:acceptanceRoot,instanceId,archiveRoot:packageRoot,targetRoot:bundle.root,
+        targetManifest:qualified.envelope.manifest,isolated:true,isolation:'containers',
+        target:{...fixedInputs.target,artifactRoot:bundle.root,manifestPath:join(packageRoot,'qualification-release.json'),archivePath:join(packageRoot,pkg.name),
+          controlArtifactRoot,controlManifestPath:join(packageRoot,'qualification-control-package.json'),controlArchivePath:control.archivePath,
+          catalogFile:join(packageRoot,'qualification-catalog.json')},
+        qa:{...fixedInputs.qa,trustRootPath:join(packageRoot,'qualification-trust-root.json')}});
       await run('corepack',['pnpm','install','--frozen-lockfile'],join(sourceRoot,'e2e-contract'));
       await run('corepack',['pnpm','exec','playwright','install','chromium'],join(sourceRoot,'e2e-contract'));
-      return {sourceRoot,outputRoot,archiveRoot:packageRoot,packageRoot:bundle.root,manifestPath,acceptanceConfigPath,commits,packageDigest:pkg.digest,runInputFingerprint:manifest.runInputFingerprint,platform:pkg.platform,arch:pkg.arch,migrationPlanDigest:manifest.upgradePaths.find(p=>p.migrationPlanDigest)?.migrationPlanDigest||null};
+      return {sourceRoot,outputRoot,archiveRoot:packageRoot,packageRoot:bundle.root,manifestPath,acceptanceConfigPath,commits,packageDigest:pkg.digest,runInputFingerprint:manifest.runInputFingerprint,platform:pkg.platform,arch:pkg.arch,migrationPlanDigest:manifest.upgradePaths.find(p=>p.migrationPlanDigest)?.migrationPlanDigest||null,controlPackage:control.binding};
     }
     const plan = await readPlan(args[0]),
       folder = join(releases, plan.key);
@@ -1563,18 +1608,19 @@ export function createReleaseRunner(overrides = {}) {
       await download(instance, "artifact/instance-package/distribution/" + pkg.name, {size: pkg.bytes, sha256: pkg.digest.slice(7)}, join(outputRoot, pkg.name));
       const policy = await readJson(join(tools, "upgrade-distribution-policy.json"));
       upgradeInvariant(policy.upgradePaths.every(path=>path.migrationPlanDigest===null||path.migrationPlanDigest===receipt.migrationPlanDigest),"MIGRATION_PACKAGE_POLICY_MISMATCH");
-      const manifest = { schemaVersion: 2, releaseId: plan.tag, channel: policy.channel, publishedAt: now(), commits: plan.commits, components: receipt.components, packages: [pkg], upgradePaths: policy.upgradePaths, policy: policy.policy };
+      const control = await controlInputs(instance,receipt,outputRoot);
+      const manifest = { schemaVersion: 2, releaseId: plan.tag, channel: policy.channel, publishedAt: now(), commits: plan.commits, components: receipt.components, packages: [pkg], upgradePaths: policy.upgradePaths, policy: policy.policy, controlPackage:control.binding };
       manifest.runInputFingerprint = runInputFingerprint(manifest);
       const evidence = await jenkins("evidence", args[2], {...plan, instancePackageBuild: Number(args[1])});
       const reports = await evidence.get("artifact/upgrade-evidence/report-set.json");
       upgradeInvariant(reports.runInputFingerprint === manifest.runInputFingerprint && Array.isArray(reports.reports), "EVIDENCE_INPUT_MISMATCH");
       const gateReportPaths=[];
       for (const report of reports.reports) {
-        upgradeInvariant(/^(build|contracts|four-combinations|native-continuity|fault-recovery|online-migration)\.json$/.test(report.name) && /^sha256:[a-f0-9]{64}$/.test(report.digest), "INVALID_GATE_REPORT");
+        upgradeInvariant(/^(build|contracts|four-combinations|native-continuity|fault-recovery|online-migration|independent-control)\.json$/.test(report.name) && /^sha256:[a-f0-9]{64}$/.test(report.digest), "INVALID_GATE_REPORT");
         const path = join(outputRoot, report.name);
         await download(evidence,"artifact/upgrade-evidence/"+report.name,{size:report.bytes,sha256:report.digest.slice(7)},path); gateReportPaths.push(path);
       }
-      return {manifest,outputRoot,keyId:policy.keyId,privateKeyPath:join(tools,"release-signing-key.pem"),gateReportPaths};
+      return {manifest,outputRoot,keyId:policy.keyId,privateKeyPath:join(tools,"release-signing-key.pem"),gateReportPaths,controlStage:control};
     }
     if (action === "record-build")
       return recordBuild(plan, args[1], args[2], folder);

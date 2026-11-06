@@ -16,6 +16,7 @@ import {
   controlMigrationStatus,
 } from "./control-migration.mjs";
 import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mjs";
+import { assertControlMigrationCommand, controlMigrationExecutionPolicy } from "./control-migration-policy.mjs";
 
 async function privateJson(path) {
   const s = await fs.lstat(path);
@@ -60,6 +61,10 @@ export async function runControlMigrationCommand(command, configPath) {
       Object.keys(c).every((k) => required.includes(k) || optional.includes(k)),
     "CONTROL_MIGRATION_CONFIG_INVALID",
   );
+  // Reject before importing SQLite, creating a journal, acquiring authority or
+  // invoking any adapter. The legacy stop-first executor is recovery-only in
+  // production; an unsupported adoption must leave the current service intact.
+  assertControlMigrationCommand(command);
   if (c.runtime && !["plan", "status"].includes(command))
     await assertMigrationRunnerIdentity(c, { configPath: resolve(configPath) });
   const require = createRequire(join(c.apiRoot, "apps/api/package.json")),
@@ -71,7 +76,9 @@ export async function runControlMigrationCommand(command, configPath) {
   if (["apply", "resume", "rollback"].includes(command))
     invariant(c.runtime, "CONTROL_MIGRATION_RUNTIME_CONFIG_REQUIRED");
   if (command === "plan")
-    return { ...planControlMigration({ ...c, Database }), runtimeImplemented: Boolean(c.runtime) };
+    return { ...planControlMigration({ ...c, Database }),
+      runtimeImplemented: Boolean(c.runtime), onlineAdoptionImplemented: false,
+      executionPolicy: controlMigrationExecutionPolicy("apply") };
   // Recovery uses the already durable original runtime/config identity. A stopped
   // WAL-mode business DB on a read-only mount cannot recreate its SHM sidecar.
   if (!(c.runtime && ["resume", "rollback"].includes(command)))

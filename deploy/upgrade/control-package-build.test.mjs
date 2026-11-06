@@ -8,7 +8,7 @@ import { command } from './artifacts.mjs';
 import { treeManifest, atomicJson, fileDigest } from './io.mjs';
 import { digest } from './trust.mjs';
 import { verifyInstalledControlPackage } from './control-package.mjs';
-import { stageControlApiClosure, probeControlImportClosure, buildControlPackage } from './control-package-build.mjs';
+import { stageControlApiClosure, probeControlImportClosure, buildControlPackage, stageControlPackage, signStagedControlPackage, verifyStagedControlArchive } from './control-package-build.mjs';
 
 async function commit(root) {
   await command('git', ['init', '-q'], { cwd: root });
@@ -41,6 +41,39 @@ test('builds an independently signed control artifact from actual compiled impor
   const input = { apiRoot: staged.apiRoot, apiSourceRoot: staged.apiRoot, installerRoot: installer, projectSourceRoot: project,
     apiRevision, projectRevision, version: 'v0.0.1-control.fixture', expectedApiClosureDigest: staged.actual.closureDigest,
     expectedInstallerDigest: executionEngineDigest, keyId: 'isolated-fixture', privateKeyPath };
+  // Independent staging cannot access a missing key. The public bytes and real
+  // native import probes are complete before the signer is ever called.
+  const unsigned = await stageControlPackage({ ...input, privateKeyPath: join(root, 'must-not-be-read.pem'), outputRoot: join(root, 'unsigned') });
+  assert.equal(unsigned.kind, 'control-package-unsigned-stage');
+  assert.equal(unsigned.signed, false); assert.equal(unsigned.privateKeyAccessed, false);
+  assert.equal(await fs.lstat(join(root, 'unsigned/control-package.signed.json')).catch(() => null), null);
+  const signInput = { stageReceiptPath: unsigned.receiptPath, expectedManifestDigest: unsigned.manifestDigest,
+    expectedArchiveDigest: unsigned.archive.digest, keyId: 'isolated-fixture', privateKeyPath };
+  const stagedEntry = join(unsigned.artifactRoot, 'installer/control-main.mjs'), stagedBytes = await fs.readFile(stagedEntry);
+  await fs.appendFile(stagedEntry, '// corrupt staged payload\n');
+  await assert.rejects(signStagedControlPackage({ ...signInput, privateKeyPath: join(root, 'must-not-be-read.pem') }), /CONTROL_STAGED_TREE_CHANGED/);
+  await fs.writeFile(stagedEntry, stagedBytes);
+  await assert.rejects(signStagedControlPackage({ ...signInput, expectedManifestDigest: 'sha256:' + 'f'.repeat(64),
+    privateKeyPath: join(root, 'must-not-be-read.pem') }), /CONTROL_STAGED_DESCRIPTOR_CHANGED/);
+  const originalArchive = await fs.readFile(unsigned.archive.path);
+  await fs.appendFile(unsigned.archive.path, 'corrupt archive');
+  await assert.rejects(signStagedControlPackage({ ...signInput, privateKeyPath: join(root, 'must-not-be-read.pem') }), /CONTROL_STAGED_ARCHIVE_CHANGED/);
+  await fs.writeFile(unsigned.archive.path, originalArchive);
+  const independentlySigned = await signStagedControlPackage(signInput);
+  const independentVerified = await verifyInstalledControlPackage({ artifactRoot: independentlySigned.artifactRoot,
+    manifestPath: independentlySigned.manifestPath, trustRootPath, engineIdentity: { artifactDigest: executionEngineDigest } });
+  assert.equal(independentVerified.packageDigest, unsigned.manifestDigest);
+  assert.equal((await fileDigest(unsigned.archive.path)).digest, unsigned.archive.digest);
+  const publisher = join(root, 'publisher');await fs.mkdir(publisher, { mode: 0o700 });
+  const publisherArchive = join(publisher, unsigned.archive.path.split('/').at(-1)), publisherDescriptor = join(publisher, 'control-package.unsigned.json'),
+    publisherReceipt = join(publisher, 'control-package.staged.json');
+  await fs.copyFile(unsigned.archive.path, publisherArchive);await fs.copyFile(unsigned.unsignedManifestPath, publisherDescriptor);
+  await fs.copyFile(unsigned.receiptPath, publisherReceipt);
+  const portable = await signStagedControlPackage({ ...signInput, stageReceiptPath: publisherReceipt,
+    unsignedManifestPath: publisherDescriptor, archivePath: publisherArchive, outputRoot: publisher });
+  assert.equal((await verifyInstalledControlPackage({ artifactRoot: unsigned.artifactRoot, manifestPath: portable.manifestPath,
+    trustRootPath, engineIdentity: { artifactDigest: executionEngineDigest } })).packageDigest, unsigned.manifestDigest);
+  await assert.rejects(signStagedControlPackage({ ...signInput, privateKeyPath: join(root, 'must-not-be-read.pem') }), /IMMUTABLE_CONTROL_DESCRIPTOR_EXISTS/);
   const result = await buildControlPackage({ ...input, outputRoot: join(root, 'output') });
   assert.equal(result.apiRevision, apiRevision); assert.equal(result.projectRevision, projectRevision);
   assert.equal(result.executionEngineDigest, executionEngineDigest);
@@ -82,4 +115,21 @@ test('builds an independently signed control artifact from actual compiled impor
   await fs.writeFile(factory, originalFactory);
   await fs.appendFile(factory, "\nrequire('node:net').createServer().listen(0,'127.0.0.1');\n");
   await assert.rejects(probeControlImportClosure(staged.apiRoot), /Artifact command failed/);
+});
+
+test('archive signing rejects an unmanifested orphan path and symlink traversal before extraction', async t => {
+  const root = await fs.realpath(await fs.mkdtemp(join(tmpdir(), 'control-package-archive-')));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const manifest = { schemaVersion: 1, kind: 'upgrade-control', version: 'v0.0.1-fixture', protocolVersion: 1,
+    apiRevision: 'a'.repeat(40), projectRevision: 'b'.repeat(40), treeDigest: digest([]), executionEngineDigest: digest([]) };
+  for (const kind of ['orphan', 'escape']) {
+    const archivePath = join(root, kind + '.tgz');
+    await command('python3', ['-c', `import io,tarfile,sys
+with tarfile.open(sys.argv[1],'w:gz') as t:
+ m=tarfile.TarInfo('missing-parent/file' if sys.argv[2]=='orphan' else 'link');m.mode=0o600
+ if sys.argv[2]=='orphan': m.size=1;t.addfile(m,io.BytesIO(b'x'))
+ else: m.type=tarfile.SYMTYPE;m.linkname='../outside';t.addfile(m)`, archivePath, kind]);
+    await assert.rejects(verifyStagedControlArchive({ archivePath, manifest,
+      expectedArchiveDigest: (await fileDigest(archivePath)).digest }), /CONTROL_ARCHIVE_UNSAFE/);
+  }
 });

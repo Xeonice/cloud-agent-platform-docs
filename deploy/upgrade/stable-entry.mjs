@@ -19,11 +19,12 @@ export function validateBinding(value) {
   invariant(Array.isArray(value.retainedWeb) && value.retainedWeb.every(w => DIGEST.test(w.digest) && typeof w.root === 'string'), 'INVALID_RETAINED_WEB');
   return value;
 }
-export async function createStableEntry({ root, instanceId, controlKey, observerKey = null, stickyKey, verifyFence, verifyContractFence, initialBinding, host = '127.0.0.1', port = 0, controlPort = 0, controlOrigin = null, privateEntryKey = null, businessProbeKey = null, verifyControlAuthority, clock = Date.now, controlRequestTimeoutMs = 2000, maxControlRequests = 32 }) {
+export async function createStableEntry({ root, instanceId, controlKey, observerKey = null, stickyKey, verifyFence, verifyContractFence, initialBinding, host = '127.0.0.1', port = 0, controlPort = 0, controlOrigin = null, privateEntryKey = null, businessProbeKey = null, verifyControlAuthority, nestedLegacyOuter = false, clock = Date.now, controlRequestTimeoutMs = 2000, maxControlRequests = 32 }) {
   invariant(typeof verifyFence === 'function' && controlKey?.length >= 32 && stickyKey?.length >= 32, 'ENTRY_AUTH_REQUIRED');
   invariant(observerKey === null || typeof observerKey === 'string' && observerKey.length >= 32 && observerKey !== controlKey && observerKey !== privateEntryKey, 'ENTRY_OBSERVER_KEY_INVALID');
   const independent = controlOrigin !== null || privateEntryKey !== null;
   invariant(!independent || typeof controlOrigin === 'string' && typeof privateEntryKey === 'string' && privateEntryKey.length >= 32 && typeof verifyControlAuthority === 'function', 'ENTRY_CONTROL_CONFIGURATION_REQUIRED');
+  invariant(typeof nestedLegacyOuter === 'boolean' && (!nestedLegacyOuter || independent), 'ENTRY_NESTED_LEGACY_OUTER_CONFIGURATION_INVALID');
   invariant(businessProbeKey===null||typeof businessProbeKey==='string'&&businessProbeKey.length>=32,'ENTRY_CONTROL_CONFIGURATION_REQUIRED');
   invariant(Number.isSafeInteger(controlRequestTimeoutMs) && controlRequestTimeoutMs > 0 && controlRequestTimeoutMs <= 2000 && Number.isSafeInteger(maxControlRequests) && maxControlRequests > 0 && maxControlRequests <= 128, 'ENTRY_CONTROL_CONFIGURATION_REQUIRED');
   const agentOrigin = independent ? origin(controlOrigin) : null;
@@ -42,13 +43,17 @@ export async function createStableEntry({ root, instanceId, controlKey, observer
   const publicControlPath=pathname=>pathname!=='/api/system/upgrade/probe'&&(pathname==='/api/system/upgrade'||pathname.startsWith('/api/system/upgrade/')||pathname==='/api/system/access-passcode');
   function forwardedHeaders(req,signed=false){
     if(!independent)return{...req.headers,'x-forwarded-host':req.headers.host,'x-forwarded-proto':'http','x-platform-route-generation':String(binding.routeGeneration)};
-    const headers={...stripEntryForwardingHeaders(req.headers),'x-forwarded-host':req.headers.host,'x-forwarded-proto':'http','x-forwarded-for':req.socket.remoteAddress||'unknown'};
-    if(new URL(req.url,'http://localhost').pathname==='/api/system/upgrade/probe'&&businessProbeKey!==null&&isLoopback(req.socket.remoteAddress)&&tokenMatches(req.headers['x-platform-internal-key'],businessProbeKey)&&req.headers['x-platform-instance-id']===instanceId){
+    // The old outer Entry cannot attest its original client. Its loopback peer
+    // and forwarded headers must never become the local-operator exception.
+    const forwarded=stripEntryForwardingHeaders(req.headers),sanitized=nestedLegacyOuter?Object.fromEntries(Object.entries(forwarded).filter(([name])=>!['forwarded','x-forwarded','x-platform'].some(prefix=>name.toLowerCase().startsWith(prefix)))):forwarded;
+    const remoteAddress=nestedLegacyOuter?null:req.socket.remoteAddress||null,clientIp=remoteAddress??'unknown';
+    const headers={...sanitized,'x-forwarded-host':req.headers.host,'x-forwarded-proto':'http','x-forwarded-for':clientIp};
+    if(!nestedLegacyOuter&&new URL(req.url,'http://localhost').pathname==='/api/system/upgrade/probe'&&businessProbeKey!==null&&isLoopback(req.socket.remoteAddress)&&tokenMatches(req.headers['x-platform-internal-key'],businessProbeKey)&&req.headers['x-platform-instance-id']===instanceId){
       headers['x-platform-internal-key']=businessProbeKey;headers['x-platform-instance-id']=instanceId;
       const recoveryId=req.headers['x-platform-recovery-id'],canonicalEpoch=req.headers['x-platform-recovery-epoch'],aliasEpoch=req.headers['x-platform-control-epoch'],epoch=canonicalEpoch??aliasEpoch;
       if(typeof recoveryId==='string'&&/^[a-f0-9-]{36}$/i.test(recoveryId)&&typeof epoch==='string'&&/^[1-9][0-9]{0,14}$/.test(epoch)&&Number.isSafeInteger(Number(epoch))&&(canonicalEpoch===undefined||aliasEpoch===undefined||canonicalEpoch===aliasEpoch)){headers['x-platform-recovery-id']=recoveryId;headers['x-platform-recovery-epoch']=epoch;if(aliasEpoch!==undefined)headers['x-platform-control-epoch']=epoch;}
     }
-    return signed?{...headers,...signEntryContext({instanceId,key:privateEntryKey,remoteAddress:req.socket.remoteAddress||null,method:req.method,path:req.url,clock})}:{...headers,'x-platform-route-generation':String(binding.routeGeneration)};
+    return signed?{...headers,...signEntryContext({instanceId,key:privateEntryKey,remoteAddress,clientIp,method:req.method,path:req.url,clock})}:{...headers,'x-platform-route-generation':String(binding.routeGeneration)};
   }
   function trackHTTP(proxy,res) {
     const transfer={request:proxy,response:null};httpTransfers.add(transfer);
@@ -75,7 +80,7 @@ export async function createStableEntry({ root, instanceId, controlKey, observer
       if (!file) { res.writeHead(404); res.end(); return; }
     }
     if (web.origin && !match && !requestPath.startsWith('/_next/')) {
-      const u = new URL(web.origin); let transfer; const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:req.headers }, upstream => { transfer.response=upstream;if(res.destroyed){upstream.destroy();return;}res.writeHead(upstream.statusCode,{...upstream.headers,'x-platform-web-digest':web.digest}); upstream.pipe(res); });transfer=trackHTTP(proxy,res);proxy.once('error',()=>{if(res.destroyed)return;if(!res.headersSent)res.writeHead(502);res.end();});req.pipe(proxy);return;
+      const u = new URL(web.origin); let transfer; const proxy = http.request({ hostname:u.hostname, port:u.port, method:req.method, path:req.url, headers:nestedLegacyOuter?forwardedHeaders(req):req.headers }, upstream => { transfer.response=upstream;if(res.destroyed){upstream.destroy();return;}res.writeHead(upstream.statusCode,{...upstream.headers,'x-platform-web-digest':web.digest}); upstream.pipe(res); });transfer=trackHTTP(proxy,res);proxy.once('error',()=>{if(res.destroyed)return;if(!res.headersSent)res.writeHead(502);res.end();});req.pipe(proxy);return;
     }
     const bytes = await readFile(file); const extension = file.split('.').at(-1); const types = { html:'text/html; charset=utf-8',js:'text/javascript; charset=utf-8',css:'text/css; charset=utf-8',json:'application/json',svg:'image/svg+xml',woff2:'font/woff2' };
     res.writeHead(200,{ 'content-type': types[extension] || 'application/octet-stream', 'cache-control': requestPath.startsWith('/_next/') || match ? 'public, max-age=31536000, immutable' : 'no-store', 'x-platform-web-digest': web.digest }); res.end(bytes);

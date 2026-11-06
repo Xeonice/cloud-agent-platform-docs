@@ -45,6 +45,7 @@ import { assertMigrationRunnerIdentity } from "./migration-identity-preflight.mj
 import { createClosedBusinessReadView, probeClosedBusinessReadView } from "./closed-business-read-view.mjs";
 import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 import { assertMigrationPreStopInventory } from "./migration-pre-stop-inventory.mjs";
+import { assertControlMigrationCommand } from "./control-migration-policy.mjs";
 const CID = /^[a-f0-9]{64}$/;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const brief = (p) => ({
@@ -330,9 +331,12 @@ export function migrationActionBudgetMs(runtime, stepId) {
 /** One durable migration run, separate from both business and live control stores. */
 export async function createControlMigrationRuntime(
   input,
-  { Database, adapter: provided, capacitySample, handoffRepairContext, handoffSupervisorReadiness, preStopInventory, clock = Date.now } = {},
+  { Database, adapter: provided, capacitySample, handoffRepairContext, handoffSupervisorReadiness,
+    preStopInventory, allowDisruptiveFixture = false, clock = Date.now } = {},
 ) {
   const c = input.runtime;
+  invariant(allowDisruptiveFixture === false || allowDisruptiveFixture === true && provided,
+    'CONTROL_MIGRATION_FIXTURE_ADAPTER_REQUIRED');
   invariant(provided || !handoffRepairContext && !handoffSupervisorReadiness && !preStopInventory,
     'CONTROL_MIGRATION_TEST_PORT_FORBIDDEN');
   invariant(!provided || typeof preStopInventory === "function",
@@ -2405,8 +2409,14 @@ export async function createControlMigrationRuntime(
   }
   return {
     prepare: () => exclusive(prepare),
-    apply: () => exclusive(apply),
-    resume: () => exclusive(apply),
+    apply: () => {
+      if (!allowDisruptiveFixture) assertControlMigrationCommand('apply');
+      return exclusive(apply);
+    },
+    resume: () => {
+      if (!allowDisruptiveFixture) assertControlMigrationCommand('resume');
+      return exclusive(apply);
+    },
     rollback: () => exclusive(rollback),
     status,
     closeWhenIdle: () =>

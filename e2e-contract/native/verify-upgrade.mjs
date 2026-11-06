@@ -6,6 +6,11 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { semanticContractGate } from "./semantic-contract-evidence.mjs";
 import { onlineMigrationGate } from "./online-migration-evidence.mjs";
+import { collectIndependentUpgradeEvidence } from "./independent-upgrade-evidence.mjs";
+import { verifyInstalledControlPackage } from "../../deploy/upgrade/control-package.mjs";
+import { actualInstallerIdentity } from "../../deploy/upgrade/installer-identity.mjs";
+import { verifyStagedControlArchive } from "../../deploy/upgrade/control-package-build.mjs";
+import { assertQualificationIsolation, qualificationInstanceAllowed } from '../server/qualification-isolation.mjs';
 import { checkedPassed, uniqueAssertion } from "./execution-assertions.mjs";
 import {
   atomicJson,
@@ -18,6 +23,8 @@ import {
   digest,
   invariant,
   runInputFingerprint,
+  loadTrustRoot,
+  verifySignedManifest,
 } from "../../deploy/upgrade/trust.mjs";
 
 const REQUIRED = [
@@ -142,6 +149,87 @@ async function collectAssertions(browser, outputRoot) {
     }
   return collected;
 }
+async function privateAcceptanceConfig(path) {
+  invariant(typeof path === 'string' && isAbsolute(path), 'INDEPENDENT_ACCEPTANCE_CONFIG_REQUIRED');
+  const stat = await fs.lstat(path);
+  invariant(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o077) === 0 && stat.size <= 1048576,
+    'INDEPENDENT_ACCEPTANCE_CONFIG_INSECURE');
+  return JSON.parse(await fs.readFile(path, 'utf8'));
+}
+async function controlIdentity(artifactRoot, manifestPath, trustRootPath, controlPackage) {
+  invariant([artifactRoot, manifestPath, trustRootPath].every(path => typeof path === 'string' && isAbsolute(path)),
+    'NATIVE_CONTROL_PACKAGE_INPUT_REQUIRED');
+  const engine = await actualInstallerIdentity({ root: join(artifactRoot, 'installer') });
+  const verified = await verifyInstalledControlPackage({ artifactRoot, manifestPath, trustRootPath, engineIdentity: engine });
+  invariant(verified.packageDigest === controlPackage.manifestDigest &&
+    verified.executionEngineDigest === controlPackage.manifest.executionEngineDigest, 'NATIVE_CONTROL_PACKAGE_CHANGED');
+  return verified;
+}
+export async function verifyNativeControlArtifact(config, controlPackage) {
+  const verified = await controlIdentity(config.target?.controlArtifactRoot, config.target?.controlManifestPath,
+    config.qa?.trustRootPath, controlPackage);
+  const archive = await verifyStagedControlArchive({ archivePath: config.target.controlArchivePath,
+    manifest: controlPackage.manifest, expectedArchiveDigest: controlPackage.package.digest });
+  invariant(archive.archive.bytes === controlPackage.package.bytes, 'NATIVE_CONTROL_ARCHIVE_CHANGED');
+  return { ...verified, controlArchiveDigest: archive.archive.digest };
+}
+async function businessCatalogTarget(catalogPath, trustRootPath, instanceId, businessManifest) {
+  invariant(typeof catalogPath === 'string' && isAbsolute(catalogPath), 'NATIVE_BUSINESS_CATALOG_REQUIRED');
+  const stat = await fs.lstat(catalogPath);
+  invariant(stat.isFile() && !stat.isSymbolicLink() && (stat.mode & 0o022) === 0 && stat.size <= 1048576,
+    'NATIVE_BUSINESS_CATALOG_INVALID');
+  const catalog = JSON.parse(await fs.readFile(catalogPath, 'utf8')), roots = await loadTrustRoot(trustRootPath);
+  invariant(catalog.schemaVersion === 1 && Array.isArray(catalog.releases) && catalog.releases.length > 0 &&
+    catalog.releases.length <= 64 && roots.purpose === 'qualification' && roots.qualificationInstanceId === instanceId,
+    'NATIVE_BUSINESS_CATALOG_INVALID');
+  const targets = [];
+  for (const record of catalog.releases) {
+    const verified = verifySignedManifest(record.envelope, roots), manifest = verified.manifest;
+    invariant(record.releaseId === manifest.releaseId && record.manifestDigest === verified.manifestDigest &&
+      manifest.qualification?.instanceId === instanceId &&
+      manifest.qualification.inputFingerprint === runInputFingerprint(manifest), 'NATIVE_BUSINESS_CATALOG_INVALID');
+    if (manifest.releaseId !== businessManifest.releaseId) continue;
+    invariant(runInputFingerprint(manifest) === runInputFingerprint(businessManifest) &&
+      canonical(manifest.packages) === canonical(businessManifest.packages), 'NATIVE_BUSINESS_TARGET_CHANGED');
+    targets.push(verified.manifestDigest);
+  }
+  invariant(targets.length === 1, 'NATIVE_BUSINESS_TARGET_REQUIRED');
+  return targets[0];
+}
+export async function verifyIndependentQualificationConfigs(config, controlPackage, businessManifest) {
+  invariant(businessManifest?.controlPackage &&
+    canonical(businessManifest.controlPackage) === canonical(controlPackage), 'NATIVE_BUSINESS_TARGET_REQUIRED');
+  const migration = await privateAcceptanceConfig(config.migrationAcceptanceConfigPath),
+    independent = await privateAcceptanceConfig(config.independentAcceptanceConfigPath);
+  const isolatedRoot = value => typeof value.root === 'string' && resolve(value.root) === value.root &&
+    /^\/var\/lib\/agent-independent-control-qa-[0-9]+\/instances\/[^/]+$/.test(value.root) && qualificationInstanceAllowed(value);
+  invariant(migration.isolated === true && migration.docker?.dedicated === true && isolatedRoot(migration) &&
+    independent.isolated === true && independent.docker?.dedicated === true, 'INDEPENDENT_ACCEPTANCE_ISOLATION_REQUIRED');
+  if (migration.sameInstanceQa !== undefined) await assertQualificationIsolation({ ...migration,
+    trustRootPath: migration.qa?.trustRootPath, catalogFile: migration.target?.catalogFile });
+  await controlIdentity(migration.target?.controlArtifactRoot, migration.target?.controlManifestPath,
+    migration.qa?.trustRootPath, controlPackage);
+  const businessTargetDigests = {
+    'legacy-to-independent-and-business-upgrade': await businessCatalogTarget(migration.target?.catalogFile,
+      migration.qa?.trustRootPath, migration.instanceId, businessManifest),
+  };
+  const scenarios = ['normal', 'agent-restart', 'business-fault', 'unknown-ack'];
+  invariant(independent.scenarios && Object.keys(independent.scenarios).sort().join(',') === [...scenarios].sort().join(','),
+    'INDEPENDENT_ACCEPTANCE_SCENARIOS_REQUIRED');
+  const roots = new Set([migration.root]);
+  for (const name of scenarios) {
+    const current = { ...independent, ...independent.scenarios[name] };
+    invariant(current.isolated === true && current.docker?.dedicated === true && isolatedRoot(current) &&
+      !roots.has(current.root), 'INDEPENDENT_ACCEPTANCE_ISOLATION_REQUIRED');roots.add(current.root);
+    if (current.sameInstanceQa !== undefined) await assertQualificationIsolation(current);
+    await controlIdentity(current.controlArtifactRoot, current.controlManifestPath, current.trustRootPath, controlPackage);
+    businessTargetDigests[name] = await businessCatalogTarget(current.catalogFile, current.trustRootPath,
+      current.instanceId, businessManifest);
+  }
+  return { migrationAcceptanceConfigPath: config.migrationAcceptanceConfigPath,
+    independentAcceptanceConfigPath: config.independentAcceptanceConfigPath,
+    businessTargetDigests, businessTargetReleaseId: businessManifest.releaseId };
+}
 export async function verifyNativeUpgrade(input) {
   const reportPath = resolve(input.report),
     packageRoot = resolve(input.packageRoot),
@@ -255,6 +343,16 @@ export async function verifyNativeUpgrade(input) {
       "INSECURE_ACCEPTANCE_CONFIGURATION",
     );
     const config = JSON.parse(await fs.readFile(configPath, "utf8"));
+    report.isolation = await assertQualificationIsolation(config);
+    let independentConfigs;
+    if (manifest.controlPackage) {
+      const control = manifest.controlPackage;
+      const verified = await verifyNativeControlArtifact(config, control);
+      report.controlPackageDigest = verified.packageDigest;
+      report.executionEngineDigest = verified.executionEngineDigest;
+      report.controlArchiveDigest = verified.controlArchiveDigest;
+      independentConfigs = await verifyIndependentQualificationConfigs(config, control, manifest);
+    }
     invariant(
       ["external-model", "local-protocol-test"].includes(
         config.modelMode ?? "external-model",
@@ -338,11 +436,20 @@ export async function verifyNativeUpgrade(input) {
           ...process.env,
           UPGRADE_ACCEPTANCE_CONFIG: configPath,
           UPGRADE_PLAYWRIGHT_REPORT: browserPath,
+          ...(independentConfigs ? {
+            MIGRATION_UPGRADE_ACCEPTANCE_CONFIG: independentConfigs.migrationAcceptanceConfigPath,
+            INDEPENDENT_UPGRADE_ACCEPTANCE_CONFIG: independentConfigs.independentAcceptanceConfigPath,
+          } : {}),
         },
         logPath: join(outputRoot, "browser.log"),
       },
     );
     const browser = JSON.parse(await fs.readFile(browserPath, "utf8"));
+    if (manifest.controlPackage) report.gates['independent-control'] = await collectIndependentUpgradeEvidence(browser, {
+      outputRoot, controlPackageDigest: report.controlPackageDigest, executionEngineDigest: report.executionEngineDigest,
+      businessTargetDigests: independentConfigs.businessTargetDigests,
+      businessTargetReleaseId: independentConfigs.businessTargetReleaseId,
+    });
     const actual = await collectAssertions(browser, outputRoot);
     report.assertions = REQUIRED.map((id) => uniqueAssertion(actual, id));
     const integration = INTEGRATION_REQUIRED.map((id) =>

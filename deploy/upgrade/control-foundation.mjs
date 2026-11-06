@@ -28,6 +28,7 @@ export async function createIndependentFoundation(c, {
     stable.accessKey === keys.accessAuthority && keys.privateEntry !== keys.controller && keys.businessProbe !== keys.controller,
     'CONTROL_FOUNDATION_ROLE_KEYS_REQUIRED');
   invariant(c.controlArtifactRoot && stable.controlDbPath === join(c.controlLedgerRoot, 'control.db') && stable.agentStartIdentity, 'CONTROL_FOUNDATION_INSTALLATION_REQUIRED');
+  const { nestedLegacyOuter = false, ...supervisorStableControl } = stable;
   privateLoopbackOrigin(stable.origin);
   if (mode !== 'entry' && !Database) Database = createRequire(join(c.controlArtifactRoot, 'api/apps/api/package.json'))('better-sqlite3');
   const common = { NODE_ENV: 'production', PATH: '/usr/local/bin:/usr/bin:/bin', PLATFORM_INSTANCE_ID: c.instanceId, HOST: '127.0.0.1', ...c.runtimeEnv };
@@ -65,10 +66,10 @@ export async function createIndependentFoundation(c, {
       publicationRoot: join(c.root, 'supervisor-publication'),
       apiPort: c.ports.apiB, webPort: c.ports.webB, coordinatorPort: c.ports.coordinatorB,
       coordinatorAppPort: c.ports.coordinatorAppB, ownerPort: c.ports.ownerB,
-      port: c.ports.supervisor, launchAdapter: adapter, stableControl: stable, Database, controlMaintenanceLifecycle });
+      port: c.ports.supervisor, launchAdapter: adapter, stableControl: supervisorStableControl, Database, controlMaintenanceLifecycle });
     if (mode !== 'supervisor') entry = await createStableEntry({ root: paths.entry, instanceId: c.instanceId, controlKey: keys.entry, observerKey: keys.controller, stickyKey: keys.sticky,
       port: c.ports.entry, controlPort: c.ports.entryControl, initialBinding,
-      controlOrigin: stable.origin, privateEntryKey: keys.privateEntry, businessProbeKey: keys.businessProbe,
+      controlOrigin: stable.origin, privateEntryKey: keys.privateEntry, businessProbeKey: keys.businessProbe, nestedLegacyOuter,
       verifyControlAuthority: value => verify('/internal/control/authority/verify', { epoch: value.epoch, operationId: value.operationId, executorId: value.executorId }),
       verifyFence: ({ attemptId, fence }) => coordinator.assertFence(attemptId, fence),
       verifyContractFence: ({ contractAttemptId, fence }) => coordinator.assertContractFence(contractAttemptId, fence) });

@@ -17,7 +17,7 @@ async function serve(t, handler) {
   t.after(close); return { origin: `http://127.0.0.1:${server.address().port}`, close };
 }
 
-test('independent Foundation restores migrated-source listeners with zero business lifecycle actions and routes control to Agent', async t => {
+for (const nestedLegacyOuter of [false, true]) test(`independent Foundation restores ${nestedLegacyOuter ? 'nested' : 'direct'} listeners with zero business lifecycle actions and routes control to Agent`, async t => {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'control-foundation-'))); t.after(() => rm(root, { recursive: true, force: true }));
   const instanceId = 'foundation-test', keys = Object.fromEntries(['owner', 'control', 'controller', 'upgradeControl', 'entry', 'sticky', 'supervisor', 'privateEntry', 'businessProbe', 'accessAuthority'].map((name, i) => [name, String(i).repeat(32)]));
   const verifier = createEntryContextVerifier({ instanceId, key: keys.privateEntry }), calls = [];
@@ -41,7 +41,7 @@ test('independent Foundation restores migrated-source listeners with zero busine
   for (const file of [capacityPlanPath, referenceStatePath, resourceObservationPath]) await atomicJson(file, {});
   const migratedArtifactPath = join(root, 'bindings/migration-source.json');
   const stableControl = { origin: agent.origin, key: keys.upgradeControl, accessKey: keys.accessAuthority, statePath: join(root, 'supervisor-private/state.db'), migratedArtifactPath,
-    capacityPlanPath, referenceStatePath, resourceObservationPath, controlDbPath: join(ledger, 'control.db'), agentStartIdentity: 'control-birth-0001' };
+    capacityPlanPath, referenceStatePath, resourceObservationPath, controlDbPath: join(ledger, 'control.db'), agentStartIdentity: 'control-birth-0001', nestedLegacyOuter };
   const c = { root, instanceId, artifactRoot: join(root, 'business-code'), controlArtifactRoot: join(root, 'control-code'), controlLedgerRoot: ledger,
     stableControl, trustRootPath: join(root, 'trust.json'), catalogFile: join(root, 'catalog.json'), publicOrigin: 'http://test.invalid',
     ports: { apiB: 39101, webB: 39102, coordinatorB: 39103, coordinatorAppB: 39104, ownerB: 39105, supervisor: 0, entry: 0, entryControl: 0 } };
@@ -78,7 +78,8 @@ test('independent Foundation restores migrated-source listeners with zero busine
   await business.close();
   const response = await fetch(foundation.entry.origin + '/api/system/upgrade/status');
   assert.equal(response.status, 200); assert.deepEqual(await response.json(), { agent: true });
-  assert.equal(calls.length, 1); assert.equal(calls[0].context.clientIp, '127.0.0.1');
+  assert.equal(calls.length, 1); assert.equal(calls[0].context.clientIp, nestedLegacyOuter ? 'unknown' : '127.0.0.1');
+  assert.equal(calls[0].context.remoteAddress, nestedLegacyOuter ? null : '127.0.0.1');
   await foundation.close(); await foundation.close(); assert.equal(lifecycleActions, 0);
 });
 

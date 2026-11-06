@@ -4,7 +4,14 @@ import { defineConfig, devices } from "@playwright/test";
 // the generic contract fixture or intercepts application/network responses.
 export default defineConfig({
   testDir: "./acceptance",
-  testMatch: "upgrade-*.spec.mjs",
+  // Full qualification includes the bootstrap into independent control as well
+  // as its normal and failure-recovery scenarios. Merely starting the ordinary
+  // upgrade suite must not silently omit either of these native paths.
+  testMatch: [
+    "upgrade-*.spec.mjs",
+    "migration-control-native.spec.mjs",
+    "independent-control-native.spec.mjs",
+  ],
   globalSetup: "./global-setup.ts",
   fullyParallel: false,
   workers: 1,

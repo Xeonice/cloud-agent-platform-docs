@@ -20,7 +20,7 @@ pipeline {
           def previousBundle = fileExists(reusePath) ? readJSON(file:reusePath) : null
           def migrationPath = '/run/agent-platform/jenkins-tools/upgrade-migration.json'
           def migrationPlan = fileExists(migrationPath) ? readJSON(file:migrationPath) : null
-          writeJSON file: 'package-input.json', json: [workspace: "${env.WORKSPACE}/instance-package", commits: [project:params.ROOT_SHA,api:params.API_SHA,web:params.WEB_SHA],releaseId:params.RELEASE_ID,channel:'stable',distributionOrigin:env.PLATFORM_DISTRIBUTION_ORIGIN,previousBundle:previousBundle,migrationPlan:migrationPlan,protocols:[api:[min:1,max:1],web:[min:1,max:1],installer:[min:1,max:1]]]
+          writeJSON file: 'package-input.json', json: [workspace: "${env.WORKSPACE}/instance-package", commits: [project:params.ROOT_SHA,api:params.API_SHA,web:params.WEB_SHA],releaseId:params.RELEASE_ID,controlVersion:params.RELEASE_ID,channel:'stable',distributionOrigin:env.PLATFORM_DISTRIBUTION_ORIGIN,previousBundle:previousBundle,migrationPlan:migrationPlan,protocols:[api:[min:1,max:1],web:[min:1,max:1],installer:[min:1,max:1]]]
         }
         sh '"$NODE22" "$PACKAGE_TOOL" package-input.json > bundle-result.json'
         script {
@@ -30,5 +30,5 @@ pipeline {
       }
     }
   }
-  post { always { archiveArtifacts artifacts:'bundle-result.json,instance-package/distribution/*',allowEmptyArchive:true,fingerprint:true,followSymlinks:false } }
+  post { always { archiveArtifacts artifacts:'bundle-result.json,instance-package/distribution/*,instance-package/control/*.json,instance-package/control/*.tgz',allowEmptyArchive:true,fingerprint:true,followSymlinks:false } }
 }

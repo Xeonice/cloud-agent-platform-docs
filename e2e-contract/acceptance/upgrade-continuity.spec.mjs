@@ -315,6 +315,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         instanceId: source.instanceId,
         host: source.localModel?.bindHost ?? "127.0.0.1",
         guestHost: source.localModel?.guestHost ?? "host.boxlite.internal",
+        qualificationInput: source.sameInstanceQa === undefined ? undefined : source,
       });
       source.runtimeId = model.runtimeId;
       source.runtimeCredential = model.runtimeCredential;
@@ -508,11 +509,13 @@ test("real user acceptance, durable installation and original VM/terminal contin
       JSON.stringify({ version: 1, dismissedLocalDate: reminderDays.nextDate }),
     );
     const beforeDownload = (await fixture.requestLog()).filter((item) =>
-      /\.tgz$/.test(item.path),
+      fixture.downloadObservationSource === 'actual-installer-download-files' || /\.tgz$/.test(item.path),
     );
     await check(
       "I01",
-      "Opening/checking/reloading/snoozing never accepts or downloads an installation",
+      fixture.downloadObservationSource === 'actual-installer-download-files'
+        ? 'Opening/checking/reloading/snoozing never accepts or leaves an installer download'
+        : 'Opening/checking/reloading/snoozing never accepts or downloads an installation',
       async () => {
         expect(initial.attempt).toBeNull();
         expect(nextDayObserved.attempt).toBeNull();
@@ -543,6 +546,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         target: initial.catalog.availableRelease?.releaseId,
         attempts: initial.attempt,
         downloads: beforeDownload.length,
+        downloadObservationSource: fixture.downloadObservationSource ?? 'actual-local-HTTPS-requests',
         reminder: {
           browserTimezone: reminderDays.timezone,
           sameInstanceAndAdministrator: true,
