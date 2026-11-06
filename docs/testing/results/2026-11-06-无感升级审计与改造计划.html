@@ -35,6 +35,8 @@
       <a href="#implementation"><span class="nav-number">09</span>修正与验证进展</a>
       <a href="#refactor-update"><span class="nav-number">10</span>11月7日改造增量</a>
       <a href="#macmini-experiment"><span class="nav-number">11</span>Mac mini现场实验</a>
+      <a href="#macmini-upgrade-preparation"><span class="nav-number">12</span>清理与升级准备</a>
+      <a href="#macmini-build-and-history"><span class="nav-number">13</span>构建与日志增量</a>
     </nav>
     <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
   </aside>
@@ -225,7 +227,19 @@
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#5-追加更新前磁盘清理">实际清理、兼容准备与证据 ↗</a><a href="../../backend/changes/2026-11-06-旧入口首次控制接入协议PoC.md#8-11月7日接入实现与真实旧版本兼容路径">接入实现与A版本的准确边界 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 磁盘清理完成，实际升级演练准备中</span></footer>
+
+    <section class="section" id="macmini-build-and-history" aria-labelledby="macmini-build-and-history-title">
+      <div class="section-head"><span class="section-number">13</span><h2 id="macmini-build-and-history-title">实际执行增量：构建受保护停止，日志采集有界修正</h2></div>
+      <p class="section-intro">首次兼容A构建运行133.35秒，后端安装、编译、生产依赖deploy均成功；复制产物时触及宿主4GiB余量保护线，已正常终止本次进程组。没有完整新包、签名、发布或生产切换，没有自动重试。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">真实空间观测 · 继续准备</div><h3>按实际峰值安排下一次构建</h3><p>本次新增占用至少约2.92GiB，超过静态估计。继续清理确认无引用的Web编译缓存和本地开发依赖；空的QA虚拟机暂时停止，工具和原包保留。原失败日志与4GiB运行保护线保留，下一次必须使用新的构建目录。</p></article>
+        <article class="card"><div class="mini-label">16项合同通过 · 不进冻结A</div><h3>原日志不能再一次性载入内存</h3><p>现场event payload总计约2.64GB，最大journal约14.58MB。采集器改为逐行摘要和原fault事件定向读取，明确单行、文件及累计字节上限；64MiB heap合同保留未知结果阻断。现场原结果仍缺7项，未授予独立控制接入。</p></article>
+      </div>
+      <p class="note">公共基础health实测200，生产仍为原v0.3.15。普通升级snapshot按attempt查询；当前applied evidence约1.89MB，历史单attempt最大约11.35MB。未把QA空库、局部合同或原服务可访问写成升级成功。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#7-追加实际构建保护停止与原日志规模">实际构建、清理、日志规模与未完成边界 ↗</a></div>
+    </section>
+
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 构建保护停止，继续清理与准备</span></footer>
   </main>
 </div>
 <script>

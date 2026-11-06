@@ -8,12 +8,17 @@ const UUID = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/;
 const TERMINAL = new Set(['activation-confirmed', 'failed', 'deferred', 'candidate-rejected', 'reverted']);
 const PROJECT = '208342ea994555c12c3ba42ce3b6aabd0afe9df1';
 const API = '17e2ad52bfacea49ec9834d4f98693e3e66fbd79';
-const MAX_ROWS = 10000, MAX_JSON = 4 * 1024 * 1024;
+const MAX_ROWS = 10000, MAX_JSON = 32 * 1024 * 1024;
+const MAX_SQL_ROW = 8 * 1024 * 1024, MAX_READ_BYTES = 128 * 1024 * 1024;
+const FORMAT = 'bounded-original-summaries-v2';
 const TABLES = {
   instances: 'SELECT instance_id,activation_generation,confirmed_release,service_state,ready FROM upgrade_instances',
   attempts: 'SELECT attempt_id,instance_id,actor_id,request_id,target_digest,manifest,plan,state,stage,sequence,generation FROM upgrade_attempts',
   steps: 'SELECT attempt_id,step_id,applied,receipt_digest,evidence,completed_work,applied_at FROM upgrade_steps',
-  events: 'SELECT event_id,attempt_id,event_digest,generation,sequence,fence,kind,payload FROM upgrade_events',
+  // Only faultCommit-referenced payloads are used by settlement. Other events
+  // still contribute their original identity/hash/sequence and byte length;
+  // this is explicitly a projection, never a claim that payloads were empty.
+  events: 'SELECT event_id,attempt_id,event_digest,generation,sequence,fence,kind FROM upgrade_events',
   recoveries: 'SELECT recovery_attempt_id,triggering_attempt_id,instance_id,state,plan,plan_digest FROM upgrade_recoveries',
   handoffs: 'SELECT attempt_id,operation_id,plan_digest,candidate,stage,evidence FROM coordinator_handoffs',
   roleHandoffs: 'SELECT attempt_id,kind,operation_id,plan_digest,candidate,stage,evidence FROM upgrade_role_handoffs',
@@ -32,15 +37,42 @@ function freeze(value) {
   return value;
 }
 
-async function json(path, optional = false) {
+function readBudget() { return { bytes: 0, largestInputBytes: 0 }; }
+function consume(budget, bytes, maximum, code, input = true) {
+  invariant(Number.isSafeInteger(bytes) && bytes >= 0 && bytes <= maximum, code);
+  if (!budget) return;
+  invariant(budget.bytes + bytes <= MAX_READ_BYTES, 'LEGACY_SETTLEMENT_READ_BYTE_LIMIT');
+  budget.bytes += bytes;
+  if (input) budget.largestInputBytes = Math.max(budget.largestInputBytes, bytes);
+}
+function journalSummary(value) {
+  invariant(value && typeof value === 'object' && !Array.isArray(value), 'LEGACY_SETTLEMENT_JOURNAL_INVALID');
+  const steps = value.steps && typeof value.steps === 'object' && !Array.isArray(value.steps)
+    ? Object.fromEntries(Object.entries(value.steps).map(([id, step]) => [id, {
+      state: step?.state ?? null, receiptDigest: step?.receiptDigest ?? null,
+      evidenceDigest: step?.evidence === undefined ? null : digest(step.evidence),
+    }])) : null;
+  const command = value.faultCommit;
+  return { attemptId: value.attemptId ?? null, planDigest: value.planDigest ?? null, steps,
+    faultCommit: command ? { eventId: command.eventId ?? null, kind: command.kind ?? null,
+      commandDigest: digest(command), payloadDigest: command.payload === undefined ? null : digest(command.payload) } : null,
+    faultCommitApplied: Boolean(value.faultCommitApplied), circuitBroken: Boolean(value.circuitBroken),
+    faultRecordingComplete: value.faultRecordingComplete === true,
+    recovery: value.recovery ? { state: value.recovery.state ?? null } : null,
+    monitorStopped: value.monitorStopped ?? null, recoveryResult: value.recoveryResult ?? null };
+}
+
+async function json(path, optional = false, { budget, project, digestOnly = false } = {}) {
   let handle;
   try {
     handle = await fs.open(path, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     const before = await handle.stat();
-    invariant(before.isFile() && before.size <= MAX_JSON, 'LEGACY_SETTLEMENT_JSON_INVALID');
+    invariant(before.isFile(), 'LEGACY_SETTLEMENT_JSON_INVALID');
+    consume(budget, before.size, MAX_JSON, 'LEGACY_SETTLEMENT_JSON_BYTE_LIMIT');
     const bytes = await handle.readFile(), after = await handle.stat();
     invariant(['dev', 'ino', 'size', 'mtimeMs', 'ctimeMs'].every(k => before[k] === after[k]), 'LEGACY_SETTLEMENT_FILE_CHANGED');
-    const value = JSON.parse(bytes.toString('utf8'));
+    if (digestOnly) return { rawDigest: digest(bytes) };
+    const original = JSON.parse(bytes.toString('utf8')), value = project ? project(original) : original;
     return { path, rawDigest: digest(bytes), bytes: bytes.length, valueDigest: digest(value), value };
   } catch (error) {
     if (optional && error.code === 'ENOENT') return null;
@@ -54,9 +86,9 @@ async function directory(path) {
   invariant(names.length <= MAX_ROWS, 'LEGACY_SETTLEMENT_INVENTORY_LIMIT');
   return names;
 }
-async function documents(path, select) {
+async function documents(path, select, options) {
   const result = [];
-  for (const name of await directory(path)) if (select(name)) result.push(await json(join(path, name)));
+  for (const name of await directory(path)) if (select(name)) result.push(await json(join(path, name), false, options));
   return result;
 }
 
@@ -82,43 +114,98 @@ export async function collectLegacySettlementInventory({ instanceId, databasePat
     invariant(typeof sqlitePackageRoot === 'string' && isAbsolute(sqlitePackageRoot), 'LEGACY_SETTLEMENT_SQLITE_MODULE_REQUIRED');
     Database = createRequire(join(sqlitePackageRoot, 'package.json'))('better-sqlite3');
   }
-  function readTables() {
-    const database = new Database(databasePath, { readonly: true, fileMustExist: true });
-    try {
-      database.pragma('query_only = ON');
-      invariant(database.readonly && database.pragma('query_only', { simple: true }) === 1, 'LEGACY_SETTLEMENT_READONLY_REQUIRED');
-      return database.transaction(() => Object.fromEntries(Object.entries(TABLES).map(([name, sql]) => {
-        const rows = database.prepare(sql + ' LIMIT ' + (MAX_ROWS + 1)).all();
-        invariant(rows.length <= MAX_ROWS, 'LEGACY_SETTLEMENT_INVENTORY_LIMIT');return [name, rows];
-      })))();
-    } finally { database.close(); }
-  }
-  const tables = readTables();
-  const after = await fs.lstat(databasePath);
-  invariant(before.dev === after.dev && before.ino === after.ino, 'LEGACY_SETTLEMENT_DATABASE_CHANGED');
+  const inputBudget = readBudget(), verificationBudget = readBudget();
   const journalRoot = join(installerRoot, 'journals');
   const journalNames = await directory(journalRoot);
   for (const name of journalNames) invariant(!name.endsWith('.json') ||
     UUID.test(name.replace(/\.json$/, '')), 'LEGACY_SETTLEMENT_UNKNOWN_INSTALLER_JOURNAL');
-  const journals = await documents(journalRoot, name => UUID.test(name.replace(/\.json$/, '')) && name.endsWith('.json'));
+  const journals = await documents(journalRoot, name => UUID.test(name.replace(/\.json$/, '')) && name.endsWith('.json'),
+    { budget: inputBudget, project: journalSummary });
+  const referencedEventIds = [...new Set(journals.map(f => f.value.faultCommit?.eventId)
+    .filter(id => typeof id === 'string'))].sort();
+  invariant(referencedEventIds.length <= MAX_ROWS && referencedEventIds.every(id => id.length <= 256),
+    'LEGACY_SETTLEMENT_INVENTORY_LIMIT');
+  const references = new Set(referencedEventIds);
+  function readTables(budget) {
+    const database = new Database(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      database.pragma('query_only = ON');
+      invariant(database.readonly && database.pragma('query_only', { simple: true }) === 1, 'LEGACY_SETTLEMENT_READONLY_REQUIRED');
+      // octet_length reads SQLite's stored byte length without materializing a
+      // TEXT/BLOB value in JS. Older SQLite lacking this function fails closed.
+      return database.transaction(() => Object.fromEntries(Object.entries(TABLES).map(([name, sql]) => {
+        const match = /^SELECT ([a-z_,]+) FROM ([a-z_]+)( WHERE .+)?$/.exec(sql);
+        invariant(match, 'LEGACY_SETTLEMENT_SQL_PROJECTION_INVALID');
+        const columns = match[1].split(','), table = match[2], where = match[3] || '';
+        const rowBytes = columns.map(column => 'coalesce(octet_length(' + column + '),0)').join('+');
+        const planned = database.prepare('SELECT count(*) AS rows,coalesce(sum(' + rowBytes + '),0) AS bytes,' +
+          'coalesce(max(' + rowBytes + '),0) AS largest FROM ' + table + where).get();
+        invariant(planned.rows <= MAX_ROWS, 'LEGACY_SETTLEMENT_INVENTORY_LIMIT');
+        consume(null, planned.largest, MAX_SQL_ROW, 'LEGACY_SETTLEMENT_SQL_ROW_BYTE_LIMIT');
+        // Reserve the whole projection before decoding its first row. A large
+        // collection of individually small rows cannot fill the JS heap first.
+        consume(budget, planned.bytes, MAX_READ_BYTES, 'LEGACY_SETTLEMENT_READ_BYTE_LIMIT', false);
+        budget.largestInputBytes = Math.max(budget.largestInputBytes, planned.largest);
+        const scan = database.prepare('SELECT rowid AS collector_row_id,' + columns.map((column, i) =>
+          'octet_length(' + column + ') AS bytes_' + i).join(',') + ' FROM ' + table + where + ' LIMIT ' + (MAX_ROWS + 1));
+        const getter = database.prepare(sql.replace(' FROM ', name === 'events' ? ',octet_length(payload) AS payload_bytes FROM ' : ' FROM ') +
+          (where ? ' AND' : ' WHERE') + ' rowid=?');
+        const payload = name === 'events' ? database.prepare('SELECT payload FROM upgrade_events WHERE rowid=?') : null;
+        const rows = [];
+        for (const size of scan.iterate()) {
+          invariant(rows.length < MAX_ROWS, 'LEGACY_SETTLEMENT_INVENTORY_LIMIT');
+          const bytes = columns.reduce((n, _column, i) => n + (size['bytes_' + i] ?? 0), 0);
+          consume(null, bytes, MAX_SQL_ROW, 'LEGACY_SETTLEMENT_SQL_ROW_BYTE_LIMIT');
+          const row = getter.get(size.collector_row_id);
+          invariant(row, 'LEGACY_SETTLEMENT_INVENTORY_CHANGED');
+          if (name === 'steps') {
+            const value = row.evidence === null ? null : parsed(row.evidence);
+            row.evidence_digest = row.evidence === null ? null : digest(value);
+            row.evidence_source_digest = row.evidence === null ? null : digest(row.evidence);
+            row.evidence_present = Boolean(value);
+            row.evidence_bytes = size['bytes_' + columns.indexOf('evidence')] ?? 0;
+            delete row.evidence;
+          }
+          if (name === 'events') {
+            row.payload_bytes ??= 0;
+            invariant(Number.isSafeInteger(row.payload_bytes) && row.payload_bytes >= 0,
+              'LEGACY_SETTLEMENT_SQL_JSON_INVALID');
+            row.payload_digest = null;
+            row.payload_source_digest = null;
+            if (references.has(row.event_id)) {
+              consume(budget, row.payload_bytes, MAX_SQL_ROW, 'LEGACY_SETTLEMENT_SQL_ROW_BYTE_LIMIT');
+              const value = payload.get(size.collector_row_id).payload;
+              row.payload_digest = value === null ? null : digest(parsed(value));
+              row.payload_source_digest = value === null ? null : digest(value);
+            }
+          }
+          rows.push(row);
+        }
+        return [name, rows];
+      })))();
+    } finally { database.close(); }
+  }
+  const tables = readTables(inputBudget);
+  const after = await fs.lstat(databasePath);
+  invariant(before.dev === after.dev && before.ino === after.ino, 'LEGACY_SETTLEMENT_DATABASE_CHANGED');
   const processNames = await directory(join(installerRoot, 'processes'));
   const processFiles = [];
   for (const name of processNames) {
     // Configs contain keys; they are inventoried by name but never opened.
-    if (/^[a-f0-9-]{36}-(?:api|web|coordinator|owner|installer)\.json$/.test(name)) processFiles.push(await json(join(installerRoot, 'processes', name)));
+    if (/^[a-f0-9-]{36}-(?:api|web|coordinator|owner|installer)\.json$/.test(name)) processFiles.push(await json(join(installerRoot, 'processes', name), false, { budget: inputBudget }));
     else invariant(!name.endsWith('.json') || /^[a-f0-9-]{36}-installer-config\.json$/.test(name), 'LEGACY_SETTLEMENT_UNKNOWN_PROCESS_RECORD');
   }
   const retirementRoot = join(publicationRoot, 'installed-roles', 'contract-retirements');
   const retirementFiles = await fs.lstat(retirementRoot).catch(e => { if (e.code === 'ENOENT') return null; throw e; })
-    ? await documents(retirementRoot, name => name.endsWith('.json')) : [];
+    ? await documents(retirementRoot, name => name.endsWith('.json'), { budget: inputBudget }) : [];
   const retirementNames = await fs.readdir(retirementRoot).then(names => names.sort()).catch(e => { if (e.code === 'ENOENT') return null; throw e; });
-  const authority = await json(join(installerRoot, 'controller-authority.json'), true);
-  const observations = processObservationsPath ? await json(processObservationsPath) : null;
+  const authority = await json(join(installerRoot, 'controller-authority.json'), true, { budget: inputBudget });
+  const observations = processObservationsPath ? await json(processObservationsPath, false, { budget: inputBudget }) : null;
   // This detects a mixed inventory; stability is NOT used as dispatch-completion
   // evidence. Every original outcome must still pass the validator below.
-  invariant(digest(readTables()) === digest(tables), 'LEGACY_SETTLEMENT_INVENTORY_CHANGED');
+  invariant(digest(readTables(verificationBudget)) === digest(tables), 'LEGACY_SETTLEMENT_INVENTORY_CHANGED');
   for (const file of [...journals, ...processFiles, ...retirementFiles, ...(authority ? [authority] : []), ...(observations ? [observations] : [])])
-    invariant((await json(file.path)).rawDigest === file.rawDigest, 'LEGACY_SETTLEMENT_FILE_CHANGED');
+    invariant((await json(file.path, false, { budget: verificationBudget, digestOnly: true })).rawDigest === file.rawDigest, 'LEGACY_SETTLEMENT_FILE_CHANGED');
   invariant(canonical(await directory(join(installerRoot, 'processes'))) === canonical(processNames),
     'LEGACY_SETTLEMENT_FILE_CHANGED');
   invariant(canonical(await directory(journalRoot)) === canonical(journalNames) &&
@@ -127,7 +214,12 @@ export async function collectLegacySettlementInventory({ instanceId, databasePat
   const finalDatabase = await fs.lstat(databasePath);
   invariant(finalDatabase.isFile() && !finalDatabase.isSymbolicLink() && before.dev === finalDatabase.dev && before.ino === finalDatabase.ino,
     'LEGACY_SETTLEMENT_DATABASE_CHANGED');
-  return { schemaVersion: 1, kind: 'legacy-upgrade-settlement-inventory', instanceId,
+  return { schemaVersion: 2, kind: 'legacy-upgrade-settlement-inventory', collectionFormat: FORMAT, instanceId,
+    coverage: { eventPayloads: 'original-journal-fault-commit-only', referencedEventIds,
+      omittedEventPayloadBytes: tables.events.filter(row => !references.has(row.event_id)).reduce((n, row) => n + row.payload_bytes, 0) },
+    readLimits: { maxJsonBytes: MAX_JSON, maxSqlRowBytes: MAX_SQL_ROW, maxReadBytes: MAX_READ_BYTES,
+      inputBytes: inputBudget.bytes, verificationBytes: verificationBudget.bytes,
+      largestInputBytes: Math.max(inputBudget.largestInputBytes, verificationBudget.largestInputBytes) },
     schemaBasis: { projectRevision: PROJECT, apiRevision: API }, observedAt: new Date(clock()).toISOString(),
     database: { path: databasePath, dev: before.dev, ino: before.ino, readonly: true, queryOnly: true, rowsDigest: digest(tables),
       unchangedAcrossFileRead: true },
@@ -144,7 +236,8 @@ export function validateLegacySettlement(inventory, { clock = Date.now } = {}) {
   const block = (code, id = null) => blockers.push({ code, ...(id ? { originalId: id } : {}) });
   const check = (condition, code, id) => { if (!condition) block(code, id);return Boolean(condition); };
   try {
-    invariant(inventory?.schemaVersion === 1 && inventory.kind === 'legacy-upgrade-settlement-inventory' &&
+    invariant(inventory?.schemaVersion === 2 && inventory.kind === 'legacy-upgrade-settlement-inventory' &&
+      inventory.collectionFormat === FORMAT &&
       inventory.database?.readonly === true && inventory.database.queryOnly === true &&
       inventory.schemaBasis?.projectRevision === PROJECT && inventory.schemaBasis.apiRevision === API &&
       ['lifecycleCalls', 'legacyRpcCalls', 'journalWrites', 'databaseWrites'].every(k => inventory[k] === 0), 'LEGACY_SETTLEMENT_INVENTORY_INVALID');
@@ -153,6 +246,20 @@ export function validateLegacySettlement(inventory, { clock = Date.now } = {}) {
     const t = inventory.tables, id = inventory.instanceId;
     invariant(Object.keys(TABLES).every(k => Array.isArray(t[k])) && digest(t) === inventory.database.rowsDigest,
       'LEGACY_SETTLEMENT_INVENTORY_CHANGED');
+    const limits = inventory.readLimits, coverage = inventory.coverage;
+    const references = [...new Set(inventory.journals.map(f => f.value.faultCommit?.eventId)
+      .filter(eventId => typeof eventId === 'string'))].sort();
+    const referenceSet = new Set(references);
+    invariant(limits?.maxJsonBytes === MAX_JSON && limits.maxSqlRowBytes === MAX_SQL_ROW &&
+      limits.maxReadBytes === MAX_READ_BYTES &&
+      limits.largestInputBytes <= MAX_JSON && ['inputBytes', 'verificationBytes', 'largestInputBytes'].every(k =>
+        Number.isSafeInteger(limits[k]) && limits[k] >= 0 && limits[k] <= MAX_READ_BYTES) &&
+      coverage?.eventPayloads === 'original-journal-fault-commit-only' &&
+      canonical(coverage.referencedEventIds) === canonical(references) &&
+      t.events.every(row => !Object.hasOwn(row, 'payload') && Number.isSafeInteger(row.payload_bytes) && row.payload_bytes >= 0 &&
+        (referenceSet.has(row.event_id) || row.payload_digest === null && row.payload_source_digest === null)) &&
+      coverage.omittedEventPayloadBytes === t.events.filter(row => !referenceSet.has(row.event_id))
+        .reduce((n, row) => n + row.payload_bytes, 0), 'LEGACY_SETTLEMENT_PROJECTION_INVALID');
     for (const file of [...inventory.journals, ...inventory.processFiles, ...inventory.retirementFiles,
       ...(inventory.authority ? [inventory.authority] : []), ...(inventory.observations ? [inventory.observations] : [])])
       invariant(DIGEST.test(file.rawDigest) && file.valueDigest === digest(file.value), 'LEGACY_SETTLEMENT_ORIGINAL_FILE_CHANGED');
@@ -201,13 +308,13 @@ export function validateLegacySettlement(inventory, { clock = Date.now } = {}) {
       if (!check(journal?.planDigest === planDigest && journal.steps && typeof journal.steps === 'object', 'LEGACY_INSTALLER_JOURNAL_REQUIRED', aid)) continue;
       for (const [stepId, local] of Object.entries(journal.steps)) {
         const stored = steps.get(aid + ':' + stepId), step = plan.steps.find(s => s.stepId === stepId);
-        const receipt = stored?.evidence ? parsed(stored.evidence) : null;
-        const applied = step && stored?.applied === 1 && receipt && stored.receipt_digest === digest(receipt) &&
+        const applied = step && stored?.applied === 1 && stored.evidence_present === true &&
+          stored.receipt_digest === stored.evidence_digest && DIGEST.test(stored.evidence_source_digest) &&
           Number.isFinite(stored.applied_at) && stored.completed_work >= 0;
         if (!check(applied, 'LEGACY_STEP_ORIGINAL_RESULT_UNKNOWN', aid + ':' + stepId)) continue;
         if (local.state === 'applying') resolved.push({ originalId: aid + ':' + stepId, by: 'original-upgrade-step-receipt', receiptDigest: stored.receipt_digest });
         else check(local.state === 'applied' && local.receiptDigest === stored.receipt_digest &&
-          digest(local.evidence) === stored.receipt_digest, 'LEGACY_STEP_RECEIPT_MISMATCH', aid + ':' + stepId);
+          local.evidenceDigest === stored.receipt_digest, 'LEGACY_STEP_RECEIPT_MISMATCH', aid + ':' + stepId);
       }
       for (const stored of t.steps.filter(s => s.attempt_id === aid && s.applied === 1)) {
         check(journal.steps[stored.step_id], 'LEGACY_STEP_LOCAL_DISPATCH_MISSING', aid + ':' + stored.step_id);
@@ -219,8 +326,10 @@ export function validateLegacySettlement(inventory, { clock = Date.now } = {}) {
       }
       if (journal.faultCommit) {
         const event = events.get(journal.faultCommit.eventId), command = journal.faultCommit;
-        check(event && event.attempt_id === aid && event.kind === command.kind && event.event_digest === digest(command) &&
-          canonical(parsed(event.payload)) === canonical(command.payload), 'LEGACY_FAULT_COMMIT_UNKNOWN', aid);
+        check(event && event.attempt_id === aid && event.kind === command.kind && DIGEST.test(command.commandDigest) &&
+          DIGEST.test(command.payloadDigest) && DIGEST.test(event.payload_source_digest) &&
+          event.event_digest === command.commandDigest && event.payload_digest === command.payloadDigest,
+        'LEGACY_FAULT_COMMIT_UNKNOWN', aid);
       } else check(!journal.faultCommitApplied, 'LEGACY_FAULT_COMMIT_MISSING', aid);
       if (journal.circuitBroken) check(journal.faultCommit && journal.faultRecordingComplete === true,
         'LEGACY_MONITOR_FAULT_UNCLOSED', aid);

@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { randomUUID, generateKeyPairSync } from 'node:crypto';
 import { createServer } from 'node:http';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { digest, canonical, runInputFingerprint, signQualificationManifest } from '../upgrade/trust.mjs';
 import { atomicJson, fileDigest } from '../upgrade/io.mjs';
 import { collectLegacySettlementInventory, validateLegacySettlement, observeLegacySettlement } from '../upgrade/legacy-settlement.mjs';
@@ -120,11 +122,12 @@ async function fixture(t, { installerChange = false, coordinatorChange = false }
     return store.commit(accepted.attemptId, { fence: current.fence, generation: current.attempt.generation,
       expectedSequence: current.attempt.sequence, eventId: randomUUID(), kind, payload }, confirmed);
   };
-  const complete = async () => {
+  const complete = async ({ firstEvidencePaddingBytes = 0 } = {}) => {
     accept();store.claim(accepted.attemptId, 'original-controller', 15000);
     const journal = { attemptId: accepted.attemptId, planDigest: plan.planDigest, steps: {} };
     for (const step of plan.steps) {
-      const evidence = { explicitSyntheticResultPort: true, stepId: step.stepId }, receiptDigest = digest(evidence);
+      const evidence = { explicitSyntheticResultPort: true, stepId: step.stepId,
+        ...(step === plan.steps[0] && firstEvidencePaddingBytes ? { explicitSyntheticLargeEvidence: 'x'.repeat(firstEvidencePaddingBytes) } : {}) }, receiptDigest = digest(evidence);
       commit('step-applied', { stepId: step.stepId, receiptDigest, completedWork: step.totalWork, evidence });
       journal.steps[step.stepId] = { state: 'applied', receiptDigest, completedWork: step.totalWork, evidence };
       const kind = { candidate: 'api', web: 'web', 'coordinator-handoff': 'coordinator',
@@ -205,6 +208,12 @@ test('monitor faultCommit and independent recovery flags are checked separately 
   await atomicJson(path, journal);
   const result = f.validate(await f.collect());assert(has(result, 'LEGACY_FAULT_COMMIT_UNKNOWN'));
   assert(has(result, 'LEGACY_MONITOR_ORIGINAL_RESULT_UNKNOWN'));
+  // Summary projection must preserve the old validator's truthy fault flags;
+  // malformed non-boolean flags cannot silently become an absent fault.
+  delete journal.faultCommit;journal.circuitBroken = 1;journal.faultCommitApplied = 1;
+  await atomicJson(path, journal);
+  const malformed = f.validate(await f.collect());assert(has(malformed, 'LEGACY_FAULT_COMMIT_MISSING'));
+  assert(has(malformed, 'LEGACY_MONITOR_FAULT_UNCLOSED'));
 });
 
 test('old contract factory intents block independently of pending; completed alone cannot replace the original expand result', async t => {
@@ -307,4 +316,102 @@ test('actual read-only collection is a required adoption precondition, never adm
   assert.equal(blocked.legacySettlement.settled, false);
   assert(blocked.blockers.includes('CONTROL_ADOPTION_LEGACY_SETTLEMENT_BLOCKED'));
   assert.equal(blocked.admissionAuthorized, false);
+});
+
+async function collectInSmallHeap(f) {
+  const inputPath = join(f.root, 'small-heap-input.json');
+  await atomicJson(inputPath, { config: f.settlementConfig, now: f.ports.clock() });
+  const script = `
+    const fs=require('node:fs'),{createRequire}=require('node:module');
+    (async()=>{
+      const input=JSON.parse(fs.readFileSync(process.argv[1]));
+      const Database=createRequire(${JSON.stringify(fileURLToPath(new URL('../../api/package.json', import.meta.url)))})('better-sqlite3');
+      const {collectLegacySettlementInventory,validateLegacySettlement}=await import(${JSON.stringify(new URL('../upgrade/legacy-settlement.mjs', import.meta.url).href)});
+      try {
+        const inventory=await collectLegacySettlementInventory({...input.config,Database,clock:()=>input.now});
+        const result=validateLegacySettlement(inventory,{clock:()=>input.now});
+        process.stdout.write(JSON.stringify({result,coverage:inventory.coverage,readLimits:inventory.readLimits,
+          serializedBytes:Buffer.byteLength(JSON.stringify(inventory)),events:inventory.tables.events.length,
+          noPayloads:inventory.tables.events.every(r=>!Object.hasOwn(r,'payload'))&&inventory.tables.steps.every(r=>!Object.hasOwn(r,'evidence'))}));
+      } catch(error) { process.stdout.write(JSON.stringify({blocked:true,errorCode:error.code||'READ_FAILED'})); }
+    })().catch(error=>{process.stderr.write(error.stack);process.exitCode=1});`;
+  const { stdout } = await promisify(execFile)(process.execPath,
+    ['--max-old-space-size=64', '-e', script, inputPath], { timeout: 30000, maxBuffer: 1024 * 1024 });
+  return JSON.parse(stdout);
+}
+
+test('real old Store large event history and a >4MiB receipt journal collect under a 64MiB heap without hiding unknown monitor results', async t => {
+  const f = await fixture(t), accepted = f.accept();
+  f.store.claim(accepted.attemptId, 'original-controller', 15000);
+  // Actual unchanged old Store creates every progress event. The synthetic
+  // padding is volume input, never business/Guest evidence or qualification.
+  const padding = 'x'.repeat(1024 * 1024);
+  for (let n = 0; n < 80; n++) f.commit('progress', {
+    stepId: f.plan.steps[0].stepId, completedWork: 0, explicitSyntheticLargePayload: padding,
+  });
+  const { journal, path } = await f.complete({ firstEvidencePaddingBytes: 5 * 1024 * 1024 });
+  journal.monitorStopped = 'recovery-unknown';await atomicJson(path, journal);
+  assert((await fs.stat(path)).size > 4 * 1024 * 1024);
+  assert(f.db.prepare('SELECT sum(octet_length(payload)) AS bytes FROM upgrade_events').get().bytes > 80 * 1024 * 1024);
+  const changes = f.db.prepare('SELECT total_changes() AS n').get().n, result = await collectInSmallHeap(f);
+  assert.equal(result.blocked, undefined, JSON.stringify(result));assert.equal(result.noPayloads, true);
+  assert.equal(result.result.settled, false);assert.equal(result.result.adoptionAuthorized, false);
+  assert(has(result.result, 'LEGACY_MONITOR_ORIGINAL_RESULT_UNKNOWN'));
+  assert(result.coverage.omittedEventPayloadBytes > 80 * 1024 * 1024);
+  assert(result.serializedBytes < 128 * 1024);assert(result.readLimits.inputBytes < 16 * 1024 * 1024);
+  assert.equal(f.db.prepare('SELECT total_changes() AS n').get().n, changes);
+});
+
+test('only a journal referenced original fault payload is read and its digest/scope cannot be discarded', async t => {
+  const f = await fixture(t), { journal, path } = await f.complete(), aid = f.store.latest().attemptId,
+    snapshot = f.store.snapshot(aid), command = { fence: snapshot.fence, generation: snapshot.attempt.generation,
+      expectedSequence: snapshot.attempt.sequence, eventId: randomUUID(), kind: 'ready-revoked',
+      payload: { reason: 'explicit-local-fault-result-port', padding: 'x'.repeat(1024 * 1024) } };
+  f.store.commit(aid, command);
+  journal.faultCommit = command;journal.faultCommitApplied = true;journal.faultRecordingComplete = true;
+  journal.recoveryResult = 'frozen-after-unknown-outcome';await atomicJson(path, journal);
+  const inventory = await f.collect(), event = inventory.tables.events.find(r => r.event_id === command.eventId);
+  assert.equal(event.payload_digest, digest(command.payload));assert.equal(Object.hasOwn(event, 'payload'), false);
+  assert.deepEqual(inventory.coverage.referencedEventIds, [command.eventId]);
+  const result = f.validate(inventory);assert.equal(result.settled, false);
+  assert.equal(has(result, 'LEGACY_FAULT_COMMIT_UNKNOWN'), false);
+  assert(has(result, 'LEGACY_MONITOR_ORIGINAL_RESULT_UNKNOWN'));
+  const oldFormat = structuredClone(inventory);oldFormat.schemaVersion = 1;
+  assert(has(f.validate(oldFormat), 'LEGACY_SETTLEMENT_INVENTORY_INVALID'));
+  const omittedReference = structuredClone(inventory);omittedReference.coverage.referencedEventIds = [];
+  assert(has(f.validate(omittedReference), 'LEGACY_SETTLEMENT_PROJECTION_INVALID'));
+  const altered = structuredClone(inventory), alteredEvent = altered.tables.events.find(r => r.event_id === command.eventId);
+  alteredEvent.payload_digest = digest('different-original-payload');altered.database.rowsDigest = digest(altered.tables);
+  assert(has(f.validate(altered), 'LEGACY_FAULT_COMMIT_UNKNOWN'));
+});
+
+test('oversized original SQL rows and JSON files fail before their contents are decoded', async t => {
+  const f = await fixture(t), accepted = f.accept(), prior = f.db.prepare('SELECT manifest FROM upgrade_attempts').get().manifest;
+  // Deliberately corrupt only this isolated old-schema fixture. No accepted
+  // history or outcome is fabricated as a positive qualification input.
+  f.db.prepare('UPDATE upgrade_attempts SET manifest=CAST(zeroblob(?) AS TEXT) WHERE attempt_id=?')
+    .run(8 * 1024 * 1024 + 1, accepted.attemptId);
+  await assert.rejects(f.collect(), { code: 'LEGACY_SETTLEMENT_SQL_ROW_BYTE_LIMIT' });
+  f.db.prepare('UPDATE upgrade_attempts SET manifest=? WHERE attempt_id=?').run(prior, accepted.attemptId);
+  const file = await fs.open(join(f.installerRoot, 'journals', accepted.attemptId + '.json'), 'wx', 0o600);
+  await file.truncate(32 * 1024 * 1024 + 1);await file.close();
+  await assert.rejects(f.collect(), { code: 'LEGACY_SETTLEMENT_JSON_BYTE_LIMIT' });
+});
+
+test('aggregate SQL bytes are rejected before the first row can fill a 64MiB heap', async t => {
+  const f = await fixture(t), accepted = f.accept(), evidence = JSON.stringify('x'.repeat(4 * 1024 * 1024));
+  // Adversarial oversized inventory, not receipts produced by the old factory.
+  // Actual SQLite storage is required to exercise the byte-length preflight.
+  const insert = f.db.prepare('INSERT INTO upgrade_steps(attempt_id,step_id,evidence) VALUES(?,?,?)');
+  f.db.transaction(() => { for (let n = 0; n < 9; n++) insert.run(accepted.attemptId, 'oversized-fixture-' + n, evidence); })();
+  const bounded = await collectInSmallHeap(f);
+  assert.equal(bounded.blocked, undefined);assert(bounded.readLimits.inputBytes > 32 * 1024 * 1024);
+  assert(bounded.readLimits.largestInputBytes < 8 * 1024 * 1024);
+  assert.equal(has(bounded.result, 'LEGACY_SETTLEMENT_PROJECTION_INVALID'), false);
+  assert.equal(bounded.result.settled, false);assert(has(bounded.result, 'LEGACY_INSTALLER_JOURNAL_REQUIRED'));
+  f.db.transaction(() => { for (let n = 9; n < 33; n++) insert.run(accepted.attemptId, 'oversized-fixture-' + n, evidence); })();
+  assert(f.db.prepare('SELECT sum(octet_length(evidence)) AS bytes FROM upgrade_steps').get().bytes > 128 * 1024 * 1024);
+  const changes = f.db.prepare('SELECT total_changes() AS n').get().n, result = await collectInSmallHeap(f);
+  assert.deepEqual(result, { blocked: true, errorCode: 'LEGACY_SETTLEMENT_READ_BYTE_LIMIT' });
+  assert.equal(f.db.prepare('SELECT total_changes() AS n').get().n, changes);
 });
