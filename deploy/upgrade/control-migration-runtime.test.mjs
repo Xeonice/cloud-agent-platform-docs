@@ -28,10 +28,11 @@ import { validateCoordinatorExitReceipt } from "./coordinator-exit-receipt.mjs";
 import { createSupervisorControlRuntime } from "./supervisor-control-runtime.mjs";
 import { createProtectedRoleLifecycle } from "./protected-role-lifecycle.mjs";
 import { createCoordinatorIdentityReader, createCoordinatorInventory } from "./supervisor-inventory.mjs";
-async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false, apiReadinessFailureCodes = [] } = {}) {
+async function runtimeFixture(t, { withCollector = false, closeOnStop = false, failApiReadiness = false, apiExitPatch = {}, failSupervisorBeforeRegistration=false, withNormalHandoff=false, apiReadinessFailureCodes = [], entryApiHealthStatus = 200 } = {}) {
   const f = await fixture(t),
     events = [],
     preStopInventoryCalls = [],
+    entryHealthRequests = [],
     states = new Map(),
     started = new Map();
   const now = Date.now(),
@@ -134,7 +135,15 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
       return;
     }
     if (req.url === "/health") {
-      res.end("{}");
+      entryHealthRequests.push(req.url);
+      res.writeHead(404, { "content-type": "text/html; charset=utf-8" });
+      res.end("<!doctype html><title>Web route not found</title>");
+      return;
+    }
+    if (req.url === "/api/health") {
+      entryHealthRequests.push(req.url);
+      res.writeHead(entryApiHealthStatus);
+      res.end(JSON.stringify({ status: entryApiHealthStatus === 200 ? "ok" : "unavailable" }));
       return;
     }
     if (req.url === "/internal/application/identity") {
@@ -750,6 +759,7 @@ async function runtimeFixture(t, { withCollector = false, closeOnStop = false, f
     capacitySample,
     handoffRepairContext,handoffSupervisorReadiness,
     preStopInventoryCalls,
+    entryHealthRequests,
     preStopInventory: async ({ runtime, lease }) => {
       assert.equal(runtime, input.runtime);
       assert.equal(lease.generation, 7);
@@ -965,9 +975,14 @@ test("SQLite+HTTP with explicit Docker adapter fixture migrates without business
       adapter: f.adapter, preStopInventory: f.preStopInventory,
     });
   t.after(() => runtime.close());
+  const webHealth = await fetch(f.input.runtime.entryOrigin + "/health");
+  assert.equal(webHealth.status, 404);
+  assert.match(webHealth.headers.get("content-type"), /^text\/html/);
+  await webHealth.body?.cancel();
   const result = await runtime.apply();
   assert.equal(result.state, "migrated");
   assert.equal(result.pending.length, 0);
+  assert.deepEqual(f.entryHealthRequests, ["/health", "/api/health"]);
   assert.deepEqual(f.events.slice(0, 3), [
     "stop:foundation",
     "stop:installer",
@@ -1006,6 +1021,28 @@ test("SQLite+HTTP with explicit Docker adapter fixture migrates without business
   assert.equal(processRecord.state, "started");
   assert.equal(processRecord.containerId, registry[0].containerId);
   assert.equal(registry[0].readerId.startsWith("reader-"), true);
+});
+test("Entry API health failure holds the real SQLite+HTTP migration before activation", async t => {
+  const f = await runtimeFixture(t, { entryApiHealthStatus: 503 }),
+    runtime = await createControlMigrationRuntime(f.input, {
+      Database, adapter: f.adapter, preStopInventory: f.preStopInventory,
+    });
+  t.after(() => runtime.close());
+  await assert.rejects(runtime.apply(), { code: "CONTROL_MIGRATION_ENTRY_HEALTH_UNPROVEN" });
+  assert.deepEqual(f.entryHealthRequests, ["/api/health"]);
+  const journal = new Database(join(f.input.runtime.journalRoot, "migration.db"), { readonly: true }),
+    ledger = new Database(f.f.controlPath, { readonly: true });
+  try {
+    assert.equal(journal.prepare("SELECT count(*) n FROM control_commands WHERE step_id IN ('activate','validate-control-stabilization')").get().n, 0);
+    const data = JSON.parse(journal.prepare("SELECT data FROM control_migration_run").get().data);
+    assert.equal(data.activation, undefined);
+    assert.equal(data.preActivationControl, undefined);
+    assert.equal(ledger.prepare("SELECT mode FROM control_authority WHERE instance_id=?").get("instance").mode, "passive");
+  } finally {
+    journal.close();
+    ledger.close();
+  }
+  assert.equal(f.states.get(f.owner.containerId).hostPid, f.owner.hostPid);
 });
 test("a lost create acknowledgement resumes only the original command and never launches a second role", async (t) => {
   const f = await runtimeFixture(t);

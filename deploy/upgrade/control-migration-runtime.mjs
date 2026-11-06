@@ -2059,7 +2059,7 @@ export async function createControlMigrationRuntime(
       "CONTROL_MIGRATION_ENTRY_BINDING_UNPROVEN",
     );
     const health = await fetch(
-      privateLoopbackOrigin(c.entryOrigin) + "/health",
+      privateLoopbackOrigin(c.entryOrigin) + "/api/health",
       { redirect: "error", signal: AbortSignal.timeout(2000) },
     );
     invariant(health.status === 200, "CONTROL_MIGRATION_ENTRY_HEALTH_UNPROVEN");
