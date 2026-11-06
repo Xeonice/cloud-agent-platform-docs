@@ -11,6 +11,16 @@ import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
 import { closeQualifiedInstallation } from "../native/close-qualified-installation.mjs";
 import { qualificationBusinessDatabasePath } from "../server/installer-filesystem.mjs";
 import {
+  upgradePrefersAsync,
+  readN01Admission,
+  assertN01Lookup,
+  resolveN01TechnicalAttempt,
+  assertN01Pending,
+  assertN01DurableAdmission,
+  n01ObservedProgress,
+  n01UpgradeConfirmed,
+} from "../server/upgrade-admission-contract.mjs";
+import {
   startQualificationModel,
   qualificationPrompt,
   configureQualificationImage,
@@ -40,11 +50,12 @@ async function json(
   method = "GET",
   data,
   expected = 200,
+  headers = {},
 ) {
   const response = await request.fetch(origin + path, {
     method,
     data,
-    headers: { Origin: origin, "X-Operation-Id": randomUUID() },
+    headers: { Origin: origin, "X-Operation-Id": randomUUID(), ...headers },
     timeout: 120000,
   });
   expect(response.status(), `${method} ${path}`).toBe(expected);
@@ -883,21 +894,30 @@ test("real user acceptance, durable installation and original VM/terminal contin
               : bytes.body,
           );
           const command = JSON.parse(event.request.postData);
-          expect(body.requestId).toBe(command.requestId);
-          expect(body.targetDigest).toBe(command.targetDigest);
+          const admission = readN01Admission(body, {
+            command,
+            instanceId: fixture.config.instanceId,
+            headers: event.request.headers,
+            targetReleaseId: fixture.envelope.manifest.releaseId,
+            targetDigest: fixture.envelope.manifestDigest,
+            activationGeneration: initial.activationGeneration,
+          });
+          admissionDiagnostics.responseKind = admission.kind;
+          admissionDiagnostics.preferAsync = admission.preferAsync;
           nativePhase = "upgrade-admission:lose-actual-202";
           await admissionCdp.send("Fetch.failRequest", {
             requestId: event.requestId,
             errorReason: "ConnectionClosed",
           });
           admissionDiagnostics.actual202ResponseLost = true;
-          resolveAdmission({ submittedCommand: command, accepted: body });
+          resolveAdmission({ submittedCommand: command, admission });
           return;
         }
         if (blockAdmissionReads && event.request.method === "GET") {
           const row = {
             path: url.pathname,
             status: event.responseStatusCode ?? null,
+            preferAsync: upgradePrefersAsync(event.request.headers),
           };
           readonlyResponsesLost.push(row);
           if (url.pathname.startsWith("/api/system/upgrade/requests/")) {
@@ -970,17 +990,45 @@ test("real user acceptance, durable installation and original VM/terminal contin
     await admissionDetails
       .getByRole("button", { name: "立即升级", exact: true })
       .click();
-    const { submittedCommand, accepted } = await Promise.race([
+    const { submittedCommand, admission } = await Promise.race([
       actualAdmission,
       delay(30000).then(() => {
         throw new Error("N01_REAL_ADMISSION_RESPONSE_MISSING");
       }),
     ]);
-    const intent = database
-      .prepare(
-        "SELECT actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
-      )
-      .get(fixture.config.instanceId, accepted.attemptId);
+    // Async acceptance persists the user operation first. Its technical attempt
+    // and derived request ID come from a real readonly status, never from an
+    // attempt-shaped copy of the 202 body.
+    nativePhase = "upgrade-admission:readonly-technical-stage-binding";
+    let technicalAttempt = null;
+    await expect
+      .poll(async () => {
+        const status = await json(request, origin, "/api/system/upgrade/status");
+        technicalAttempt = resolveN01TechnicalAttempt(admission, status);
+        return technicalAttempt !== null;
+      }, { timeout: 120000, intervals: [250, 500, 1000] })
+      .toBe(true);
+    const intent = database.prepare(
+      "SELECT attempt_id,actor_id,request_id,request_digest,target_release_id,target_digest,plan,accepted_at FROM upgrade_attempts WHERE instance_id=? AND attempt_id=?",
+    ).get(fixture.config.instanceId, technicalAttempt.attemptId);
+    const operationRow = admission.kind === "operation" ? database.prepare(
+      `SELECT operation_id,actor_id,request_digest,created_at,
+        json_extract(result,'$.command') command,
+        json_extract(result,'$.operation') operation,
+        json_array_length(result,'$.chain') chain_length,
+        json_extract(result,'$.chain[0].requestId') technical_request_id,
+        json_extract(result,'$.chain[0].envelope.manifestDigest') technical_target_digest,
+        json_extract(result,'$.chain[0].envelope.manifest.releaseId') technical_target_release_id
+       FROM platform_operations WHERE instance_id=? AND operation_id=? AND role='upgrade-plan'`,
+    ).get(fixture.config.instanceId, admission.response.operationId) : null;
+    const acceptedPlan = assertN01DurableAdmission(admission, technicalAttempt, intent, operationRow);
+    const assertSingleIntent = () => {
+      expect(database.prepare("SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?")
+        .get(fixture.config.instanceId).n).toBe(1);
+      expect(database.prepare("SELECT count(*) n FROM platform_operations WHERE instance_id=? AND role='upgrade-plan'")
+        .get(fixture.config.instanceId).n).toBe(admission.kind === "operation" ? 1 : 0);
+    };
+    assertSingleIntent();
     const pendingRequestKey = `ap.upgrade-request.v1:${encodeURIComponent(browserAdmissionSnapshot.instanceId)}:${encodeURIComponent(browserAdmissionSnapshot.userScope)}`;
     const readPending = () =>
       page.evaluate((key) => localStorage.getItem(key), pendingRequestKey);
@@ -999,9 +1047,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
         ),
       )
       .toBe(true);
-    expect(await readPending()).toBe(
-      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
-    );
+    const originalPending = await readPending();
+    assertN01Pending(originalPending, admission);
+    expect(uiLookups.filter(row => row.path === "/api/system/upgrade/requests/" + submittedCommand.requestId)
+      .every(row => row.preferAsync === admission.preferAsync)).toBe(true);
     const originalTaskUrl = page.url();
     const terminalBookmarkKey = `ap.terminal-bookmark.v1:${encodeURIComponent(browserAdmissionSnapshot.instanceId)}:${encodeURIComponent(browserAdmissionSnapshot.userScope)}:${encodeURIComponent(original.id)}`;
     const readTerminalBookmark = () =>
@@ -1032,9 +1081,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     ).toHaveCount(0);
     expect(await readTerminalBookmark()).toBe(originalTerminalBookmark);
     const readyWhileScopeUnknown = evidence.ready.length;
-    expect(await readPending()).toBe(
-      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
-    );
+    expect(await readPending()).toBe(originalPending);
     admissionDiagnostics.pendingOriginalIdRetainedAfterReload = true;
     nativePhase = "upgrade-admission:unknown-readonly-retry-window";
     // Let the actual UI's 2s retry interval run while the result stays unknown.
@@ -1044,15 +1091,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
     );
     expect(evidence.ready.length).toBe(readyWhileScopeUnknown);
     expect(await readTerminalBookmark()).toBe(originalTerminalBookmark);
-    expect(await readPending()).toBe(
-      JSON.stringify({ version: 1, requestId: submittedCommand.requestId }),
-    );
+    expect(await readPending()).toBe(originalPending);
     expect(admissionPosts).toHaveLength(1);
-    expect(
-      database
-        .prepare("SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?")
-        .get(fixture.config.instanceId).n,
-    ).toBe(1);
+    assertSingleIntent();
     expect(interceptionError).toBeNull();
     nativePhase = "upgrade-admission:restore-readonly-responses";
     blockAdmissionReads = false;
@@ -1060,15 +1101,19 @@ test("real user acceptance, durable installation and original VM/terminal contin
       request,
       origin,
       "/api/system/upgrade/requests/" + submittedCommand.requestId,
+      "GET", undefined, 200,
+      admission.preferAsync ? { Prefer: "respond-async" } : {},
     );
-    expect(originalLookup.requestId).toBe(submittedCommand.requestId);
-    expect(originalLookup.attemptId).toBe(accepted.attemptId);
-    expect(originalLookup.targetDigest).toBe(accepted.targetDigest);
+    assertN01Lookup(admission, originalLookup);
+    if (admission.kind === "operation")
+      expect(originalLookup.stages[0].attemptId).toBe(technicalAttempt.attemptId);
     await expect
       .poll(
-        async () =>
-          (await json(request, origin, "/api/system/upgrade/status")).attempt
-            ?.requestId,
+        async () => {
+          const status = await json(request, origin, "/api/system/upgrade/status");
+          resolveN01TechnicalAttempt(admission, status, technicalAttempt);
+          return admission.kind === "operation" ? status.operation.requestId : status.attempt.requestId;
+        },
       )
       .toBe(submittedCommand.requestId);
     nativePhase = "upgrade-admission:readonly-confirmed-reload";
@@ -1092,12 +1137,9 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(restoredBrowserScope.userScope).toBe(
       browserAdmissionSnapshot.userScope,
     );
-    expect(restoredBrowserScope.attempt.requestId).toBe(
-      submittedCommand.requestId,
-    );
-    expect(restoredBrowserScope.attempt.targetDigest).toBe(
-      accepted.targetDigest,
-    );
+    resolveN01TechnicalAttempt(admission, restoredBrowserScope, technicalAttempt);
+    expect(admission.kind === "operation" ? restoredBrowserScope.operation.requestId : restoredBrowserScope.attempt.requestId)
+      .toBe(submittedCommand.requestId);
     nativePhase = "upgrade-admission:original-terminal-readonly-reconnect";
     await expect(
       page.getByRole("tab", { name: "终端 2", exact: true }),
@@ -1126,19 +1168,31 @@ test("real user acceptance, durable installation and original VM/terminal contin
     await Promise.all(interceptionTasks);
     expect(interceptionError).toBeNull();
     expect(admissionPosts).toHaveLength(1);
+    assertSingleIntent();
+    expect(uiLookups.every(row => row.preferAsync === admission.preferAsync)).toBe(true);
     admissionRecovery = {
       actualPostStatus: 202,
       responseLostAfterActualAcceptance: true,
       requestId: submittedCommand.requestId,
-      attemptId: accepted.attemptId,
+      admissionKind: admission.kind,
+      operationId: admission.kind === "operation" ? admission.response.operationId : null,
+      attemptId: technicalAttempt.attemptId,
+      technicalRequestId: technicalAttempt.requestId,
       browserPosts: admissionPosts.length,
       actualUiOriginalIdLookups: uiLookups,
       readonlyResponsesLost,
       pendingReloadContainsOnlyOriginalRequestId: true,
       pendingIdentitySource:
         "actual loaded browser UI status after readonly check immediately before POST",
-      productionPendingFormat: "exact version1/requestId scoped JSON",
-      readonlyOriginalLookup: {
+      productionPendingFormat: admission.preferAsync
+        ? "exact version1/original requestId/preferAsync scoped JSON"
+        : "version1/original requestId scoped JSON with optional false preferAsync",
+      readonlyOriginalLookup: admission.kind === "operation" ? {
+        requestId: originalLookup.requestId,
+        operationId: originalLookup.operationId,
+        finalTargetDigest: originalLookup.finalTargetDigest,
+        technicalAttemptId: originalLookup.stages[0].attemptId,
+      } : {
         requestId: originalLookup.requestId,
         attemptId: originalLookup.attemptId,
         targetDigest: originalLookup.targetDigest,
@@ -1157,6 +1211,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
       pendingClearedAfterReadonlyConfirmation: true,
       extraPostsWhileUnknownAndReload: 0,
       durableIntents: 1,
+      durableUserOperations: admission.kind === "operation" ? 1 : 0,
+      durableTechnicalAttempts: 1,
     };
     nativePhase = "upgrade-admission:finish-loss-observation";
     await admissionCdp.send("Fetch.disable");
@@ -1165,50 +1221,31 @@ test("real user acceptance, durable installation and original VM/terminal contin
     await admissionCdp.detach();
     admissionCdp = null;
     page.off("request", observeAdmission);
-    expect(accepted.state).toBe("accepted");
-    expect(
-      Boolean(intent),
-      "Actual authorized command has a durable acceptance record",
-    ).toBe(true);
-    const acceptedPlan = JSON.parse(intent.plan);
-    expect(accepted.completedWork).toBe(0);
-    if (acceptedPlan.steps.some((step) => step.totalWork === null)) {
-      // An unapplied step with unknown work keeps the real denominator unknown.
-      // The UI must wait for observed progress rather than fabricate zero.
-      expect(accepted.percent).toBeNull();
-      expect(accepted.totalWork).toBeNull();
-    } else {
-      expect(typeof accepted.percent).toBe("number");
-      expect(Number.isFinite(accepted.percent)).toBe(true);
-      expect(accepted.percent).toBeGreaterThanOrEqual(0);
-      expect(accepted.percent).toBeLessThan(100);
-    }
-    expect(
-      intent.actor_id === "instance-administrator",
-      "The existing authenticated instance session accepts this explicit intent",
-    ).toBe(true);
-    expect(intent.request_id).toBe(submittedCommand.requestId);
-    expect(intent.request_id).toBe(accepted.requestId);
-    expect(intent.target_release_id).toBe(submittedCommand.targetReleaseId);
-    expect(intent.target_digest).toBe(submittedCommand.targetDigest);
-    expect(intent.target_digest).toBe(accepted.targetDigest);
-    expect(intent.request_digest).toBe(upgradeDigest(submittedCommand));
-    expect(acceptedPlan.sourceActivationGeneration).toBe(
-      submittedCommand.expectedActivationGeneration,
-    );
+    // The original operation and the real technical attempt have independent
+    // acceptance timestamps and request digests. Neither is a replay of the other.
+    expect(admission.response.state).toBe("accepted");
     expect(submittedCommand.expectedActivationGeneration).toBe(
       initial.activationGeneration,
     );
-    expect(intent.accepted_at).toBe(Date.parse(accepted.acceptedAt));
     const acceptedIntent = {
       actorDigest: upgradeDigest(intent.actor_id),
-      requestId: intent.request_id,
-      requestDigest: intent.request_digest,
-      targetReleaseId: intent.target_release_id,
-      targetDigest: intent.target_digest,
+      kind: admission.kind,
+      operationId: admission.kind === "operation" ? admission.response.operationId : null,
+      requestId: submittedCommand.requestId,
+      requestDigest: upgradeDigest(submittedCommand),
+      targetReleaseId: submittedCommand.targetReleaseId,
+      targetDigest: submittedCommand.targetDigest,
       expectedActivationGeneration:
         submittedCommand.expectedActivationGeneration,
-      acceptedAt: accepted.acceptedAt,
+      acceptedAt: admission.response.acceptedAt,
+      technicalAttempt: {
+        attemptId: technicalAttempt.attemptId,
+        requestId: intent.request_id,
+        requestDigest: intent.request_digest,
+        planDigest: technicalAttempt.planDigest,
+        acceptedAt: technicalAttempt.acceptedAt,
+        sourceActivationGeneration: acceptedPlan.sourceActivationGeneration,
+      },
       admittedThroughRealBrowserPost: true,
     };
     nativePhase = "upgrade-confirmation";
@@ -1217,13 +1254,37 @@ test("real user acceptance, durable installation and original VM/terminal contin
       name: "版本与更新详情",
       exact: true,
     });
-    const actualProgress = upgradeDetails.getByRole("progressbar", {
+    const overallProgress = upgradeDetails.getByRole("progressbar", {
       name: "本实例升级进度",
       exact: true,
     });
-    await expect
+    const actualProgress = admission.kind === "operation"
+      ? upgradeDetails.locator('[role="progressbar"][aria-label]:not([aria-label="本实例升级进度"]):not([aria-label^="上次确认的"])')
+      : overallProgress;
+    let progressBrowserStatus = restoredBrowserScope,
+      progressStatusError = null;
+    const progressStatusTasks = new Set();
+    const observeProgressStatus = (response) => {
+      const url = new URL(response.url());
+      if (url.origin !== origin || url.pathname !== "/api/system/upgrade/status" || response.status() !== 200) return;
+      const work = (async () => {
+        let status;
+        try { status = await response.json(); } catch { return; }
+        resolveN01TechnicalAttempt(admission, status, technicalAttempt);
+        if (status.attempt.sequence >= progressBrowserStatus.attempt.sequence &&
+          (admission.kind !== "operation" || status.operation.sequence >= progressBrowserStatus.operation.sequence))
+          progressBrowserStatus = status;
+      })().catch(error => { progressStatusError = error; })
+        .finally(() => progressStatusTasks.delete(work));
+      progressStatusTasks.add(work);
+    };
+    page.on("response", observeProgressStatus);
+    try {
+      await expect
       .poll(
         async () => {
+          if (progressStatusError) throw progressStatusError;
+          const observed = n01ObservedProgress(admission, progressBrowserStatus, technicalAttempt);
           // Capture the attributes together; never turn a missing value into zero.
           const sample = await actualProgress.evaluateAll((elements) =>
             elements.length === 1
@@ -1237,13 +1298,22 @@ test("real user acceptance, durable installation and original VM/terminal contin
           const percent = Number(sample.raw);
           if (!Number.isFinite(percent) || percent <= 0 || percent >= 100)
             return false;
+          if (percent !== observed.percent) return false;
+          if (admission.kind === "operation" &&
+            await overallProgress.getAttribute("aria-valuenow") !== null) return false;
           ongoingProgress = {
             percent,
             rawAriaValue: sample.raw,
             ariaText: sample.ariaText,
             actualBrowserProgress: true,
-            actualRequestId: restoredBrowserScope.attempt.requestId,
-            actualTargetDigest: restoredBrowserScope.attempt.targetDigest,
+            scope: observed.scope,
+            stage: observed.stage,
+            actualRequestId: admission.kind === "operation" ? progressBrowserStatus.operation.requestId : progressBrowserStatus.attempt.requestId,
+            actualTargetDigest: admission.kind === "operation" ? progressBrowserStatus.operation.finalTargetDigest : progressBrowserStatus.attempt.targetDigest,
+            technicalAttemptId: progressBrowserStatus.attempt.attemptId,
+            technicalRequestId: progressBrowserStatus.attempt.requestId,
+            browserStatusObservedAt: progressBrowserStatus.observedAt,
+            overallPercent: admission.kind === "operation" ? progressBrowserStatus.operation.percent : percent,
             observedAtMonotonicMs: performance.now(),
           };
           return true;
@@ -1251,17 +1321,24 @@ test("real user acceptance, durable installation and original VM/terminal contin
         { timeout: 120000, intervals: [250, 500, 1000] },
       )
       .toBe(true);
+    } finally {
+      page.off("response", observeProgressStatus);
+      await Promise.all(progressStatusTasks);
+    }
+    if (progressStatusError) throw progressStatusError;
     expect(ongoingProgress.actualBrowserProgress).toBe(true);
     expect(Number.isFinite(ongoingProgress.percent)).toBe(true);
     expect(ongoingProgress.percent).toBeGreaterThan(0);
     expect(ongoingProgress.percent).toBeLessThan(100);
     expect(ongoingProgress.percent).toBe(Number(ongoingProgress.rawAriaValue));
-    expect(ongoingProgress.actualRequestId).toBe(accepted.requestId);
-    expect(ongoingProgress.actualTargetDigest).toBe(accepted.targetDigest);
+    expect(ongoingProgress.actualRequestId).toBe(submittedCommand.requestId);
+    expect(ongoingProgress.actualTargetDigest).toBe(submittedCommand.targetDigest);
+    expect(ongoingProgress.technicalAttemptId).toBe(technicalAttempt.attemptId);
+    expect(ongoingProgress.technicalRequestId).toBe(technicalAttempt.requestId);
     await expect(
       upgradeDetails.getByRole("button", { name: "刷新页面", exact: true }),
     ).toHaveCount(0);
-    const frozenTarget = accepted.targetDigest;
+    const frozenTarget = submittedCommand.targetDigest;
     const confirmationDeadline = performance.now() + 900000,
       failedStates = new Set([
         "failed",
@@ -1274,7 +1351,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       const status = await json(request, origin, "/api/system/upgrade/status"),
         attempt = status.attempt;
       if (
-        attempt?.attemptId === accepted.attemptId &&
+        attempt?.attemptId === technicalAttempt.attemptId &&
         typeof attempt.percent === "number" &&
         Number.isFinite(attempt.percent)
       ) {
@@ -1291,31 +1368,20 @@ test("real user acceptance, durable installation and original VM/terminal contin
         observedAt: status.observedAt,
         activationGeneration: status.activationGeneration,
         serviceState: status.serviceState,
+        operation: status.operation ?? null,
         attempt,
         recovery: status.recovery,
         lastKnownProgress,
       };
       if (
-        attempt?.attemptId === accepted.attemptId &&
+        attempt?.attemptId === technicalAttempt.attemptId &&
         failedStates.has(attempt.state)
       ) {
         throw new Error(
           `N01_INSTANCE_UPGRADE_TERMINATED: ${JSON.stringify(upgradeObservation)}`,
         );
       }
-      const recovering =
-        status.recovery?.triggeringAttemptId === accepted.attemptId &&
-        status.recovery.state !== "recovery-confirmed";
-      if (
-        attempt?.attemptId === accepted.attemptId &&
-        attempt.state === "activation-confirmed" &&
-        attempt.percent === 100 &&
-        status.serviceState === "confirmed" &&
-        status.confirmedServiceRelease?.releaseId ===
-          accepted.targetReleaseId &&
-        !recovering
-      )
-        break;
+      if (n01UpgradeConfirmed(admission, status, technicalAttempt)) break;
       if (performance.now() >= confirmationDeadline)
         throw new Error(
           `N01_INSTANCE_UPGRADE_CONFIRMATION_TIMEOUT: ${JSON.stringify(upgradeObservation)}`,
@@ -1323,7 +1389,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
       await delay(++confirmationPolls === 1 ? 500 : 1000);
     }
     const installed = await json(request, origin, "/api/system/upgrade/status");
-    expect(installed.attempt.attemptId).toBe(accepted.attemptId);
+    expect(n01UpgradeConfirmed(admission, installed, technicalAttempt)).toBe(true);
+    assertSingleIntent();
+    expect(admissionPosts).toHaveLength(1);
+    expect(installed.attempt.attemptId).toBe(technicalAttempt.attemptId);
     expect(installed.attempt.targetDigest).toBe(frozenTarget);
     expect(installed.attempt.percent).toBe(100);
     expect(installed.confirmedServiceRelease.releaseId).toBe(
@@ -1339,7 +1408,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       await page
         .getByRole("button", { name: "版本与更新", exact: true })
         .click();
-    await expect(actualProgress).toHaveAttribute("aria-valuenow", "100");
+    await expect(overallProgress).toHaveAttribute("aria-valuenow", "100");
     nativePhase = "page-refresh-and-terminal-attach";
     const beforeRefresh = evidence.ready.length,
       refreshStart = performance.now();
@@ -1439,7 +1508,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           )
           .get(fixture.config.instanceId).confirmed_release,
       ),
-      acceptedAtMs = Date.parse(accepted.acceptedAt),
+      acceptedAtMs = Date.parse(admission.response.acceptedAt),
       activatedAtMs = Date.parse(installed.confirmedServiceRelease.activatedAt),
       triggeredAtMs = Date.parse(automationRuns[0].triggeredAt);
     expect(persistedRelease.activatedAt).toBe(
@@ -1492,18 +1561,14 @@ test("real user acceptance, durable installation and original VM/terminal contin
               row.method === "POST",
           ),
         ).toHaveLength(1);
-        expect(
-          database
-            .prepare(
-              "SELECT count(*) n FROM upgrade_attempts WHERE instance_id=?",
-            )
-            .get(fixture.config.instanceId).n,
-        ).toBe(1);
+        assertSingleIntent();
         expect(admissionRecovery.browserPosts).toBe(1);
         expect(admissionRecovery.durableIntents).toBe(1);
         expect(admissionRecovery.extraPostsWhileUnknownAndReload).toBe(0);
         expect(ongoingProgress.percent).toBeGreaterThan(0);
         expect(ongoingProgress.percent).toBeLessThan(100);
+        expect(ongoingProgress.scope).toBe(admission.kind === "operation" ? "current-technical-stage" : "technical-attempt");
+        if (admission.kind === "operation") expect(ongoingProgress.overallPercent).toBeNull();
         expect(originalAfter.id).toBe(original.id);
         expect(originalAfter.status).toBe("running");
         expect(snapshotB.pid).toBe(snapshotA.pid);
@@ -1563,7 +1628,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         expect(snapshotB.seq.length).toBeGreaterThan(snapshotA.seq.length);
       },
       {
-        attemptId: accepted.attemptId,
+        attemptId: technicalAttempt.attemptId,
         acceptedIntent,
         admissionRecovery,
         ongoingProgress,
@@ -1584,7 +1649,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
           }),
         ),
         serverUpgradeWindow: {
-          acceptedAt: accepted.acceptedAt,
+          acceptedAt: admission.response.acceptedAt,
+          technicalAcceptedAt: technicalAttempt.acceptedAt,
           activatedAt: installed.confirmedServiceRelease.activatedAt,
           automationTriggeredAt: automationRuns[0].triggeredAt,
         },
