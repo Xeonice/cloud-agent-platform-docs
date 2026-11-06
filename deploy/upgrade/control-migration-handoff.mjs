@@ -200,8 +200,22 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
     return createControlCapacityCollector({config,sample,clock,...(monotonic?{monotonic}:{}),...(publicationLock?{publicationLock}:{})})
       .collect({plan,expectedRevision:previous?.value.revision??0,signal:bounded()});
   }
-  function admit(plan,observation) {
+  function admit(plan,observation,phase) {
     const proof=evaluateCapacityAdmission({plan,observation,now:clock()});
+    if(!proof.qualified) {
+      const old=load();
+      if(!old.firstAdmissionFailure) {
+        // Keep the original refusal through restart and later successful
+        // reconciliation. Never persist the full observation or caller values.
+        const admission={qualified:false,state:proof.state,reason:proof.reason};
+        if(proof.allocationId!==undefined)admission.allocationId=proof.allocationId;
+        if(proof.overruns!==undefined)admission.overruns=proof.overruns.map(({resource,required,available})=>({resource,required,available}));
+        if(proof.shortages!==undefined)admission.shortages=proof.shortages.map(({resource,required,available,boundary})=>({resource,required,available,boundary}));
+        const observedAt=typeof observation?.observedAt==='string'&&/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,9})?Z$/.test(observation.observedAt)&&Number.isFinite(Date.parse(observation.observedAt))?observation.observedAt:null;
+        save({...old,firstAdmissionFailure:{phase,planDigest:DIGEST.test(plan?.planDigest)?plan.planDigest:null,
+          observationDigest:observation===undefined?null:digest(observation),observedAt,admission}});
+      }
+    }
     invariant(proof.qualified,proof.reason??'MIGRATION_NORMAL_CAPACITY_UNKNOWN');
     return proof;
   }
@@ -227,7 +241,7 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
       config={...f.config,sourceDigest:projectedPlan.sourceDigest,observationPath:join(normal.transitionRoot,'preflight-observation.json')};
     invariant(!old.preflightIntent || old.preflightIntent.scopeDigest===scope,'MIGRATION_NORMAL_PREFLIGHT_SCOPE_CHANGED');
     save({...old,preflightIntent:{scopeDigest:scope,planDigest:projectedPlan.planDigest,sourceDigest:projectedPlan.sourceDigest}});
-    const observation=await collect(projectedPlan,config),admission=admit(projectedPlan,observation);
+    const observation=await collect(projectedPlan,config),admission=admit(projectedPlan,observation,'preflight');
     const proof={kind:'normal-repair-headroom-before-first-stop',scopeDigest:scope,projected:true,
       context,requiredRoles:projection.requiredRoles,slots:projection.slots,planDigest:projectedPlan.planDigest,
       nativeRefs:f.refs,capacitySequence:f.state.sequence,capacityChainDigest:f.state.chainDigest,
@@ -334,10 +348,10 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
         invariant(!priorNormal || priorSeed && same(priorNormal.value,priorSeed.value),
           'MIGRATION_NORMAL_OBSERVATION_CONFLICT');
         observation=await collect(nextPlan,seedConfig,publicationLock);
-        admit(nextPlan,observation);
+        admit(nextPlan,observation,'publish-seed');
         await cas(normal.observationPath,observation,false,priorNormal?.value);
       }
-      const admission=admit(nextPlan,observation);
+      const admission=admit(nextPlan,observation,'publish');
       // Re-read original chain and all physical births after the real two-frame collection.
       const after=await files();invariant(same(after.refs,f.refs) && await actualCommands(after)===commandsDigest,
         'MIGRATION_NORMAL_HANDOFF_PHYSICAL_CHANGED');
@@ -362,7 +376,7 @@ export function createMigrationCapacityHandoff({sqlite, Database, journal, insta
     const observation=await fact(normal.observationPath);
     invariant(observation.value.revision>=actual.revision && (observation.value.revision>actual.revision || digest(observation.value)===actual.observationDigest),
       'MIGRATION_NORMAL_SUPERVISOR_OBSERVATION_CHANGED');
-    admit(plan.value,observation.value);
+    admit(plan.value,observation.value,'ready');
     const result={...p,supervisor:actual};save({...old,ready:result});return result;
   }
   return {preflight,publish,assertReady,status:load};

@@ -22,7 +22,7 @@ const identity=n=>({artifactDigest:digest('artifact-'+n),inputFingerprint:digest
 
 /** Actual SQLite journals/bookkeepers/collector/admission, with explicit physical
  * and monotonic counter ports. No Native, SDK, Guest, network or real admission. */
-async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
+async function fixture(t,{cpu=12000,write,protectedRoots=[],handoffFactory=createMigrationCapacityHandoff}={}) {
   const root=await fs.realpath(await fs.mkdtemp(join(tmpdir(),'migration-handoff-')));
   const protectedRuntimeRoots=typeof protectedRoots==='function'?protectedRoots(root):protectedRoots;
   await fs.chmod(root,0o700);t.after(()=>fs.rm(root,{recursive:true,force:true}));
@@ -34,6 +34,7 @@ async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
     startIdentity:own?role+'-original-identity':null,artifactDigest:own?digest('artifact-'+role):null});
   const original=[row(1,'foundation',false),row(2,'installer'),row(3,'coordinator'),row(4,'owner'),row(5,'web')];
   let containers=structuredClone(original);
+  const cpuRates=new Map(),cpuCounters=new Map(),memoryUsage=new Map();
   const physical=r=>({...r,hostPid:r.pid,role:r.role??'foundation',startIdentity:r.startIdentity??'original-foundation-code',
     artifactDigest:r.artifactDigest??digest('foundation'),imageDigest:digest('runtime-image'),running:true,paused:false,
     restartPolicy:'no',oomKilled:false,exitCode:0});
@@ -51,7 +52,12 @@ async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
     return {vmBootId:'00112233-4455-6677-8899-aabbccddeeff',procIdentity:{path:'/host/proc',dev:'1',ino:'1'},
       cpu:{cpus:12,total:tick*10000,idle:tick*10000},memory:{total:20*GiB,free:20*GiB-200*MiB,available:20*GiB-200*MiB},
       devices:[{id:'data',dev:'2049',majorMinor:'8:1',capacityBytes:100*GiB,freeBytes:90*GiB,availableBytes:90*GiB,readBytes:1,writeBytes:1}],
-      containers:containers.map(r=>({...r,memoryBytes:10*MiB,cpuNs:1,ioBytes:1,monotonic:mono})),startedAt:now,finishedAt:now,monotonic:mono};
+      containers:containers.map(r=>{
+        const previous=cpuCounters.get(r.containerId)??{cpuNs:1,monotonic:mono},
+          cpuNs=previous.cpuNs+(mono-previous.monotonic)*(cpuRates.get(r.role)??0)*1000;
+        cpuCounters.set(r.containerId,{cpuNs,monotonic:mono});
+        return {...r,memoryBytes:memoryUsage.get(r.role)??10*MiB,cpuNs,ioBytes:1,monotonic:mono};
+      }),startedAt:now,finishedAt:now,monotonic:mono};
   };
   const config={schemaVersion:1,instanceId,sourceDigest:digest('original-source'),hostProcRoot:'/host/proc',dockerSocketPath:'/fixture.sock',
     devices:[{id:'data',path:root,dev:'2049',majorMinor:'8:1'}],residents:[{id:'legacy-controller',containers:[original[1]]},
@@ -93,7 +99,7 @@ async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
     installedComponents:{api:identity('api'),coordinator:identity('coordinator'),installer:identity('new-installer')},
     web:identity('web'),owner:identity('owner'),webBinding:{root:'/explicit-fixture/web'},defaultOwner:{ownerId:'retained-owner'}};
   let actualContext=structuredClone(context),writes=[];
-  const create=()=>createMigrationCapacityHandoff({sqlite:db,Database,journal,instanceId,migrationId,configDigest,deadline,rollbackDeadline,native,normal,source,targets,
+  const create=()=>handoffFactory({sqlite:db,Database,journal,instanceId,migrationId,configDigest,deadline,rollbackDeadline,native,normal,source,targets,
     protectedRoots:protectedRuntimeRoots,
     capacityStatus:()=>capacity.status(),readRepairContext:async stage=>structuredClone(stage==='actual'?actualContext:context),
     inspect:async r=>states.get(r.containerId),sample,clock:()=>now,monotonic:()=>{mono+=250;return mono;},
@@ -123,7 +129,9 @@ async function fixture(t,{cpu=12000,write,protectedRoots=[]}={}) {
     finally{await runtime.close();supDb.close();}
   }
   return {root,db,journal,capacity,native,normal,initial,context,targets,source,writes,migrate,readiness,
-    get handoff(){return handoff;},reopen(){handoff=create();},mutateContext(fn){fn(actualContext);}};
+    get handoff(){return handoff;},reopen(){handoff=create();},mutateContext(fn){fn(actualContext);},
+    setCpuMilliCores(role,value){cpuRates.set(role,value);},
+    setMemoryBytes(role,value){memoryUsage.set(role,value);}};
 }
 
 test('Owner roots outside the control mount namespace remain unread and absent through preflight and publication',async t=>{
@@ -166,6 +174,109 @@ test('real journals and capacity transitions seed normal facts, preserve every o
   assert.deepEqual(await fs.readFile(f.native.planPath),original);
   await assert.rejects(f.handoff.assertReady(async()=>({qualified:true})),/SUPERVISOR_NOT_READY/);
   const ready=await f.handoff.assertReady(f.readiness);assert.equal(ready.supervisor.qualified,true);
+});
+
+test('a real post-start resident overrun persists its original seed failure through reopen and a later successful publication',async t=>{
+  const f=await fixture(t);await f.handoff.preflight();await f.migrate();
+  const original=await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),
+    peak=structuredClone(f.capacity.status().peak),commands=f.db.prepare('SELECT * FROM control_commands ORDER BY rowid').all();
+  f.setMemoryBytes('control-entry',128*MiB+1);
+  await assert.rejects(f.handoff.publish(),{code:'CAPACITY_RESIDENT_BUDGET_EXCEEDED'});
+  const failure=f.handoff.status().firstAdmissionFailure,
+    plan=JSON.parse(await fs.readFile(f.normal.planPath)),
+    seed=JSON.parse(await fs.readFile(join(f.normal.transitionRoot,'handoff-observation.json')));
+  assert.deepEqual(failure,{
+    phase:'publish-seed',planDigest:plan.planDigest,observationDigest:digest(seed),observedAt:seed.observedAt,
+    admission:{qualified:false,state:'deferred',reason:'CAPACITY_RESIDENT_BUDGET_EXCEEDED',
+      allocationId:'migration-control-entry',overruns:[{resource:'memoryBytes',required:128*MiB+1,available:128*MiB}]},
+  });
+  assert.equal(f.handoff.status().published,undefined);assert.equal(f.handoff.status().ready,undefined);
+  await assert.rejects(fs.stat(f.normal.configPath),{code:'ENOENT'});
+  assert.deepEqual(await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),original);
+  assert.deepEqual(f.capacity.status().peak,peak);
+  assert.deepEqual(f.db.prepare('SELECT * FROM control_commands ORDER BY rowid').all(),commands);
+  f.reopen();assert.deepEqual(f.handoff.status().firstAdmissionFailure,failure);
+  f.setMemoryBytes('control-entry',10*MiB);
+  await f.handoff.publish();await f.handoff.assertReady(f.readiness);f.reopen();
+  assert.deepEqual(f.handoff.status().firstAdmissionFailure,failure);
+});
+
+test('readiness retains the first failure when a newer real observation exceeds a fresh Supervisor success',async t=>{
+  const f=await fixture(t);await f.handoff.preflight();await f.migrate();await f.handoff.publish();
+  const good=await f.readiness();
+  f.setMemoryBytes('control-entry',128*MiB+1);
+  const later=await f.readiness();assert.equal(later.qualified,false);assert(later.revision>good.revision);
+  await assert.rejects(f.handoff.assertReady(async()=>good),{code:'CAPACITY_RESIDENT_BUDGET_EXCEEDED'});
+  const observation=JSON.parse(await fs.readFile(f.normal.observationPath)),failure=f.handoff.status().firstAdmissionFailure;
+  assert.equal(failure.phase,'ready');assert.equal(failure.observationDigest,digest(observation));
+  assert.equal(failure.observedAt,observation.observedAt);
+  assert.deepEqual(failure.admission.overruns,[{resource:'memoryBytes',required:128*MiB+1,available:128*MiB}]);
+  assert.equal(f.handoff.status().ready,undefined);
+  f.setMemoryBytes('control-entry',10*MiB);await f.handoff.assertReady(f.readiness);
+  assert.deepEqual(f.handoff.status().firstAdmissionFailure,failure);
+});
+
+test('a 363m resident with a 350m CPU reservation charges the extra 13m and publishes without changing the frozen amounts',async t=>{
+  const f=await fixture(t),preflight=await f.handoff.preflight();await f.migrate();
+  const original=await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),
+    peak=structuredClone(f.capacity.status().peak);
+  f.setCpuMilliCores('coordinator',363);
+  const published=await f.handoff.publish(),normal=JSON.parse(await fs.readFile(f.normal.planPath));
+  assert.equal(published.admission.requiredTotal.cpuMilliCores,preflight.admission.requiredTotal.cpuMilliCores+13);
+  assert.equal(normal.allocations.candidate.find(r=>r.id==='migration-coordinator').resources.cpuMilliCores,350);
+  assert.equal(published.admission.qualified,true);assert.deepEqual(published.admission.shortages,[]);
+  assert.equal(f.handoff.status().firstAdmissionFailure,undefined);
+  assert.equal((await f.handoff.assertReady(f.readiness)).supervisor.qualified,true);
+  assert.deepEqual(await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),original);
+  assert.deepEqual(f.capacity.status().peak,peak);
+});
+
+test('CPU growth beyond effective total and available capacity persists safe shortages without hiding the original refusal',async t=>{
+  const f=await fixture(t),preflight=await f.handoff.preflight();await f.migrate();
+  const original=await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),
+    peak=structuredClone(f.capacity.status().peak);
+  f.setCpuMilliCores('coordinator',3000);
+  await assert.rejects(f.handoff.publish(),{code:'CAPACITY_BUDGET_INSUFFICIENT'});
+  const plan=JSON.parse(await fs.readFile(f.normal.planPath)),
+    seed=JSON.parse(await fs.readFile(join(f.normal.transitionRoot,'handoff-observation.json'))),
+    failure=f.handoff.status().firstAdmissionFailure;
+  assert.deepEqual(failure,{
+    phase:'publish-seed',planDigest:plan.planDigest,observationDigest:digest(seed),observedAt:seed.observedAt,
+    admission:{qualified:false,state:'deferred',reason:'CAPACITY_BUDGET_INSUFFICIENT',shortages:[
+      {resource:'cpuMilliCores',required:preflight.admission.requiredTotal.cpuMilliCores+3000-350,available:12000,boundary:'total'},
+      {resource:'cpuMilliCores',required:preflight.admission.requiredTotal.cpuMilliCores-350,available:9000,boundary:'available'},
+    ]},
+  });
+  await assert.rejects(fs.stat(f.normal.configPath),{code:'ENOENT'});
+  f.reopen();f.setCpuMilliCores('coordinator',0);await f.handoff.publish();
+  await f.handoff.assertReady(f.readiness);
+  assert.deepEqual(f.handoff.status().firstAdmissionFailure,failure);
+  assert.deepEqual(await Promise.all([f.native.planPath,f.native.configPath].map(p=>fs.readFile(p))),original);
+  assert.deepEqual(f.capacity.status().peak,peak);
+});
+
+test('a null or undefined collector observation preserves the original unknown admission instead of a diagnostic TypeError',async t=>{
+  for(const literal of ['null','undefined'])await t.test(literal,async t=>{
+    // Exercise the whole production factory and real SQLite journal. Only the
+    // collector return port violates its contract; no production API is added.
+    let source=await fs.readFile(new URL('./control-migration-handoff.mjs',import.meta.url),'utf8');
+    const original="import { createControlCapacityCollector, sampleLinuxCapacity } from './control-capacity-collector.mjs';";
+    assert.equal(source.split(original).length,2);
+    source=source.replace(original,"import { sampleLinuxCapacity } from './control-capacity-collector.mjs';\n"+
+      `const createControlCapacityCollector=()=>({collect:async()=>${literal}});`)
+      .replace(/from '(\.\/[^']+)'/g,(_all,path)=>'from '+JSON.stringify(new URL(path,import.meta.url).href));
+    const {createMigrationCapacityHandoff:handoffFactory}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
+    const f=await fixture(t,{handoffFactory});
+    await assert.rejects(f.handoff.preflight(),{code:'CAPACITY_OBSERVATION_UNKNOWN'});
+    const state=f.handoff.status();
+    assert.deepEqual(state.firstAdmissionFailure,{
+      phase:'preflight',planDigest:state.preflightIntent.planDigest,
+      observationDigest:literal==='null'?digest(null):null,observedAt:null,
+      admission:{qualified:false,state:'unknown',reason:'CAPACITY_OBSERVATION_UNKNOWN'},
+    });
+    assert.equal(f.db.prepare('SELECT count(*) n FROM control_commands').get().n,0);
+    await assert.rejects(fs.stat(f.normal.configPath),{code:'ENOENT'});
+  });
 });
 
 test('an interrupted pending publication resumes only the same plan/config intent and never replaces conflicting state',async t=>{

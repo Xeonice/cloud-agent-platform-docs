@@ -149,6 +149,8 @@ function exceeds(required, available) {
  * Pure admission. `limits` are the effective, frozen instance/VM/cgroup budget;
  * `available` is the concurrently observed free capacity in the same units and
  * filesystem identities. `residents.resources` is measured exclusive usage.
+ * CPU reserves each allocation's larger declared or measured amount; a measured
+ * overage must fit unallocated headroom. Other resident resources remain caps.
  * Unknown CPU/IO availability must stay unknown, not become a guessed constant.
  * The caller owns a reservation/CAS boundary before launching any role.
  */
@@ -221,17 +223,27 @@ export function evaluateCapacityAdmission({
       additional = zero(plan.limits.disks),
       measured = zero(plan.limits.disks);
     for (const item of allocations) {
-      const resident = actual.get(item.id);
+      const resident = actual.get(item.id),
+        overruns = resident ? exceeds(resident.resources, item.resources)
+          .filter(({ resource }) => resource !== "cpuMilliCores") : [];
       if (
         resident &&
-        (exceeds(resident.resources, item.resources).length ||
+        (overruns.length ||
           !accumulate(measured, resident.resources))
       )
         return result("deferred", "CAPACITY_RESIDENT_BUDGET_EXCEEDED", {
           allocationId: item.id,
+          // Report only known numeric boundaries; an undeclared resource still
+          // refuses above, but must not acquire an invented numeric budget.
+          overruns: overruns.filter(({ required, available }) =>
+            integer(required) && integer(available)),
         });
+      const effective = resident ? {
+        ...item.resources,
+        cpuMilliCores: Math.max(item.resources.cpuMilliCores, resident.resources.cpuMilliCores),
+      } : item.resources;
       if (
-        !accumulate(total, item.resources) ||
+        !accumulate(total, effective) ||
         !accumulate(additional, item.resources, resident?.resources)
       )
         return result("unknown", "CAPACITY_ACCOUNTING_UNKNOWN");

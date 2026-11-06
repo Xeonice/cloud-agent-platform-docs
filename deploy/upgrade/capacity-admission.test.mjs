@@ -182,6 +182,181 @@ test("resident growth and unused peak headroom are included instead of crediting
   assert.equal(f.run().reason, "CAPACITY_RESIDENT_BUDGET_EXCEEDED");
 });
 
+test("non-CPU resident overruns name only the allocation and exact numeric resource boundaries", async (t) => {
+  for (const resource of ["memoryBytes", "ioBytesPerSecond", "disk:data"])
+    await t.test(resource, () => {
+      const f = fixture(), resident = f.observation.residents[0];
+      assert.equal(f.run().qualified, true);
+      const available = resource === "disk:data"
+        ? resident.resources.disks.data++
+        : resident.resources[resource]++;
+      const before = structuredClone({ plan: f.plan, observation: f.observation });
+      const result = f.run();
+      assert.deepEqual(result, {
+        qualified: false,
+        state: "deferred",
+        reason: "CAPACITY_RESIDENT_BUDGET_EXCEEDED",
+        allocationId: resident.id,
+        overruns: [{ resource, required: available + 1, available }],
+      });
+      assert.deepEqual({ plan: f.plan, observation: f.observation }, before);
+    });
+});
+
+// Recorded F7 CPU reservations and the failed handoff's exclusive CPU readings.
+// Other resource dimensions are zero here so these cases isolate CPU admission.
+function f7CpuFixture(limit = 11750) {
+  const item = (id, cpu, resident = false) => ({
+    id,
+    resident,
+    identityDigest: digest(id),
+    resources: vector(0, {}, cpu, 0),
+  });
+  const plan = freezeCapacityBudget({
+    instanceId: "capacity-f7-cpu",
+    sourceDigest: digest("recorded-f7-handoff-cpu"),
+    maxObservationAgeMs: 5000,
+    limits: vector(0, {}, limit, 0),
+    allocations: {
+      source: [
+        item("legacy-coordinator", 500),
+        item("legacy-controller", 250),
+        item("source-other", 100, true),
+      ],
+      retainedOwners: [item("retained-owner-runtime", 1500, true)],
+      retainedGuests: [],
+      existingCandidates: [],
+      candidate: [
+        item("migration-api", 150, true),
+        item("migration-coordinator", 350, true),
+        item("future-owner-template", 2500),
+        item("future-web-template", 150),
+      ],
+      verification: [],
+      control: [
+        item("host-overhead", 1900, true),
+        item("migration-control-agent", 200, true),
+        item("migration-control-entry", 50, true),
+        item("migration-control-supervisor", 500, true),
+      ],
+      recovery: [
+        item("recovery-reserve", 250),
+        item("pending-original-guest-recovery", 2000),
+      ],
+    },
+  });
+  const measured = {
+    "source-other": 0,
+    "retained-owner-runtime": 1,
+    "migration-api": 0,
+    "migration-coordinator": 363,
+    "host-overhead": 513,
+    "migration-control-agent": 47,
+    "migration-control-entry": 0,
+    "migration-control-supervisor": 0,
+  };
+  const observation = {
+    known: true,
+    exclusiveAccounting: true,
+    instanceId: plan.instanceId,
+    sourceDigest: plan.sourceDigest,
+    revision: 1,
+    observedAt: new Date(now).toISOString(),
+    limits: structuredClone(plan.limits),
+    available: vector(0, {}, limit - 924, 0),
+    residents: Object.values(plan.allocations)
+      .flat()
+      .filter((r) => r.resident)
+      .map(({ id, identityDigest }) => ({
+        id,
+        identityDigest,
+        resources: vector(0, {}, measured[id], 0),
+      })),
+  };
+  return {
+    plan,
+    observation,
+    run: () => evaluateCapacityAdmission({ plan, observation, now }),
+  };
+}
+
+test("recorded F7 CPU 363/350 consumes 13m of unallocated headroom without changing the frozen plan or readings", () => {
+  const f = f7CpuFixture();
+  const before = structuredClone({ plan: f.plan, observation: f.observation });
+  const result = f.run();
+  assert.equal(result.qualified, true);
+  assert.equal(result.requiredTotal.cpuMilliCores, 10413);
+  assert.equal(result.requiredAdditional.cpuMilliCores, 9489);
+  assert.equal(result.observationDigest, digest(f.observation));
+  assert.deepEqual(result.shortages, []);
+  assert.equal(
+    f.observation.residents.find((r) => r.id === "migration-coordinator")
+      .resources.cpuMilliCores,
+    363,
+  );
+  assert.deepEqual({ plan: f.plan, observation: f.observation }, before);
+});
+
+test("effective CPU total admits at the exact frozen boundary and refuses one millicore less", () => {
+  const exact = f7CpuFixture(10413);
+  assert.equal(exact.run().qualified, true);
+  const result = f7CpuFixture(10412).run();
+  assert.equal(result.reason, "CAPACITY_BUDGET_INSUFFICIENT");
+  assert.deepEqual(result.shortages, [
+    { resource: "cpuMilliCores", required: 10413, available: 10412, boundary: "total" },
+    { resource: "cpuMilliCores", required: 9489, available: 9488, boundary: "available" },
+  ]);
+});
+
+test("observed available CPU still limits admission independently of the frozen total", () => {
+  const f = f7CpuFixture();
+  f.observation.available.cpuMilliCores = 9489;
+  assert.equal(f.run().qualified, true);
+  f.observation.available.cpuMilliCores--;
+  const result = f.run();
+  assert.equal(result.reason, "CAPACITY_BUDGET_INSUFFICIENT");
+  assert.deepEqual(result.shortages, [
+    { resource: "cpuMilliCores", required: 9489, available: 9488, boundary: "available" },
+  ]);
+});
+
+test("CPU growth cannot borrow a protected Owner's unused reservation", () => {
+  const f = f7CpuFixture();
+  f.observation.residents.find((r) => r.id === "retained-owner-runtime")
+    .resources.cpuMilliCores = 0;
+  f.observation.residents.find((r) => r.id === "migration-coordinator")
+    .resources.cpuMilliCores = 1701;
+  const measured = f.observation.residents.reduce(
+    (sum, r) => sum + r.resources.cpuMilliCores, 0,
+  );
+  f.observation.available.cpuMilliCores = f.plan.limits.cpuMilliCores - measured;
+  const result = f.run();
+  assert.equal(result.reason, "CAPACITY_BUDGET_INSUFFICIENT");
+  assert.equal(result.requiredTotal.cpuMilliCores, 11751);
+  assert.ok(result.shortages.some((r) =>
+    r.boundary === "total" && r.resource === "cpuMilliCores" && r.required === 11751));
+  assert.equal(f.plan.allocations.retainedOwners[0].resources.cpuMilliCores, 1500);
+  assert.equal(f.plan.allocations.candidate.find((r) => r.id === "future-owner-template")
+    .resources.cpuMilliCores, 2500);
+});
+
+test("each resident CPU overage is counted, including API, Agent, Entry and Supervisor", () => {
+  const f = f7CpuFixture();
+  const allocations = Object.values(f.plan.allocations).flat();
+  for (const resident of f.observation.residents) {
+    const budget = allocations.find((r) => r.id === resident.id);
+    resident.resources.cpuMilliCores = budget.resources.cpuMilliCores + 1;
+  }
+  const measured = f.observation.residents.reduce(
+    (sum, r) => sum + r.resources.cpuMilliCores, 0,
+  );
+  f.observation.available.cpuMilliCores = f.plan.limits.cpuMilliCores - measured;
+  const result = f.run();
+  assert.equal(result.qualified, true);
+  assert.equal(result.requiredTotal.cpuMilliCores, 10400 + f.observation.residents.length);
+  assert.equal(result.requiredAdditional.cpuMilliCores, 5650);
+});
+
 test("a frozen total peak over the effective limit is reported in addition to free headroom shortages", () => {
   const f = fixture(),
     input = structuredClone(f.plan);
