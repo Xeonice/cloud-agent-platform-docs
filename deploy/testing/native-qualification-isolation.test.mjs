@@ -61,14 +61,15 @@ test('existing QA names retain their original gate and do not query Docker', asy
 
 test('production ID cannot bypass startup using a boolean or create any intent', async t => {
   const root = await fs.mkdtemp(join(tmpdir(), 'same-instance-denied-'));t.after(() => fs.rm(root, { recursive: true, force: true }));
-  await assert.rejects(startUpgradeHarness({ isolated: true, instanceId: 'real-instance', root, initialRoot: root }),
+  await assert.rejects(startUpgradeHarness({ isolated: true, instanceId: 'real-instance', root, initialRoot: root,
+    initialRelease: { activationGeneration: 1 } }),
     { code: 'ISOLATED_INSTANCE_REQUIRED' });
   assert.deepEqual(await fs.readdir(root), []);
 });
 
 test('same signed legacy run cannot silently select the new repository Foundation',async()=>{
   await assert.rejects(startUpgradeHarness({isolated:true,instanceId:'existing-instance',root:'/var/lib/qa/instance',initialRoot:'/var/lib/qa/initial',
-    sameInstanceQa:{},legacyProvided:false}),{code:'SAME_SIGNED_LEGACY_RUNTIME_REQUIRED'});
+    initialRelease:{activationGeneration:1},sameInstanceQa:{},legacyProvided:false}),{code:'SAME_SIGNED_LEGACY_RUNTIME_REQUIRED'});
 });
 
 for (const [name, change, code] of [
