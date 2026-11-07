@@ -37,6 +37,10 @@
       <a href="#macmini-experiment"><span class="nav-number">11</span>Mac mini现场实验</a>
       <a href="#macmini-upgrade-preparation"><span class="nav-number">12</span>清理与升级准备</a>
       <a href="#macmini-build-and-history"><span class="nav-number">13</span>真实验收与QA环境修正</a>
+      <a href="#a2-published-q5-capacity-hold"><span class="nav-number">14</span>A2发布与容量HOLD</a>
+      <a href="#actual-cache-cleanup-and-maintenance-state"><span class="nav-number">15</span>实际回收与维护状态</a>
+      <a href="#q5-native-inflight-after-cache-cleanup"><span class="nav-number">16</span>Q5首次启动记录</a>
+      <a href="#q5-terminal-failure-overall-progress"><span class="nav-number">17</span>Q5终态失败与阻断</a>
     </nav>
     <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<br>11月7日追加：本机 Mac mini<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
   </aside>
@@ -44,7 +48,7 @@
     <header class="hero">
       <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">未达标 · 线上切换暂停</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-      <p class="hero-lede">本轮迁移暴露了切换顺序、完整链路验证和失败恢复的设计缺口。下一步先证明可行的交接方案，再实现和验收；当前报告不代表修改已经上线。</p>
+      <p class="hero-lede">A2兼容修复包已实际构建、发布并核验匿名下载；Q5已终态失败。业务激活已确认，但总体进度UI断言未通过，完整qualification=false。生产仍为原.15／generation8、升级继续阻断。五次真实QA按各自失败层次记录，维护传输超时不混计。</p>
       <div class="meta"><span>对象：公司电脑部署实例</span><span>范围：独立升级控制迁移</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
     </header>
 
@@ -175,7 +179,7 @@
 
     <section class="section" id="evidence" aria-labelledby="evidence-title">
       <div class="section-head"><span class="section-number">08</span><h2 id="evidence-title">证据、口径与当前状态</h2></div>
-      <div class="split"><div class="card"><div class="mini-label">已核实</div><h3>失败审计完成</h3><p>23 份远端账本、15 个触停批次与各轮直接原因已经交叉核对；HTTP 观测按端点与采样边界表达，纠正了 F4 的连续中断表述。</p></div><div class="card"><div class="mini-label">待验证</div><h3>新方案尚未实施上线</h3><p>旧入口兼容接入、旧执行权撤销、写权交接时限和完整恢复路径仍需隔离验证。新构建 R2 未执行，下一次线上切换停止推进。</p></div></div>
+      <div class="split"><div class="card"><div class="mini-label">已核实</div><h3>失败审计完成</h3><p>23 份远端账本、15 个触停批次与各轮直接原因已经交叉核对；HTTP 观测按端点与采样边界表达，纠正了 F4 的连续中断表述。</p></div><div class="card"><div class="mini-label">11月6日审计快照</div><h3>当时新方案尚未实施上线</h3><p>当时新构建 R2 未执行，线上切换暂停。后续11月7日A2已发布、Q5容量HOLD见第14节；旧入口正式接入、旧撤权与完整独立Control资格仍未闭合。</p></div></div>
       <div class="references"><a href="2026-11-06-无感升级失败审计.md">失败审计原文：统计口径、15 轮原因、HTTP 观测</a><a href="2026-10-20-独立升级控制实现与资格准备.md">历史实施与资格记录：保留失败、回退及未验收事实</a><a href="../../product/requirements/UPG.md">UPG 产品需求：9 条需求 / 52 条验收条件</a><a href="../../backend/changes/2026-10-20-独立升级控制系统.md">现有独立控制系统方案：本轮后续修订对象</a><a href="../changes/2026-10-20-独立升级控制与恢复测试计划.md" id="test-plan-link">独立升级控制与恢复测试计划</a></div>
       <details><summary>原始只读证据标识与统计时间</summary><div class="detail-body"><p>远端账本快照：<code>all-operator-attempts.actual-r1.json</code>，54,680 B；读取时间 <code>2026-11-06T07:44:42.983305Z</code>。该次读取全部迁移 actor 数为零，SQL 写入和生命周期动作均为零。</p><p class="hash">SHA-256：675b701c81991f68125e61b46877028c00cc9489773873ed9424687d2bea357b</p><p>该文件与统计投影 <code>failure-counts.actual-r1.json</code> 保存在本机操作目录的 <code>20261104-r1/failure-audit-20261106-r1/</code>。本 HTML 为离线报告快照，不查询实时生产状态，不包含口令、token 或私钥。</p></div></details>
     </section>
@@ -194,7 +198,7 @@
 
     <section class="section" id="refactor-update" aria-labelledby="refactor-update-title">
       <div class="section-head"><span class="section-number">10</span><h2 id="refactor-update-title">11月7日：继续收紧交接与旧控制边界</h2></div>
-      <p class="section-intro">本轮继续整体改造，完成以下本地实现与回归。未提交、未发布，也未连接生产；线上历史快照不作为本轮实时健康结论。</p>
+      <p class="section-intro">以下保留11月7日早期改造快照：当时完成本地实现与回归，未提交、未发布，也未连接生产。后续A2实际发布与本机验证见后文；历史快照不作为实时健康结论。</p>
       <div class="split">
         <article class="card"><div class="mini-label">已实现 · 本地验证</div><h3>恢复移出窗口，交接共享原截止</h3><p>任务恢复在实际 ready 后启动，先续接已知 job，未知启动只查原结果。Owner 交接并行汇总；部分或未知释放保持 releasing，不重复 claim 或直接恢复 ready。完整连续性条件保留，终端检查限4并发。</p></article>
         <article class="card"><div class="mini-label">已实现 · 失败分支已验证</div><h3>迟到结果不能重新打开服务</h3><p>release、adopt、初始化、探测和绑定共同消费原 quiesce 截止。超时原 Promise 仍参与退休计数；旧 writer epoch、关闭监听或迟到初始化不能恢复 HTTP/WS ready。prepared 强制关闭启动孤儿清理，保护原 Guest。</p></article>
@@ -264,12 +268,85 @@
       </tbody></table></div>
       <div class="callout" style="margin-top:17px"><h3>最小兼容修复已通过局部检查，尚未新包验收</h3><p>Installer仅对实际完成的409／BACKGROUND_WORK_PENDING，在原fence复核和同一原operation／plan的只读status明确为prepared、applied=false、commitKnown=true、resumeAction=quiesce后，继续冻结的同一candidate。旧status不提供candidate证明，本地冻结副本保持该身份；未知ACK、超时、5xx、状态或fence不符均不续发，独立Control journal未知命令仍不重放。</p><p style="margin-top:10px">busy等待计入原candidate startup预算，默认120秒；每次最多等100毫秒。原quiesce／release／adopt共享两秒预算不增、不重置，成功quiesce立即接原交接链。准备截止不硬抢占既有RPC；旧调度器持续接新工作仍可耗尽预算，真实时限需Native测量。没有停任务或调整自动任务触发时机求通过。</p><p style="margin-top:10px">Node22相关87/87合同通过、0跳过、27.329秒，独立审查GO。canonical构建另补已验证上一签名包的schema29复用：完整树与API fingerprint先匹配，迁移／receipt逐字节保持，普通release不能选qualification profile；5/5合同通过、独立审查GO。两者均为局部检查。</p></div>
       <p class="note">Root另执行quiesce、native executor、bootstrap profile及package保留Web／installed Owner组合回归，62/62通过、0跳过、3.500秒；证据为background-work-drain-fix-r1/root-combined-green.tap。未重新编译未变API／Web，组合合同不等于新包构建。</p>
-      <p class="note">下一候选A2计划为新的不可变v0.3.17-experiment.macmini.20261107.2：复用已验证且未变API／Web字节，实际重建Installer并冻结新项目commit。截至本次报告，A2尚未打包、签名、发布或执行下一Native，生产catalog／升级请求未变。原.16不覆盖。业务兼容桥接不等于完整Control首迁：onlineAdoptionImplemented=false与原7项证据缺口仍保留。本轮build VM和两个owned-offline CI节点维护仍待恢复。</p>
+      <p class="note">上述局部修复刚完成时，A2仍计划为新的不可变v0.3.17-experiment.macmini.20261107.2，尚未打包、签名或发布；后续实际结果见下一节。原.16不覆盖。业务兼容桥接不等于完整Control首迁：onlineAdoptionImplemented=false与原7项证据缺口仍保留。本轮build VM和两个owned-offline CI节点维护仍待恢复。</p>
       <p class="note">Q4证据：qa-runner-r4/actual-n01-r4/terminal.actual.json与terminal-safe-failure-projection.actual-r1.json；后者为query_only安全投影，不读payload、不调用SDK、不重放原run。修复87项原始结果见background-work-drain-fix-r1/result.actual-r1.json；schema29复用合同见deploy/testing/bootstrap-migration-profile.test.mjs。原四次失败和15批历史统计均保留。</p>
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q4-compatible-fix">Q4兼容修复、真实结果与待验收边界 ↗</a><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q3-environment-and-q4">Q3环境修复、精确清理与Q4最终失败 ↗</a><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#9-追加首次真实n01在setup失败保留现场待诊断">首次真实run、两条磁盘观测与保留现场 ↗</a><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#8-追加实验包实际构建与发布完成">实际构建、发布与原始证据 ↗</a><a href="https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.3.16-experiment.macmini.20261107.1">已发布的实验包 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · 四次真实QA失败保留，兼容修复待新包验收</span></footer>
+    <section class="section" id="a2-published-q5-capacity-hold" aria-labelledby="a2-published-q5-capacity-hold-title">
+      <div class="section-head"><span class="section-number">14</span><h2 id="a2-published-q5-capacity-hold-title">A2已发布，Q5已stage，容量门继续HOLD</h2></div>
+      <p class="section-intro">已生成新的不可变v0.3.17-experiment.macmini.20261107.2，目标body、实际tar与完整树均核验。Q5尚未launch，Native次数0；生产catalog写入0、升级POST0，原.15／generation8保持。</p>
+      <div class="split">
+        <article class="card"><div class="mini-label">canonical实际构建 · exit0</div><h3>保留已验证组件，交付新Installer</h3><p>冻结项目0896e767、API defc2802、原Web 17e67697。验证原A签名及全树、重算API fingerprint，显式retain-installed原Web；API／Web／Coordinator／Owner实际身份保持，新Installer ac12cda6来自0896。compileCalls0，不冒认API／Web已重新编译。</p></article>
+        <article class="card"><div class="mini-label">原校验器与匿名HTTPS · PASS</div><h3>实验已发布，完整资格仍未通过</h3><p>原.15 unsigned和signed verifier实际通过，schema29、原信任不变、不携Control字段。06:52:13Z发布9份prerelease资产，匿名流式核验真实tar和signed body摘要／大小。upgradeQualified=false，发布不能代替Native或生产更新。</p></article>
+      </div>
+      <div class="table-wrap" style="margin-top:17px" tabindex="0" aria-label="A2实际不可变产物与构建观测"><table><thead><tr><th scope="col">实际产物／观测</th><th scope="col">结果</th></tr></thead><tbody>
+        <tr><td>canonical unsigned构建</td><td>Linux arm64、Node22／ABI127、glibc2.28；exit0／OOM false／restart0，无TERM、无自动重试。最低host可用12,626,460,672字节。</td></tr>
+        <tr><td>tar</td><td>94,595,511字节；<code>sha256:aecf6e171301f7d501c1829a273e6b20481d76243154e68f723099ec2df4f88c</code></td></tr>
+        <tr><td>完整实际文件树</td><td>20,067项payload、293,032,843字节；<code>sha256:395c3831a929bcf46f75d02c8338607b556c26ddb90a5398749aaddff13fc068</code>。每项hash／mode／size／link、contained symlink及schema29通过。</td></tr>
+        <tr><td>签名目标body</td><td><code>sha256:92227667125978423f5955d574428a1068e1e52f9408b005b2e2b05a7d5f9bfc</code>；原instance、channel与public trust保持。</td></tr>
+      </tbody></table></div>
+      <p class="note">被动tar checker曾因合法目录尾斜杠解析过严而拒绝；第二轮gzip随机seek低效，原PID／birth复核后一次正常TERM，第三轮改为单顺序流逐项核验并完整PASS。原记录保留、产物未改；这些是校验工具执行调整，不计作产品升级失败，也不把该TERM写进unsigned构建或Native。</p>
+      <div class="callout" style="margin-top:17px"><h3>Q5已完成实际输入staging，尚无真实run</h3><p>新A2 hub独立于Q1原A，原source15／source tar及新A2 tar各自RO alias；source15同dev／inode保留。Q5递归bind保留子mount，顶层及source15均只读，工具／artifact源0896，fresh activation1。实际stage确认root／startup intent／fixture proof不存在，instances／runner-home／results为空，SDK未打开、角色未启动；STAGED_NOT_RUN不能记作N01通过。</p><p style="margin-top:10px">完整tar／tree复核已前移到fresh宿主容量采样之前；light launch仅核同一proof、固定13项stat与小文件hash，不在容量门后再做长时间全树读取。局部合同与独立审查已通过，实际launch仍为0，自动任务、原两秒时限及连续性要求未改。</p></div>
+      <div class="callout amber" style="margin-top:17px"><h3>依据已见9.322GB窗口消耗，将Native启动门提高到15GiB</h3><p>Q4启动host余量16,628,117,504、最低7,306,149,888字节，差分9,321,967,616字节，超过此前静态预算。新启动门16,106,127,360字节；原4GiB底线、1秒观测、零重试、单TERM保持。扣除已见窗口消耗与底线后余量2,489,192,448字节，这是保守预留，不是已验证的后续峰值上界。当前容量未达到新门，Q5继续HOLD。</p></div>
+      <div class="table-wrap" style="margin-top:17px" tabindex="0" aria-label="本轮容量清理实际结果与保留边界"><table><thead><tr><th scope="col">处理范围</th><th scope="col">结果与边界</th></tr></thead><tbody>
+        <tr><td>Q4退出进程与公有缓存</td><td>九个退出容器正常rm、不带-v。原Owner／future Owner各五类公共image缓存按全hash／公有来源／硬链接及保护清单精确清理，唯一inode allocated各2,738,909,184字节；SDK／Guest／base／DB／authority保护不变，不称SDK settled。</td></tr>
+        <tr><td>trim与宿主余量</td><td>两次trim窗口总体6,260,269,056→13,445,844,992字节。含已有free块及同期变化，全部差分／trim字节不独占归因，不重复计收益。</td></tr>
+        <tr><td>A2四项可再生中间物</td><td>实际allocated409,501,696字节，该阶段清单已列、当时尚待Root清理门；后续完成见第15节。真实tar／distribution／Git repos与bundle／sourceWitness／验收输入保留。</td></tr>
+        <tr><td>两份Q4 bootstrap base</td><td>该阶段各256MiB仍未压缩／删除，仅准备默认HELD工具；后续Root已归档并移除raw，见第15节。净约407MB当时是估计，不是实测回收。Guest／DB／journal不删。</td></tr>
+      </tbody></table></div>
+      <p class="note">删除前既有SQLite诊断曾触发SHM保护门拒绝，拒绝记录保留；公有来源随后改用原始副本离线投影，后续不再连接原SDK DB。build VM与两个本轮owned-offline CI节点仍处维护范围，尚不能写成已恢复。生产继续.15／generation8；完整独立Control首迁的原证据缺口与onlineAdoptionImplemented=false不因A2发包而消失。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#a2-published-q5-capacity-hold">A2产物完整摘要、Q5实际stage与容量HOLD证据 ↗</a><a href="https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.3.17-experiment.macmini.20261107.2">A2不可变实验发行包 ↗</a></div>
+    </section>
+
+    <section class="section" id="actual-cache-cleanup-and-maintenance-state" aria-labelledby="actual-cache-cleanup-and-maintenance-state-title">
+      <div class="section-head"><span class="section-number">15</span><h2 id="actual-cache-cleanup-and-maintenance-state-title">限定缓存已回收，维护与容量准备仍未结束</h2></div>
+      <p class="section-intro">本节追加前述待处理事项的实际结果。Q5仍未launch、Native新增0，生产catalog写入0／升级POST0。07:54:59Z的r21只读快照确认HTTP200、原.15／generation8／confirmed、catalog no-update。</p>
+      <div class="table-wrap" tabindex="0" aria-label="已完成限定清理及恢复保留"><table><thead><tr><th scope="col">固定范围</th><th scope="col">实际完成结果</th></tr></thead><tbody>
+        <tr><td>A2四项可再生中间物</td><td>已精确移除，原allocated409,501,696字节；保留distribution tar／Git repos与bundle／sourceWitness／真实verified hub与全部证据，不等同宿主净收益。</td></tr>
+        <tr><td>12个历史A8退出容器记录</td><td>原6个exit1、6个exit0，均PID0；先保存完整私有日志／原元数据，实际仅正常docker rm固定12项，无-f／-v。其余16个记录与两CI原身份不变，历史6次失败不新计成本轮Native或生产失败。</td></tr>
+        <tr><td>五个旧公开展开副本</td><td>实际移除allocated1,826,758,656字节。原完整tar核验101,301项payload，4份tar、3份原installed.json bytes及全模式／目录元数据保留；凭固定full proof续接全path-set／ns／inode、双引用扫描及dirfd删除，未再次读全payload。</td></tr>
+        <tr><td>17份公开重复输入</td><td>14份whole-byte相同，3份原ref header＋相同master pack已实际证明可重建原full SHA。实际unlink17项／allocated1,771,204,608字节，7份master及恢复mapping保留，16容器／两CI不变，无SDK／SQLite动作。</td></tr>
+        <tr><td>生成缓存、旧A展开树与B bare repos</td><td>两phase实际complete：本地两个生成缓存allocated77,729,792字节、tracked0；QA旧A与B repos allocated510,570,496字节。全metadata／硬链接闭包／物理引用核对，无GB payload复读；旧A签名tar／原manifest、HEAD／refs／sourceWitness及恢复来源保留。Q5／source15／A2不变，历史输入重用前须恢复。</td></tr>
+        <tr><td>本地第二份A2 tar与旧proof builder</td><td>重复tar逻辑94,595,511／allocated94,597,120字节已移除，QA master与匿名HTTPS相同SHA保留；未来host工具需原路径时先恢复。历史exit137 builder日志／diff先保全，再正常rm唯一记录、无-v，volume保留；16→15且其他状态不变。原RW size512,835,584字节不冒认实测收益／新增Native失败。</td></tr>
+      </tbody></table></div>
+      <p class="note">duplicate R2原次SSH因/bin/bash: Argument list too long在Python启动前失败，输出目录不存在、24项身份不变、mutation0；R3改从stdin送代码，固定原actual SHA／header-pack证明，再核fresh24项ns／xattrs、16容器与FD／maps。原失败证据保留，R3才是实际完成；不是重放未知动作，也不是新的产品或Native失败。</p>
+      <p class="note">生成缓存／旧A清理执行时已核summary字段与保留源身份，但遗漏unlink前绑定远端summary完整raw SHA／size。事后限定一次只读核对才确认与原host逐byte相同：7,502字节／2135741a…，身份稳定。该执行审查遗漏及完整post-action-only证据保留，未改原sealed工具／记录，不追称原门已存在；后续同类工具须在变更前绑定。</p>
+      <div class="callout" style="margin-top:17px"><h3>两份Q4 base已保全双份gzip后移除raw</h3><p>原QuapbQw7.ext4与DI4KIU6i.ext4各268,435,456字节。QA／host各保留32,403,368与32,404,082字节gzip，每份均全流inflate核原SHA／字节数／trailer；独立Root门才unlink两raw。归档前后QA容器0、KVM fd0及文件／map／cwd／路径参数引用0，不打开SDK或连接SQLite。Guest写盘、SDK DB／WAL／SHM raw hash与保护状态保持，历史running行不改settled。</p><p style="margin-top:10px">原allocated536,875,008字节；四份gzip共129,614,900逻辑字节，差额不冒认APFS净回收。后续trim报告1,045,843,968字节，host 10,725,855,232→11,262,758,912；含已有free块及同期变化，不独占归因。重开原失败SDK前必须在原路径完整恢复raw及原uid／gid／mode／mtime／atime／xattrs；inode／ctime仅为审计身份。Q1／Q2早已归档unlink的旧base不重复计数。</p></div>
+      <div class="callout amber" style="margin-top:17px"><h3>build先正常停止；最新又临时4CPU／4GiB运行</h3><p>清理后原build VM实际仅一次普通colima stop、exit0／无force。新VZ与CI birth／boot、KVM0、owned-offline／idle／queue0先核；停后runtime55／目标25＋Foundation／原身份及health200保持，其他profile未变。该次swap前后均约24,026.94MiB，不能写成stop立即清空swap或释放同量宿主磁盘。</p><p style="margin-top:10px">随后Root为39份历史构建缓存转存（29份既有public／Git、10份未发布unsigned，仅无损保全、不授签名／发布／升级资格），以--save-config=false临时启动同一build为4CPU／4GiB。原saved4CPU／8GiB保留，当前不能写成build已停止或CI恢复。两CI仍仅本次reason macmini-native-20261107-r2、idle／queue0；转存尚未完成，不能提前记39份回收。维护后仍须恢复原build配置与连接，再仅清本次reason。</p></div>
+      <p class="note">后续QA／build trim分别报告1,753,944,064与5,304,692,736字节，host总体观测9,814,614,016→10,820,083,712字节；含既有free及同期变化，不与allocated／logical相加计独占收益。末值仍低于15GiB启动门，4GiB保护线、1秒观测及零自动重试不降低。39份历史缓存尚未转存完成；A2真实任务／PTY连续性、故障恢复与生产升级仍待后续结果，完整独立Control首迁资格未成立。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#actual-cache-cleanup-and-maintenance-state">各清理实际证据、base恢复要求与最新维护状态 ↗</a></div>
+    </section>
+
+    <section class="section" id="q5-native-inflight-after-cache-cleanup" aria-labelledby="q5-native-inflight-after-cache-cleanup-title">
+      <div class="section-head"><span class="section-number">16</span><h2 id="q5-native-inflight-after-cache-cleanup-title">19处缓存清理与Q5首次启动记录</h2></div>
+      <p class="section-intro">本节保留首次启动时状态，最终失败见第17节；不再作为当前inflight结论。前述容量HOLD／未launch亦保留为当时记录。生产catalog写入0／升级POST0，原.15／generation8未更新。</p>
+      <div class="table-wrap" tabindex="0" aria-label="Q5启动前实际完成步骤"><table><thead><tr><th scope="col">实际步骤</th><th scope="col">结果与边界</th></tr></thead><tbody>
+        <tr><td>19处旧公开展开缓存</td><td>三个无容器引用build卷内实际移除19处，原estimated allocated6,927,699,968字节；11份原master tar与恢复mapping保留。容器census不变、volume删除0，SDK／Guest／DB／journal未触及；guest free60,220,882,944→67,148,505,088字节。</td></tr>
+        <tr><td>trim与容量门</td><td>trim exit0，报告17,447,157,760字节；host12,211,998,720→19,140,431,872字节。含历史free及同期变化，不将报告／全部差分独占归因于19处清理。</td></tr>
+        <tr><td>临时4CPU／4GiB build正常停止</td><td>一次普通stop、exit0／无force，现BuildStopped；runtime55／目标26原State不变、health200。原receipt hostAfter19,137,970,176字节，swap仍约23,514.94MiB。两CI仍本次owned-offline，后续原4CPU／8GiB及连接／本次reason恢复尚未完成。</td></tr>
+        <tr><td>Q5唯一真实启动</td><td>2026-11-07 08:38:35Z，PID22106／birth3992380，host19,135,582,208字节超过15GiB门；QA MemAvailable7,863,476,224字节。固定0896源码／d49e config／fresh gen1／source15／A2 .17.2；4GiB保护线、1秒观测、零重试不降，启动不是通过。</td></tr>
+      </tbody></table></div>
+      <p class="note">39份历史缓存转存的首对象约135MB，约0.6MB/s链路使180秒观察器超时；Root随后原现场只读确认同SHA命名blob＋complete已落盘，原证据保留，源unlink0、不重传／续旧batch。此为传输观察器问题，不计第五次Native或线上升级失败。单archive只读比率约1.974，仍2.118GB／约1小时，未启动；13份Git内容cache与P加密备份均默认HELD、未执行／未创建密钥。</p>
+      <div class="callout amber" style="margin-top:17px"><h3>启动不代表验收通过</h3><p>原次随后在总体进度UI断言处失败，见第17节。真实任务／PTY完整连续性和故障恢复尚未取得整轮资格，也没有独立Control首迁资格。维护收尾仍待完成。</p></div>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q5-native-inflight-after-cache-cleanup">19处清理／trim／normalstop与Q5原次启动证据 ↗</a></div>
+    </section>
+
+    <section class="section" id="q5-terminal-failure-overall-progress" aria-labelledby="q5-terminal-failure-overall-progress-title">
+      <div class="section-head"><span class="section-number">17</span><h2 id="q5-terminal-failure-overall-progress-title">Q5业务激活已确认，整体验收仍失败</h2></div>
+      <p class="section-intro">原次789.424459934秒／exit1，runner TERM0、retry0，host最低10,970,226,688字节，未触4GiB容量保护。整体qualification=false；生产仍.15／generation8，catalog写入0／升级POST0，A2更新继续阻断。</p>
+      <div class="table-wrap" tabindex="0" aria-label="Q5终态事实与验证边界"><table><thead><tr><th scope="col">实际事实</th><th scope="col">结果与边界</th></tr></thead><tbody>
+        <tr><td>已越过Q4 BACKGROUND_WORK_PENDING</td><td>candidate-ready→observing期间2个Agent任务／3个业务沙箱仍running；原attempt最终activation-confirmed、target A2／generation2／technical percent100／seq608。technical attempt进度不直接替代operation总体进度。</td></tr>
+        <tr><td>N01直接失败点</td><td>spec1411要求dialog总体progressbar aria-valuenow=100；DOM无valuenow，aria-valuetext为“本次总体进度待确认；按实际阶段展示”，随后dialog消失。后续已核为same-Web完成态harness期待误判；原失败与qualification=false保留。</td></tr>
+        <tr><td>已通过子链／未完成断言</td><td>I01原202丢失、POST1、原ID只读找回、reload恢复及确认后清除子链passed；不授整轮资格。N01最终刷新／PTY连续性及I02完整断言未完成，不能宣称全部通过。</td></tr>
+        <tr><td>原失败现场正常关闭</td><td>9个QA角色全部exit0／PID0／无OOM，KVM fd0，原SDK frames／home／Guest写盘／authority与证据保留；不改历史SDK settled状态、不重跑原次。Build仍Stopped，两CI仍本次owned-offline，恢复原4CPU／8GiB及维护reason收尾待做。</td></tr>
+      </tbody></table></div>
+      <div class="callout amber" style="margin-top:17px"><h3>五次真实QA失败按原层次记录</h3><p>Q1 75.336秒：fresh generation fixture冲突；Q2 280.733秒：async operation与旧attempt断言契约不匹配；Q3 35.342秒：QA AppArmor parser环境缺失；Q4 450.158秒：产品交接后台未排空；Q5 789.424秒：业务激活后总体进度UI断言失败，已核为same-Web完成态harness误判。五次均未取得完整Native资格，不等同五次生产升级失败。缓存转存观察器超时也不新增Native次数。</p></div>
+      <p class="note">根因已核：retained Web17e与现有PRD／设计合同明确，同一Web构建完成后无需刷新、隐藏更新入口；原harness却强制popover100%／刷新按钮。3个测试文件已按实际浏览器Web身份与签名目标tuple分支修正，21/21仅合同测试；A2产品仍固定0896，原Q5失败／整体qualification=false不改，不据此放行生产。原terminal／完整Playwright证据保留，业务bridge与完整独立Control首迁资格仍分开。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q5-terminal-failure-overall-progress">Q5终态、直接断言与五次原run分类证据 ↗</a></div>
+    </section>
+
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · Q5终态失败，生产更新继续阻断</span></footer>
   </main>
 </div>
 <script>

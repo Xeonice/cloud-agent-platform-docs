@@ -25,6 +25,7 @@ import {
   qualificationPrompt,
   configureQualificationImage,
 } from "../server/qualification-model.mjs";
+import { n01WebContinuity } from "../server/upgrade-web-continuity-contract.mjs";
 
 const digest = (value) =>
   "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -293,6 +294,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     nativePhase = "setup",
     bodyErrorSummary = null,
     businessCleanup = null,
+    completedWebUi = null,
     upgradeObservation = null,
     lastKnownProgress = null,
     resourcesCleaned = false;
@@ -802,6 +804,26 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(authorized.capabilities.canUpgradeInstance).toBe(true);
     expect(authorized.capabilities.canAuthenticate).toBe(false);
     expect(authorized.attempt).toBeNull();
+    // Read the build identity rendered by this actual browser, not a release ID
+    // or a configured assumption about which Web was loaded. API-only upgrades
+    // preserve this Web and intentionally remove the completed header popover.
+    const loadedWebBuild = upgradeStatusPage
+      .locator("#version dt")
+      .filter({ hasText: /^实际 Web 构建$/ })
+      .locator("..")
+      .locator("dd");
+    await expect(loadedWebBuild).toHaveText(
+      initial.confirmedServiceRelease.components.web.webRevision,
+    );
+    expect(initial.confirmedServiceRelease.components.web).toMatchObject({
+      artifactDigest: fixture.config.initialRelease.components.web.artifactDigest,
+      webRevision: fixture.config.initialRelease.components.web.webRevision,
+    });
+    const webContinuity = n01WebContinuity({
+      sourceWeb: initial.confirmedServiceRelease.components.web,
+      targetWeb: fixture.envelope.manifest.components.web,
+      loadedWebRevision: (await loadedWebBuild.textContent()).trim(),
+    });
     await upgradeStatusPage.close();
     await page.reload();
     await expect(
@@ -1401,14 +1423,90 @@ test("real user acceptance, durable installation and original VM/terminal contin
     expect(installed.activationGeneration).toBeGreaterThan(
       initial.activationGeneration,
     );
-    await expect(
-      page.getByRole("button", { name: "版本与更新", exact: true }),
-    ).toBeVisible();
-    if (!(await upgradeDetails.isVisible()))
-      await page
-        .getByRole("button", { name: "版本与更新", exact: true })
-        .click();
-    await expect(overallProgress).toHaveAttribute("aria-valuenow", "100");
+    expect(installed.confirmedServiceRelease.components.web.artifactDigest).toBe(
+      webContinuity.target.artifactDigest,
+    );
+    expect(installed.confirmedServiceRelease.components.web.webRevision).toBe(
+      webContinuity.target.webRevision,
+    );
+    if (webContinuity.sameWeb) {
+      // Same-Web completion correctly removes the header popover. Observe the
+      // existing system card in a separate actual page so the
+      // original terminal selection remains untouched until the user reload.
+      nativePhase = "upgrade-confirmation:same-web-system-card";
+      const completionPage = await context.newPage();
+      try {
+        const browserCompletionResponse = completionPage.waitForResponse(
+          (response) =>
+            new URL(response.url()).origin === origin &&
+            new URL(response.url()).pathname === "/api/system/upgrade/status" &&
+            response.request().method() === "GET" &&
+            response.status() === 200,
+        );
+        await completionPage.goto(origin + "/settings/system#version");
+        const browserCompletion = await (await browserCompletionResponse).json();
+        expect(
+          n01UpgradeConfirmed(admission, browserCompletion, technicalAttempt),
+        ).toBe(true);
+        expect(browserCompletion.activationGeneration).toBe(
+          installed.activationGeneration,
+        );
+        expect(browserCompletion.confirmedServiceRelease.components.web).toEqual(
+          installed.confirmedServiceRelease.components.web,
+        );
+        const versionCard = completionPage.locator("#version");
+        await expect(
+          versionCard.getByText("本实例升级已确认，当前页面无需刷新", {
+            exact: true,
+          }),
+        ).toBeVisible();
+        await expect(
+          versionCard.getByText("本次实例升级已完成 · 100%", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          versionCard.getByRole("button", { name: "刷新页面", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          versionCard.locator("dt").filter({ hasText: /^当前服务版本$/ })
+            .locator("..").locator("dd"),
+        ).toHaveText(fixture.envelope.manifest.releaseId);
+        await expect(
+          versionCard.locator("dt").filter({ hasText: /^实际 Web 构建$/ })
+            .locator("..").locator("dd"),
+        ).toHaveText(webContinuity.loadedWebRevision);
+        await expect(upgradeDetails).toHaveCount(0);
+        await expect(
+          page.getByRole("button", { name: "版本与更新", exact: true }),
+        ).toHaveCount(0);
+        completedWebUi = {
+          ...webContinuity,
+          surface: "actual-browser-system-version-card",
+          browserObservedAt: browserCompletion.observedAt,
+          operationState: browserCompletion.operation?.state ?? null,
+          attemptState: browserCompletion.attempt.state,
+          percent: browserCompletion.attempt.percent,
+          activationGeneration: browserCompletion.activationGeneration,
+          refreshOffered: false,
+        };
+      } finally {
+        await completionPage.close();
+      }
+    } else {
+      nativePhase = "upgrade-confirmation:changed-web-popover";
+      await expect(
+        page.getByRole("button", { name: "版本与更新", exact: true }),
+      ).toBeVisible();
+      if (!(await upgradeDetails.isVisible()))
+        await page
+          .getByRole("button", { name: "版本与更新", exact: true })
+          .click();
+      await expect(overallProgress).toHaveAttribute("aria-valuenow", "100");
+      completedWebUi = {
+        ...webContinuity,
+        surface: "actual-browser-ready-popover",
+        refreshOffered: true,
+      };
+    }
     nativePhase = "page-refresh-and-terminal-attach";
     const beforeRefresh = evidence.ready.length,
       refreshStart = performance.now();
@@ -1416,10 +1514,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
       name: "刷新页面",
       exact: true,
     });
-    if (
-      installed.availableWeb.webRevision !==
-      fixture.config.initialRelease.components.web.webRevision
-    ) {
+    if (!webContinuity.sameWeb) {
       await expect(refreshButton).toBeVisible();
       await refreshButton.click();
     } else {
@@ -1632,6 +1727,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         acceptedIntent,
         admissionRecovery,
         ongoingProgress,
+        completedWebUi,
         targetDigest: frozenTarget,
         activationGeneration: installed.activationGeneration,
         terminalIdentity: secondTerminal.terminalIdentity,
@@ -2063,6 +2159,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           admissionRecovery,
           admissionDiagnostics,
           ongoingProgress,
+          completedWebUi,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",
