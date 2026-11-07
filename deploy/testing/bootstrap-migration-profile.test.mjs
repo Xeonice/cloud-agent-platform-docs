@@ -60,3 +60,46 @@ test('ordinary artifacts keep the complete migration set and formal release cann
     previousBundle: {}, run() { calls++; } }), /INVALID_BOOTSTRAP_MIGRATION_PROFILE/);
   assert.equal(calls, 0);
 });
+
+async function reusedFixture(t) {
+  const f = await fixture(t);
+  const receipt = await applyBootstrapMigrationProfile(f);
+  await fs.rm(f.previousApiRoot, { recursive: true });
+  await fs.cp(f.builtApiRoot, f.previousApiRoot, { recursive: true });
+  return { ...f, receipt, reuseVerifiedPrevious: true };
+}
+
+test('a verified reused API retains the exact prior profile and all 29 migrations without rewriting them', async t => {
+  const f = await reusedFixture(t);
+  const paths = ['drizzle/meta/_journal.json', 'upgrade-bootstrap-schema-profile.json',
+    ...f.journal.entries.slice(0, 29).map(entry => 'drizzle/' + entry.tag + '.sql')];
+  const before = await Promise.all(paths.map(async path => ({ path,
+    stat: await fs.stat(join(f.builtApiRoot, path)), bytes: await fs.readFile(join(f.builtApiRoot, path)) })));
+  assert.deepEqual(await applyBootstrapMigrationProfile(f), f.receipt);
+  for (const file of before) {
+    const after = await fs.stat(join(f.builtApiRoot, file.path));
+    assert.equal(after.ino, file.stat.ino);
+    assert.equal(after.mtimeMs, file.stat.mtimeMs);
+    assert.deepEqual(await fs.readFile(join(f.builtApiRoot, file.path)), file.bytes);
+  }
+  await assert.rejects(applyBootstrapMigrationProfile({ ...f, reuseVerifiedPrevious: false }), /BOOTSTRAP_SCHEMA_PREFIX_CHANGED/);
+});
+
+test('reused profile rejects changed SQL, forged/missing receipts, reintroduced tails and formal qualification reuse', async t => {
+  for (const mutation of ['sql', 'receipt', 'missing', 'tail', 'journal', 'release']) {
+    const f = await reusedFixture(t);
+    const receiptPath = join(f.builtApiRoot, 'upgrade-bootstrap-schema-profile.json');
+    if (mutation === 'sql') await fs.appendFile(join(f.builtApiRoot, 'drizzle', f.journal.entries[0].tag + '.sql'), '-- tampered');
+    if (mutation === 'receipt') {
+      const changed = { ...f.receipt, enablesControlFastPath: true };
+      for (const root of [f.builtApiRoot, f.previousApiRoot])
+        await fs.writeFile(join(root, 'upgrade-bootstrap-schema-profile.json'), JSON.stringify(changed));
+    }
+    if (mutation === 'missing') await fs.unlink(receiptPath);
+    if (mutation === 'tail') await fs.writeFile(join(f.builtApiRoot, 'drizzle/0029_upgrade_control_fast_path.sql'), 'unexpected');
+    if (mutation === 'journal') await fs.appendFile(join(f.builtApiRoot, 'drizzle/meta/_journal.json'), '\n');
+    const before = await fs.readFile(join(f.builtApiRoot, 'drizzle/meta/_journal.json'));
+    await assert.rejects(applyBootstrapMigrationProfile({ ...f, ...(mutation === 'release' ? { purpose: 'release' } : {}) }));
+    assert.deepEqual(await fs.readFile(join(f.builtApiRoot, 'drizzle/meta/_journal.json')), before);
+  }
+});

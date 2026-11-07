@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { invariant, canonical, digest, DIGEST } from './trust.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
 import { entryControlHeaders, entryBindingDigest } from './control-entry-context.mjs';
+import { quiesceCoordinator } from './coordinator-quiesce.mjs';
 function fixedBinding(value) {
   const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;
 }
@@ -253,7 +254,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
         if(enough&&safe)break;invariant(Date.now()<deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await new Promise(ok=>setTimeout(ok,100));
       }
     }
-    let evidence;for(const action of kind==='owner'?['prepare','adopt']:['prepare','quiesce','release','adopt']){await coordinator.assertFence(attempt.attemptId,fence);if(action==='prepare'||action==='quiesce'||(kind==='owner'&&action==='adopt'))remainingStartup(deadline);evidence=await rpc(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate,action},action==='prepare'?{timeoutMs:remainingStartup(deadline)}:undefined);if(action==='prepare')remainingStartup(deadline);invariant(evidence.commitKnown===true,'ROLE_TRANSITION_COMMIT_UNKNOWN');}
+    let evidence;for(const action of kind==='owner'?['prepare','adopt']:['prepare','quiesce','release','adopt']){await coordinator.assertFence(attempt.attemptId,fence);if(action==='prepare'||action==='quiesce'||(kind==='owner'&&action==='adopt'))remainingStartup(deadline);const body={fence,operationId,planDigest:attempt.plan.planDigest,candidate,action};evidence=kind==='coordinator'&&action==='quiesce'?await quiesceCoordinator({coordinator,attemptId:attempt.attemptId,body,deadline}):await rpc(attempt.attemptId,body,action==='prepare'?{timeoutMs:remainingStartup(deadline)}:undefined);if(action==='prepare')remainingStartup(deadline);invariant(evidence.commitKnown===true,'ROLE_TRANSITION_COMMIT_UNKNOWN');}
     const applied=evidence.evidence??evidence;invariant(applied.qualified===true&&applied.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');if(kind==='coordinator'){invariant(Number.isSafeInteger(applied.generation)&&applied.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,applied.generation);return {...applied,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return admission?.receipt?{...applied,sourceBindingAdmission:admission.receipt}:applied;
   }
   return {

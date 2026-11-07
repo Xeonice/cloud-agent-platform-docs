@@ -78,7 +78,7 @@ export async function packagePinnedInstance({workspace,commits,releaseId,channel
       if(await fs.lstat(join(built,'api/node_modules/@platform',name)).catch(()=>null)){const relative=location.startsWith('modules/')?'../../node_modules/@platform/':'../node_modules/@platform/';await fs.symlink(relative+name,target);}
     }
   }
-  const artifactMigrationProfile=await applyBootstrapMigrationProfile({builtApiRoot:join(built,'api'),previousApiRoot:prior?join(prior.root,'api'):undefined,purpose,profile:migrationProfile});
+  const artifactMigrationProfile=await applyBootstrapMigrationProfile({builtApiRoot:join(built,'api'),previousApiRoot:prior?join(prior.root,'api'):undefined,purpose,profile:migrationProfile,reuseVerifiedPrevious:reuseApi});
   if(reuseWeb)await fs.cp(join(prior.root,'web'),join(built,'web'),{recursive:true,dereference:false,verbatimSymlinks:true});
   else {await fs.cp(join(web,'.next/standalone'),join(built,'web'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/_next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});
   await fs.cp(join(web,'public'),join(built,'web/public'),{recursive:true,dereference:false,verbatimSymlinks:true});await fs.cp(join(web,'.next/static'),join(built,'web/.next/static'),{recursive:true,dereference:false,verbatimSymlinks:true});

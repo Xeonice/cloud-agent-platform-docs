@@ -192,7 +192,7 @@ test("an existing candidate waits for fresh qualification during reconciliation 
 
 // Real short HTTP RPCs carry explicit contract-double measurement receipts.
 // These tests verify Executor ordering/guards, not Native or 60s load evidence.
-async function sourceBoundary(t, { transform, revokeAfterObservation = false, appliedGeneration = 2, productionEntry = false, raceStamp = false } = {}) {
+async function sourceBoundary(t, { transform, revokeAfterObservation = false, appliedGeneration = 2, productionEntry = false, raceStamp = false, handoffHandler } = {}) {
   const sourceDigest = "sha256:" + "c".repeat(64);
   const targetDigest = "sha256:" + "d".repeat(64);
   const attemptId = "accepted-source-boundary", fence = 7;
@@ -239,7 +239,17 @@ async function sourceBoundary(t, { transform, revokeAfterObservation = false, ap
         const record = { origin: "http://127.0.0.1:2", artifactDigest: targetDigest, startIdentity: "new-coordinator" };
         result = path === "/start" ? record : { qualified: true, record };
       } else if (path.endsWith("/coordinator-handoff")) {
-        if (body.action === "adopt") {
+        if (handoffHandler) {
+          const handled = await handoffHandler({ body, response, revokeFence: () => { fenceRevoked = true; } });
+          if (response.destroyed) return;
+          if (handled !== undefined) {
+            response.statusCode = handled.status ?? 200;
+            result = handled.body;
+          }
+        }
+        if (result !== undefined) {
+          // An explicit HTTP contract response from the test port.
+        } else if (body.action === "adopt") {
           generation = 2;
           adoptedAt = Date.now();
           result = { commitKnown: true, evidence: { qualified: true, originalResourcesPreserved: true, singleWriter: true, maxControlPauseMs: 1, generation: appliedGeneration } };
@@ -355,6 +365,71 @@ test("Coordinator adoption returns promptly but handoff waits for its fresh comp
   assert.ok(f.requests.filter(r => r.path === "/internal/upgrades/observation").length >= 3);
   assert.deepEqual(f.requests.filter(r => r.body?.action).map(r => r.body.action), ["prepare", "quiesce", "release", "adopt"]);
   assert.equal(f.binding.weight, 0);
+});
+
+test("completed old Coordinator busy rejection waits and resumes only its fixed quiesce", async t => {
+  let busy = 2;
+  const f = await sourceBoundary(t, { handoffHandler: ({ body }) => {
+    if (body.action === "quiesce" && busy-- > 0)
+      return { status: 409, body: { code: "BACKGROUND_WORK_PENDING" } };
+    if (body.action === "status")
+      return { body: { stage: "prepared", applied: false, commitKnown: true, resumeAction: "quiesce" } };
+  } });
+  const result = await f.executor.coordinatorHandoff(f.input);
+  assert.equal(result.qualified, true);
+  const actions = f.requests.filter(r => r.path.endsWith("/coordinator-handoff"));
+  assert.deepEqual(actions.map(r => r.body.action), ["prepare", "quiesce", "status", "quiesce", "status", "quiesce", "release", "adopt"]);
+  const fixed = { ...actions[0].body }; delete fixed.action;
+  for (const request of actions) {
+    const body = { ...request.body }; delete body.action;
+    assert.deepEqual(body, fixed);
+  }
+  assert.equal(f.requests.filter(r => r.path === "/start").length, 1);
+  assert.equal(f.binding.weight, 0);
+});
+
+test("completed busy rejection cannot resume a changed or unknown handoff stage", async t => {
+  for (const status of [
+    { stage: "quiesced", applied: false, commitKnown: true, resumeAction: "release" },
+    { stage: "releasing", applied: false, commitKnown: false, unknown: true },
+    { stage: "prepared", applied: false, commitKnown: false, resumeAction: "quiesce" },
+    { stage: "prepared", applied: true, commitKnown: true, resumeAction: "quiesce" },
+  ]) await t.test(JSON.stringify(status), async t => {
+    const f = await sourceBoundary(t, { handoffHandler: ({ body }) => {
+      if (body.action === "quiesce") return { status: 409, body: { code: "BACKGROUND_WORK_PENDING" } };
+      if (body.action === "status") return { body: status };
+    } });
+    await assert.rejects(f.executor.coordinatorHandoff(f.input), { code: "COORDINATOR_QUIESCE_RETRY_UNPROVEN" });
+    assert.deepEqual(f.requests.filter(r => r.body?.action).map(r => r.body.action), ["prepare", "quiesce", "status"]);
+  });
+});
+
+test("non-409, other rejection and lost HTTP acknowledgement never retry quiesce", async t => {
+  for (const [name, response] of [
+    ["HTTP 500", { status: 500, body: { code: "BACKGROUND_WORK_PENDING" } }],
+    ["HTTP 400", { status: 400, body: { code: "BACKGROUND_WORK_PENDING" } }],
+    ["other error", { status: 409, body: { code: "BACKGROUND_CLONE_WRITER_QUIESCED" } }],
+    ["lost acknowledgement", null],
+  ]) await t.test(name, async t => {
+    const f = await sourceBoundary(t, { handoffHandler: ({ body, response: socket }) => {
+      if (body.action !== "quiesce") return;
+      if (!response) { socket.destroy(); return; }
+      return response;
+    } });
+    await assert.rejects(f.executor.coordinatorHandoff(f.input));
+    assert.deepEqual(f.requests.filter(r => r.body?.action).map(r => r.body.action), ["prepare", "quiesce"]);
+  });
+});
+
+test("a fence rejected after old busy response prevents even the original status lookup", async t => {
+  const f = await sourceBoundary(t, { handoffHandler: ({ body, revokeFence }) => {
+    if (body.action === "quiesce") {
+      revokeFence();
+      return { status: 409, body: { code: "BACKGROUND_WORK_PENDING" } };
+    }
+  } });
+  await assert.rejects(f.executor.coordinatorHandoff(f.input), { code: "UPGRADE_FENCE_EXPIRED" });
+  assert.deepEqual(f.requests.filter(r => r.body?.action).map(r => r.body.action), ["prepare", "quiesce"]);
 });
 
 test("first 1% route requires both real sample threshold and complete 60s window", async t => {
