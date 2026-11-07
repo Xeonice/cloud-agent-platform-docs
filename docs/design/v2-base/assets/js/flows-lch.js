@@ -412,7 +412,7 @@
       // 闸门在场时弹层底部一句（REQ-LCH-003）；开不了终端时那条琥珀提示占着 nt-block，闸门句不再重复
       let block = q('[data-nt="block"]');
       const notty = st.load === 'notty';
-      const off = P.ask('newTask.blocked', p); // 第四段（REQ-WB-014）：离线时 [发起] 也置灰，弹层底部同一位置说原因（排在凭证闸门之前）
+      const off = P.ask('newTask.blocked', p); // 扩展准入钩子；联网探测不注册禁用，凭证等实际闸门仍生效（REQ-WB-014）。
       const blockText = off || (gate && !notty ? `先完成上面的 ${rt.name} 登录，才能发起任务。` : null);
       if (blockText) {
         if (!block) { block = document.createElement('p'); block.className = 'tone-warn'; block.id = 'nt-block'; block.dataset.nt = 'block'; q('.fields').after(block); }

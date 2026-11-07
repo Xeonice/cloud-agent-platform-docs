@@ -45,7 +45,7 @@
 
 | 面 | 数量 | 权威清单 |
 |---|---|---|
-| REST 端点 | **69 条能力 path / 79 个 operation**（2026-10 按当前清单核对：**68 条 path / 78 个 operation 已实现**，含 `GET /api/automations/attention` 与部署运维探针 `GET /api/deployment/status`；另 1 条 `POST /api/system/backup` 为 ⏳ 预留。排除 3 条 MCP 传输路径；`POST /api/system/diagnose` 的 SSE 响应计入此 HTTP 清单，也在下行单列） | 10 §6.1–6.6 |
+| REST 端点 | **76 条能力 path / 86 个 operation**（2026-10 新增用户自主升级、独立旧表示清理及原操作结果7条；**75 条 path / 85 个 operation 已实现**，另 1 条 `POST /api/system/backup` 为 ⏳ 预留。MCP传输与独立PSK保护的角色私有RPC／采样不计普通用户能力，排除口径见09 §2.4；诊断SSE计入HTTP清单） | 10 §6.1–6.6 |
 | MCP tools | **14 设计 / 14 已注册**（本迭代把最后四个补齐——它们的 REST 端点此前也不存在，所以是「先做端点、再包壳」两层一起落地，见 §2） | 02 §5.2 |
 | WS 通道 | **3**（`/events`、`/terminal`、`/tasks`） | 10 §6.7 |
 | WS 事件类型 | **7**（S5 新增 `runtime.install_progress`） | 10 §3 |
@@ -224,7 +224,7 @@
 
 | 能力 | REST | MCP | 请求要点 | 响应 | command/query | 强制不变量 | 可能错误码 | WS 事件 |
 |---|---|---|---|---|---|---|---|---|
-| `listImages` | `GET /api/images` | — | `?runtimeId=&provider=`。`runtimeId` 单独出现取**可选集**（`isActive ∧ 非 invalid`），仅作开关、不按 runtime 筛；都不传取历史版本。传 `provider` 时优先取完整历史（含禁用与 invalid），供任务镜像选择器解释不可选原因（10 §6.4） | `ImageManifestDto[]`——含 `digest` / `resolvedAt` / `imageId` / `imageName` / `imageAlias: string\|null` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `imageConfig` / `isBuiltin`；provider 查询另附可选 `providerCompatibility` / `isProviderDefault`，精确类型见 10 §7.3 | `ImageApplicationService.listImages(runtimeId?, provider?)` | I-IMG-3（禁用的不出现在可选集；历史查询保留禁用行）；创建时仍判 I-IMG-2/3 | — | — |
+| `listImages` | `GET /api/images` | — | `?runtimeId=&provider=`。`runtimeId` 单独出现取**可选集**（`isActive ∧ 非 invalid`），仅作开关、不按 runtime 筛；都不传取历史版本。传 `provider` 时优先取完整历史（含禁用与 invalid），供任务镜像选择器解释不可选原因（10 §6.4） | `ImageManifestDto[]`——含 `digest` / `resolvedAt` / `imageId` / `imageName` / `imageAlias: string\|null` / `version` / `isActive` / `validationStatus` / `validationErrors` / `supportedRuntimes` / `runtimeVersions?` / `imageConfig` / `isBuiltin`；provider 查询另附可选 `providerCompatibility` / `isProviderDefault`，精确类型见 10 §7.3 | `ImageApplicationService.listImages(runtimeId?, provider?)` | I-IMG-3（禁用的不出现在可选集；历史查询保留禁用行）；创建时仍判 I-IMG-2/3 | — | — |
 | `registerImage` | `POST /api/images` | — | `{ ref, copyConfigFromId?, alias? }`。`alias?: string\|null` 仅新 Image 设置，已有 Image 省略保持、明确不同值时 400 字段错误且零写入，改名用卡头 PATCH。可从同镜像、同 tag 的 manifest 继承运行参数（秘密由服务端复制）；幂等命中已有 digest 仅补空配置、不覆盖已有配置。**按 `(image_id, digest)` 幂等**：命中 → **200** + 现有行（不动 `isActive`）；未命中 → **201** + INSERT 新行，`isActive = 该 tag 当前没有活行`（首次注册即当前；已有活行则新行**待激活**，由用户 `activate` 决定何时切） | `{ manifest: ImageManifestDto, validation: ValidationOutcome }`；200/201 表达幂等结果，`created` 不上 wire | `register-image` command | I-IMG-6（digest 非空）、I-IMG-7（只 INSERT 不 UPDATE） | `VALIDATION_FAILED`(400，非法 alias 或已有 Image 别名冲突，`details[].path=alias`)、`NOT_FOUND`（继承来源不存在）、`REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502)、`MANIFEST_INVALID`(422，`details[]` 含 `IMAGE_BASE_REQUIRED` / `IMAGE_ENTRYPOINT_INVALID` / 根镜像的 `IMAGE_TMUX_MISSING`)、`INVALID_STATE`(409，继承来源跨镜像/跨 tag，或**平台还没有可用的预制镜像作为血统基准**——那是平台没准备好，不是用户镜像不对，04 §7 ★血统 ③)。⚠️ **重复注册刻意不回 409**：用户把同一个 URI 再粘一遍，八成想表达的是「更新一下」，409 只会让他去删了重建（而删除会被 RESTRICT 挡住，P21-4 §6） | — |
 | `validateImage`（**预检**） | `POST /api/images/validate` | — | `{ ref }`；**不落库、不产生 manifest** | `ValidationOutcome{ status:'valid'\|'warning'\|'invalid', errors[], warnings[] }` | `validate-image` command | — | `REF_NOT_FOUND`(404)、`REGISTRY_UNREACHABLE`(502) | — |
 | `revalidateImage` | `POST /api/images/:id/validate` | — | 已注册镜像重验证；**digest 没变才写回 `validationStatus`**，变了只报告不写回（新 digest 描述的是另一份 bits，替本行盖章会悄悄让一个好版本退役） | `ValidationOutcome` **+ `currentDigest` / `upstreamDigest` / `digestChanged`**（`RevalidateOutcomeSchema`；本格原写「同上」，实现比它宽） | `validate-image` command | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502) | — |
@@ -233,6 +233,8 @@
 | `checkImageUpdate` | `POST /api/images/:id/check-update` | — | 重解该行的 `version`(tag) → 比对 digest，**不落库、不产生 manifest** | `{ current:{digest,resolvedAt}, upstream:{digest,validation}\|null, changed:boolean }` | `check-image-update` query | — | `NOT_FOUND`、`REGISTRY_UNREACHABLE`(502)；**`INVALID_STATE`(409)** —— ref 是 digest 形态时无 tag 可解，天然不漂移（P21-4 §5 ★） | — |
 | `deleteImage` | `DELETE /api/images/:id` | — | 硬删除 | 204 | `delete-image` command | I-IMG-4（预置镜像不可删） | `409`（有 sandbox 引用或预置镜像） | — |
 | `deletionPreview` | `GET /api/images/:id/deletion-preview` | — | 只读 | 版本、任务引用、canDelete | query | stopped/failed 仍属引用 | `NOT_FOUND` | — |
+
+**CLI 版本声明（REQ-IMG-062/063）**：既有 manifest 与 validation DTO 增加只读 `runtimeVersions?: Record<string, string>`，无新增 endpoint/tool。`codex` / `claude-code` 精确版本来自本次 digest 的 OCI `platform.runtimeVersions` JSON label，缺/坏/未报告按未知；平台列表返回 `{}`，旧 API 可省略。注册持久化、同 digest 重注册/重验只补缺键，tag 漂移不写旧行；重验 response 的 map 属于 upstreamDigest。check-update 的 current 仍只给 digest/resolvedAt，当前声明由列表按 digest 匹配；upstream.validation 使用新解析值；激活/回滚返回目标自身值，配置继承不跨 digest 复制声明。GET 列表/普通 PATCH 不读取 registry、不拉层、不建 Guest、不执行 CLI。该元数据不改变镜像有效性或可选性，构建声明不能表述为运行实测；详细规范与迁移 29 见 [10 §6.4](../shared/10-接口契约与类型共享.md#64-image)及[后端增量](./changes/2026-10-17-镜像CLI版本元数据.md)。
 
 **共享别名契约（REQ-IMG-060/061）**：`imageAlias` 在所有 manifest 响应中必有，未设置为 `null`。统一规则先拒绝原始 Unicode `Cc` 与 `U+2028/U+2029`，再 trim，最多 64 个码点，重复别名允许。PATCH 不解析 registry、不重验证；事务内重读 Image，用专用 `updateAliasSync` 写别名，普通注册 upsert 不更新 alias，注册提交前复查显式别名以防并发覆盖。实际改名发布 `ImageAliasUpdated`，同值或失败不记；响应从本次事务后的 Image 映射。
 
@@ -336,6 +338,20 @@
 **SSE 消费提示**：`openapi-typescript` 只能生成响应 content-type，**帧类型要手写**并与 WS 协议文件同放（10 §6.7）。用 `fetch` + `ReadableStream`（需要 POST body，`EventSource` 不支持）。
 
 ---
+
+### 9.1 用户自主升级与原操作结果
+
+| 能力 | REST | 请求要点 | 响应 | 可能错误码 | 备注 |
+|---|---|---|---|---|---|
+| `upgradeStatus` | `GET /api/system/upgrade/status` | 认证用户，只读核验 | `UpgradeStatus` | 统一信封 | 无下载执行、无attempt创建；page与service独立 |
+| `upgradeAccessCompatibility` | `POST /api/system/upgrade/access` | deprecated旧客户端兼容，接受{}或旧upgradeKey；已有访问保护／Origin／CSRF，无需升级密钥 | `UpgradeStatus` | 统一信封 | 不发grant、不创建attempt；新前端不调用 |
+| `requestInstanceUpgrade` | `POST /api/system/upgrade/requests` | 精确target digest／requestId／expected generation | 202 `UpgradeAttempt` | 统一信封 | 服务端instance CAS；目录不替换已接纳目标 |
+| `lookupInstanceUpgrade` | `GET /api/system/upgrade/requests/:requestId` | 同actor原请求ID | 原`UpgradeAttempt` | 统一信封 | 只查原结果，响应未知不自动新POST |
+| `requestUpgradeContract` | `POST /api/system/upgrade/contracts/requests` | 固定plan digest／requestId／generation／明确关闭回退确认 | 202 `UpgradeContractAttempt` | 统一信封 | 已有访问保护／Origin／CSRF，全实例与升级互斥；非升级自动步骤 |
+| `lookupUpgradeContract` | `GET /api/system/upgrade/contracts/requests/:requestId` | 同actor原请求ID | 原`UpgradeContractAttempt` | 统一信封 | 只读查询；未知不重发或自动重试 |
+| `lookupApplicationOperation` | `GET /api/operations/:operationId` | 认证actor范围 | 原状态及可公开结果 | `OPERATION_RESULT_UNKNOWN` | 无SDK操作／无journal写；敏感结果不回显 |
+
+升级命令复用已有访问会话，解锁后直接点击“立即升级”，无独立授权界面或用户升级密钥；`canAuthenticate` 仅供旧客户端兼容且固定 `false`。上述升级能力不进MCP。私有管理／应用RPC独立PSK与loopback认证，ControllerKey不授权任意业务、URL、shell或Docker参数；目录信任、唯一writer、固定工作计划、整体100、原任务连续性与安全回退见[升级后端方案](./changes/2026-10-10-不停机升级与运行环境分离.md)。
 
 ## 10. 前端消费视角速查（按页面/功能反查）
 

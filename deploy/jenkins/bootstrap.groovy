@@ -51,7 +51,11 @@ JenkinsLocationConfiguration.get().setUrl(location)
 [
     [name: 'linux-deploy', label: 'agent-platform-linux-deploy', remote: '/home/jenkins/agent'],
     [name: 'linux-ci', label: 'agent-platform-linux-ci', remote: '/home/jenkins/agent'],
-    [name: 'linux-web-amd64', label: 'agent-platform-web-build', remote: '/home/jenkins/agent']
+    [name: 'linux-web-amd64', label: 'agent-platform-web-build', remote: '/home/jenkins/agent'],
+    [name:'linux-publisher',label:'agent-platform-linux-publisher',remote:'/home/jenkins/agent'],
+    [name:'linux-api-build',label:'agent-platform-linux-api-build',remote:'/home/jenkins/agent'],
+    [name:'linux-arm64-package',label:'agent-platform-linux-arm64-package',remote:'/home/jenkins/agent'],
+    [name:'linux-upgrade-evidence',label:'agent-platform-linux-upgrade-evidence',remote:'/home/jenkins/agent']
 ].each { spec ->
     if (j.getNode(spec.name) == null) j.addNode(new DumbSlave(spec.name, 'Fixed Mac mini container agent', spec.remote, '1', Node.Mode.EXCLUSIVE, spec.label, new JNLPLauncher(), new RetentionStrategy.Always(), []))
     writeSecret(root.resolve("secrets/${spec.name}.secret"), j.getNode(spec.name).toComputer().getJnlpMac())
@@ -65,7 +69,9 @@ JenkinsLocationConfiguration.get().setUrl(location)
     [name: 'agent-platform-contract', file: 'contract.groovy'],
     [name: 'agent-platform-web', file: 'web.groovy'],
     [name: 'agent-platform-mutation', file: 'mutation.groovy'],
-    [name: 'agent-platform-sandbox-images', file: 'sandbox-images.groovy']
+    [name: 'agent-platform-sandbox-images', file: 'sandbox-images.groovy'],
+    [name:'agent-platform-instance-package',file:'instance-package.groovy'],
+    [name:'agent-platform-upgrade-evidence',file:'upgrade-evidence.groovy']
 ].each { spec ->
     if (!Files.exists(root.resolve("managed-pipelines/${spec.file}"))) return
     def job = j.getItem(spec.name)
@@ -79,7 +85,9 @@ JenkinsLocationConfiguration.get().setUrl(location)
         'agent-platform-contract': ['ROOT_SHA', 'API_SHA', 'WEB_SHA'],
         'agent-platform-release': ['TAG', 'REQUEST_KEY'],
         'agent-platform-mutation': ['SHA', 'REF', 'MODE', 'BASE_SHA', 'BASE_REF'],
-        'agent-platform-sandbox-images': ['SHA', 'REF', 'TAG', 'MODE']
+        'agent-platform-sandbox-images': ['SHA', 'REF', 'TAG', 'MODE'],
+        'agent-platform-instance-package':['ROOT_SHA','API_SHA','WEB_SHA','RELEASE_ID','PLATFORM','ARCH'],
+        'agent-platform-upgrade-evidence':['ROOT_SHA','API_SHA','WEB_SHA','INSTANCE_PACKAGE_BUILD']
     ][spec.name]
     // Job.addProperty appends; remove every legacy group, including duplicates.
     // Use the complete property list so an old SHA-only first group cannot hide ROOT_SHA.

@@ -1,0 +1,227 @@
+/* 服务升级设计增量。仅使用原 v2 token 与已有 popover / conn-bar / dialog 组件。 */
+.upgrade-contract-section {
+  margin: 12px 16px 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.upgrade-contract-section[hidden] { display: none; }
+.upgrade-contract-section .kv {
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+}
+.upgrade-contract-section .btn { justify-self: start; }
+/* 演示入口属于设计稿工具：终端聚焦时仍可打开，不因整块画布与角落浮标重叠而失去入口。 */
+.proto-float.proto-float--tucked:has([data-action="upgrade-demo"]):not(:focus-within) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.upgrade-connection {
+  flex: none;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.upgrade-connection .wb-conn__text {
+  font: var(--text-copy-13);
+}
+.upgrade-connection--restored {
+  background: var(--surface-inset);
+  color: var(--foreground-muted);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.upgrade-connection--restored > .icon {
+  color: var(--status-ok-fg);
+}
+.term[data-upgrade-transport="reconnecting"] .term__cursor {
+  visibility: hidden;
+}
+.upgrade-version-trigger {
+  position: relative;
+  flex: none;
+}
+/* lucide CircleArrowUp：与原 v2 图标相同的 24px mask / 1.5px 非缩放描边。 */
+.i-circle-arrow-up {
+  --i: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10' vector-effect='non-scaling-stroke'/%3E%3Cpath d='m8 12 4-4 4 4' vector-effect='non-scaling-stroke'/%3E%3Cpath d='M12 16V8' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+}
+.upgrade-update-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-full);
+  background: var(--status-info-solid);
+  pointer-events: none;
+}
+.upgrade-version-popover .kv {
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+}
+.upgrade-version-popover .popover__body {
+  gap: 10px;
+}
+.upgrade-version-popover .popover__foot {
+  gap: 10px;
+}
+.upgrade-version-popover {
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+}
+.upgrade-publish-progress .progress__note {
+  overflow-wrap: anywhere;
+}
+.upgrade-version-section [data-upgrade-card-progress] {
+  padding-top: 12px;
+}
+.upgrade-update-notice {
+  position: fixed;
+  z-index: calc(var(--z-menu) - 1);
+  width: 300px;
+  max-width: calc(100vw - 16px);
+  padding: 12px;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-menu);
+  animation: none;
+}
+.upgrade-update-notice__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.upgrade-update-notice__head h2 {
+  font: var(--text-heading-14);
+  margin: 0;
+}
+.upgrade-update-notice__head p {
+  font: var(--text-copy-13);
+  color: var(--foreground-muted);
+  margin: 4px 0 0;
+}
+.upgrade-version-section {
+  grid-column: 1 / -1;
+}
+.upgrade-version-section .section-head {
+  flex-wrap: wrap;
+}
+.upgrade-version-section .list__line {
+  column-gap: 20px;
+}
+.upgrade-version-section .list__name {
+  min-width: 112px;
+}
+.upgrade-version-section .list__line > .badge:last-child {
+  margin-left: 0;
+}
+.upgrade-version-last {
+  color: var(--foreground-subtle);
+  font: var(--text-label-12);
+}
+#upgrade-version-card:focus-visible {
+  box-shadow: var(--focus-ring), var(--shadow-card);
+  outline: none;
+}
+.upgrade-demo-body {
+  overflow-wrap: anywhere;
+}
+.upgrade-demo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.upgrade-demo-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.upgrade-demo-evidence dl {
+  display: grid;
+  grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font: var(--text-copy-13);
+}
+.upgrade-demo-evidence dt {
+  color: var(--foreground-muted);
+}
+.upgrade-demo-evidence dd {
+  margin: 0;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+.upgrade-demo-footnote {
+  font: var(--text-label-12);
+}
+@media (max-width: 639px) {
+  .upgrade-version-section .card__footer {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .upgrade-version-section .card__footer-help {
+    flex-basis: 100%;
+  }
+  .upgrade-version-section .card__footer-end {
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .upgrade-version-section .list__line {
+    column-gap: 8px;
+  }
+  .upgrade-connection {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+  .upgrade-connection .wb-conn__text {
+    flex-basis: calc(100% - 24px);
+  }
+  .upgrade-connection .conn-bar__end {
+    margin-left: 24px;
+  }
+  .upgrade-demo-actions .btn {
+    flex: 1 1 calc(50% - 4px);
+    height: auto;
+    min-height: var(--control-32);
+    padding-top: 6px;
+    padding-bottom: 6px;
+    white-space: normal;
+  }
+  .upgrade-demo-evidence dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .upgrade-demo-evidence dd + dt {
+    margin-top: 8px;
+  }
+}
+@media (forced-colors: active) {
+  .upgrade-connection,
+  .upgrade-demo-evidence {
+    border-color: CanvasText;
+  }
+}
+
+/* 2026-10-18：仅补事实与诊断，沿用现有版本卡和任务准备卡。 */
+.upgrade-experience-details {
+  display: grid;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-subtle);
+  font: var(--text-copy-13);
+  overflow-wrap: anywhere;
+}
+.upgrade-experience-details[hidden] { display: none; }
+.upgrade-experience-details details { color: var(--foreground-muted); }
+.upgrade-experience-details summary { cursor: pointer; color: var(--foreground); }
+.upgrade-experience-details .btn-row { flex-wrap: wrap; }
+[data-upgrade-startup-facts] {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  font: var(--text-copy-13);
+}
+[data-upgrade-startup-facts] .kv { text-align: left; }

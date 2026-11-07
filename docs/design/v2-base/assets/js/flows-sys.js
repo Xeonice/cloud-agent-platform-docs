@@ -12,7 +12,7 @@
  * 标记来源：页面骨架 tpl-system ← f-sys-conn-01（header, main）；骨架 / 失败 / 结果句 / 空态 / chip 等部件 ← f-sys-resource-01、f-sys-conn-0x、f-sys-diag-0x、
  *           f-sys-audit-0x（index.html 的 tpl-sys-*，build-proto.cjs 同源拷贝）；资源卡、连接卡、诊断行、审计行按同一套类名由本文件按数据画。
  * 产品口径：gap/product/SYS.md（AC 的 Then）；接线要点：gap/drafts/notes/sys-a.md §5、sys-b.md §4；示例世界 consistency.md ③⑤⑨⑩⑪；待定问题按 open-questions 默认。
- * 给别处的出口：P.requestDiagnose()（横幅 / ⌘K / 向导完成后用）、P.sysNet（最近一次联网检查的结论，离线横幅与向导共用）、P.proxySettings（出网代理，向导第 2 步同一份）、
+ * 给别处的出口：P.requestDiagnose()（横幅 / ⌘K / 向导完成后用）、P.sysNet（最近一次联网检查的结论，联网检查提醒与向导共用）、P.proxySettings（出网代理，向导第 2 步同一份）、
  *           P.sysResources()（本机资源读数，向导第 5 步读同一份）、P.validateProxy()。
  */
 (function () {
@@ -29,7 +29,7 @@
   P.scenario.define({ key: 'sys-load', group: G, label: '系统状态页读取', def: 'ok', options: [['ok', '正常'], ['slow', '每次进入先出骨架']] });
   P.scenario.define({ key: 'sys-resource', group: G, label: '本机资源', def: 'normal', options: [['normal', '正常（名额与成果占用按示例世界推导）'], ['warn', '告警：CPU 87%，还能再发 1 个'], ['critical', '严重：磁盘 96%，还能再发 0 个'], ['retained', '成果过量：保留下来的成果占数据目录 82%，磁盘 88%']] });
   P.scenario.define({ key: 'sys-env', group: G, label: '沙箱环境', def: 'normal', options: [['normal', '正常（boxlite 0/14，aio 无样本）'], ['unhealthy', '不健康：boxlite 最近 1h 失败率 12%（6/50）']] });
-  P.scenario.define({ key: 'sys-conn', group: G, label: '连接', def: 'normal', options: [['normal', '正常'], ['offline', '离线：模型 API 全部连不上（横幅 + 诊断第 ⑤ 项失败）'], ['down', '后端不可达（各卡读取失败 + 横幅「无法确认平台状态」）']] });
+  P.scenario.define({ key: 'sys-conn', group: G, label: '连接', def: 'normal', options: [['normal', '正常'], ['offline', '声明模型目标全部确定失败（治理提醒 + 逐行事实）'], ['down', '后端不可达（各卡读取失败 + 横幅「无法确认平台状态」）']] });
   P.scenario.define({ key: 'sys-diag', group: G, label: '下一轮诊断', def: 'ok', options: [['ok', '按示例世界（⑤ 跟着「连接」，⑧ 跟着「镜像 › 预制镜像在本机」）'], ['fail', '有失败：④ 端口被占 · ⑤ 应答慢 · ⑥ 超时未响应'], ['abort', '中断：5/9 项返回后断开'], ['early', '连接即断：拿到检查清单之前就断了']] });
   P.scenario.define({ key: 'sys-audit', group: G, label: '审计流', def: 'ok', options: [['ok', '正常（示例 11 条）'], ['live', '实时更新中断（列表中间有一段没加载）'], ['empty', '暂无记录（全新部署）'], ['unrecorded', '镜像类事件平台尚未记录']] });
   const backendDown = () => P.scenario.is('sys-conn', 'down');
@@ -96,8 +96,8 @@
     focusAfter: null,     // 忙态按钮被禁用、焦点掉到 body：结果出来后还给它（data-fk）
     proxy: { state: 'ok', saved: null, saving: false, msg: null, field: null, retrying: false, form: null },
   };
-  // 最近一次联网检查的结论（离线横幅、诊断第 ⑤ 项、向导第 1 步的结果共用；REQ-SYS-076、REQ-WB-014）
-  const NET = (P.sysNet = { offline: false, at: 0 });
+  // 最近一次联网检查的结论（联网检查提醒、诊断第 ⑤ 项、向导第 1 步的结果共用；REQ-SYS-076、REQ-WB-014）
+  const NET = (P.sysNet = { offline: false, at: null, source: '原型场景快照' });
   P.proxySettings = S.proxy;
 
   // ---- 时间写法：横幅「（上次检测：2026-10-02 14:31:05（刚刚））」、向导「上次检测：…」
@@ -106,14 +106,15 @@
   P.fmtDash = (ms) => { const d = shDate(ms); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`; };
   P.fmtAgo = (ms) => { const s = Math.max(0, (P.clock.wall() - ms) / 1000); if (s < 60) return '刚刚'; if (s < 3600) return `${Math.floor(s / 60)} 分钟前`; if (s < 86400) return `${Math.floor(s / 3600)} 小时前`; return `${Math.floor(s / 86400)} 天前`; };
 
-  // ================================================================== 横幅（F-WB-BANNER 的两条阻断：离线 / 无法确认平台状态；数据放 P.world.banners，ui.js 画）
-  // 离线：最近一次联网检查判模型 API 全部连不上（场景「离线」= 刚做过一次判为离线的检查）；[重新检测] 在 #system 就地跑诊断、别处进页即跑（REQ-SYS-076）
+  // ================================================================== 横幅（F-WB-BANNER：联网探测治理提示 / 平台状态读取失败阻断；数据放 P.world.banners，ui.js 画）
+  // 联网提醒只覆盖声明目标；[重新检测] 在 #system 就地跑诊断、别处进页即跑（REQ-SYS-076）。原型模拟结果不是实际 Agent 能力测量。
   // 无法确认平台状态：后端不可达（读 init-status 失败）；动作「查看系统状态」在本页不出（UX-DS-311，ui.js 按 action.view 判）
-  const OFFLINE_TEXT = '当前连不上外网，Agent 将不可用 —— 每个 Agent 都必须能访问自己的模型 API，这是物理约束，不是配置问题。平台其余功能（项目管理、凭证与镜像配置、系统诊断）照常可用。';
+  const NETWORK_TEXT = '这些结果只覆盖声明的探测目标，不代表所有 Agent 不可用。任务是否可用以实际配置和请求结果为准。';
+  const networkTime = (at) => Number.isFinite(at) && at > 0 ? `上次检测：${P.fmtDash(at)}（${P.fmtAgo(at)}）` : '检测时刻未提供';
   function syncBanners() {
     const want = [];
     if (backendDown()) want.push({ id: 'sys-unknown', level: 'block', title: '无法确认平台状态', text: '读取平台初始化状态失败（后端没有响应）。这多半是后端没起来或不可达 —— 在它恢复之前，「Agent 是否可用」无法判定：既不表示网络正常，也不表示离线。', action: { label: '查看系统状态', view: 'system' }, dismiss: 'close' });
-    if (NET.offline) want.push({ id: 'sys-offline', level: 'block', title: '离线模式：Agent 不可用', text: `${OFFLINE_TEXT}（上次检测：${P.fmtDash(NET.at)}（${P.fmtAgo(NET.at)}））`, action: { label: '重新检测', act: () => P.requestDiagnose() }, dismiss: 'close' });
+    if (NET.offline) want.push({ id: 'sys-offline', level: 'govern', title: '联网检查未通过', text: `${NETWORK_TEXT}（来源：${NET.source}；${networkTime(NET.at)}）`, action: { label: '重新检测', act: () => P.requestDiagnose() }, dismiss: 'today' });
     const list = world.banners;
     let changed = false;
     for (let i = list.length - 1; i >= 0; i--) { const b = list[i]; if ((b.id === 'sys-unknown' || b.id === 'sys-offline') && !want.some((w) => w.id === b.id)) { list.splice(i, 1); changed = true; } }
@@ -121,14 +122,13 @@
       const cur = list.find((b) => b.id === w.id);
       if (!cur) { list.unshift(w); changed = true; } else if (cur.text !== w.text) { cur.text = w.text; changed = true; }
     }
-    // 阻断里「无法确认平台状态」排在离线之前（wb notes §6.2）
+    // 平台状态读取失败仍优先；联网检查只是治理提示。
     list.sort((a, b) => (a.id === 'sys-unknown' ? -1 : b.id === 'sys-unknown' ? 1 : 0));
     return changed;
   }
   P.hook('main:refreshed', () => { syncBanners(); }, { first: true }); // 在 ui.js 画横幅之前
   P.hook('live', () => { if (NET.offline && syncBanners() && !ui.loading && !P.gated) P.banners.render(); }); // 「（刚刚）」→「（1 分钟前）」
-  // 离线时发起任务的入口置灰并说原因（REQ-WB-014；第四段起所有发起入口都先问这里：顶栏、⌘K、树里空组、总览卡、P6、「新建 ⌄」、欢迎态、新建任务弹层）
-  P.hook('newTask.blocked', () => (NET.offline ? '离线模式：需连接网络才能发起任务' : undefined));
+  // REQ-WB-014：声明目标的失败、超时或历史结果不注册全局任务禁用钩子；实际项目、Agent、凭证、镜像等闸门仍由各流程负责。
 
   // ================================================================== 视图：wire / refresh
   const sec = (host, id) => $(`section[aria-labelledby="${id}"]`, host);
@@ -446,9 +446,9 @@
       }
       case 'port-conflict': return mode === 'ok' ? { st: 'ok', ms: '64ms', res: '端口没有冲突', why: '端口 3000（平台 HTTP/WS 服务）正由平台自己监听（pid 2817）。' } : PORT_FAIL;
       case 'outbound-network':
-        if (P.scenario.is('sys-conn', 'offline')) return { st: 'fail', ms: '3.5s', res: '连不上模型 API，Agent 不可用', why: 'api.openai.com 不可达、api.anthropic.com 不可达、ghcr.io 未在超时时限内应答。当前是离线环境。', next: 'DNS 解析不了 api.openai.com（Codex 的模型 API）。内网环境通常要配代理：在初始化向导 / 系统设置里填 HTTP_PROXY / HTTPS_PROXY', offline: true };
-        if (mode === 'fail') return { st: 'warn', ms: '3.5s', res: '模型 API 应答慢，未必连不上', why: 'api.openai.com 未在超时时限内应答、api.anthropic.com 未在超时时限内应答。模型 API 都没在超时时限内应答 —— 这不等于连不上：一条时快时慢的链路会周期性越过时限，而 Agent 用的是长连接，可能照样能用。', next: '重跑一次诊断看它稳不稳定：偶发多半只是慢，可以直接往下走；每次都这样就按不通处理（内网常见形态是「网络通、但要走代理」，在系统设置里填 HTTPS_PROXY 后重试）。' };
-        return { st: 'ok', ms: '1.3s', res: '外网都能连上', why: 'api.openai.com、api.anthropic.com、ghcr.io 均可达，最快 212ms。' };
+        if (P.scenario.is('sys-conn', 'offline')) return { st: 'fail', ms: '3.5s', res: '本轮声明的探测目标未通过检查', offline: true, why: NETWORK_TEXT, next: '可重新检测，或检查供平台探测使用的代理；保存代理不会改变沙箱网络或 Agent 环境。', rows: [{ target: 'api.openai.com', kind: '模型 API', result: '连不上', reason: 'DNS 解析失败' }, { target: 'api.anthropic.com', kind: '模型 API', result: '连不上', reason: '连接被拒绝' }, { target: 'ghcr.io', kind: '镜像下载源', result: '超时未响应', reason: '未在本轮时限内应答' }] };
+        if (mode === 'fail') return { st: 'warn', ms: '3.5s', res: '本轮声明的模型 API 探测目标超时未响应', why: `超时不等于连不上。${NETWORK_TEXT}`, next: '可重新检测并查看每个目标的结果。', rows: [{ target: 'api.openai.com', kind: '模型 API', result: '超时未响应' }, { target: 'api.anthropic.com', kind: '模型 API', result: '超时未响应' }, { target: 'ghcr.io', kind: '镜像下载源', result: '连得上' }] };
+        return { st: 'ok', ms: '1.3s', res: '本轮声明的探测目标均连得上', why: '只说明这些目标在本次原型模拟检测中可达，不验证任务模型地址、凭证、沙箱网络或完整 Agent 调用。', rows: [{ target: 'api.openai.com', kind: '模型 API', result: '连得上' }, { target: 'api.anthropic.com', kind: '模型 API', result: '连得上' }, { target: 'ghcr.io', kind: '镜像下载源', result: '连得上' }] };
       case 'ws-loopback': return mode === 'fail'
         ? { st: 'timeout', ms: '10s', res: '10 秒内没有结果', why: '这一项这次没有结论，其余项不受影响。', next: '看这一项依赖的东西是卡住了还是在报错；再跑一次诊断，看它是不是每次都超时。' }
         : { st: 'ok', ms: '9ms', res: '实时推送正常', why: '本机 127.0.0.1:3000 应答正常（9ms）。' };
@@ -500,14 +500,15 @@
   }
   function arrive(id, mode) {
     const r = itemResult(id, mode);
+    if (id === 'outbound-network') r.checkedAt = P.clock.wall(); // 原型模拟结果自己的时刻，不借整轮完成或页面刷新时刻。
     D.results[id] = r; D.arrived++;
     P.dirty();
   }
   function finish(totalMs) {
     D.phase = 'done'; D.totalMs = totalMs; // 「整轮」= done 帧的 totalMs（各项并行，约等于最慢的一项）
-    // 第 ⑤ 项是这一轮的联网检查：结论同步给离线横幅（REQ-SYS-076：第 ⑤ 项通过后横幅消失）
+    // 第 ⑤ 项的结果与自身时刻同步给治理提醒；新结果不撤销用户当天的关闭记录。
     const net = D.results['outbound-network'];
-    if (net) { NET.offline = !!net.offline; NET.at = P.clock.wall(); if (NET.offline) P.banners.ui.hidden.delete('sys-offline'); }
+    if (net) { NET.offline = !!net.offline; NET.at = net.checkedAt ?? null; NET.source = '本轮原型模拟检测'; }
     afterDiag();
     P.announce(summaryText());
   }
@@ -532,8 +533,9 @@
     let body = '';
     if (r) {
       body += `<span class="check-row__result">${esc(r.res)}</span>`;
+      if (id === 'outbound-network') body += `<span class="check-row__note">来源：本轮原型模拟检测；${esc(networkTime(r.checkedAt))}</span>`;
       if (r.note) body += `<span class="check-row__note">${esc(r.note)}</span>`;
-      if (open) body += `<div class="check-row__detail" id="diag-d-${id}">${r.why ? `<span class="check-row__why">${esc(r.why)}</span>` : ''}${r.next ? `<span class="check-row__next">${esc(r.next)}</span>` : ''}${r.cmd ? `<span class="check-row__cmd"><code class="check-row__code" tabindex="0">${esc(r.cmd)}</code><button class="btn btn--secondary btn--24" type="button" data-action="diag-copy" data-diag="${id}" data-fk="diag-copy:${id}">复制</button></span>` : ''}${r.goImages ? '<span><button class="btn btn--tertiary btn--24" type="button" data-action="diag-go-images" data-fk="diag-go-images">去镜像管理<span class="icon icon--14 i-arrow-right btn__trail" aria-hidden="true"></span></button></span>' : ''}</div>`;
+      if (open) body += `<div class="check-row__detail" id="diag-d-${id}">${r.rows ? `<ul>${r.rows.map((row) => `<li data-network-target="${esc(row.target)}">${esc(row.target)} · ${esc(row.kind)} · ${esc(row.result)}${row.reason ? `：${esc(row.reason)}` : ''}</li>`).join('')}</ul>` : ''}${r.why ? `<span class="check-row__why">${esc(r.why)}</span>` : ''}${r.next ? `<span class="check-row__next">${esc(r.next)}</span>` : ''}${r.cmd ? `<span class="check-row__cmd"><code class="check-row__code" tabindex="0">${esc(r.cmd)}</code><button class="btn btn--secondary btn--24" type="button" data-action="diag-copy" data-diag="${id}" data-fk="diag-copy:${id}">复制</button></span>` : ''}${r.goImages ? '<span><button class="btn btn--tertiary btn--24" type="button" data-action="diag-go-images" data-fk="diag-go-images">去镜像管理<span class="icon icon--14 i-arrow-right btn__trail" aria-hidden="true"></span></button></span>' : ''}</div>`;
     }
     return `<li class="list__row" data-testid="diagnostic-item-${id}" data-status="${st}" data-expanded="${open}"><div class="check-row__head"><span class="check-row__ord" aria-hidden="true">${ord}</span><span class="check-row__title">${esc(title)}</span>${metas}<span class="check-row__status"><span class="badge badge--20 ${cls}"><span class="icon ${icon}" aria-hidden="true"></span>${word}</span></span>${toggle}</div>${body}</li>`;
   }
@@ -889,7 +891,7 @@
   P.hook('scenario', (k, v) => {
     if (k === 'sys-resource') applyRetainedScenario();
     if (k === 'sys-conn') {
-      if (v === 'offline') { NET.offline = true; NET.at = P.clock.wall(); P.banners.ui.hidden.delete('sys-offline'); } // 「刚做过一次判为离线的检查」
+      if (v === 'offline') { NET.offline = true; NET.at = P.clock.wall(); NET.source = '原型场景快照'; }
       if (v === 'down') {
         P.banners.ui.hidden.delete('sys-unknown');
         if (onSystem()) { S.res = 'fail'; S.proxy.state = 'fail'; A.state = 'fail'; schedulePoll(); }

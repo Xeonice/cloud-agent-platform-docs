@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "208342ea994555c12c3ba42ce3b6aabd0afe9df1",
+  "sourceRoot": "deploy/upgrade",
+  "purpose": "unmodified historical Supervisor runtime closure for local protocol tests only; never shipped in installer",
+  "runtimeClosure": [
+    "artifacts.mjs",
+    "candidate-supervisor.mjs",
+    "contract-retirement.mjs",
+    "coordinator-client.mjs",
+    "io.mjs",
+    "trust.mjs"
+  ],
+  "files": [
+    {
+      "path": "artifacts.mjs",
+      "bytes": 8523,
+      "sha256": "031af8fa92c5f6b1d566f6957582655d81c8831526a49797e5bd9fc9d58c6586"
+    },
+    {
+      "path": "candidate-supervisor.mjs",
+      "bytes": 22608,
+      "sha256": "9b9d04376330d68d49a7e5decf542759203c8c1316b81b6a13454419d7b8e08d"
+    },
+    {
+      "path": "contract-retirement.mjs",
+      "bytes": 11902,
+      "sha256": "a2963df64278b77102cd99ef13928cd0e2fb6cd01c1809feebd1c0b9326fdc44"
+    },
+    {
+      "path": "coordinator-client.mjs",
+      "bytes": 4366,
+      "sha256": "492baeabe1a1d0294f12c590941ee534683e28c4fce841cb446f3caa184a44ef"
+    },
+    {
+      "path": "io.mjs",
+      "bytes": 2538,
+      "sha256": "9834a95b949edc6554d5b6aeebf868f174ab22c067aa7f7ee22c486e738ba854"
+    },
+    {
+      "path": "trust.mjs",
+      "bytes": 16265,
+      "sha256": "3a0e07139ec53862ebf874ac005c713e76abdf452a829623f3e88b7728d43c3b"
+    }
+  ]
+}

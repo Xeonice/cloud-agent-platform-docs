@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "kind": "historical-entry-source-fixture",
+  "sourceCommit": "208342ea994555c12c3ba42ce3b6aabd0afe9df1",
+  "sourceRepository": "cloud-agent-platform-docs",
+  "modified": false,
+  "runtimeEntry": "stable-entry.mjs",
+  "runtimeClosure": [
+    "stable-entry.mjs",
+    "io.mjs",
+    "trust.mjs",
+    "installer-identity.mjs"
+  ],
+  "files": [
+    {
+      "path": "stable-entry.mjs",
+      "sourcePath": "deploy/upgrade/stable-entry.mjs",
+      "gitBlob": "b9428241eb1ce99b71613489cde8077306770f3b",
+      "sha256": "eac771a268b4e1be2a39f9ca16f71f2a747dba7795ce09c9d27582f7364a483a",
+      "bytes": 13116,
+      "use": "loaded-original-runtime"
+    },
+    {
+      "path": "io.mjs",
+      "sourcePath": "deploy/upgrade/io.mjs",
+      "gitBlob": "b909cf6072d67963c966b4bdc90998a720f3ce19",
+      "sha256": "9834a95b949edc6554d5b6aeebf868f174ab22c067aa7f7ee22c486e738ba854",
+      "bytes": 2538,
+      "use": "loaded-original-runtime"
+    },
+    {
+      "path": "trust.mjs",
+      "sourcePath": "deploy/upgrade/trust.mjs",
+      "gitBlob": "3e6f741df3f3d38c8ce256c24b4f45b47b3a90f4",
+      "sha256": "3a0e07139ec53862ebf874ac005c713e76abdf452a829623f3e88b7728d43c3b",
+      "bytes": 16265,
+      "use": "loaded-original-runtime"
+    },
+    {
+      "path": "installer-identity.mjs",
+      "sourcePath": "deploy/upgrade/installer-identity.mjs",
+      "gitBlob": "b59fc7f0631865d3a1dbb4581efe37b4a9bca18b",
+      "sha256": "40a4315ed7b1b4d03dafadabe7511c717d1d7f64c525d606e69abdaef9a26905",
+      "bytes": 1758,
+      "use": "loaded-original-runtime"
+    },
+    {
+      "path": "controller-main.mjs",
+      "sourcePath": "deploy/upgrade/controller-main.mjs",
+      "gitBlob": "45f40e0bdba0d29d9eb6fac6b8dbf5c128946ef6",
+      "sha256": "b33274a6f111dcb224d8a9289f17e3bea7959aad87ef5c996626fa485f4191e6",
+      "bytes": 2116,
+      "use": "identity-tree-anchor-only"
+    }
+  ],
+  "notACompleteInstallerPackage": true,
+  "productionPackageExcluded": true
+}

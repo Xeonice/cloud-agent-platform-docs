@@ -16,7 +16,6 @@ pipeline {
   environment {
     NODE22 = '/usr/local/bin/node'
     PUBLIC_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
-    TRUSTED_WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
   }
   stages {
     stage('Initialize CI state') {
@@ -25,16 +24,6 @@ pipeline {
           env.CONTRACT_CHILD_NUMBER = ''
           env.CONTRACT_CHILD_RESULT = 'NOT_RUN'
         }
-      }
-    }
-    stage('Prepare public production build settings') {
-      when { expression { params.REF == 'refs/heads/main' } }
-      agent { label 'agent-platform-linux-deploy' }
-      steps {
-        // No checkout and no repository code in this credential-bearing stage.
-        deleteDir()
-        sh '"$NODE22" "$TRUSTED_WEB_TOOL" prepare-env "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"'
-        stash name: 'public-vercel-cache', includes: 'public-vercel-cache/project.json,public-vercel-cache/production.env,public-vercel-cache/provenance.json', useDefaultExcludes: false
       }
     }
     stage('Local web CI and packaging') {
@@ -48,7 +37,7 @@ pipeline {
           steps {
             deleteDir()
             sh '"$NODE22" "$PUBLIC_WEB_TOOL" checkout "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"'
-            script { if (params.REF == 'refs/heads/main') unstash 'public-vercel-cache' }
+            script { if (params.REF == 'refs/heads/main') sh '"$NODE22" "$PUBLIC_WEB_TOOL" prepare-ci-env "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"' }
           }
         }
         stage('Install locked dependencies and Chromium') { steps { sh '"$NODE22" "$PUBLIC_WEB_TOOL" install "$SHA" "$REF" "$WORKSPACE" "$ROOT_SHA" "$API_SHA"' } }
@@ -103,7 +92,7 @@ pipeline {
     always {
       // Allocate an executor only after the child has completed or waiting was
       // interrupted. The report contains no repository output or credentials.
-      node('agent-platform-linux-deploy') {
+      node('agent-platform-linux-publisher') {
         script {
           def fullSha = { value -> value ==~ /[a-f0-9]{40}/ ? value : null }
           def childNumber = env.CONTRACT_CHILD_NUMBER ==~ /[1-9][0-9]*/ ? env.CONTRACT_CHILD_NUMBER.toInteger() : null
@@ -128,5 +117,5 @@ pipeline {
     }
   }
   // No trigger or deployment here. The umbrella release job verifies this job's
-  // final SUCCESS and all three SHAs, then adopts/uploads/promotes on linux-deploy.
+  // final SUCCESS and all three SHAs before publishing immutable instance artifacts.
 }

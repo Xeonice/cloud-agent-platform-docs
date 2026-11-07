@@ -5,6 +5,8 @@
 > **⚠️ 2026-08 再次改写（用户裁决：tmux 升 MUST）**：**B 档（无 tmux ⇒ 网关自持 pty + ring buffer）整体取消**，§6 只剩 tmux 一档；ring buffer 随之退役（判断依据见 §6.3）。轨迹与取代理由见 04 §7 ★ 与 TASK-LAUNCH-DECISIONS T-2。
 > 关联文档：[08 前端 xterm 集成](../frontend/08-前端xterm集成.md) · [04 Contract 体系](./04-Contract与Registry扩展体系.md) · [10 WS 协议类型](../shared/10-接口契约与类型共享.md) · [03 §4.1/§4.2 判定口径定案](./03-Sandbox调度中心.md)
 
+> 本轮新增 [UPG 升级续接需求](../product/requirements/UPG.md)，目标为刷新及控制 API 更新后接回同一运行实例和 tmux 会话。稳定运行 owner、唯一写入／调度所有权与协议的规划见[后端增量方案](./changes/2026-10-10-不停机升级与运行环境分离.md)，当前内嵌 SDK 形态仍以源码为准。
+
 ## 1. 链路总览
 
 ```
@@ -30,7 +32,7 @@
 - **初始任务指令：⚠️ 已挪出网关（S5 裁决 D-15，[TASK-LAUNCH-DECISIONS](../TASK-LAUNCH-DECISIONS.md) T-2）**。此前本条写的是「首个会话的 `cmd` 由 adapter 按 `RuntimeTaskSpec.prompt` 组装为带指令启动 CLI」——**该逻辑现在属于 provision workflow 的 `bootstrapAgentSession`**（03 §4.3 ⑤）：agent 会话在 `starting` 段就已经起好并开始执行，与用户有没有点开终端无关。
   - **网关侧的新规则：一律 attach 已存在的 agent 会话**（`tmux attach -t platform-agent`，§6），**不判断「首次」、不调 `buildStartCommand`**。
   - **为什么必须挪**：绑在 `openSession` 上时，① 用户创建完关掉浏览器 ⇒ 指令永不执行；② **MCP `create_sandbox` 根本没有终端 ⇒ 必不执行**，与 02 §5.2 的说明正面矛盾；③ P20 §0「启动时即执行」是产品承诺。
-  - **兜底**：会话意外不存在时（tmux server 被沙箱内进程杀掉、session 名被误删等；**「无 tmux 镜像下平台重启」这条原因已随 B 档取消而消失**，§6），网关按 `buildAttachCommand()` 起一个干净会话并记 warning——**不重放 `initialPrompt`**（消费标记见 23 I-SBX-10）。
+  - **原会话无法续接**：先区分暂时不可达与确证不存在，返回准确恢复状态；不得因刷新或升级自动起一个干净会话替代原会话，也不得重放 `initialPrompt`。原会话真实退出时由用户明确选择新终端或已有业务操作。此项与新增 UPG 连续性目标共同实现并验证（消费标记仍见 23 I-SBX-10）。
 - 网关拿到的是**已解复用的干净字节流**——流头、多路复用、tty 下 stderr 合并全部由 provider 内部消化（04 §2.2 的 spawn 语义），网关不做任何解码。
 
 实现对照（04 §2.2）：
@@ -126,14 +128,18 @@ list-panes -a → S:0.0 id=%0                       ← 只有一个 pane
 立论（「看不见但还活着比关掉更糟」）**是同一个坏状态**——不能一边拿它当理由，一边在
 刷新这条路上走进去。
 
-- 网关在 **`kind=agent` 那条连接**上，`session` 首帧**之后**补一帧
-  `shells{shells}`（10 §7.4）。
-  - **为什么是 agent 那条**：清单是 **sandbox 级**事实、只有一个消费者（标签栏），
-    而 Agent 标签是每次页面加载**必然**连、且只连一条的那个（它是兜底选中的标签）。
-    每条 shell 连接也推的话，N 个标签要付 N 次 `tmux list-sessions`，换回 N 份一样的清单。
-  - **为什么不塞进 `session` 首帧**：清单要问一次沙箱（一次 exec 往返），而 `session`
-    帧装着重连凭据、也是前端判定「连上了」的那一帧。搭在它前面 = 把开终端的首帧
-    延后一个 exec。⇒ 单独一帧，随后补上，零额外往返又不占用关键路径。
+- 网关在**每条通过认证并成功续接的终端连接**上，异步补一帧
+  `shells{shells}`（10 §7.4）。协议 revision2 在原 runtime identity 已确认、`ready`
+  帧发出之后补清单；revision1 保持在 `session` 首帧之后。Agent、shell 和 runtime 标签
+  使用相同规则，清单只查询该连接已获授权的 sandbox，不创建或重跑终端。
+  - **不能依赖 Agent 连接**：公开书签可直接恢复原先选中的「终端 2」。隐藏的 Agent
+    标签可能尚未得到可绘制尺寸，因而没有建立 WS；只在 Agent 上推清单会让其他仍在运行的
+    标签无法恢复。2026-11-07 Q6 已实际暴露该路径，不能再假定 Agent 每次加载必连。
+  - 清单使用现有后台工作与退休排空机制，读取 tmux 清单并关联公开书签；一次成功连接
+    可能增加一次清单查询，不把多连接的重复查询描述成零开销。已有标签只增不减，重复清单
+    不重建会话、不改变选中项。
+  - **不阻塞 `session`／`ready` 首帧**：清单需要一次沙箱 exec 往返，必须单独异步发送。
+    鉴权失败、revision2 原 runtime identity 未确认或 attach 失败时不查询或发送清单。
 - 清单来源：`tmux -u list-sessions -F '#{session_name}	#{session_created}'`，
   然后 **两道闸门**筛出我们自己的：① 前缀 `platform-shell-`（把 `platform-agent`
   挡在外面——它进了清单，前端就会给任务自己的会话多渲染一个可关的标签）；

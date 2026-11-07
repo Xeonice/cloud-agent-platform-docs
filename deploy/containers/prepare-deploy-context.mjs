@@ -5,16 +5,28 @@ import { createHash } from "node:crypto";
 import { pathToFileURL, fileURLToPath } from "node:url";
 export async function prepareDeployContext(root, temporary = tmpdir()) {
   root = await fs.realpath(root);
-  const inputs = [["deploy/containers/deploy.Dockerfile", "deploy.Dockerfile"]];
+  const inputs = [
+    ["deploy/containers/deploy.Dockerfile", "deploy.Dockerfile"],
+    ["deploy/containers/publication.Dockerfile", "publication.Dockerfile"],
+    [
+      "deploy/containers/publication-package.Dockerfile",
+      "publication-package.Dockerfile",
+    ],
+  ];
   for (const name of (await fs.readdir(join(root, "deploy/jenkins"))).sort())
     if (name.endsWith(".mjs") && !name.endsWith(".test.mjs"))
-      inputs.push(["deploy/jenkins/" + name, "tools/" + name]);
+      { inputs.push(["deploy/jenkins/" + name, "tools/" + name]); inputs.push(["deploy/jenkins/" + name, "tools/deploy/jenkins/" + name]); }
+  for (const name of (await fs.readdir(join(root,"deploy/upgrade"))).sort()) if(name.endsWith('.mjs')&&!name.endsWith('.test.mjs')) { inputs.push(["deploy/upgrade/"+name,"tools/deploy/upgrade/"+name]); inputs.push(["deploy/upgrade/"+name,"upgrade/"+name]); }
   for (const name of [
     "api-container.mjs",
+    "api-build.mjs",
+    "publication-entrypoint.mjs",
+    "qualification-entrypoint.mjs",
+    "qualification-workspace.mjs",
     "api-context.mjs",
     "deploy-agent-entrypoint.mjs",
   ])
-    inputs.push(["deploy/containers/" + name, "tools/" + name]);
+    { if (!["api-build.mjs","publication-entrypoint.mjs"].includes(name)) inputs.push(["deploy/containers/" + name, "tools/" + name]); if(name!=="deploy-agent-entrypoint.mjs") inputs.push(["deploy/containers/"+name,"tools/deploy/containers/"+name]); }
   for (const name of [
     "Dockerfile.api",
     "api-entrypoint.mjs",

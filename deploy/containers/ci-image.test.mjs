@@ -135,8 +135,9 @@ test("all managed production child requests and trusted web phases use main, whi
     new URL("../jenkins/release.groovy", import.meta.url),
     "utf8",
   );
-  for (const phase of ["adopt", "upload", "promote"])
-    assert.ok(release.includes(`${phase} "$WEB_SHA" refs/heads/main`));
+  assert.doesNotMatch(release, /\$WEB_TOOL|\bpromote\b|\$MONITOR_TOOL/);
+  assert.match(release, /agent-platform-instance-package/);
+  assert.match(release, /agent-platform-upgrade-evidence/);
   const images = await fs.readFile(
     new URL("../jenkins/sandbox-images.groovy", import.meta.url),
     "utf8",
