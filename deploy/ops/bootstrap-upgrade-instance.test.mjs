@@ -1289,10 +1289,13 @@ test("actual adapter uses private env file, isolated container and scoped worksp
       runArgs = args;
       const path = args[args.indexOf("--env-file") + 1];
       assert.equal((await fs.stat(path)).mode & 0o077, 0);
-      assert.match(
-        await fs.readFile(path, "utf8"),
-        /PLATFORM_COORDINATOR_RPC_KEY=owner-test-key/,
-      );
+      const actualEnv = await fs.readFile(path, "utf8");
+      assert.match(actualEnv, /PLATFORM_COORDINATOR_RPC_KEY=owner-test-key/);
+      assert.match(actualEnv, /^RUNTIME_OWNER_WORKSPACE_ROOT=\/data\/workspaces$/m);
+      const actualWorkspace = actualEnv.split("\n").find(row => row.startsWith("RUNTIME_OWNER_WORKSPACE_ROOT=")).split("=", 2)[1];
+      assert.ok(args.includes(`type=bind,src=${c.businessHostPath}/workspaces,dst=${actualWorkspace}`));
+      assert.equal(actualEnv.includes("DATABASE_URL="), false);
+      assert.equal(actualEnv.includes("DATA_ROOT="), false);
       return cid + "\n";
     }
     if (args[0] === "inspect") {

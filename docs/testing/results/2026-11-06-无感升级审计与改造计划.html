@@ -42,6 +42,8 @@
       <a href="#q5-native-inflight-after-cache-cleanup"><span class="nav-number">16</span>Q5首次启动记录</a>
       <a href="#q5-terminal-failure-overall-progress"><span class="nav-number">17</span>Q5终态失败与阻断</a>
       <a href="#q6-terminal-tab-inventory-failure"><span class="nav-number">18</span>Q6标签恢复缺口与A3</a>
+      <a href="#a3-r3-published-q7-prepared"><span class="nav-number">19</span>A3发布与Q7准备</a>
+      <a href="#q7-terminal-owner-workspace-capacity-failure"><span class="nav-number">20</span>Q7容量路径缺陷与A4</a>
     </nav>
     <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<br>11月7日追加：本机 Mac mini<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
   </aside>
@@ -49,7 +51,7 @@
     <header class="hero">
       <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">未达标 · 线上切换暂停</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-      <p class="hero-lede">A2已发布并核验匿名下载；Q6同Web完成100%与原终端2续接已通过，随后刷新标签清单遗漏终端1，整轮仍失败。六次真实QA尚无完整资格。A3 .17.3产品修复准备中，尚无新构建／发布／Native；生产保持.15／generation8、7个Owner／1个沙箱，更新继续阻断。</p>
+      <p class="hero-lede">A3 .17.3已发布并实际完成匿名下载校验；Q7在新自动化任务未启动处失败，已定位未来Owner容量探针的工作区路径与真实挂载不符。七次QA均未取得完整Native资格，生产仍.15／generation8、7个Owner／0活动沙箱，升级尝试0。A4修复与Q8验证准备中。</p>
       <div class="meta"><span>对象：公司电脑部署实例</span><span>范围：独立升级控制迁移</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
     </header>
 
@@ -364,7 +366,46 @@
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q6-terminal-tab-inventory-failure">Q6原次事实、终端库存根因与A3未执行边界 ↗</a><a href="../../backend/06-TTY终端链路.md">已更新TTY连接与库存规则 ↗</a><a href="../../shared/10-接口契约与类型共享.md">已更新共享WS接口合同 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · Q6标签恢复失败，A3准备中，生产更新继续阻断</span></footer>
+    <section class="section" id="a3-r3-published-q7-prepared" aria-labelledby="a3-r3-published-q7-prepared-title">
+      <div class="section-head"><span class="section-number">19</span><h2 id="a3-r3-published-q7-prepared-title">A3已真实构建并发布；完整Native与生产更新仍待完成</h2></div>
+      <p class="section-intro">A3 .17.3于2026-11-07 10:36:04Z发布，10:36:26.752Z匿名完整下载通过。Q7工具准备完成，尚无新的完整Native通过记录；六次QA失败保留。生产仍.15／generation8，最新只读基线7个Owner／0活动沙箱，升级尝试0；补充纠正：pre-a2-q6也是1条destroyed历史沙箱记录／0活动，旧§18简称“1个沙箱”仅计数据库total row，不代表运行中；原记录保留，计数含义以本节纠正。</p>
+      <div class="table-wrap" tabindex="0" aria-label="A3构建尝试及失败分类"><table><thead><tr><th scope="col">构建原次</th><th scope="col">实际结果与分类</th></tr></thead><tbody>
+        <tr><td>R1 · 工具准备失败</td><td>API声明pnpm9.12.0，镜像仅预备9.15.0；Corepack向只读缓存补装时报EROFS，未编译API。属于工具／源码声明对账遗漏，不新增Native或生产失败次数。</td></tr>
+        <tr><td>R2 · 构建隔离配置失败</td><td>独立目录补齐可写Corepack缓存及两版工具，但此次自定义root用户配合cap-drop ALL，使node-gyp安装headers时fchown报EPERM，未进入TypeScript编译。属于本次执行配置问题，原失败记录保留。</td></tr>
+        <tr><td>R3 · 新API真实构建成功</td><td>B3 compat-a3-r3/canonical，临时root＋Docker默认capabilities匹配此前A1应急builder，保留只读rootfs／A2输入RO／无业务SDK挂载，并匹配/usr/local真实Node22.23.3／ABI127 headers。canonical install／build／production deploy均exit0；Root4f435／API434／Web17e。此临时配置不等同正式仓库CI的UID1000＋cap-drop ALL；原R1／R2不续跑、不改写。</td></tr>
+      </tbody></table></div>
+      <p class="note">原a1a0运行镜像另行实际完成SQLite内存库SELECT及安全API／prepared Coordinator工厂、worker manifest／upgrade module导入，Node22.23.3／ABI127／glibc2.28、exit0，角色启动0／SDK0／HTTP0。原unsigned记录与后续独立probe分别保留；兼容探针不是Guest／PTY或完整Native验收。</p>
+      <div class="table-wrap" style="margin-top:17px" tabindex="0" aria-label="A3实际不可变产物与发布下载"><table><thead><tr><th scope="col">产物／发布</th><th scope="col">实际证据</th></tr></thead><tbody>
+        <tr><td>组件</td><td>API／Coordinator／Owner新编译，artifact ab093b07…／source434；保原Web db047…／6623，reuse.web=true；Installer仍ac12字节、来源revision4f435。组件字节和来源元数据分别记录。</td></tr>
+        <tr><td>tar与完整文件树</td><td>tar94,592,431字节／sha256:b12461bc99903ae36a0150032d6024fd68abf6a0467e074cadf6b65937572a76。实际20,067项payload／293,014,406字节，tree507e6ef7…aa789；逐hash／mode／size／link及contained symlink通过，schema29／不改live DB／不启Control fast path。</td></tr>
+        <tr><td>签名与旧版本校验</td><td>manifest1293eae58f30f6a338c7781db75773a9ff60f6489902126a551c3e1eb297e161；signed body6,776字节／bb524f22…13783。原.15 unsigned与signed verifier实际PASS，同body／原trust及schema29直达路径保持。</td></tr>
+        <tr><td>发布与匿名下载</td><td>release id437505165／9 assets／makeLatest=false。真实匿名HTTPS流式核完tar94,592,431字节及body6,776字节，全SHA／字节数／签名body相同；CD只发布，生产未安装，nativeQualification=false。</td></tr>
+      </tbody></table></div>
+      <div class="callout amber" style="margin-top:17px"><h3>首次发布失败原因未知，保留透明限制</h3><p>首轮只有generic错误，原件无HTTP响应／状态细节，不补猜具体原因。只读确认tag／release均404且不存在后，才以独立observed-r2显式发布，留存HTTP201／PATCH200／tag200。此项与两次构建执行失败分别记录，不混计为Native或生产升级失败。五类正式qualification仍not-run，发布与下载不授完整Native、业务bridge上线或独立Control首迁资格。</p></div>
+      <p class="note">Q6已退出9容器正常rm／无-v，原失败tar／日志／frames保留；两Owner各5类公共image缓存共5,477,834,752 allocated字节精确清理，SDK／Guest／base／DB／authority不变、源SQLite0。QA trim报告9,802,715,136字节，host12,399,185,920→20,374,421,504，包含历史free和同期变化，不独占归因／重复计收益。</p>
+      <p class="note">生产仅移除3处无consumer（含stopped）的旧展开副本＋2份原字节重复tar，allocated1,278,418,944字节；guest6,721,998,848→7,965,945,856。原master／完整恢复mapping、source15／catalog inode与SHA／全部容器／journals不变；journal引用tar、退出installer绑定树及全部SDK保留，生命周期／catalog写入／升级POST均0。</p>
+      <div class="callout" style="margin-top:17px"><h3>Q7绑定真实A3；实际运行另记</h3><p>新namespace0707／fresh gen1／source15同inode只读，目标只用真实MF1293／tarb124／tree507e及B3。15GiB启动门、4GiB保护线、1秒／2100秒、0retry／单TERM与全部N01／I01／I02断言保持。stage前发现的旧稿SHA字段／文件名派生错误与独审抓到的host旧helper名均保留并修正；未产生新Native或生产尝试。准备完成不代替验收通过。</p></div>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#a3-r3-published-q7-prepared">A3三次构建分类、完整产物／发布／下载与维护原件 ↗</a><a href="https://github.com/Xeonice/cloud-agent-platform-docs/releases/tag/v0.3.17-experiment.macmini.20261107.3">实际A3实验发行包 ↗</a></div>
+    </section>
+
+    <section class="section" id="q7-terminal-owner-workspace-capacity-failure" aria-labelledby="q7-terminal-owner-workspace-capacity-failure-title">
+      <div class="section-head"><span class="section-number">20</span><h2 id="q7-terminal-owner-workspace-capacity-failure-title">Q7标签恢复已越过；新自动化因Owner容量路径错误未启动</h2></div>
+      <p class="section-intro">原次934.5416502952576秒／exit1，TERM0、retry0，host最低12,436,389,888字节，未触4GiB保护。正式仅I01 passed，I02／N01未完成，qualification=false；七次真实QA失败与构建、发布和缓存维护分别记录。生产仍.15／generation8，升级尝试0。</p>
+      <div class="table-wrap" tabindex="0" aria-label="Q7实际终态、通过部分与未完成断言"><table><thead><tr><th scope="col">实际事实</th><th scope="col">结果与限制</th></tr></thead><tbody>
+        <tr><td>A3业务激活与原终端标签</td><td>manifest1293／gen2／activation-confirmed／100／seq564；operation completed100，同Web实际浏览器无需刷新。已越过spec1544三个精确标签、原终端2续接、输入marker回显及升级后Guest快照读取；后续最终身份／counter比较与正式I02仍未到达。</td></tr>
+        <tr><td>直接失败断言</td><td>original-runtime-continuity／spec1587:8 toBe：180秒poll等待自动化running run数为1，实际0。原聚合仅2个running沙箱／1个running Agent任务，未达到3沙箱／2任务。</td></tr>
+        <tr><td>调度发生项已受理</td><td>新Scheduler已在10:54:11Z持久写原run与intent，run pending、无其sandbox。不是timer未恢复；pending受理不等于任务启动，不允许另建发生项重放。</td></tr>
+        <tr><td>业务流量与控制交接</td><td>618.262秒／6,834 operations／约11.05357Hz，20,502样本全200，错误写入及幂等不一致0。read／write／dedup最大428.827／84.067／81.955ms；控制handoff389ms。该窗口不替代未到达的完整任务连续性与public API清理。</td></tr>
+        <tr><td>失败收尾</td><td>9角色exit0／PID0／无OOM、KVM fd0；SDK状态不重写，原home／Guest写盘／authority及证据保全。模型仅本地协议测试，modelQualityQualified=false。</td></tr>
+      </tbody></table></div>
+      <div class="callout danger" style="margin-top:17px"><h3>实际根因：探针坐标没有跟随真实挂载</h3><p>owner-factory.ts硬编码/data/workspaces，Q7未来Owner真实mount destination为实例…/business/workspaces。对已退出Owner只读docker cp确认前者不存在；容量探针因缺少实际文件系统信息返回unknown，准入正确拒绝。新Owner无该自动化assignment／effect call，原Owner归属保留。Owner journal只在稳定文件副本的私有immutable副本查询，源SQLite0／SDK0／重启0。</p><p>线上7个Owner却已有有效/data/workspaces RW别名，与实例business/workspaces同源；Q7旧fixture descriptor没有别名。因此本轮暴露fixture挂载描述差异和产品路径耦合，不能推断线上当前必然同样坏。两种布局均属统一VM部署，不改原factory伪造同构，也不删容量检查。</p></div>
+      <div class="callout amber" style="margin-top:17px"><h3>A4修正路径，保持unknown拒绝与全部原断言</h3><p>新正式launcher按可信最终工作区bind destination注入RUNTIME_OWNER_WORKSPACE_ROOT，Owner严格采实际文件系统与自身cgroup；显式字段支持合法runtime-owners等home布局，不要求旧后缀。原.15 Supervisor不可修改且不认识新字段；仅缺字段时，从已认证同实例original-owner／future-owners的OwnerHome推唯一business/workspaces候选，再由内核精确RW mountinfo、canonical／inode见证确认。显式错误不走替代；无唯一合法实物证据仍unknown拒绝，不采Coordinator、不以/data常量或虚构容量兜底。两条均为统一VM部署的启动协议兼容，不放宽公共RPC任意env／路径。</p><p>prepared身份发布前接入普通main已有PlatformLoggerService并flush，位于2秒handoff开始前，不新增worker／定时器或handoff同步I/O；无日志不等于未调度。修复及局部回归进行中，A4新构建／签发／发布、Q8和生产更新尚未执行，不改断言／180秒poll／资源保护线。原七项架构缺口和完整独立Control首迁资格保持，业务bridge不能代替它们。</p></div>
+      <p class="note">生产另正常移除一个无86容器consumer的公开Docker镜像缓存，无force／SDK目录访问／容器生命周期动作。实际guest7,965,589,504→8,781,983,744字节（增加816,394,240），86容器metadata不变／55running／health200；不用Docker df估计冒充收益，不计版本升级。</p>
+      <p class="note"><strong>后续实际回归与Q7收尾：</strong>API修复已提交f8b12eb1…；官方vitest-capped63/63、tsc／lint／prettier均exit0，旧硬编码4/4对应用例实测失败，审查记录f4c2682c…；部署最终Node37/37（09ee…）。Root正常rm9／无-v后，仅清原Owner五类公共缓存，可回收2,748,166,144字节，future收益0，actual cleanup21079706…／1,665字节。QA trim报告6,219,563,008字节，host13,274,210,304→17,526,636,544，含历史free与同期变化，不独占归因或重复计算。Q7失败保留，生产动作0；A4未构建、Q8未运行、生产升级尝试0。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q7-terminal-owner-workspace-capacity-failure">Q7原次、容量路径根因及A4／Q8边界 ↗</a><a href="../../shared/11-部署与扩展预留.md#owner-capacity-workspace-root">Owner可信容量路径与实际挂载合同 ↗</a><a href="../../backend/changes/2026-10-20-独立升级控制系统.md">后端分层修正及完整Control边界 ↗</a></div>
+    </section>
+
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · Q7失败已定位，A4／Q8准备中，生产尚未更新</span></footer>
   </main>
 </div>
 <script>

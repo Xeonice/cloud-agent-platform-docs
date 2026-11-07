@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import * as fs from "node:fs/promises";
-import { join, isAbsolute } from "node:path";
+import { join, isAbsolute, resolve, basename } from "node:path";
 import { invariant, digest } from "./trust.mjs";
 import { atomicJson, readJson, secureDirectory, inside } from "./io.mjs";
 import { captureProcessIdentity } from "./supervisor-sampler.mjs";
@@ -42,6 +42,22 @@ export function roleEnvironment(c, kind, supplied) {
     ...supplied,
     ...(["owner", "coordinator"].includes(kind) ? provider : {}),
   };
+}
+/** Reserved Owner path, derived only at the final Docker launch boundary.
+ * The workspace source grants no business-database or sibling-directory mount.
+ * Old Supervisors may omit this field; their immutable OWNER_ENV stays unchanged.
+ */
+export function ownerWorkspaceEnvironment(env, mounts, { source, destination }) {
+  invariant(
+    [source, destination].every(path => typeof path === "string" && isAbsolute(path) && resolve(path) === path && basename(path) === "workspaces" && !/[\r\n,]/.test(path)) &&
+      Array.isArray(mounts) && mounts.filter(mount => mount.source === source && mount.destination === destination && mount.rw === true).length === 1,
+    "OWNER_WORKSPACE_BIND_REQUIRED",
+  );
+  invariant(
+    !Object.hasOwn(env, "RUNTIME_OWNER_WORKSPACE_ROOT") || env.RUNTIME_OWNER_WORKSPACE_ROOT === destination,
+    "OWNER_WORKSPACE_ENV_MISMATCH",
+  );
+  return { ...env, RUNTIME_OWNER_WORKSPACE_ROOT: destination };
 }
 export const bootstrapDataRoot = (c) =>
   c.kind === "idle-first-bootstrap-experiment"
@@ -348,7 +364,14 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
       for (const v of image.Config.Env || [])
         if (v.startsWith("BOXLITE_"))
           argv.push("--env", v.split("=", 1)[0] + "=");
-    for (const mount of roleMounts(c, spec))
+    const mounts = roleMounts(c, { ...spec, env });
+    const launchEnv = kind === "owner"
+      ? ownerWorkspaceEnvironment(env, mounts, {
+          source: join(c.businessHostPath, "workspaces"),
+          destination: join(bootstrapDataRoot(c), "workspaces"),
+        })
+      : env;
+    for (const mount of mounts)
       argv.push(
         "--mount",
         `type=bind,src=${mount.source},dst=${mount.destination}${mount.rw ? "" : ",readonly"}`,
@@ -356,7 +379,7 @@ export async function createProductionRoleAdapter(c, { run = execute } = {}) {
     const envFile = join(records, name + ".env");
     await fs.writeFile(
       envFile,
-      Object.entries(env)
+      Object.entries(launchEnv)
         .map(([key, value]) => {
           invariant(
             /^[A-Z_][A-Z0-9_]*$/.test(key) &&

@@ -5,7 +5,7 @@ import { invariant,digest } from './trust.mjs';
 import { secureDirectory,atomicJson,readJson,inside } from './io.mjs';
 import { captureProcessIdentity } from './supervisor-sampler.mjs';
 import { createProtectedRoleLifecycle,fixedRoleName } from './protected-role-lifecycle.mjs';
-import { roleMounts } from './production-role-adapter.mjs';
+import { roleMounts, ownerWorkspaceEnvironment } from './production-role-adapter.mjs';
 import { roleResourceFlags } from './role-resource-limits.mjs';
 
 async function exec(program,args){return new Promise((ok,fail)=>{const child=spawn(program,args,{shell:false,stdio:['ignore','pipe','pipe']});let output='',bytes=0,settled=false;const reject=()=>{if(!settled){settled=true;fail(Object.assign(Error('Dedicated container operation failed'),{code:'DEDICATED_CONTAINER_OPERATION_FAILED'}));}};const timer=setTimeout(()=>{reject();try{child.kill('SIGKILL');}catch{}},5000);child.stdout.on('data',c=>{bytes+=c.length;if(bytes>4*1024*1024){reject();try{child.kill('SIGKILL');}catch{}}else output+=c;});child.stderr.resume();child.once('error',()=>{clearTimeout(timer);reject();});child.once('close',status=>{clearTimeout(timer);if(!settled){settled=true;status===0?ok(output):fail(Object.assign(Error('Dedicated container operation failed'),{code:'DEDICATED_CONTAINER_OPERATION_FAILED'}));}});});}
@@ -39,7 +39,7 @@ export async function createDockerRoleAdapter(c){
     else if(kind==='control-agent')invariant(record.startIdentity===c.controlAgentStartIdentity&&artifactRoot===c.controlAgentArtifactRoot&&stableBootstrap===true,'CONTROL_AGENT_BOOTSTRAP_IDENTITY_REQUIRED');
     else if(c.stableControl)invariant(kind!=='installer'&&record.commandId&&typeof assertBeforeDispatch==='function','STABLE_ROLE_FIXED_COMMAND_REQUIRED');
     const mounts=new Map();const mount=(path,rw=false)=>{if(!path)return;invariant(isAbsolute(path)&&!path.includes(','),'FIXED_CONTAINER_MOUNT_REQUIRED');mounts.set(resolve(path),Boolean(rw));};
-    let foundationMounts=[];
+    let foundationMounts=[],ownerWorkspace=null;
     if(['control-entry','control-supervisor'].includes(kind))foundationMounts=roleMounts({...c,root:installationRoot,businessHostPath:c.businessRoot},{kind,artifactRoot,cwd,env});
     else if(kind==='control-agent'){invariant(c.controlAgentArtifactRoot===artifactRoot&&c.controlPrivateRoot&&c.controlLedgerRoot&&c.controlPrivateRoot&&!inside(c.controlPrivateRoot,c.controlLedgerRoot)&&!inside(c.controlLedgerRoot,c.controlPrivateRoot)&&!inside(c.controlPrivateRoot,c.businessRoot)&&!inside(c.businessRoot,c.controlPrivateRoot)&&!inside(c.installerRoot,artifactRoot),'CONTROL_AGENT_MOUNT_SCOPE_REQUIRED');invariant(Array.isArray(c.runtimeRoots)&&c.runtimeRoots.length>0&&c.runtimeRoots.length<=128&&c.runtimeRoots.every(isAbsolute),'CONTROL_AGENT_RUNTIME_ROOTS_REQUIRED');const controlPaths=[artifactRoot,c.controlPrivateRoot,c.controlLedgerRoot,c.controlDownloadRoot],protectedPaths=[c.businessRoot,...c.runtimeRoots,'/var/run/docker.sock'];invariant(controlPaths.every(path=>isAbsolute(path)&&protectedPaths.every(protectedPath=>!inside(path,protectedPath)&&!inside(protectedPath,path)))&&controlPaths.every((path,i)=>controlPaths.every((other,j)=>i===j||!inside(path,other)))&&[artifactRoot,c.controlPrivateRoot,c.controlLedgerRoot].every(path=>!inside(path,c.installerRoot)&&!inside(c.installerRoot,path)),'CONTROL_AGENT_EXCESS_MOUNT');invariant(c.controlDownloadRoot===join(c.installerRoot,'downloads')&&[artifactRoot,c.controlPrivateRoot,c.controlLedgerRoot].every(path=>!inside(path,c.controlDownloadRoot)&&!inside(c.controlDownloadRoot,path)),'CONTROL_DOWNLOAD_MOUNT_SCOPE_REQUIRED');invariant(isAbsolute(c.capacityStateRoot)&&[...controlPaths,...protectedPaths].every(path=>!inside(path,c.capacityStateRoot)&&!inside(c.capacityStateRoot,path)),'CONTROL_CAPACITY_STATE_MOUNT_SCOPE_REQUIRED');mount(c.capacityStateRoot);mount(c.controlDownloadRoot,true);mount(artifactRoot);mount(c.controlPrivateRoot,true);mount(c.controlLedgerRoot,true);mount(c.bindingRoot);mount(c.trustRootPath);for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|BOXLITE_HOME|BOXLITE_RUNTIME_DIR|RUNTIME_OWNER_HOME)$/.test(key),'CONTROL_AGENT_EXCESS_AUTHORITY');}
     else if(kind==='installer'){
@@ -57,12 +57,13 @@ export async function createDockerRoleAdapter(c){
       }
       if(kind==='owner'){
         invariant(isAbsolute(ownerHome)&&inside(installationRoot,ownerHome)&&!inside(c.installerRoot,ownerHome)&&!inside(c.businessRoot,ownerHome),'OWNER_HOME_ISOLATION_REQUIRED');mount(ownerHome,true);
-        const workspaces=await secureDirectory(join(c.businessRoot,'workspaces'));mount(workspaces,true);
+        const workspaces=await secureDirectory(join(c.businessRoot,'workspaces'));mount(workspaces,true);ownerWorkspace=workspaces;
         for(const key of Object.keys(env))invariant(!/^(?:DATA_ROOT|DATABASE_URL|PLATFORM_CONTROLLER_RPC_KEY|PLATFORM_CONTROL_RPC_KEY|UPGRADE_ADMIN_KEY|UPGRADE_LEGACY_AUTH_CONTINUITY_KEY|UPGRADE_SESSION_SECRET)$/.test(key),'OWNER_CONTAINER_EXCESS_AUTHORITY');
       }
     }
     mount(env.NODE_EXTRA_CA_CERTS);
     mount(env.SSL_CERT_FILE);mount(env.SSL_CERT_DIR);
+    if(kind==='owner')env=ownerWorkspaceEnvironment(env,[...mounts].map(([path,rw])=>({source:path,destination:path,rw})),{source:ownerWorkspace,destination:ownerWorkspace});
     for(const path of [...mounts.keys(),...foundationMounts.map(m=>m.source)])invariant((await fs.lstat(path).catch(()=>null)),'FIXED_CONTAINER_MOUNT_MISSING');
     const uid=c.uid??process.getuid(),gid=c.gid??process.getgid();invariant(Number.isSafeInteger(uid)&&uid>=0&&Number.isSafeInteger(gid)&&gid>=0,'FIXED_CONTAINER_USER_REQUIRED');
     const name=fixedRoleName(c.instanceId,{...record,kind}),argv=['run','--detach','--name',name,'--network','host','--read-only','--user',uid+':'+gid,'--label','agent-platform.instance='+c.instanceId,'--label','agent-platform.installation='+digest(installationRoot),'--label','agent-platform.start='+record.startIdentity,'--label','agent-platform.role='+kind,'--label','agent-platform.artifact='+record.artifactDigest,'--label','agent-platform.attempt='+record.attemptId,...(record.commandId?['--label','agent-platform.command='+record.commandId,'--label','agent-platform.operation='+record.operationId]:[]),'--tmpfs','/tmp:rw,nosuid,nodev,size=256m','--workdir',cwd];
