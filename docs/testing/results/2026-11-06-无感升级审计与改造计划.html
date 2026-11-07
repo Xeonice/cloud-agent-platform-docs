@@ -41,6 +41,7 @@
       <a href="#actual-cache-cleanup-and-maintenance-state"><span class="nav-number">15</span>实际回收与维护状态</a>
       <a href="#q5-native-inflight-after-cache-cleanup"><span class="nav-number">16</span>Q5首次启动记录</a>
       <a href="#q5-terminal-failure-overall-progress"><span class="nav-number">17</span>Q5终态失败与阻断</a>
+      <a href="#q6-terminal-tab-inventory-failure"><span class="nav-number">18</span>Q6标签恢复缺口与A3</a>
     </nav>
     <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<br>11月7日追加：本机 Mac mini<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
   </aside>
@@ -48,7 +49,7 @@
     <header class="hero">
       <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">未达标 · 线上切换暂停</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-      <p class="hero-lede">A2兼容修复包已实际构建、发布并核验匿名下载；Q5已终态失败。业务激活已确认，但总体进度UI断言未通过，完整qualification=false。生产仍为原.15／generation8、升级继续阻断。五次真实QA按各自失败层次记录，维护传输超时不混计。</p>
+      <p class="hero-lede">A2已发布并核验匿名下载；Q6同Web完成100%与原终端2续接已通过，随后刷新标签清单遗漏终端1，整轮仍失败。六次真实QA尚无完整资格。A3 .17.3产品修复准备中，尚无新构建／发布／Native；生产保持.15／generation8、7个Owner／1个沙箱，更新继续阻断。</p>
       <div class="meta"><span>对象：公司电脑部署实例</span><span>范围：独立升级控制迁移</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
     </header>
 
@@ -346,7 +347,24 @@
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q5-terminal-failure-overall-progress">Q5终态、直接断言与五次原run分类证据 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · Q5终态失败，生产更新继续阻断</span></footer>
+    <section class="section" id="q6-terminal-tab-inventory-failure" aria-labelledby="q6-terminal-tab-inventory-failure-title">
+      <div class="section-head"><span class="section-number">18</span><h2 id="q6-terminal-tab-inventory-failure-title">Q6原终端2续接已通过，标签库存恢复仍有产品缺口</h2></div>
+      <p class="section-intro">原次803.9036638736725秒／exit1，TERM0、retry0，host最低12,184,985,600字节，未触4GiB容量保护。整体qualification=false，正式仅I01 passed，I02／N01未完成；生产.15／generation8更新继续阻断。第六次QA与历史生产触停、缓存传输问题分别统计。</p>
+      <div class="table-wrap" tabindex="0" aria-label="Q6实际通过部分、失败位置与未验证边界"><table><thead><tr><th scope="col">原次事实</th><th scope="col">结果与限制</th></tr></thead><tbody>
+        <tr><td>同Web真实浏览器完成态通过</td><td>A2 activation-confirmed／gen2，operation completed／100%；实际浏览器Web revision相同、noRefresh、旧更新入口隐藏。Q5的harness修正已越过，原A2签名产物保持。</td></tr>
+        <tr><td>原终端2续接已确认</td><td>原terminal identity／runtime identity／existingSession的5秒poll通过，无替代终端、原指令重跑或额外POST；不能代替后续原终端1和完整连续性验证。</td></tr>
+        <tr><td>直接失败与数据库保留</td><td>spec1544刷新后应为Agent／终端1／终端2，实际Agent／终端2。API数据库原3份公开书签均保留；缺标签不能直接推断Guest／PTY1已死。</td></tr>
+        <tr><td>尚未走到最终连续性比较</td><td>Guest PID／birth／counter／tmux与Agent PID／birth／one-launch／task identity比较均未执行，正式I02／N01未通过，不补写整轮成功。</td></tr>
+        <tr><td>真实业务探针与交接窗口</td><td>497.032秒、约11.0335 operation／秒，16,452个read／write／dedup样本全HTTP200，错误写入／幂等不一致0；实际Coordinator控制handoff最大345ms、singleWriter／commitKnown。仅覆盖已采集窗口，不替代最终Guest／任务断言。</td></tr>
+        <tr><td>现场正常关闭</td><td>9个QA角色exit0／PID0／无OOM、KVM fd0；原SDK状态未重写，home／Guest写盘／authority／失败frames保留。原次不重跑，生产生命周期动作0。</td></tr>
+      </tbody></table></div>
+      <div class="callout danger" style="margin-top:17px"><h3>根因：完整终端库存不应只依赖Agent连接</h3><p>旧网关只在Agent连接补发shells。刷新直接恢复终端2时，隐藏Agent标签可能未建立WS；终端2可以续接原会话，但终端1没有回到标签栏。原3份书签仍在，不能把UI缺失写成Guest死亡，也不能冒认未执行的最终counter比较。</p></div>
+      <div class="callout amber" style="margin-top:17px"><h3>A3 .17.3修复准备中，尚未构建或上线</h3><p>计划对每条认证、原runtime identity确认且成功attach的Agent／shell／runtime连接异步补库存；revision2在ready后、revision1在session后，不阻塞首帧、不创建或重跑会话。后端TTY与共享接口合同已更新，产品修复／局部测试进行中；无A3新构建、签名／发布、Native或生产更新。业务bridge与完整独立Control首迁资格仍分别判断。</p></div>
+      <p class="note">生产只读基线H0：原.15／generation8、7个Owner／1个沙箱，catalog写入0／升级POST0。Build仍Stopped、两CI仍本次owned-offline，原4CPU／8GiB和维护reason收尾待做。原安全投影2bcb069a…／16,217字节及原归档c4a8b510…／76,247,040字节保留，后续结果追加，不改写失败。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#q6-terminal-tab-inventory-failure">Q6原次事实、终端库存根因与A3未执行边界 ↗</a><a href="../../backend/06-TTY终端链路.md">已更新TTY连接与库存规则 ↗</a><a href="../../shared/10-接口契约与类型共享.md">已更新共享WS接口合同 ↗</a></div>
+    </section>
+
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-07 更新 · Q6标签恢复失败，A3准备中，生产更新继续阻断</span></footer>
   </main>
 </div>
 <script>
