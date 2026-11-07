@@ -508,12 +508,12 @@ test("input scope, concurrency, metadata leakage and failed collector all hold",
   );
 });
 
-test("historical zombie identity is retained in complete Owner proofs and compared exactly", async () => {
+test("historical bwrap zombie identity is retained in complete Owner proofs and compared exactly", async () => {
   const zombie = {
     pid: 78,
     ppid: 1,
     startTicks: "180",
-    comm: "node",
+    comm: "bwrap",
     livenessClass: "zombie",
   };
   const f = fixture({
@@ -549,69 +549,62 @@ test("historical zombie identity is retained in complete Owner proofs and compar
   );
 });
 
-test("live to zombie transitions cannot pass a scan or a signed proof comparison", async () => {
-  assert.throws(
-    () =>
-      parseOwnerProcSnapshot(
-        procText((rows, round) => {
-          if (round === 2)
-            rows.push({
-              pid: 78,
-              ppid: 1,
-              startTicks: "180",
-              comm: "node",
-              livenessClass: "zombie",
-            });
-          else
-            rows.push({
-              pid: 78,
-              ppid: 1,
-              startTicks: "180",
-              comm: "node",
-              livenessClass: "live",
-            });
-        }),
-      ),
-    /CHANGED_DURING_SCAN/,
-  );
-  const before = await collect(
-    fixture({
-      onProc(v) {
-        v.stdout = procText((rows) =>
-          rows.push({
-            pid: 78,
-            ppid: 1,
-            startTicks: "180",
-            comm: "node",
-            livenessClass: "live",
-          }),
-        );
-      },
-    }),
-  );
-  const after = clone(before);
-  after.rows[0].processes.find((p) => p.pid === 78).livenessClass = "zombie";
-  after.stableDigest = digest(after.rows);
-  assert.throws(
-    () => compareOwnerKernelContinuityProof(before, after),
-    /OWNER_KERNEL_OR_ASSIGNMENTS_CHANGED/,
-  );
-  for (const pid of [1, 10, 11]) {
+test("live to zombie transitions cannot pass a scan or signed comparison for Node, bwrap, VMM or shim", async () => {
+  for (const comm of ["node", "bwrap", "libkrun (vmm)", "boxlite-shim"]) {
     assert.throws(
       () =>
         parseOwnerProcSnapshot(
-          procText((rows) => {
-            rows.find((p) => p.pid === pid).livenessClass = "zombie";
+          procText((rows, round) => {
+            rows.push({
+              pid: 78,
+              ppid: 1,
+              startTicks: "180",
+              comm,
+              livenessClass: round === 1 ? "live" : "zombie",
+            });
           }),
         ),
-      /OWNER_/,
+      /CHANGED_DURING_SCAN/,
     );
-    const invalid = clone(before);
-    invalid.rows[0].processes.find((p) => p.pid === pid).livenessClass =
-      "zombie";
-    invalid.stableDigest = digest(invalid.rows);
-    assert.throws(() => validateOwnerKernelContinuityProof(invalid), /OWNER_/);
+    const before = await collect(
+      fixture({
+        onProc(v) {
+          v.stdout = procText((rows) =>
+            rows.push({
+              pid: 78,
+              ppid: 1,
+              startTicks: "180",
+              comm,
+              livenessClass: "live",
+            }),
+          );
+        },
+      }),
+    );
+    const after = clone(before);
+    after.rows[0].processes.find((p) => p.pid === 78).livenessClass = "zombie";
+    after.stableDigest = digest(after.rows);
+    assert.throws(
+      () => compareOwnerKernelContinuityProof(before, after),
+      /OWNER_KERNEL_OR_ASSIGNMENTS_CHANGED/,
+    );
   }
+  assert.throws(
+    () =>
+      parseOwnerProcSnapshot(
+        procText((rows) => {
+          rows[0].livenessClass = "zombie";
+        }),
+      ),
+    /OWNER_PROC_REQUIRED_PROCESS_NOT_LIVE/,
+  );
+  const invalid = await collect(fixture());
+  invalid.rows[0].processes[0].livenessClass = "zombie";
+  invalid.stableDigest = digest(invalid.rows);
+  assert.throws(
+    () => validateOwnerKernelContinuityProof(invalid),
+    /OWNER_PROOF_PROCESS_INVALID/,
+  );
 });
 
 test("real shell records stable historical Z, normalizes R/S to live, and rejects dead X", async (t) => {

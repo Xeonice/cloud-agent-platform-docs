@@ -34,7 +34,8 @@ const same = (a, b, code) => invariant(canonical(a) === canonical(b), code);
  * /proc is the Owner's container PID namespace. PID $$ and its descendants are
  * explicitly excluded by the parser, even if a transport makes it a PID1 child.
  * Stable historical zombies remain in the proof; live-to-zombie changes fail.
- * PID1, bwrap and VMM processes must remain live. R/S scheduler states are not identity.
+ * PID1 must remain live. Other processes retain their baseline class, including
+ * historical destroyed-process zombies. R/S scheduler states are not identity.
  */
 export const OWNER_PROC_COLLECTOR = String.raw`set -eu
 round=1
@@ -109,8 +110,7 @@ function processRows(rows, collectorPid) {
     if (excluded.has(p.pid)) continue;
     invariant(descendants.has(p.pid), "OWNER_PROC_UNROOTED_PROCESS");
     invariant(
-      !(p.pid === 1 || /bwrap|krun|vmm/i.test(p.comm)) ||
-        p.livenessClass === "live",
+      p.pid !== 1 || p.livenessClass === "live",
       "OWNER_PROC_REQUIRED_PROCESS_NOT_LIVE",
     );
     result.push(p);
@@ -603,8 +603,7 @@ export function validateOwnerKernelContinuityProof(proof) {
           text(p.comm) &&
           p.comm.length <= 64 &&
           ["live", "zombie"].includes(p.livenessClass) &&
-          (!(p.pid === 1 || /bwrap|krun|vmm/i.test(p.comm)) ||
-            p.livenessClass === "live") &&
+          (p.pid !== 1 || p.livenessClass === "live") &&
           !processes.has(p.pid),
         "OWNER_PROOF_PROCESS_INVALID",
       );
