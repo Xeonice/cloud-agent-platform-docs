@@ -5,6 +5,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
   const url = new URL(origin); invariant(url.protocol==='http:' && ['127.0.0.1','localhost','[::1]'].includes(url.hostname) && key?.length>=32,'UNSAFE_COORDINATOR_CONFIG');
   let observedOrigin=url.origin,observedGeneration=0;
   const capabilities = new Map(), attemptGenerations = new Map();
+  const completedQuiescedResponse = Symbol();
   const bindingKey = () => `${observedOrigin}:${observedGeneration}`;
   function remember(result) {
     const snapshot = result?.snapshot || result;
@@ -18,7 +19,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     await actualOrigin(selection);
     return capabilities.get(bindingKey())?.controlFastPath === 1;
   }
-  async function actualOrigin({allowQuiescing=false,attemptId=null,fence=null}={}) {
+  async function actualOrigin({allowQuiescing=false,attemptId=null,fence=null,routeDeadline=Infinity,renewalScope=null}={}) {
     if(!bindingPath)return observedOrigin;
     const context=requestContext?.();
     if(context?.recoveryId && (context.businessAttemptId!==undefined||context.businessFence!==undefined)) {
@@ -27,13 +28,20 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
       // authorized by the new recovery epoch; the old fence grants no rights.
       allowQuiescing=true;attemptId=context.businessAttemptId;fence=context.businessFence;
     }
-    const deadline=Date.now()+2000;
+    const deadline=Math.min(Date.now()+2000,routeDeadline);
     while(true) {
+      invariant(Date.now()<deadline,'COORDINATOR_HANDOFF_WAIT_EXCEEDED');
       const stat=await lstat(bindingPath);invariant(stat.isFile()&&!stat.isSymbolicLink()&&(stat.mode&0o022)===0,'INSECURE_COORDINATOR_BINDING');
       const binding=JSON.parse(await readFile(bindingPath,'utf8'));
       invariant(binding.instanceId===instanceId&&Number.isSafeInteger(binding.generation)&&binding.generation>=observedGeneration&&['ready','quiescing'].includes(binding.state),'COORDINATOR_BINDING_UNKNOWN');
       if(binding.state==='ready'||allowQuiescing&&binding.attemptId===attemptId&&binding.fence===fence) {
         const next=new URL(binding.origin);invariant(next.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(next.hostname)&&next.pathname==='/'&&!next.username&&!next.password&&!next.search&&!next.hash,'UNSAFE_COORDINATOR_BINDING');
+        if(renewalScope) {
+          invariant((binding.attemptId===undefined||binding.attemptId===renewalScope.attemptId)&&(binding.fence===undefined||binding.fence===renewalScope.fence),'COORDINATOR_RENEW_SCOPE_CHANGED');
+          invariant(next.origin===observedOrigin||binding.generation>observedGeneration&&!renewalScope.origins.has(next.origin),'COORDINATOR_RENEW_SCOPE_CHANGED');
+          renewalScope.origins.add(next.origin);
+        }
+        invariant(Date.now()<deadline,'COORDINATOR_HANDOFF_WAIT_EXCEEDED');
         observedOrigin=next.origin;observedGeneration=binding.generation;return observedOrigin;
       }
       invariant(Date.now()<deadline,'COORDINATOR_HANDOFF_WAIT_EXCEEDED');await new Promise(ok=>setTimeout(ok,10));
@@ -58,7 +66,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
   }
   async function rpc(path,body,selection,requestOptions) {
     const started=Date.now(),monotonicStart=performance.now(),liveContext=requestContext?.();
-    const requestTimeoutMs=Math.min(requestOptions?.timeoutMs??timeoutMs,Number.isSafeInteger(liveContext?.deadline)?liveContext.deadline-started:Infinity);
+    const requestTimeoutMs=Math.min(requestOptions?.timeoutMs??timeoutMs,Number.isSafeInteger(liveContext?.deadline)?liveContext.deadline-started:Infinity,requestOptions?.deadline===undefined?Infinity:requestOptions.deadline-started);
     const requestKind=path.endsWith('/authority-check')||path.endsWith('/renew')&&body?.checkOnly===true?'fence-check':path.endsWith('/lease-renew')||path.endsWith('/renew')?'lease-renew':path.endsWith('/progress-checkpoint')||path.includes('/progress-checkpoint?')?'progress-checkpoint':path.endsWith('/commit')||path.endsWith('/commit-receipt')?'event-commit':'control-read';
     const traceId=randomUUID();let bindingMs=null,serializationMs=null,firstResponseMs=null,decodeMs=null;
     try {
@@ -74,7 +82,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
       const headersStart=performance.now();
       const r=await fetcher(activeOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':key,'x-platform-instance-id':instanceId,'x-platform-control-request-kind':requestKind,'x-platform-control-trace-id':traceId,...contextHeaders},body:serialized,signal:AbortSignal.timeout(remaining)});
       firstResponseMs=performance.now()-headersStart;const bodyStart=performance.now();
-      const result=await r.json();decodeMs=performance.now()-bodyStart;if(!r.ok)throw Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status});
+      const result=await r.json();decodeMs=performance.now()-bodyStart;if(!r.ok)throw Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status,...(typeof result.sideEffectFree==='boolean'?{sideEffectFree:result.sideEffectFree}:{}),...(typeof result.retryable==='boolean'?{retryable:result.retryable}:{}),[completedQuiescedResponse]:r.status===425&&result.code==='APPLICATION_WRITER_QUIESCED'&&result.sideEffectFree===true&&result.retryable===true});
       return remember(result.data ?? result);
     } catch(error) {
       const failure=error instanceof Error?error:new Error('Coordinator RPC failed',{cause:error});
@@ -89,7 +97,36 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     get origin(){return observedOrigin;},instanceId,
     pending:()=>rpc('/internal/upgrades/pending'),
     claim:(id,body)=>rpc(prefix(id)+'/claim',body),
-    renew:async(id,body)=>(await fastPath())&&attemptGenerations.has(id)?rpc(prefix(id)+'/lease-renew',{...body,generation:attemptGenerations.get(id)}):rpc(prefix(id)+'/renew',body),
+    renew:async(id,body)=>{
+      const started=Date.now(),context=requestContext?.();
+      const deadline=Math.min(started+timeoutMs,Number.isSafeInteger(context?.deadline)?context.deadline:Infinity),routeDeadline=Math.min(started+2000,deadline);
+      const original=structuredClone(body),generation=attemptGenerations.get(id);
+      const fast=await fastPath({routeDeadline})&&attemptGenerations.has(id);
+      const path=prefix(id)+(fast?'/lease-renew':'/renew'),command=fast?{...original,generation}:original;
+      const scope={attemptId:id,fence:original?.fence,origins:new Set([observedOrigin])};
+      let continuation=false;
+      while(true) {
+        invariant(attemptGenerations.get(id)===generation,'COORDINATOR_RENEW_SCOPE_CHANGED');
+        try {
+          const result=await rpc(path,command,{routeDeadline,...(continuation?{renewalScope:scope}:{})},{deadline:continuation?routeDeadline:deadline});
+          if(continuation) {
+            const expected={instanceId,attemptId:id,controllerId:original.controllerId,fence:original.fence,generation};
+            const scopes=[result,result?.attempt,result?.snapshot,result?.snapshot?.attempt];
+            invariant(attemptGenerations.get(id)===generation&&scopes.every(value=>value===undefined||value===null||typeof value==='object'&&Object.entries(expected).every(([field,wanted])=>value[field]===undefined||value[field]===wanted)),'COORDINATOR_RENEW_SCOPE_CHANGED');
+          }
+          return result;
+        }
+        catch(error) {
+          // Only a fully decoded explicit no-effect rejection can be continued.
+          // Unknown acknowledgements and all mutation RPCs remain terminal.
+          if(error[completedQuiescedResponse]!==true||error.status!==425||error.code!=='APPLICATION_WRITER_QUIESCED'||error.sideEffectFree!==true||error.retryable!==true||!Number.isSafeInteger(generation)||!Number.isSafeInteger(original?.fence)||original.fence<=0||typeof original?.controllerId!=='string')throw error;
+          invariant(Date.now()<routeDeadline,'COORDINATOR_HANDOFF_WAIT_EXCEEDED');
+          await new Promise(ok=>setTimeout(ok,Math.min(10,Math.max(1,routeDeadline-Date.now()))));
+          invariant(Date.now()<routeDeadline,'COORDINATOR_HANDOFF_WAIT_EXCEEDED');
+          continuation=true;
+        }
+      }
+    },
     commit:async(id,body)=>rpc(prefix(id)+(await fastPath()?'/commit-receipt':'/commit'),body),
     step:(id,stepId)=>rpc(prefix(id)+'/steps/'+encodeURIComponent(stepId)),
     snapshot:id=>rpc(prefix(id)),
