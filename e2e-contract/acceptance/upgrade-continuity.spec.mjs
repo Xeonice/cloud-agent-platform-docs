@@ -26,6 +26,12 @@ import {
   configureQualificationImage,
 } from "../server/qualification-model.mjs";
 import { n01WebContinuity } from "../server/upgrade-web-continuity-contract.mjs";
+import {
+  QUALIFICATION_TOOL_STARTUP_MS,
+  QUALIFICATION_COUNTER_STARTUP_MS,
+  inspectQualificationToolStartup,
+  inspectQualificationCounterStartup,
+} from "../server/qualification-agent-startup.mjs";
 
 const digest = (value) =>
   "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -52,12 +58,13 @@ async function json(
   data,
   expected = 200,
   headers = {},
+  timeout = 120000,
 ) {
   const response = await request.fetch(origin + path, {
     method,
     data,
     headers: { Origin: origin, "X-Operation-Id": randomUUID(), ...headers },
-    timeout: 120000,
+    timeout,
   });
   expect(response.status(), `${method} ${path}`).toBe(expected);
   return response.status() === 204 ? undefined : response.json();
@@ -157,7 +164,7 @@ async function guestSnapshot(request, origin, sandboxId) {
   };
 }
 
-async function agentCounter(request, origin, sandboxId, marker) {
+async function agentCounter(request, origin, sandboxId, marker, timeoutMs = 120000) {
   const folder = "/workspace/.upg-agent-proof/" + marker;
   const result = await json(
     request,
@@ -167,6 +174,9 @@ async function agentCounter(request, origin, sandboxId, marker) {
     {
       command: `printf 'PID '; cat ${folder}/pid; printf 'BIRTH '; cat ${folder}/birth; printf 'LAUNCHES\\n'; cat ${folder}/launches; printf 'SEQ\\n'; cat ${folder}/counter`,
     },
+    200,
+    {},
+    timeoutMs,
   );
   expect(result.exitCode).toBe(0);
   const match =
@@ -295,6 +305,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     bodyErrorSummary = null,
     businessCleanup = null,
     completedWebUi = null,
+    sourceAgentStartup = null,
     upgradeObservation = null,
     lastKnownProgress = null,
     resourcesCleaned = false;
@@ -688,6 +699,30 @@ test("real user acceptance, durable installation and original VM/terminal contin
       source.headlessPrompt,
       "Real long-running guest AgentTask instruction is required",
     ).toBeTruthy();
+    // Probe the real CLI before the one original task starts; do not launch a
+    // second CLI process alongside its first model/tool startup.
+    sourceAgentStartup = { phase: "cli-version", cliVersion: null, failureCategory: null };
+    const cli = await json(
+      request,
+      origin,
+      `/api/sandboxes/${headless.id}/exec`,
+      "POST",
+      { command: runtimeId === "claude-code" ? "claude --version" : "codex --version" },
+    );
+    sourceAgentStartup.cliVersion = cli.stdout.trim();
+    expect(cli.exitCode).toBe(0);
+    sourceAgentStartup = {
+      cliVersion: cli.stdout.trim(),
+      phase: "task-request",
+      toolStartupBudgetMs: QUALIFICATION_TOOL_STARTUP_MS,
+      counterStartupBudgetMs: QUALIFICATION_COUNTER_STARTUP_MS,
+      requestAtMs: Date.now(),
+      acceptedAtMs: null,
+      toolIssuedAtMs: null,
+      counterReadyAtMs: null,
+      failureCategory: null,
+    };
+    expect(sourceAgentStartup.cliVersion).toMatch(/\d+\.\d+\.\d+/);
     const run = await json(
       request,
       origin,
@@ -696,6 +731,8 @@ test("real user acceptance, durable installation and original VM/terminal contin
       { prompt: source.headlessPrompt, timeoutMinutes: 30 },
       202,
     );
+    sourceAgentStartup.acceptedAtMs = Date.now();
+    sourceAgentStartup.originalTaskIdDigest = digest(run.id);
     expect(run.status).toBe("running");
     const readOriginalIdentities = () => {
       const task = database
@@ -728,46 +765,62 @@ test("real user acceptance, durable installation and original VM/terminal contin
     const agentMarker = model
       ? /UPG_PROTOCOL_TASK:([a-f0-9-]{36})/.exec(source.headlessPrompt)[1]
       : null;
-    const cli = await json(
-      request,
-      origin,
-      `/api/sandboxes/${headless.id}/exec`,
-      "POST",
-      {
-        command:
-          runtimeId === "claude-code" ? "claude --version" : "codex --version",
-      },
-    );
-    expect(cli.exitCode).toBe(0);
-    expect(cli.stdout.trim()).toMatch(/\d+\.\d+\.\d+/);
     if (model) {
-      await expect
-        .poll(
-          async () => {
-            try {
-              agentA = await agentCounter(
-                request,
-                origin,
-                headless.id,
-                agentMarker,
-              );
-              return agentA.seq.length;
-            } catch {
-              return 0;
-            }
-          },
-          { timeout: 180000 },
-        )
-        .toBeGreaterThanOrEqual(2);
-      expect(agentA.launches).toHaveLength(1);
-      expect(
-        model
-          .evidence()
-          .requests.some(
-            (row) => row.taskId === agentMarker && row.phase === "tool-issued",
-          ),
-      ).toBe(true);
-    }
+      try {
+        sourceAgentStartup.phase = "waiting-for-tool";
+        const toolDeadline = sourceAgentStartup.requestAtMs + QUALIFICATION_TOOL_STARTUP_MS;
+        while (sourceAgentStartup.toolIssuedAtMs === null) {
+          const progress = inspectQualificationToolStartup({
+            taskId: agentMarker,
+            requestAtMs: sourceAgentStartup.requestAtMs,
+            acceptedAtMs: sourceAgentStartup.acceptedAtMs,
+            nowMs: Date.now(),
+            requests: model.evidence().requests,
+          });
+          if (progress.phase === "tool-issued") {
+            sourceAgentStartup.toolIssuedAtMs = progress.toolIssuedAtMs;
+            sourceAgentStartup.toolObservedAtMs = Date.now();
+            sourceAgentStartup.toolStartupElapsedMs = progress.elapsedMs;
+          } else await delay(Math.min(250, Math.max(1, toolDeadline - Date.now())));
+        }
+        sourceAgentStartup.phase = "waiting-for-counter";
+        const counterDeadline = sourceAgentStartup.toolIssuedAtMs + QUALIFICATION_COUNTER_STARTUP_MS;
+        let firstIdentity;
+        while (agentA === undefined) {
+          // Both sides of the await use the same original tool deadline. The
+          // request itself cannot consume the old generic 120-second timeout.
+          inspectQualificationCounterStartup({ toolIssuedAtMs: sourceAgentStartup.toolIssuedAtMs, nowMs: Date.now(), firstIdentity });
+          let observed;
+          sourceAgentStartup.counterReadAttempts = (sourceAgentStartup.counterReadAttempts ?? 0) + 1;
+          try {
+            observed = await agentCounter(request, origin, headless.id, agentMarker, Math.max(1, counterDeadline - Date.now()));
+            sourceAgentStartup.counterLastReadableAtMs = Date.now();
+          } catch {
+            sourceAgentStartup.counterReadFailures = (sourceAgentStartup.counterReadFailures ?? 0) + 1;
+            // Missing/unknown files do not qualify the original counter.
+          }
+          const progress = inspectQualificationCounterStartup({ toolIssuedAtMs: sourceAgentStartup.toolIssuedAtMs, nowMs: Date.now(), counter: observed, firstIdentity });
+          if (progress.identity) firstIdentity ??= progress.identity;
+          if (progress.phase === "counter-ready") {
+            agentA = observed;
+            sourceAgentStartup.counterReadyAtMs = sourceAgentStartup.toolIssuedAtMs + progress.elapsedMs;
+            sourceAgentStartup.counterStartupElapsedMs = progress.elapsedMs;
+            sourceAgentStartup.originalCounterIdentity = progress.identity;
+          } else await delay(Math.min(250, Math.max(1, counterDeadline - Date.now())));
+        }
+        expect(agentA.seq.length).toBeGreaterThanOrEqual(2);
+        expect(agentA.launches).toHaveLength(1);
+        sourceAgentStartup.phase = "ready";
+      } catch (error) {
+        sourceAgentStartup.failedAtMs = Date.now();
+        sourceAgentStartup.failureCategory = /^[A-Z][A-Z0-9_]+$/.test(error?.code ?? "")
+          ? error.code
+          : sourceAgentStartup.phase === "waiting-for-tool"
+            ? "AGENT_TOOL_STARTUP_TIMEOUT"
+            : "AGENT_COUNTER_STARTUP_TIMEOUT";
+        throw error;
+      }
+    } else sourceAgentStartup.phase = "external-model-task-running";
     // Schedule a real occurrence across the measured upgrade window.
     expect(
       source.automationInput,
@@ -2007,6 +2060,10 @@ test("real user acceptance, durable installation and original VM/terminal contin
     };
     resourcesCleaned = true;
   } catch (error) {
+    if (sourceAgentStartup && !["ready", "external-model-task-running"].includes(sourceAgentStartup.phase) && sourceAgentStartup.failureCategory === null) {
+      sourceAgentStartup.failedAtMs = Date.now();
+      sourceAgentStartup.failureCategory = "AGENT_STARTUP_NOT_CONFIRMED";
+    }
     // APIRequestContext errors can include authentication headers in their raw
     // message. Record only a known failure category, never that message/body.
     const category = [
@@ -2055,6 +2112,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         targetManifestDigest: fixture?.envelope?.manifestDigest ?? null,
         error: bodyErrorSummary,
         admissionDiagnostics,
+        sourceAgentStartup,
         ongoingProgress,
         publicObservation:
           upgradeObservation === null
@@ -2160,6 +2218,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           admissionDiagnostics,
           ongoingProgress,
           completedWebUi,
+          sourceAgentStartup,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",
