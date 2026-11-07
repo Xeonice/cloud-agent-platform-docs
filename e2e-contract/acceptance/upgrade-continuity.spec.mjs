@@ -10,6 +10,7 @@ import { startUpgradeHarness } from "../server/start-upgrade.mjs";
 import { createUpgradeFixture } from "../server/upgrade-fixture.mjs";
 import { closeQualifiedInstallation } from "../native/close-qualified-installation.mjs";
 import { qualificationBusinessDatabasePath } from "../server/installer-filesystem.mjs";
+import { readQualificationHistoryCoverage } from "../server/qualification-history-seed.mjs";
 import {
   upgradePrefersAsync,
   readN01Admission,
@@ -306,6 +307,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     businessCleanup = null,
     completedWebUi = null,
     sourceAgentStartup = null,
+    historyScaleCoverage = null,
     upgradeObservation = null,
     lastKnownProgress = null,
     resourcesCleaned = false;
@@ -2096,6 +2098,25 @@ test("real user acceptance, durable installation and original VM/terminal contin
     };
     throw error;
   } finally {
+    // This is coverage metadata, not a replacement for I01/I02/N01. Never pad or
+    // rewrite this attempt's real handoff receipt to satisfy a scale target.
+    if (fixture?.config.historyScale !== undefined && database) {
+      try {
+        historyScaleCoverage = readQualificationHistoryCoverage({
+          profile: fixture.config.historyScale,
+          seed: harness?.historyScale,
+          database,
+          attemptId: upgradeObservation?.attempt?.attemptId,
+        });
+      } catch (error) {
+        historyScaleCoverage = {
+          state: "coverage-unconfirmed",
+          code: /^QUALIFICATION_HISTORY_[A-Z_]+$/.test(error?.code ?? "") ? error.code : "QUALIFICATION_HISTORY_COVERAGE_UNKNOWN",
+          qualificationEvidence: false,
+          changesNativeAssertions: false,
+        };
+      }
+    }
     // Keep this diagnostic independent from mandatory UPG assertion IDs. Persist
     // it before any teardown await can hide a body failure behind an open SSE.
     const attempt = upgradeObservation?.attempt,
@@ -2113,6 +2134,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         error: bodyErrorSummary,
         admissionDiagnostics,
         sourceAgentStartup,
+        historyScaleCoverage,
         ongoingProgress,
         publicObservation:
           upgradeObservation === null
@@ -2219,6 +2241,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           ongoingProgress,
           completedWebUi,
           sourceAgentStartup,
+          historyScaleCoverage,
           cleanup,
           model: model?.evidence() ?? {
             modelMode: "external-model",

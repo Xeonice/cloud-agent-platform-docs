@@ -13,6 +13,7 @@ import { verifyQualificationBusinessDatabaseFilesystem } from './installer-files
 import { createDockerRoleAdapter } from '../../deploy/upgrade/docker-role-adapter.mjs';
 import { assertQualificationIsolation } from './qualification-isolation.mjs';
 import { loadLegacyUpgradeRuntime } from './legacy-upgrade-runtime.mjs';
+import { seedQualificationHistory } from './qualification-history-seed.mjs';
 
 async function freePort() {
   const server = createServer();
@@ -105,6 +106,9 @@ export async function startUpgradeHarness(config) {
   for (const [name, folder] of Object.entries({data:'business',owner:'original-owner',futureOwners:'future-owners',installer:'installer',bindings:'bindings',logs:'logs',web:'initial-web-code'})) paths[name] = await secureDirectory(join(root,folder));
   await secureDirectory(join(paths.installer,'artifacts'));
   const businessDatabasePath=await verifyQualificationBusinessDatabaseFilesystem(config);
+  // Explicit QA-only history is initialized offline before every role launch.
+  // With no historyScale option this performs no reads, writes or dependency loads.
+  const historyScale=await seedQualificationHistory(config);
   const bindingPath=join(paths.bindings,'coordinator.json'), ownerBindingPath=join(paths.bindings,'owners.json');
   const release = {...config.initialRelease,productionWebBinding:config.initialRelease.productionWebBinding||origin('entry')};
   invariant(release.components.coordinator && release.components.installer && release.components.web.webRevision,'INITIAL_COMPONENT_IDENTITIES_REQUIRED');
@@ -149,7 +153,7 @@ export async function startUpgradeHarness(config) {
   async function startController(){const startIdentity=randomUUID();await atomicJson(controllerConfigPath,{...controllerConfig,startIdentity});const child=await launch('controller',join(config.initialRoot,'installer/controller-main.mjs'),{},join(config.initialRoot,'installer'),'installer',{args:[controllerConfigPath],startIdentity});const r=await waitFor(origin('controllerMetadata'),'/metadata',{'x-platform-internal-key':keys.controller});const identity=await r.json();invariant(identity.instanceId===config.instanceId&&identity.artifactDigest===release.components.installer.artifactDigest&&identity.inputFingerprint===release.components.installer.inputFingerprint&&identity.startIdentity===startIdentity,'INITIAL_CONTROLLER_ACTUAL_IDENTITY_MISMATCH');return child;}
   await startController();
   const bootstrap=await fetch(origin('coordinator')+'/internal/upgrades/bootstrap',{method:'POST',headers:{'x-platform-internal-key':keys.controller,'x-platform-instance-id':config.instanceId},signal:AbortSignal.timeout(120000)});await assertInitialBootstrapResponse(bootstrap);
-  const info={instanceId:config.instanceId,root,entryOrigin:entry.origin,coordinatorOrigin:coordinator.origin,initialRoot:config.initialRoot,ports,pids:Object.fromEntries([...children].map(([n,c])=>[n,c.pid])),native:process.platform==='linux'&&process.arch==='arm64',isolation:adapter?'containers':'processes',roleContainers,bindingPath,ownerBindingPath,controllerConfigPath};
+  const info={instanceId:config.instanceId,root,entryOrigin:entry.origin,coordinatorOrigin:coordinator.origin,initialRoot:config.initialRoot,ports,pids:Object.fromEntries([...children].map(([n,c])=>[n,c.pid])),native:process.platform==='linux'&&process.arch==='arm64',isolation:adapter?'containers':'processes',roleContainers,bindingPath,ownerBindingPath,controllerConfigPath,...(historyScale?{historyScale}:{})};
   await atomicJson(join(root,'harness.json'),info);
   async function stopOwned(name,signal){const child=children.get(name);invariant(child,'OWNED_ROLE_REQUIRED');if(child.container){await adapter.signal(child.containerId,signal);return;}if(child.exitCode!==null||child.signalCode!==null)return;await new Promise(ok=>{child.once('exit',ok);child.kill(signal);});}
   async function currentController(){const authority=await readJson(join(paths.installer,'controller-authority.json'),null);if(!authority?.attemptId)return {initial:true,record:children.get('controller')};const record=supervisor.ownedProcesses().find(row=>row.kind==='installer'&&row.startIdentity===authority.startIdentity);invariant(record&&record.artifactDigest===authority.artifactDigest,'CURRENT_CONTROLLER_NOT_OWNED');return {initial:false,record};}
