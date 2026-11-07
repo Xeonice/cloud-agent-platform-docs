@@ -33,6 +33,8 @@ const same = (a, b, code) => invariant(canonical(a) === canonical(b), code);
  * SDK directory, business DB, Guest filesystem or child executable is read.
  * /proc is the Owner's container PID namespace. PID $$ and its descendants are
  * explicitly excluded by the parser, even if a transport makes it a PID1 child.
+ * Stable historical zombies remain in the proof; live-to-zombie changes fail.
+ * PID1, bwrap and VMM processes must remain live. R/S scheduler states are not identity.
  */
 export const OWNER_PROC_COLLECTOR = String.raw`set -eu
 round=1
@@ -52,10 +54,14 @@ while [ "$round" -le 2 ]; do
     [ "$#" -ge 20 ] || exit 76
     state=$1
     ppid=$2
-    [ "$state" != Z ] && [ "$state" != X ] || exit 76
+    case "$state" in
+      Z) liveness=zombie ;;
+      R|S|D|T|t|K|W|P|I) liveness=live ;;
+      *) exit 76 ;;
+    esac
     shift 19
     ticks=$1
-    printf 'P\t%s\t%s\t%s\t%s\t%s\n' "$round" "$pid" "$ppid" "$ticks" "$comm"
+    printf 'P\t%s\t%s\t%s\t%s\t%s\t%s\n' "$round" "$pid" "$ppid" "$ticks" "$comm" "$liveness"
   done
   printf 'E\t%s\t%s\n' "$round" "$count"
   round=$((round + 1))
@@ -102,6 +108,11 @@ function processRows(rows, collectorPid) {
   for (const p of rows.values()) {
     if (excluded.has(p.pid)) continue;
     invariant(descendants.has(p.pid), "OWNER_PROC_UNROOTED_PROCESS");
+    invariant(
+      !(p.pid === 1 || /bwrap|krun|vmm/i.test(p.comm)) ||
+        p.livenessClass === "live",
+      "OWNER_PROC_REQUIRED_PROCESS_NOT_LIVE",
+    );
     result.push(p);
   }
   return result.sort((a, b) => a.pid - b.pid);
@@ -135,13 +146,14 @@ export function parseOwnerProcSnapshot(output) {
     } else if (p[0] === "P") {
       invariant(
         active &&
-          p.length === 6 &&
+          p.length === 7 &&
           rounds.get(p[1]) === active &&
           /^[1-9][0-9]*$/.test(p[2]) &&
           /^(0|[1-9][0-9]*)$/.test(p[3]) &&
           /^[1-9][0-9]{0,24}$/.test(p[4]) &&
           text(p[5]) &&
-          p[5].length <= 64,
+          p[5].length <= 64 &&
+          ["live", "zombie"].includes(p[6]),
         "OWNER_PROC_STAT_INVALID",
       );
       const row = {
@@ -149,6 +161,7 @@ export function parseOwnerProcSnapshot(output) {
         ppid: Number(p[3]),
         startTicks: p[4],
         comm: p[5],
+        livenessClass: p[6],
       };
       invariant(
         positive(row.pid) &&
@@ -579,7 +592,7 @@ export function validateOwnerKernelContinuityProof(proof) {
     for (const p of row.processes) {
       keys(
         p,
-        ["pid", "ppid", "startTicks", "comm"],
+        ["pid", "ppid", "startTicks", "comm", "livenessClass"],
         "OWNER_PROOF_PROCESS_FIELDS",
       );
       invariant(
@@ -589,6 +602,9 @@ export function validateOwnerKernelContinuityProof(proof) {
           /^[1-9][0-9]{0,24}$/.test(p.startTicks) &&
           text(p.comm) &&
           p.comm.length <= 64 &&
+          ["live", "zombie"].includes(p.livenessClass) &&
+          (!(p.pid === 1 || /bwrap|krun|vmm/i.test(p.comm)) ||
+            p.livenessClass === "live") &&
           !processes.has(p.pid),
         "OWNER_PROOF_PROCESS_INVALID",
       );

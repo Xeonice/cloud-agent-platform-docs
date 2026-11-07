@@ -22,11 +22,23 @@ const boot = "b6ac8ffb-f862-460b-a96d-2579d684c279";
 const sha = (c) => "sha256:" + c.repeat(64);
 const clone = (v) => structuredClone(v);
 const processes = () => [
-  { pid: 1, ppid: 0, startTicks: "100", comm: "node" },
-  { pid: 10, ppid: 1, startTicks: "123", comm: "bwrap" },
-  { pid: 11, ppid: 10, startTicks: "125", comm: "libkrun (vmm)" },
-  { pid: 999, ppid: 0, startTicks: "900", comm: "sh" },
-  { pid: 1000, ppid: 999, startTicks: "901", comm: "read-helper" },
+  { pid: 1, ppid: 0, startTicks: "100", comm: "node", livenessClass: "live" },
+  { pid: 10, ppid: 1, startTicks: "123", comm: "bwrap", livenessClass: "live" },
+  {
+    pid: 11,
+    ppid: 10,
+    startTicks: "125",
+    comm: "libkrun (vmm)",
+    livenessClass: "live",
+  },
+  { pid: 999, ppid: 0, startTicks: "900", comm: "sh", livenessClass: "live" },
+  {
+    pid: 1000,
+    ppid: 999,
+    startTicks: "901",
+    comm: "read-helper",
+    livenessClass: "live",
+  },
 ];
 function procText(change = () => {}) {
   let out = "";
@@ -35,7 +47,7 @@ function procText(change = () => {}) {
     change(rows, round);
     out += `H\t${round}\t${boot}\t999\n`;
     for (const p of rows)
-      out += `P\t${round}\t${p.pid}\t${p.ppid}\t${p.startTicks}\t${p.comm}\n`;
+      out += `P\t${round}\t${p.pid}\t${p.ppid}\t${p.startTicks}\t${p.comm}\t${p.livenessClass}\n`;
     out += `E\t${round}\t${rows.length}\n`;
   }
   return out;
@@ -493,5 +505,156 @@ test("input scope, concurrency, metadata leakage and failed collector all hold",
       }),
     ),
     /PROC_EXEC_FAILED/,
+  );
+});
+
+test("historical zombie identity is retained in complete Owner proofs and compared exactly", async () => {
+  const zombie = {
+    pid: 78,
+    ppid: 1,
+    startTicks: "180",
+    comm: "node",
+    livenessClass: "zombie",
+  };
+  const f = fixture({
+    onProc(v) {
+      v.stdout = procText((rows) => rows.push({ ...zombie }));
+    },
+  });
+  const before = await collect(f),
+    after = await collect(f);
+  assert.deepEqual(
+    before.rows[0].processes.find((p) => p.pid === 78),
+    zombie,
+  );
+  assert.equal(
+    compareOwnerKernelContinuityProof(before, after)
+      .ownerKernelContinuityQualified,
+    true,
+  );
+  assert.equal(before.guestProcessContinuityQualified, false);
+  const lost = clone(after);
+  lost.rows[0].processes = lost.rows[0].processes.filter((p) => p.pid !== 78);
+  lost.stableDigest = digest(lost.rows);
+  assert.throws(
+    () => compareOwnerKernelContinuityProof(before, lost),
+    /OWNER_KERNEL_OR_ASSIGNMENTS_CHANGED/,
+  );
+  const reused = clone(after);
+  reused.rows[0].processes.find((p) => p.pid === 78).startTicks = "181";
+  reused.stableDigest = digest(reused.rows);
+  assert.throws(
+    () => compareOwnerKernelContinuityProof(before, reused),
+    /OWNER_KERNEL_OR_ASSIGNMENTS_CHANGED/,
+  );
+});
+
+test("live to zombie transitions cannot pass a scan or a signed proof comparison", async () => {
+  assert.throws(
+    () =>
+      parseOwnerProcSnapshot(
+        procText((rows, round) => {
+          if (round === 2)
+            rows.push({
+              pid: 78,
+              ppid: 1,
+              startTicks: "180",
+              comm: "node",
+              livenessClass: "zombie",
+            });
+          else
+            rows.push({
+              pid: 78,
+              ppid: 1,
+              startTicks: "180",
+              comm: "node",
+              livenessClass: "live",
+            });
+        }),
+      ),
+    /CHANGED_DURING_SCAN/,
+  );
+  const before = await collect(
+    fixture({
+      onProc(v) {
+        v.stdout = procText((rows) =>
+          rows.push({
+            pid: 78,
+            ppid: 1,
+            startTicks: "180",
+            comm: "node",
+            livenessClass: "live",
+          }),
+        );
+      },
+    }),
+  );
+  const after = clone(before);
+  after.rows[0].processes.find((p) => p.pid === 78).livenessClass = "zombie";
+  after.stableDigest = digest(after.rows);
+  assert.throws(
+    () => compareOwnerKernelContinuityProof(before, after),
+    /OWNER_KERNEL_OR_ASSIGNMENTS_CHANGED/,
+  );
+  for (const pid of [1, 10, 11]) {
+    assert.throws(
+      () =>
+        parseOwnerProcSnapshot(
+          procText((rows) => {
+            rows.find((p) => p.pid === pid).livenessClass = "zombie";
+          }),
+        ),
+      /OWNER_/,
+    );
+    const invalid = clone(before);
+    invalid.rows[0].processes.find((p) => p.pid === pid).livenessClass =
+      "zombie";
+    invalid.stableDigest = digest(invalid.rows);
+    assert.throws(() => validateOwnerKernelContinuityProof(invalid), /OWNER_/);
+  }
+});
+
+test("real shell records stable historical Z, normalizes R/S to live, and rejects dead X", async (t) => {
+  const root = await fs.mkdtemp(join(tmpdir(), "owner-proc-liveness-"));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(join(root, "sys/kernel/random"), { recursive: true });
+  await fs.writeFile(join(root, "sys/kernel/random/boot_id"), boot + "\n");
+  const rows = [
+    ...processes(),
+    {
+      pid: 78,
+      ppid: 1,
+      startTicks: "180",
+      comm: "node",
+      livenessClass: "zombie",
+    },
+  ];
+  async function writeState(p, state) {
+    await fs.writeFile(
+      join(root, String(p.pid), "stat"),
+      `${p.pid} (${p.comm}) ${[state, p.ppid, ...Array(17).fill(0), p.startTicks].join(" ")}\n`,
+    );
+  }
+  for (const p of rows) {
+    await fs.mkdir(join(root, String(p.pid)));
+    await writeState(p, p.livenessClass === "zombie" ? "Z" : "S");
+  }
+  const script = OWNER_PROC_COLLECTOR.replaceAll(
+    "/proc/",
+    root + "/",
+  ).replaceAll('"$$"', '"999"');
+  const a = parseOwnerProcSnapshot(
+    (await run("/bin/sh", ["-c", script], { timeout: 5000 })).stdout,
+  );
+  assert.equal(a.processes.find((p) => p.pid === 78).livenessClass, "zombie");
+  await writeState(rows[0], "R");
+  const b = parseOwnerProcSnapshot(
+    (await run("/bin/sh", ["-c", script], { timeout: 5000 })).stdout,
+  );
+  assert.deepEqual(a, b);
+  await writeState(rows.at(-1), "X");
+  await assert.rejects(
+    run("/bin/sh", ["-c", script], { timeout: 5000 }),
+    (e) => e.code === 76,
   );
 });
