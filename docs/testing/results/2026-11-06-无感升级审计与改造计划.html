@@ -70,14 +70,15 @@
   </aside>
   <main class="main" id="main">
     <header class="hero">
-      <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">A7计划已重排 · 尚未上线</span></div>
+      <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">实包性能通过 · Native待容量</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-      <p class="hero-lede">当前交付只推进已发布 A7 的验收与一次线上升级。先补同包大历史性能资格，再完成真实沙箱连续性验收，两项均通过后才发起新的生产请求。完整独立 Control 另排里程碑。Q12 原容量中断与历史失败不改写，详见下方当前计划。</p>
+      <p class="hero-lede">计划已重排并推送，固定A7实物在原镜像中完成65秒历史负载性能验证：三通道约20Hz、零失败、最大28ms，控制调用最大12ms。真实沙箱连续性验收尚未启动：宿主可用15.24GB，距离暂定22GiB规划仍缺8.38GB。小QA窗口已正常关闭，A7生产POST仍为0。</p>
       <div class="meta"><span>对象：公司实例原审计＋Mac mini后续验证</span><span>当前范围：A7兼容升级；独立Control另排</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
     </header>
 
     <section class="section" id="current-a7-plan-v2" aria-labelledby="current-a7-plan-v2-title">
       <div class="section-head"><span class="section-number">当前</span><h2 id="current-a7-plan-v2-title">11月9日重排：先关闭验证缺口，再执行一次更新</h2></div>
+      <div class="callout amber" style="margin-bottom:17px"><h3>本轮已执行：实包性能通过，完整Native等待额外空间</h3><p>计划2018a9a／边界澄清359a136先提交，再用原A7编译业务类、Node22.23.3／ABI127／glibc2.28镜像测试。277,135行＋4,053,536B明示合成证据；三lane各1,300对、约20.008Hz，零失败、最大27.852ms；64轮四轻RPC零失败、最大11.212ms，COUNT和大证据解析均0。2,201个加载文件匹配原header。</p><p>原件已完整取回；仅本次已退出的专项容器普通移除，原9条测试记录与私有数据保留。QA正常停止1.652秒，Build与CI本轮未改。宿主最终可用15,238,877,184B，距暂定22GiB规划仍差8,383,442,944B；约4.18GB文件缓存只是待资格候选。Q13新增0、A7生产请求0，联合资格仍HOLD。</p><p><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#a7-artifact-performance-v2-pass-native-capacity-held">本轮实际结果、原件和容量停止点 ↗</a></p></div>
       <div class="callout"><h3>交付目标：A7真实 confirmed，原沙箱、任务与终端保持连续</h3><p>固定已发布 A7 <code>v0.3.17-experiment.macmini.20261108.1</code>，来源 <code>e73bd023／API325aa5d0</code>，manifest <code>ff1fd0d2…</code>，tar <code>9bee8fd6…</code>。本轮不重建、不重签；工具和文档的新提交不改变包的身份。A7生产请求仍为0。</p></div>
       <div class="split" style="margin-top:17px">
         <div class="card"><h3>纠正容量预算</h3><p>Q12中断前已消耗14,256,414,720 B，加原4GiB保护线，只有18,551,382,016 B的前缀下界，尚非完整峰值。旧15GiB启动门废止；22GiB只是临时规划估算。重新分开核算公共缓存冷展开、Guest、SQLite／WAL、宿主与thin backing、失败归档和恢复余量；按各阶段预算放行。</p></div>
@@ -807,7 +808,7 @@
       <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#a7-published-q12-capacity-guard-not-qualified">A7完整产物、归档／清理、Q12失败与当前维护边界 ↗</a><a href="../changes/2026-10-20-独立升级控制与恢复测试计划.md#82-生产历史规模下的探测写入与失败恢复回归">独立测试计划§8.2：原规模与SLO门不变 ↗</a></div>
     </section>
 
-    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-09 更新 · A7同包联合验收计划／生产待执行</span></footer>
+    <footer class="footer"><span>Agent 管理平台 · 无感升级审计与改造计划</span><span>2026-11-09 更新 · A7实包性能通过／Native待容量</span></footer>
   </main>
 </div>
 <script>
