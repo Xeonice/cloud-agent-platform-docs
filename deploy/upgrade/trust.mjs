@@ -31,6 +31,7 @@ export function validatePolicy(p, {purpose='release'} = {}) {
   invariant(positive(p.retentionMs) && positive(p.migrationBatchMs) && p.migrationBatchMs < p.requestDeadlineMs && positive(p.maxWalBytes) && positive(p.minFreeBytes), 'INVALID_BUDGET_POLICY');
   invariant(Array.isArray(p.fallbacks) && p.fallbacks.length > 0 && p.fallbacks.every(f => RELEASE.test(f.releaseId) && DIGEST.test(f.apiDigest) && DIGEST.test(f.webDigest) && (purpose==='qualification' ? typeof f.rehearsed === 'boolean' : f.rehearsed === true)), 'FALLBACK_NOT_REHEARSED');
   invariant(p.stopUserResources === false && p.restoreLiveVolume === false && p.contractInUpgrade === false, 'FORBIDDEN_DEPLOY_AUTHORITY');
+  if(p.coordinatorPreparationProfile!==undefined){invariant(p.coordinatorPreparationProfile==='coordinator-phased-v1','COORDINATOR_PREPARATION_PROFILE_UNSUPPORTED');const budget=p.candidateStartupMs===undefined?120000:p.candidateStartupMs;invariant(positive(budget)&&budget<=120000,'COORDINATOR_PREPARATION_BUDGET_INVALID');}
   return p;
 }
 export function validateManifest(m, { purpose = 'release' } = {}) {

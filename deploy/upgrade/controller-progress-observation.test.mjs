@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
 import { generateKeyPairSync } from "node:crypto";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,6 +10,7 @@ import { createInstanceController } from "./instance-controller.mjs";
 import { createCoordinatorClient } from "./coordinator-client.mjs";
 import { atomicJson } from "./io.mjs";
 import { digest, freezePlan, signManifest, verifyManifest } from "./trust.mjs";
+import { inspectHeldCoordinatorPreparation } from "./coordinator-preparation.mjs";
 
 const H = "sha256:" + "a".repeat(64),
   OLD = "sha256:" + "b".repeat(64);
@@ -34,6 +35,8 @@ async function fixture(
     holdSecondAck = false,
     progressCapability,
     checkpointEvidence,
+    coordinatorPreparation = false,
+    handoffHandler,
   } = {},
 ) {
   const root = await realpath(
@@ -72,6 +75,9 @@ async function fixture(
     stopUserResources: false,
     restoreLiveVolume: false,
     contractInUpgrade: false,
+    ...(coordinatorPreparation
+      ? { coordinatorPreparationProfile: "coordinator-phased-v1" }
+      : {}),
   };
   const manifest = {
     schemaVersion: 2,
@@ -261,6 +267,12 @@ async function fixture(
       let text = "";
       for await (const chunk of req) text += chunk;
       const body = JSON.parse(text);
+      if (path.endsWith("/coordinator-handoff")) {
+        assert.equal(typeof handoffHandler, "function");
+        assert.equal(body.fence, fence);
+        assert.equal(body.planDigest, plan.planDigest);
+        return send(await handoffHandler(body));
+      }
       if (path.endsWith("/claim")) {
         controllerId = body.controllerId;
         return send({
@@ -400,7 +412,7 @@ async function fixture(
     actual: async () => ({ weight: 0 }),
     fallbackEligibility: async () => ({ qualified: false }),
   };
-  const controller = createInstanceController({
+  const controllerOptions = {
     root,
     instanceId: attempt.instanceId,
     controllerId: "progress-controller",
@@ -408,7 +420,8 @@ async function fixture(
     coordinator,
     executor,
     signal: stopped.signal,
-  });
+  };
+  const controller = createInstanceController(controllerOptions);
   t.after(async () => {
     stopped.abort();
     operation.resolve();
@@ -419,7 +432,11 @@ async function fixture(
     await rm(root, { recursive: true, force: true });
   });
   return {
+    root,
+    journalPath: join(root, "journals", ID + ".json"),
     controller,
+    coordinator,
+    executor,
     snapshot,
     steps,
     events,
@@ -434,6 +451,12 @@ async function fixture(
     setProgressCapability: (value) => { progressCapability = value; },
     run: () => {
       running = controller.runOnce();
+      running.catch(() => {});
+      return running;
+    },
+    restart: () => {
+      fence++;
+      running = createInstanceController(controllerOptions).runOnce();
       running.catch(() => {});
       return running;
     },
@@ -635,3 +658,140 @@ test(
     assert.deepEqual(f.errors, []);
   },
 );
+
+function preparationRecord(input) {
+  const now = Date.now();
+  return {
+    schemaVersion: 1,
+    profile: "coordinator-phased-v1",
+    instanceId: input.attempt.instanceId,
+    attemptId: input.attempt.attemptId,
+    operationId: input.operationId,
+    planDigest: input.attempt.plan.planDigest,
+    targetDigest: input.attempt.targetDigest,
+    fence: input.fence,
+    state: "starting",
+    startupStartedAt: now,
+    startupDeadline: now + 120000,
+    prepareStartedAt: null,
+    prepareDeadline: null,
+    prepareSent: false,
+    candidate: null,
+    candidateDigest: null,
+    statusClassification: null,
+  };
+}
+
+test("Controller persists preparation checkpoints before the original HTTP command and retains phase after applied", async (t) => {
+  let f;
+  let prepareCalls = 0;
+  let expected;
+  f = await fixture(t, {
+    coordinatorPreparation: true,
+    handoffHandler: async (body) => {
+      prepareCalls++;
+      assert.equal(body.action, "prepare");
+      const row = JSON.parse(await readFile(f.journalPath, "utf8")).steps["coordinator-handoff"];
+      assert.equal(row.state, "applying");
+      assert.equal(row.operationId, body.operationId);
+      assert.equal(row.fence, body.fence);
+      assert.deepEqual(row.preparation, expected);
+      assert.equal(row.preparation.prepareSent, true, "the HTTP receiver sees the already-durable dispatch intent");
+      return { commitKnown: true, stage: "prepared" };
+    },
+  });
+  let completed;
+  f.executor.coordinatorHandoff = async (input) => {
+    assert.equal(input.attempt.plan.policy.coordinatorPreparationProfile, "coordinator-phased-v1");
+    assert.equal(typeof input.checkpointPreparation, "function");
+    const initial = preparationRecord(input);
+    await input.checkpointPreparation(initial);
+    assert.deepEqual(JSON.parse(await readFile(f.journalPath, "utf8")).steps["coordinator-handoff"].preparation, initial);
+    const candidate = { startIdentity: "fixed-prepared-candidate", artifactDigest: H };
+    const now = Date.now();
+    expected = { ...initial, state: "preparing", prepareStartedAt: now,
+      prepareDeadline: now + 120000, prepareSent: true, candidate,
+      candidateDigest: digest(candidate) };
+    await input.checkpointPreparation(expected);
+    await f.coordinator.coordinatorHandoff(input.attempt.attemptId, {
+      fence: input.fence, operationId: input.operationId, planDigest: input.attempt.plan.planDigest,
+      candidate, action: "prepare",
+    });
+    // The executor is a contract double; this tests Controller journal wiring,
+    // not actual handoff/Native qualification.
+    completed = { ...expected, state: "adopted-known", adoptedAt: Date.now() };
+    await input.checkpointPreparation(completed);
+    return { qualified: true, originalResourcesPreserved: true, singleWriter: true, maxControlPauseMs: 0 };
+  };
+  await assert.rejects(f.run(), { code: "EXPECTED_ROUTE_BOUNDARY" });
+  assert.equal(prepareCalls, 1);
+  const after = JSON.parse(await readFile(f.journalPath, "utf8")).steps["coordinator-handoff"];
+  assert.equal(after.state, "applied");
+  assert.deepEqual(after.preparation, completed);
+  assert.equal(f.events.filter((event) => event.kind === "step-applied" && event.payload.stepId === "coordinator-handoff").length, 1);
+  assert.deepEqual(f.errors, []);
+});
+
+test("Controller restart passes the original preparation record and preserves its historical fence in the same journal", async (t) => {
+  let f;
+  const statusCommands = [];
+  f = await fixture(t, {
+    coordinatorPreparation: true,
+    handoffHandler: async (body) => {
+      statusCommands.push(body);
+      assert.equal(body.action, "status");
+      return { definitelyNotApplied: true, stage: "absent" };
+    },
+  });
+  let original;
+  let starts = 0;
+  f.executor.coordinatorHandoff = async (input) => {
+    starts++;
+    const initial = preparationRecord(input);
+    await input.checkpointPreparation(initial);
+    const candidate = { startIdentity: "original-prepared-candidate", artifactDigest: H };
+    const now = Date.now();
+    original = { ...initial, state: "preparing", prepareStartedAt: now,
+      prepareDeadline: now + 120000, prepareSent: true, candidate,
+      candidateDigest: digest(candidate) };
+    await input.checkpointPreparation(original);
+    assert.deepEqual(JSON.parse(await readFile(f.journalPath, "utf8")).steps["coordinator-handoff"].preparation, original);
+    // Crash after fsynced may-have-sent, including the pre-fetch gap. A new
+    // Controller must never interpret a subsequent absent row as replay rights.
+    throw Object.assign(new Error("Simulated Controller process loss"), { code: "CONTROLLER_STOPPED" });
+  };
+  await assert.rejects(f.run(), { code: "CONTROLLER_STOPPED" });
+  const before = JSON.parse(await readFile(f.journalPath, "utf8"));
+  assert.equal(before.steps["coordinator-handoff"].state, "applying");
+  assert.equal(f.snapshot().attempt.state, "candidate-ready");
+  f.executor.reconcile = async (input) => {
+    assert.equal(input.step.kind, "coordinator-handoff");
+    assert.deepEqual(input.local.preparation, original);
+    assert.equal(input.local.fence, original.fence);
+    assert.equal(input.fence, original.fence + 1);
+    assert.equal(typeof input.checkpointPreparation, "function");
+    return inspectHeldCoordinatorPreparation({
+      scope: { instanceId: input.attempt.instanceId, attemptId: input.attempt.attemptId,
+        operationId: input.local.operationId, planDigest: input.attempt.plan.planDigest,
+        targetDigest: input.attempt.targetDigest, fence: input.fence },
+      local: input.local, checkpoint: input.checkpointPreparation,
+      assertFence: () => f.coordinator.assertFence(input.attempt.attemptId, input.fence),
+      status: (body, options) => f.coordinator.coordinatorHandoff(input.attempt.attemptId, body, options),
+    });
+  };
+  await assert.rejects(f.restart(), { code: "COORDINATOR_PREPARATION_HELD" });
+  const retained = JSON.parse(await readFile(f.journalPath, "utf8")).steps["coordinator-handoff"];
+  assert.equal(starts, 1, "neither start nor prepare may be replayed by a restart");
+  assert.equal(statusCommands.length, 1);
+  assert.equal(statusCommands[0].operationId, original.operationId);
+  assert.equal(statusCommands[0].fence, original.fence + 1);
+  assert.equal(retained.fence, original.fence);
+  assert.equal(retained.preparation.fence, original.fence);
+  assert.equal(retained.preparation.inspectionFence, original.fence + 1);
+  assert.equal(retained.preparation.startupDeadline, original.startupDeadline);
+  assert.equal(retained.preparation.prepareDeadline, original.prepareDeadline);
+  assert.equal(retained.preparation.state, "restart-held");
+  assert.equal(retained.preparation.statusClassification, "absent-not-proof");
+  assert.equal(retained.preparation.prepareSent, true);
+  assert.deepEqual(f.errors, []);
+});

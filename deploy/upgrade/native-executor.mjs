@@ -3,6 +3,7 @@ import { invariant, canonical, digest, DIGEST } from './trust.mjs';
 import { inspectObservation } from './circuit-breaker.mjs';
 import { entryControlHeaders, entryBindingDigest } from './control-entry-context.mjs';
 import { quiesceCoordinator } from './coordinator-quiesce.mjs';
+import { coordinatorPreparationBudget, prepareCoordinatorPhased, inspectHeldCoordinatorPreparation } from './coordinator-preparation.mjs';
 function fixedBinding(value) {
   const result={...value};for(const key of ['inFlight','activeWS','wsByDigest','httpByDigest'])delete result[key];return result;
 }
@@ -241,7 +242,41 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
       await read(()=>new Promise(ok=>setTimeout(ok,Math.min(1000,Math.max(1,deadline-Date.now())))));
     }
   }
-  async function roleTransition(kind,{artifact,attempt,fence,operationId},statusOnly=false) {
+  async function phasedCoordinatorTransition({artifact,attempt,fence,operationId,checkpointPreparation,local},statusOnly) {
+    // The independent Control journal has a separate unknown-command protocol.
+    // This legacy bridge profile cannot silently change that protocol.
+    invariant(!controlContext,'COORDINATOR_PHASED_INDEPENDENT_CONTROL_UNQUALIFIED');
+    const budgetMs=coordinatorPreparationBudget(attempt.plan.policy);
+    const scope={instanceId,attemptId:attempt.attemptId,operationId,planDigest:attempt.plan.planDigest,targetDigest:attempt.targetDigest,fence};
+    const assertFence=()=>coordinator.assertFence(attempt.attemptId,fence);
+    const rpc=(body,options)=>coordinator.coordinatorHandoff(attempt.attemptId,body,options);
+    try {
+      if(statusOnly)return await inspectHeldCoordinatorPreparation({scope,local,checkpoint:checkpointPreparation,status:rpc,assertFence});
+      const result=await prepareCoordinatorPhased({scope,budgetMs,checkpoint:checkpointPreparation,assertFence,
+        start:timeout=>start('coordinator',artifact,attempt,fence,timeout),
+        ready:deadline=>waitProcess('coordinator',attempt,fence,deadline),
+        baseline:async deadline=>{
+          while(true){remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');await assertFence();const measured=await boundedObservation(attempt,fence,0,deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED'),p=measured.probes,baseline=measured.baseline,hard=measured.invariants;remainingStartup(deadline,'COORDINATOR_BASELINE_NOT_QUALIFIED');
+            const enough=Number(baseline?.requests)>=attempt.plan.policy.minRequests;
+            const safe=measured.sharedStateHealthy===true&&measured.continuity?.qualified===true&&hard&&['unauthorizedStops','resourceRebuilds','duplicateCommands','duplicateOccurrences','writerConflicts','migrationDifferences','integrityFailures'].every(k=>hard[k]===0)&&p?.hz>=attempt.plan.policy.probeHz&&p.failures===0&&p.maxLatencyMs<=attempt.plan.policy.requestDeadlineMs&&p.attachMaxMs<=attempt.plan.policy.attachDeadlineMs&&baseline?.errorRate===0;
+            if(enough&&safe)return;await new Promise(ok=>setTimeout(ok,Math.min(100,remainingStartup(deadline))));
+          }
+        },
+        prepare:rpc,status:rpc,
+        quiesce:(body,deadline)=>quiesceCoordinator({coordinator,attemptId:attempt.attemptId,body,deadline,statusReadDeadline:deadline}),
+        release:rpc,adopt:rpc});
+      const applied=result.evidence??result;
+      invariant(applied.qualified===true&&applied.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');
+      invariant(Number.isSafeInteger(applied.generation)&&applied.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');
+      const proof=await sourceBaseline(attempt,fence,applied.generation);
+      return {...applied,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};
+    } catch(error) {error.suppressRecovery=true;throw error;}
+  }
+  async function roleTransition(kind,input,statusOnly=false) {
+    const {artifact,attempt,fence,operationId}=input;
+    const phased=coordinatorPreparationBudget(attempt.plan.policy);
+    if(phased!==null)invariant(!controlContext,'COORDINATOR_PHASED_INDEPENDENT_CONTROL_UNQUALIFIED');
+    if(kind==='coordinator'&&phased!==null)return phasedCoordinatorTransition(input,statusOnly);
     const deadline=statusOnly?0:Date.now()+(attempt.plan.policy.candidateStartupMs||120000);
     await coordinator.assertFence(attempt.attemptId,fence);const rpc=kind==='owner'?coordinator.ownerCandidate:coordinator.coordinatorHandoff;invariant(typeof rpc==='function','ROLE_TRANSITION_RPC_REQUIRED');
     if(statusOnly){const observed=await supervise('/observe',attempt,fence,kind);if(observed.definitelyAbsent)return {definitelyNotApplied:true};const result=await rpc(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate:observed.record,action:'status'});if(result.applied===true&&result.evidence?.qualified===true){let evidence=result.evidence;if(kind==='coordinator'){invariant(Number.isSafeInteger(evidence.generation)&&evidence.generation>0,'COORDINATOR_SOURCE_BASELINE_GENERATION_UNKNOWN');const proof=await sourceBaseline(attempt,fence,evidence.generation);evidence={...evidence,sourceBaseline:proof.baseline,sourceBaselineAdmission:proof.bindingAdmission};}return {applied:true,evidence,completedWork:1};}invariant(result.definitelyNotApplied===true,'ROLE_TRANSITION_RESULT_UNKNOWN');return result;}
@@ -259,7 +294,7 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
   }
   return {
     refreshConfirmedFence,
-    async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT'); await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,controlContext?'package':'installer'); },
+    async prepare({download,attempt,fence}) { invariant(attempt.plan.package.format==='native-tar','UNSUPPORTED_EXECUTOR_FORMAT');if(coordinatorPreparationBudget(attempt.plan.policy)!==null)invariant(!controlContext,'COORDINATOR_PHASED_INDEPENDENT_CONTROL_UNQUALIFIED');await coordinator.assertFence(attempt.attemptId,fence); return supervise('/publish',attempt,fence,controlContext?'package':'installer'); },
     async installerIsCurrent({attempt,fence}){const identity=await supervise('/current-installer',attempt,fence,'installer');return identity.artifactDigest===attempt.manifest.components.installer.artifactDigest&&identity.inputFingerprint===attempt.manifest.components.installer.inputFingerprint;},
     async installerCandidate({artifact,attempt,fence}){const record=await start('installer',artifact,attempt,fence);const deadline=Date.now()+120000;while(true){const result=await supervise('/observe',attempt,fence,'installer');if(result.qualified===true)return {...record,...result.identity};invariant(Date.now()<deadline,'INSTALLER_CANDIDATE_STARTUP_EXCEEDED');await new Promise(ok=>setTimeout(ok,100));}},
     async installerHandoff({attempt,fence,operationId,candidate}){const evidence=await coordinator.controllerHandoff(attempt.attemptId,{fence,operationId,planDigest:attempt.plan.planDigest,candidate,action:'adopt'});invariant(evidence.commitKnown===true&&evidence.authorityTransferred===true,'CONTROLLER_HANDOFF_UNKNOWN');return supervise('/activate-installer',attempt,fence,'installer');},
@@ -275,14 +310,14 @@ export function createNativeExecutor({root,instanceId,coordinator,entryOrigin,en
         invariant(Date.now()<deadline,'CANDIDATE_STARTUP_BUDGET_EXCEEDED');await new Promise(ok=>setTimeout(ok,250));
       }
     },
-    async reconcile({step,attempt,fence,local}) {
+    async reconcile({step,attempt,fence,local,checkpointPreparation}) {
       await coordinator.assertFence(attempt.attemptId,fence);
       if(step.kind==='route'||step.kind==='web') {
         const actual=await entry('/binding');const applied=step.kind==='route'?actual.weight===step.weight&&actual.candidateApi?.digest===attempt.manifest.components.api.artifactDigest:actual.web.digest===attempt.manifest.components.web.artifactDigest;
         return applied?{applied:true,evidence:actual,completedWork:1}:{definitelyNotApplied:true};
       }
       if(step.kind==='installer-handoff'){const observed=await supervise('/observe',attempt,fence,'installer');if(observed.definitelyAbsent)return {definitelyNotApplied:true};invariant(observed.qualified===true,'INSTALLER_IDENTITY_UNKNOWN');return {definitelyNotApplied:true};}
-      if(step.kind==='owner-candidate'||step.kind==='coordinator-handoff')return roleTransition(step.kind==='owner-candidate'?'owner':'coordinator',{attempt,fence,operationId:local.operationId},true);
+      if(step.kind==='owner-candidate'||step.kind==='coordinator-handoff')return roleTransition(step.kind==='owner-candidate'?'owner':'coordinator',{attempt,fence,operationId:local.operationId,local,checkpointPreparation},true);
       if(step.kind==='candidate') {
         const deadline=Date.now()+(attempt.plan.policy.candidateStartupMs||120000),binding=await entry('/binding'),admitted=await admitConfirmedSource(attempt,fence,binding,deadline,'CANDIDATE_STARTUP_BUDGET_EXCEEDED');
         const first=await supervise('/observe',attempt,fence,'api');const observed=first.definitelyAbsent?first:await waitProcess('api',attempt,fence,deadline);

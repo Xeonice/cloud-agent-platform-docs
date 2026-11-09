@@ -86,8 +86,13 @@ export function createInstanceController({root,downloadRoot=root,instanceId,cont
         progressTask=serializeMutation(observeDurableProgress).catch(e=>{if(!observationsStopped)leaseLost=e;}).finally(()=>{progressTask=null;});
       },1000);progressTimer.unref();
       async function applied(step,evidence,completedWork) {
-        const receiptDigest=digest(evidence);const next=await commit('step-applied',{stepId:step.stepId,receiptDigest,completedWork,evidence});journal.steps[step.stepId]={state:'applied',receiptDigest,evidence,completedWork};await atomicJson(journalPath,journal);return next;
+        const receiptDigest=digest(evidence);const next=await commit('step-applied',{stepId:step.stepId,receiptDigest,completedWork,evidence});const preparation=journal.steps[step.stepId]?.preparation;journal.steps[step.stepId]={state:'applied',receiptDigest,evidence,completedWork,...(preparation?{preparation}:{})};await atomicJson(journalPath,journal);return next;
       }
+      const preparationCheckpoint=(step,operationId)=>async value=>{
+        await assertFence();const local=journal.steps[step.stepId];
+        invariant(step.kind==='coordinator-handoff'&&local?.state==='applying'&&local.operationId===operationId&&value.instanceId===instanceId&&value.attemptId===attempt.attemptId&&value.operationId===operationId&&value.planDigest===plan.planDigest&&value.targetDigest===attempt.targetDigest&&(value.fence===session.fence||value.state==='restart-held'&&value.inspectionFence===session.fence&&value.fence===local.preparation?.fence),'COORDINATOR_PREPARATION_JOURNAL_SCOPE_CHANGED');
+        local.preparation=structuredClone(value);await atomicJson(journalPath,journal);await assertFence();
+      };
       let artifact,candidate,download;
       if(record.recovery?.state==='recovering'){
         const recoveryPlan=record.recoveryPlan;invariant(recoveryPlan?.triggeringAttemptId===attempt.attemptId&&recoveryPlan.planDigest===record.recovery.planDigest,'FIXED_RECOVERY_PLAN_REQUIRED');const unsignedRecovery={...recoveryPlan};delete unsignedRecovery.planDigest;invariant(digest(unsignedRecovery)===recoveryPlan.planDigest,'RECOVERY_PLAN_CHANGED');
@@ -101,10 +106,10 @@ export function createInstanceController({root,downloadRoot=root,instanceId,cont
       for(const step of plan.steps) {
         session.currentStep={stepId:step.stepId,kind:step.kind};
         await assertFence();const prior=await coordinator.step(attempt.attemptId,step.stepId);
-        if(prior?.state==='applied'||prior?.applied===true){if(step.kind==='installer-handoff'&&!await executor.installerIsCurrent({attempt,fence:session.fence})){const candidateInstaller=prior.evidence;await stopObservations();await executor.installerHandoff({attempt,fence:session.fence,operationId:candidateInstaller.operationId,candidate:candidateInstaller});return {state:'controller-handoff',attemptId:attempt.attemptId};}journal.steps[step.stepId]={state:'applied',...prior};if(step.kind==='download')download=prior.evidence;if(step.kind==='verify')artifact=prior.evidence;if(step.kind==='candidate')candidate=prior.evidence;continue;}
+        if(prior?.state==='applied'||prior?.applied===true){if(step.kind==='installer-handoff'&&!await executor.installerIsCurrent({attempt,fence:session.fence})){const candidateInstaller=prior.evidence;await stopObservations();await executor.installerHandoff({attempt,fence:session.fence,operationId:candidateInstaller.operationId,candidate:candidateInstaller});return {state:'controller-handoff',attemptId:attempt.attemptId};}const preparation=journal.steps[step.stepId]?.preparation;journal.steps[step.stepId]={state:'applied',...prior,...(preparation?{preparation}:{})};if(step.kind==='download')download=prior.evidence;if(step.kind==='verify')artifact=prior.evidence;if(step.kind==='candidate')candidate=prior.evidence;continue;}
         const local=journal.steps[step.stepId];
         if(local?.state==='applying') {
-          const reconciled=await executor.reconcile?.({step,attempt,fence:session.fence,local});
+          const reconciled=await executor.reconcile?.({step,attempt,fence:session.fence,local,checkpointPreparation:preparationCheckpoint(step,local.operationId)});
           if(reconciled?.applied){await applied(step,reconciled.evidence,reconciled.completedWork);if(step.kind==='download')download=reconciled.evidence;if(step.kind==='verify')artifact=reconciled.evidence;if(step.kind==='candidate')candidate=reconciled.evidence;continue;}
           invariant(reconciled?.definitelyNotApplied===true||['download','verify','observe','activation','migration'].includes(step.kind),'APPLICATION_RESULT_UNKNOWN');
         }
@@ -130,7 +135,7 @@ export function createInstanceController({root,downloadRoot=root,instanceId,cont
         }else if(step.kind==='candidate') {
           artifact ||= journal.steps['package-verify']?.evidence;candidate=await executor.candidate({artifact,attempt,fence:session.fence,operationId});await applied(step,candidate,1);
         }else if(step.kind==='owner-candidate'||step.kind==='coordinator-handoff') {
-          artifact ||= journal.steps['package-verify']?.evidence;const evidence=step.kind==='owner-candidate'?await executor.ownerCandidate({artifact,attempt,fence:session.fence,operationId}):await executor.coordinatorHandoff({artifact,attempt,fence:session.fence,operationId});
+          artifact ||= journal.steps['package-verify']?.evidence;const evidence=step.kind==='owner-candidate'?await executor.ownerCandidate({artifact,attempt,fence:session.fence,operationId}):await executor.coordinatorHandoff({artifact,attempt,fence:session.fence,operationId,checkpointPreparation:preparationCheckpoint(step,operationId)});
           invariant(evidence.qualified===true&&evidence.originalResourcesPreserved===true,'ROLE_TRANSITION_UNCONFIRMED');if(step.kind==='coordinator-handoff')invariant(evidence.singleWriter===true&&evidence.maxControlPauseMs<=plan.policy.requestDeadlineMs,'COORDINATOR_HANDOFF_UNSAFE');
           await applied(step,evidence,1);
         }else if(step.kind==='route') {

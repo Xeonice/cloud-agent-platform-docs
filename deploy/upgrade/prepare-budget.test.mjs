@@ -53,7 +53,7 @@ async function listener(t, handler, port = 0) {
   return "http://127.0.0.1:" + server.address().port;
 }
 
-async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
+async function boundary(t, { budgetMs = 8000, delays = {}, extra, controlContext } = {}) {
   const calls = [];
   const record = {
     origin: "http://127.0.0.1:1",
@@ -162,9 +162,11 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
     entryKey: "e".repeat(32),
     supervisorOrigin: origin,
     supervisorKey: "s".repeat(32),
+    controlContext,
   });
   const attempt = {
     attemptId,
+    targetDigest: digest,
     manifest: {
       components: { web: { artifactDigest: digest, webRevision: revision } },
     },
@@ -207,6 +209,94 @@ async function boundary(t, { budgetMs = 8000, delays = {}, extra } = {}) {
     }),
   };
 }
+
+test('explicit phased profile preserves real HTTP scope and durable dispatch before prepare', async t => {
+  const records = [];
+  const f = await boundary(t, { budgetMs: 300, delays: { '/start': 80, '/observe': 80,
+    '/internal/upgrades/observation': 50, prepare: 180 },
+    extra: async ({ body }) => {
+      if (body?.action !== 'prepare') return;
+      assert.equal(records.at(-1).prepareSent, true);
+      assert.equal(records.at(-1).operationId, operationId);
+      return { commitKnown: true, stage: 'prepared' };
+    },
+  });
+  f.input.attempt.plan.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+  f.input.checkpointPreparation = async row => records.push(structuredClone(row));
+  const result = await f.executor.coordinatorHandoff(f.input);
+  assert.equal(result.qualified, true);
+  assert.equal(records.at(-1).state, 'adopted-known');
+  assert.equal(f.calls.filter(call => call.phase === 'prepare').length, 1);
+  const b = records.find(row => row.prepareStartedAt !== null);
+  assert.equal(b.prepareDeadline - b.prepareStartedAt, 300);
+  assert.ok(b.prepareStartedAt < b.startupDeadline);
+  assert.deepEqual(criticalCalls(f).map(call => call.phase), ['quiesce', 'release', 'adopt']);
+  for (const call of f.calls.filter(call => call.body?.action)) assert.deepEqual(call.body, f.body(call.phase));
+});
+
+test('real lost prepare response resumes the same original operation using only status', async t => {
+  let prepared = false;
+  const records = [];
+  const f = await boundary(t, { budgetMs: 800,
+    extra: async ({ body, response }) => {
+      if (body?.action === 'prepare') {
+        assert.equal(records.at(-1).prepareSent, true);
+        prepared = true; response.destroy(); return null;
+      }
+      if (body?.action === 'status') {
+        assert.equal(prepared, true);
+        return { commitKnown: true, applied: false, stage: 'prepared', resumeAction: 'quiesce' };
+      }
+    },
+  });
+  f.input.attempt.plan.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+  f.input.checkpointPreparation = async row => records.push(structuredClone(row));
+  assert.equal((await f.executor.coordinatorHandoff(f.input)).qualified, true);
+  assert.deepEqual(f.calls.filter(call => call.body?.action).map(call => call.phase),
+    ['prepare', 'status', 'quiesce', 'release', 'adopt']);
+  assert.equal(records.some(row => row.state === 'prepare-unknown'), true);
+});
+
+test('restart with sent prepare never uses the absent Supervisor replay shortcut', async t => {
+  const f = await boundary(t, { extra: async ({ body }) => {
+    if (body?.action === 'status') return { stage: 'absent', definitelyNotApplied: true };
+  } });
+  f.input.attempt.plan.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+  const original = { schemaVersion: 1, profile: 'coordinator-phased-v1',
+    instanceId: 'http-budget-case', attemptId, operationId, planDigest: digest, targetDigest: digest,
+    fence, state: 'prepare-unknown', startupStartedAt: 1000, startupDeadline: 2000,
+    prepareStartedAt: 1500, prepareDeadline: 2500, prepareSent: true,
+    candidate: f.record, candidateDigest: (await import('./trust.mjs')).digest(f.record) };
+  const records = [];
+  await assert.rejects(f.executor.reconcile({ step: { kind: 'coordinator-handoff' },
+    attempt: f.input.attempt, fence, local: { state: 'applying', operationId, preparation: original },
+    checkpointPreparation: async row => records.push(row),
+  }), { code: 'COORDINATOR_PREPARATION_HELD', suppressRecovery: true });
+  assert.equal(f.calls.filter(call => call.path === '/observe' || call.path === '/start').length, 0);
+  assert.deepEqual(f.calls.filter(call => call.body?.action).map(call => call.phase), ['status']);
+  assert.equal(records.at(-1).prepareDeadline, 2500);
+  assert.equal(records.at(-1).state, 'restart-held');
+});
+
+test('new profile cannot dispatch without its durable step journal', async t => {
+  const f = await boundary(t);
+  f.input.attempt.plan.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+  await assert.rejects(f.executor.coordinatorHandoff(f.input),
+    { code: 'COORDINATOR_PREPARATION_JOURNAL_REQUIRED', suppressRecovery: true });
+  assert.equal(f.calls.length, 0);
+});
+
+test('legacy phased profile is rejected before independent Control publishes or admits an Owner', async t => {
+  for (const method of ['prepare', 'ownerCandidate', 'coordinatorHandoff'])
+    await t.test(method, async t => {
+      const f = await boundary(t, { controlContext: () => ({}) });
+      f.input.attempt.plan.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+      f.input.attempt.plan.package = { format: 'native-tar' };
+      await assert.rejects(f.executor[method](f.input),
+        { code: 'COORDINATOR_PHASED_INDEPENDENT_CONTROL_UNQUALIFIED' });
+      assert.equal(f.calls.length, 0);
+    });
+});
 
 function criticalCalls(fixture) {
   return fixture.calls.filter((call) =>

@@ -6,7 +6,7 @@ import { invariant } from './trust.mjs';
 // deliberately not retryable. This does not make unknown Control commands safe
 // to replay; that journal continues to reject them independently.
 export async function quiesceCoordinator({ coordinator, attemptId, body, deadline,
-  clock = Date.now, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  statusReadDeadline, clock = Date.now, pause = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   // The old status handler checks operation/plan/fence before returning, but
   // does not echo/check candidate. Keep our own exact original value; every
   // mutating quiesce still runs the old candidate equality/identity checks.
@@ -31,7 +31,9 @@ export async function quiesceCoordinator({ coordinator, attemptId, body, deadlin
       await coordinator.assertFence(attemptId, fixed.fence);
       remaining();
       const status = await coordinator.coordinatorHandoff(attemptId,
-        { ...structuredClone(fixed), action: 'status' });
+        { ...structuredClone(fixed), action: 'status' },
+        statusReadDeadline === undefined ? undefined :
+          { statusRead: { deadline: Math.min(deadline, statusReadDeadline) } });
       remaining();
       invariant(status?.stage === 'prepared' && status.applied === false &&
         status.commitKnown === true && status.resumeAction === 'quiesce' &&

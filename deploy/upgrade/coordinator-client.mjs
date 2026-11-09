@@ -53,6 +53,18 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     invariant(Number.isSafeInteger(options.timeoutMs)&&options.timeoutMs>0&&options.timeoutMs<=120000,'INVALID_PREPARATION_TIMEOUT');
     return {timeoutMs:options.timeoutMs};
   }
+  function preparationScope(id,body) {
+    const safeId=value=>typeof value==='string'&&/^[a-zA-Z0-9._:-]{1,200}$/.test(value)?value:null;
+    return {instanceId:safeId(instanceId),attemptId:safeId(id),operationId:safeId(body?.operationId),fence:Number.isSafeInteger(body?.fence)&&body.fence>0?body.fence:null,planDigest:typeof body?.planDigest==='string'&&/^sha256:[a-f0-9]{64}$/.test(body.planDigest)?body.planDigest:null};
+  }
+  function coordinatorPreparationOptions(id,body,options) {
+    if(options?.statusRead===undefined)return preparationOptions(body,options);
+    invariant(body?.action==='status','PREPARATION_STATUS_READ_NOT_ALLOWED');
+    const read=options.statusRead,limit=Math.min(timeoutMs,5000);
+    invariant(options.timeoutMs===undefined&&read&&typeof read==='object'&&!Array.isArray(read)&&Object.keys(read).every(key=>['deadline','timeoutMs'].includes(key))&&Number.isSafeInteger(read.deadline)&&read.deadline>0&&Number.isSafeInteger(limit)&&limit>0&&(read.timeoutMs===undefined||Number.isSafeInteger(read.timeoutMs)&&read.timeoutMs>0&&read.timeoutMs<=limit),'INVALID_PREPARATION_STATUS_READ');
+    invariant(Object.values(preparationScope(id,body)).every(value=>value!==null),'PREPARATION_STATUS_SCOPE_INVALID');
+    return {timeoutMs:read.timeoutMs??limit,deadline:read.deadline,preparationStatusRead:true};
+  }
   function migrationOptions(body,options) {
     if(options?.timeoutMs===undefined)return undefined;
     invariant(['prepare','status'].includes(body?.action),'MIGRATION_TIMEOUT_NOT_ALLOWED');
@@ -68,7 +80,7 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     const started=Date.now(),monotonicStart=performance.now(),liveContext=requestContext?.();
     const requestTimeoutMs=Math.min(requestOptions?.timeoutMs??timeoutMs,Number.isSafeInteger(liveContext?.deadline)?liveContext.deadline-started:Infinity,requestOptions?.deadline===undefined?Infinity:requestOptions.deadline-started);
     const requestKind=path.endsWith('/authority-check')||path.endsWith('/renew')&&body?.checkOnly===true?'fence-check':path.endsWith('/lease-renew')||path.endsWith('/renew')?'lease-renew':path.endsWith('/progress-checkpoint')||path.includes('/progress-checkpoint?')?'progress-checkpoint':path.endsWith('/commit')||path.endsWith('/commit-receipt')?'event-commit':'control-read';
-    const traceId=randomUUID();let bindingMs=null,serializationMs=null,firstResponseMs=null,decodeMs=null;
+    const traceId=randomUUID();let bindingMs=null,serializationMs=null,firstResponseMs=null,decodeMs=null,requestDispatched=false,responseDecoded=false,completedRejection=false;
     try {
       const activeOrigin=requestOptions?.fixedOrigin??await actualOrigin(selection);
       bindingMs=performance.now()-monotonicStart;
@@ -80,16 +92,30 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
       const remaining=Math.ceil(requestTimeoutMs-(performance.now()-monotonicStart));
       if(remaining<=0)throw new DOMException('Control request deadline exceeded','TimeoutError');
       const headersStart=performance.now();
+      requestDispatched=true; // Even an immediate transport failure cannot prove no dispatch.
       const r=await fetcher(activeOrigin+path,{method:body?'POST':'GET',headers:{'content-type':'application/json','x-platform-internal-key':key,'x-platform-instance-id':instanceId,'x-platform-control-request-kind':requestKind,'x-platform-control-trace-id':traceId,...contextHeaders},body:serialized,signal:AbortSignal.timeout(remaining)});
       firstResponseMs=performance.now()-headersStart;const bodyStart=performance.now();
-      const result=await r.json();decodeMs=performance.now()-bodyStart;if(!r.ok)throw Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status,...(typeof result.sideEffectFree==='boolean'?{sideEffectFree:result.sideEffectFree}:{}),...(typeof result.retryable==='boolean'?{retryable:result.retryable}:{}),[completedQuiescedResponse]:r.status===425&&result.code==='APPLICATION_WRITER_QUIESCED'&&result.sideEffectFree===true&&result.retryable===true});
+      const result=await r.json();responseDecoded=true;decodeMs=performance.now()-bodyStart;
+      if(requestOptions?.preparationStatusRead&&performance.now()-monotonicStart>=requestTimeoutMs)throw new DOMException('Control request deadline exceeded','TimeoutError');
+      if(!r.ok) {
+        const rejection=Object.assign(new Error(result.error?.code||result.code||'COORDINATOR_RPC_FAILED'),{code:result.error?.code||result.code||'COORDINATOR_RPC_FAILED',status:r.status,...(typeof result.sideEffectFree==='boolean'?{sideEffectFree:result.sideEffectFree}:{}),...(typeof result.retryable==='boolean'?{retryable:result.retryable}:{}),[completedQuiescedResponse]:r.status===425&&result.code==='APPLICATION_WRITER_QUIESCED'&&result.sideEffectFree===true&&result.retryable===true});
+        completedRejection=true;throw rejection;
+      }
       return remember(result.data ?? result);
     } catch(error) {
       const failure=error instanceof Error?error:new Error('Coordinator RPC failed',{cause:error});
       const context={path:path.split('?')[0],action:['prepare','status','quiesce','release','adopt','batch'].includes(body?.action)?body.action:null,requestKind,traceId,timeoutMs:requestTimeoutMs,startedAt:new Date(started).toISOString(),elapsedMs:performance.now()-monotonicStart,bindingMs,serializationMs,firstResponseMs,decodeMs};
       // Only fixed routing/timing facts reach the durable fault receipt. Never
       // include origins, headers, body, credentials or query parameter values.
-      failure.rpcContext=context;failure.faultEvidence={rpc:context};throw failure;
+      failure.rpcContext=context;failure.faultEvidence={rpc:context};
+      if(requestOptions?.preparationScope) {
+        // A decoded rejection is not proof that the original operation had no effect.
+        const outcome={...requestOptions.preparationScope,requestDispatched,responseDecoded,result:!requestDispatched?'not-dispatched':completedRejection?'completed-rejection':'unknown',reconciliationRequired:requestDispatched};
+        // Scope is for the caller's original-operation reconciliation only;
+        // preserve the existing routing/timing-only durable fault evidence.
+        failure.preparationOutcome=outcome;
+      }
+      throw failure;
     }
   }
   const prefix=id=>'/internal/upgrades/'+encodeURIComponent(id);
@@ -146,11 +172,16 @@ export function createCoordinatorClient({ origin, instanceId, key, fetcher = fet
     controllerHandoff:(id,body)=>rpc(prefix(id)+'/controller-handoff',body),
     coordinatorHandoff:async(id,body,requestOptions)=>{
       if(independentControl&&body.action==='adopt') {
+        invariant(requestOptions?.statusRead===undefined,'PREPARATION_STATUS_READ_NOT_ALLOWED');
         const u=new URL(body.candidate?.managementOrigin??'');
         invariant(u.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(u.hostname)&&u.pathname==='/'&&!u.search&&!u.hash&&!u.username&&!u.password&&typeof body.candidate?.startIdentity==='string','UNSAFE_PREPARED_COORDINATOR_ORIGIN');
         return rpc('/internal/coordinator/adopt',{instanceId,attemptId:id,fence:body.fence,operationId:body.operationId,planDigest:body.planDigest,startIdentity:body.candidate.startIdentity},undefined,{fixedOrigin:u.origin});
       }
-      return rpc(prefix(id)+'/coordinator-handoff',body,{allowQuiescing:true,attemptId:id,fence:body.fence},preparationOptions(body,requestOptions));
+      const options=coordinatorPreparationOptions(id,body,requestOptions);
+      // Status remains one original operation read. In particular legacy absent
+      // never causes this client to send or repeat prepare.
+      const fixed=options?.preparationStatusRead||body.action==='prepare'?structuredClone(body):body;
+      return rpc(prefix(id)+'/coordinator-handoff',fixed,{allowQuiescing:true,attemptId:id,fence:fixed.fence,...(options?.preparationStatusRead?{routeDeadline:options.deadline}:{})},{...options,...(fixed.action==='prepare'?{preparationScope:preparationScope(id,fixed)}:{})});
     },
     ownerCandidate:async(id,body,requestOptions)=>rpc(prefix(id)+'/owner-candidate',body,undefined,preparationOptions(body,requestOptions)),
     coordinatorRecovery:(id,body)=>rpc(prefix(id)+'/coordinator-recovery',body),

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { atomicJson, fileDigest, treeManifest } from './io.mjs';
-import { canonical, digest, runInputFingerprint, validateManifest, signManifest, signQualificationManifest } from './trust.mjs';
+import { canonical, digest, runInputFingerprint, validatePolicy, validateManifest, signManifest, signQualificationManifest, verifyManifest, verifySignedManifest, freezePlan } from './trust.mjs';
 import { verifyControlPackageSignature } from './control-package.mjs';
 import { command } from './artifacts.mjs';
 import { buildSignedDistribution } from './build-distribution.mjs';
@@ -65,6 +65,56 @@ async function fixture(t) {
     url: 'https://example.invalid/control-fixture.tgz', format: 'native-tar', ...await fileDigest(archivePath) } };
   return { root, artifactRoot, controlManifestPath, controlEnvelope, control, pem, publicKey };
 }
+
+test('Coordinator preparation profile is opt-in and rejects unknown profiles or invalid opted-in budgets', () => {
+  const legacy = business().policy;
+  assert.equal(validatePolicy(legacy), legacy);
+  assert.equal(Object.hasOwn(legacy, 'coordinatorPreparationProfile'), false);
+  const oldExtension = { ...legacy, candidateStartupMs: 180000 };
+  assert.equal(validatePolicy(oldExtension), oldExtension);
+  for (const candidateStartupMs of [undefined, 1, 120000]) {
+    const policy = { ...legacy, coordinatorPreparationProfile: 'coordinator-phased-v1',
+      ...(candidateStartupMs === undefined ? {} : { candidateStartupMs }) };
+    assert.equal(validatePolicy(policy), policy);
+    assert.equal(Object.hasOwn(policy, 'candidateStartupMs'), candidateStartupMs !== undefined);
+  }
+  for (const coordinatorPreparationProfile of ['coordinator-phased-v2', '', null, true])
+    assert.throws(() => validatePolicy({ ...legacy, coordinatorPreparationProfile }),
+      { code: 'COORDINATOR_PREPARATION_PROFILE_UNSUPPORTED' });
+  for (const candidateStartupMs of [null, 0, -1, 120001, 1.5, '120000', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])
+    assert.throws(() => validatePolicy({ ...legacy, coordinatorPreparationProfile: 'coordinator-phased-v1', candidateStartupMs }),
+      { code: 'COORDINATOR_PREPARATION_BUDGET_INVALID' });
+});
+
+test('signed Coordinator preparation policy survives verification and freezing without claiming installer capabilities', () => {
+  const legacy = business(), manifest = structuredClone(legacy);
+  manifest.policy.coordinatorPreparationProfile = 'coordinator-phased-v1';
+  manifest.policy.candidateStartupMs = 120000;
+  completeEvidence(manifest);
+  assert.notEqual(runInputFingerprint(manifest), runInputFingerprint(legacy));
+  const key = generateKeyPairSync('ed25519');
+  const signed = signManifest(manifest, 'fixture', key.privateKey.export({ format: 'pem', type: 'pkcs8' }));
+  const roots = { schemaVersion: 1, channel: manifest.channel, distributionOrigins: ['https://example.invalid'],
+    keys: [{ id: 'fixture', publicKey: key.publicKey.export({ format: 'pem', type: 'spki' }) }] };
+  const current = { instanceId: 'isolated-fixture', releaseId: 'v0.0.1', channel: manifest.channel,
+    schema: 1, generation: 1, platform: 'linux', arch: 'arm64',
+    protocols: Object.fromEntries(['api', 'web', 'coordinator', 'installer'].map(name => [name, { min: 1, max: 1 }])),
+    ...Object.fromEntries(['api', 'web', 'coordinator', 'installer'].flatMap(name => [[name + 'Digest', H(9)], [name + 'InputFingerprint', H(9)]])) };
+  const verified = verifyManifest(signed, roots, current);
+  assert.deepEqual(verified.manifest.policy, manifest.policy);
+  const plan = freezePlan(verified, current);
+  assert.deepEqual(plan.policy, manifest.policy);
+  assert.equal(plan.planDigest, digest(Object.fromEntries(Object.entries(plan).filter(([name]) => name !== 'planDigest'))));
+  assert.deepEqual(plan.steps.map(step => step.kind),
+    freezePlan(verifyManifest(signManifest(legacy, 'fixture', key.privateKey.export({ format: 'pem', type: 'pkcs8' })), roots, current), current).steps.map(step => step.kind));
+  assert.deepEqual(manifest.components.installer, legacy.components.installer);
+  assert.equal(Object.hasOwn(manifest.components.installer, 'coordinatorPreparationProfile'), false);
+  for (const change of [policy => delete policy.coordinatorPreparationProfile,
+    policy => { policy.candidateStartupMs = 119999; }]) {
+    const tampered = structuredClone(signed);change(tampered.manifest.policy);
+    assert.throws(() => verifySignedManifest(tampered, roots), { code: 'SIGNATURE_OR_MANIFEST_DIGEST_INVALID' });
+  }
+});
 
 test('legacy fingerprint stays exact while complete release binds Control body, archive and qualified reports', async t => {
   const f = await fixture(t), legacy = business();
