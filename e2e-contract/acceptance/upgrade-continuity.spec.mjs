@@ -28,6 +28,11 @@ import {
 } from "../server/qualification-model.mjs";
 import { n01WebContinuity } from "../server/upgrade-web-continuity-contract.mjs";
 import {
+  createQualificationHttpObservation,
+  attachQualificationBrowserHttp,
+  observeQualificationApiFetch,
+} from "../native/qualification-http-observation.mjs";
+import {
   QUALIFICATION_TOOL_STARTUP_MS,
   QUALIFICATION_COUNTER_STARTUP_MS,
   inspectQualificationToolStartup,
@@ -36,6 +41,7 @@ import {
 
 const digest = (value) =>
   "sha256:" + createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const apiRequestObservers = new WeakMap();
 async function configuration() {
   const path = process.env.UPGRADE_ACCEPTANCE_CONFIG;
   if (!path)
@@ -61,12 +67,15 @@ async function json(
   headers = {},
   timeout = 120000,
 ) {
-  const response = await request.fetch(origin + path, {
-    method,
-    data,
-    headers: { Origin: origin, "X-Operation-Id": randomUUID(), ...headers },
-    timeout,
-  });
+  const response = await observeQualificationApiFetch(
+    apiRequestObservers.get(request), origin + path, method,
+    () => request.fetch(origin + path, {
+      method,
+      data,
+      headers: { Origin: origin, "X-Operation-Id": randomUUID(), ...headers },
+      timeout,
+    }),
+  );
   expect(response.status(), `${method} ${path}`).toBe(expected);
   return response.status() === 204 ? undefined : response.json();
 }
@@ -81,6 +90,8 @@ function transportEvidence(page) {
     traffic = [],
     mutations = [],
     output = [];
+  const httpObservation = createQualificationHttpObservation();
+  const detachHttpObservation = attachQualificationBrowserHttp(page, httpObservation);
   page.on("request", (request) => {
     const url = new URL(request.url());
     if (!url.pathname.startsWith("/api/")) return;
@@ -115,7 +126,7 @@ function transportEvidence(page) {
       // No cookie, socketSessionKey, private shellId, input or output is persisted.
     });
   });
-  return { ready, traffic, mutations, output };
+  return { ready, traffic, mutations, output, httpObservation, detachHttpObservation };
 }
 async function shell(page, name) {
   const button = page.getByTestId("terminal-tab-new");
@@ -373,6 +384,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
     void harness.runController();
     const origin = harness.entryOrigin,
       request = context.request;
+    apiRequestObservers.set(request, evidence.httpObservation);
     await page.goto(origin);
     // A fresh browser and the actual fixture's enabled passcode always require
     // this user flow. An immediate isVisible() before hydration can skip it while
@@ -2098,6 +2110,11 @@ test("real user acceptance, durable installation and original VM/terminal contin
     };
     throw error;
   } finally {
+    // Freeze the body window and detach before teardown can hang or throw.
+    // Unfinished requests remain explicitly pending; cleanup adds no samples.
+    const httpObservation = evidence.httpObservation.snapshot();
+    apiRequestObservers.delete(context.request);
+    evidence.detachHttpObservation();
     // This is coverage metadata, not a replacement for I01/I02/N01. Never pad or
     // rewrite this attempt's real handoff receipt to satisfy a scale target.
     if (fixture?.config.historyScale !== undefined && database) {
@@ -2134,6 +2151,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
         error: bodyErrorSummary,
         admissionDiagnostics,
         sourceAgentStartup,
+        httpObservation,
         historyScaleCoverage,
         ongoingProgress,
         publicObservation:
@@ -2234,6 +2252,7 @@ test("real user acceptance, durable installation and original VM/terminal contin
           assertions,
           probes: probeResult,
           requests: evidence.traffic,
+          httpObservation,
           upgradeObservation,
           businessCleanup,
           admissionRecovery,
