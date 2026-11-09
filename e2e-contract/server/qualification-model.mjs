@@ -56,15 +56,133 @@ function message(model, id, content, reason) {
     usage: { input_tokens: 1, output_tokens: 1 },
   };
 }
-async function bodyOf(req) {
+const MAX_INGRESS_RECORDS = 256;
+const INGRESS_CATEGORIES = [
+  "health", "auth-rejected", "route-rejected", "count-tokens",
+  "tool-issued", "tool-result-held", "auxiliary", "invalid-json",
+  "body-too-large", "missing-bash", "invalid-request", "client-abort", "fixture-close",
+];
+const INGRESS_METHODS = ["GET", "POST", "HEAD", "PUT", "PATCH", "DELETE", "OPTIONS", "OTHER"];
+
+// Independent transport evidence: fixed enums and numbers only. Neither the
+// request URL nor headers, body, key, error text or task content is retained.
+function createIngressObservation() {
+  const records = [];
+  const counts = {
+    started: 0, finished: 0, inFlight: 0, maximumInFlight: 0,
+    omittedRecords: 0, observationErrors: 0,
+  };
+  const routes = { health: 0, messages: 0, "count-tokens": 0, other: 0 };
+  const methods = Object.fromEntries(INGRESS_METHODS.map((name) => [name, 0]));
+  const categories = Object.fromEntries(INGRESS_CATEGORIES.map((name) => [name, 0]));
+  const statuses = { "200": 0, "400": 0, "401": 0, "404": 0 };
+  let closing = false;
+  const bump = (object, key) => {
+    object[key] = Math.min(Number.MAX_SAFE_INTEGER, object[key] + 1);
+  };
+  const safe = (action) => {
+    try { action(); } catch { bump(counts, "observationErrors"); }
+  };
+  return {
+    begin(req, res, pathname) {
+      let done = false, selected = false;
+      const started = performance.now();
+      const record = {
+        route: pathname === "/health" ? "health" : pathname === "/v1/messages" ? "messages"
+          : pathname === "/v1/messages/count_tokens" ? "count-tokens" : "other",
+        method: INGRESS_METHODS.includes(req.method) ? req.method : "OTHER",
+        category: "pending", status: null, outcome: "in-flight",
+        startedAtMs: Date.now(), decisionAtMs: null, finishedAtMs: null,
+        decisionElapsedMs: null, durationMs: null,
+      };
+      const finish = (outcome) => safe(() => {
+        if (done) return;
+        done = true;
+        try {
+          record.outcome = outcome;
+          record.finishedAtMs = Date.now();
+          record.durationMs = Math.max(0, performance.now() - started);
+          bump(counts, "finished");
+          counts.inFlight = Math.max(0, counts.inFlight - 1);
+          if (outcome !== "response-finished") bump(categories, outcome);
+        } finally {
+          req.off("aborted", aborted);
+          res.off("finish", finished);
+          res.off("close", closed);
+        }
+      });
+      const aborted = () => finish(closing ? "fixture-close" : "client-abort");
+      const finished = () => finish("response-finished");
+      const closed = () => finish(res.writableFinished ? "response-finished"
+        : closing ? "fixture-close" : "client-abort");
+      safe(() => {
+        bump(counts, "started");
+        bump(counts, "inFlight");
+        counts.maximumInFlight = Math.max(counts.maximumInFlight, counts.inFlight);
+        bump(routes, record.route);
+        bump(methods, record.method);
+        if (records.length < MAX_INGRESS_RECORDS) records.push(record);
+        else bump(counts, "omittedRecords");
+        req.once("aborted", aborted);
+        res.once("finish", finished);
+        res.once("close", closed);
+      });
+      return {
+        mark(category, status) {
+          safe(() => {
+            if (done || selected) return;
+            if (!INGRESS_CATEGORIES.includes(category) || !Object.hasOwn(statuses, String(status))) {
+              bump(counts, "observationErrors");
+              return;
+            }
+            selected = true;
+            record.category = category;
+            record.status = status;
+            record.decisionAtMs = Date.now();
+            record.decisionElapsedMs = Math.max(0, performance.now() - started);
+            bump(categories, category);
+            bump(statuses, String(status));
+          });
+        },
+        afterHandler() {
+          safe(() => {
+            if (res.writableFinished) finished();
+            else if (res.destroyed) closed();
+          });
+        },
+      };
+    },
+    closing() { closing = true; },
+    snapshot() {
+      return {
+        schemaVersion: 1, kind: "qualification-model-http-ingress-observation",
+        maximumRecords: MAX_INGRESS_RECORDS, ...counts,
+        routeCounts: { ...routes }, methodCounts: { ...methods },
+        // Branch counts can include an abort/fixture-close after a selected response.
+        categoryCounts: { ...categories }, responseStatusCounts: { ...statuses },
+        records: records.map((record) => ({ ...record })),
+      };
+    },
+  };
+}
+
+async function bodyOf(req, rejected) {
   let bytes = 0;
   const chunks = [];
   for await (const chunk of req) {
     bytes += chunk.length;
-    if (bytes > 8 * 1024 * 1024) throw new Error("MODEL_REQUEST_TOO_LARGE");
+    if (bytes > 8 * 1024 * 1024) {
+      rejected("body-too-large");
+      throw new Error("MODEL_REQUEST_TOO_LARGE");
+    }
     chunks.push(chunk);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch (error) {
+    rejected("invalid-json");
+    throw error;
+  }
 }
 export async function startQualificationModel({
   isolated,
@@ -91,9 +209,12 @@ export async function startQualificationModel({
     releasedTasks = new Set(),
     taskStreams = new Map(),
     releases = [];
+  const ingress = createIngressObservation();
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://qualification.invalid");
+    const observation = ingress.begin(req, res, url.pathname);
     if (req.method === "GET" && url.pathname === "/health") {
+      observation.mark("health", 200);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
@@ -104,6 +225,7 @@ export async function startQualificationModel({
       return;
     }
     if (req.headers["x-api-key"] !== secret) {
+      observation.mark("auth-rejected", 401);
       res.writeHead(401, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
@@ -120,13 +242,15 @@ export async function startQualificationModel({
       req.method !== "POST" ||
       !["/v1/messages", "/v1/messages/count_tokens"].includes(url.pathname)
     ) {
+      observation.mark("route-rejected", 404);
       res.writeHead(404);
       res.end();
       return;
     }
     try {
-      const input = await bodyOf(req);
+      const input = await bodyOf(req, (category) => observation.mark(category, 400));
       if (url.pathname.endsWith("/count_tokens")) {
+        observation.mark("count-tokens", 200);
         res.writeHead(200, { "content-type": "application/json" });
         res.end(JSON.stringify({ input_tokens: 1 }));
         return;
@@ -149,8 +273,10 @@ export async function startQualificationModel({
           ),
       );
       const tool = (input.tools ?? []).find((value) => value.name === "Bash");
-      if (marker && !toolResult && !tool)
+      if (marker && !toolResult && !tool) {
+        observation.mark("missing-bash", 400);
         throw new Error("ACTUAL_CLI_BASH_TOOL_REQUIRED");
+      }
       const phase = !marker
         ? "auxiliary"
         : toolResult
@@ -164,6 +290,7 @@ export async function startQualificationModel({
           "sha256:" +
           createHash("sha256").update(JSON.stringify(input)).digest("hex"),
       });
+      observation.mark(phase, 200);
       if (toolResult) {
         res.writeHead(200, {
           "content-type": "text/event-stream",
@@ -243,6 +370,7 @@ export async function startQualificationModel({
       send(res, { type: "message_stop" });
       res.end();
     } catch {
+      observation.mark("invalid-request", 400);
       res.writeHead(400, { "content-type": "application/json" });
       res.end(
         JSON.stringify({
@@ -253,6 +381,8 @@ export async function startQualificationModel({
           },
         }),
       );
+    } finally {
+      observation.afterHandler();
     }
   });
   await new Promise((ok, fail) => {
@@ -298,8 +428,10 @@ export async function startQualificationModel({
       requests: [...requests],
       finalResponses: releases.map((row) => ({ ...row })),
       activeStreams: held.size,
+      ingress: ingress.snapshot(),
     }),
     async close() {
+      ingress.closing();
       for (const res of held) res.destroy();
       await new Promise((ok) => {
         server.close(ok);
