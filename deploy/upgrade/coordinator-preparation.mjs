@@ -52,6 +52,15 @@ function preparationTiming(error) {
     requestDispatched: typeof error.preparationOutcome?.requestDispatched === 'boolean' ? error.preparationOutcome.requestDispatched : null,
     responseDecoded: typeof error.preparationOutcome?.responseDecoded === 'boolean' ? error.preparationOutcome.responseDecoded : null };
 }
+function preparationFailureEvidence(record) {
+  const code = value => typeof value === 'string' && /^[A-Z0-9_]{1,100}$/.test(value) ? value : null;
+  return { firstPrepareFailureCode: code(record.firstPrepareFailureCode),
+    firstPrepareFailureAt: typeof record.firstPrepareFailureAt === 'number' &&
+      Number.isFinite(record.firstPrepareFailureAt) ? record.firstPrepareFailureAt : null,
+    firstPrepareRpc: preparationTiming({ rpcContext: record.firstPrepareRpc,
+      preparationOutcome: record.firstPrepareRpc }),
+    holdReasonCode: code(record.holdReasonCode) };
+}
 
 /** Runs only in the original Controller incarnation. checkpoint is the existing
  * step's fsynced journal, never a second operation ledger. No SDK is opened. */
@@ -65,7 +74,9 @@ export async function prepareCoordinatorPhased({ scope: inputScope, budgetMs, ch
   let record = { schemaVersion: 1, profile: COORDINATOR_PHASED_PROFILE, ...scope,
     state: 'starting', startupStartedAt: startupBegan, startupDeadline: startupBegan + budgetMs,
     prepareStartedAt: null, prepareDeadline: null, prepareSent: false,
-    candidate: null, candidateDigest: null, statusClassification: null };
+    candidate: null, candidateDigest: null, statusClassification: null,
+    firstPrepareFailureCode: null, firstPrepareFailureAt: null, firstPrepareRpc: null,
+    holdReasonCode: null };
   const save = async patch => {
     record = { ...record, ...patch };
     await checkpoint(structuredClone(record));
@@ -77,7 +88,10 @@ export async function prepareCoordinatorPhased({ scope: inputScope, budgetMs, ch
   };
   const fenced = async deadline => { remaining(deadline); await assertFence(); remaining(deadline); };
   const held = async (error, state = 'prepare-unknown') => {
-    await save({ state, lastFailureCode: reasonCode(error), heldAt: clock() });
+    const holdReasonCode = reasonCode(error);
+    // lastFailureCode retains its historical final-error meaning. The first
+    // prepare failure remains separate when reconciliation ends differently.
+    await save({ state, lastFailureCode: holdReasonCode, holdReasonCode, heldAt: clock() });
     throw Object.assign(new Error('Coordinator preparation requires original-operation inspection'), {
       code: 'COORDINATOR_PREPARATION_HELD', suppressRecovery: true, cause: error,
       faultEvidence: { coordinatorPreparation: { scopeDigest: digest(scope), profile: record.profile,
@@ -85,7 +99,8 @@ export async function prepareCoordinatorPhased({ scope: inputScope, budgetMs, ch
         startupDeadline: record.startupDeadline, prepareStartedAt: record.prepareStartedAt,
         prepareDeadline: record.prepareDeadline, prepareSent: record.prepareSent,
         statusClassification: record.statusClassification, lastFailureCode: record.lastFailureCode,
-        prepareRpc: record.prepareRpc ?? null } },
+        prepareRpc: record.prepareRpc ?? null,
+        ...preparationFailureEvidence(record) } },
     });
   };
   const originalBody = action => ({ fence: scope.fence, operationId: scope.operationId,
@@ -122,9 +137,14 @@ export async function prepareCoordinatorPhased({ scope: inputScope, budgetMs, ch
     // and fetch never permits another prepare, even if status says absent.
     await save({ prepareSent: true, prepareSentAt: clock() });
     await fenced(record.prepareDeadline);
-    let receipt;
+    let receipt, prepareFailure;
     try {
-      receipt = await prepare(originalBody('prepare'), { timeoutMs: remaining(record.prepareDeadline) });
+      const body = originalBody('prepare'), options = { timeoutMs: remaining(record.prepareDeadline) };
+      try { receipt = await prepare(body, options); }
+      catch (error) {
+        prepareFailure = { code: reasonCode(error), at: clock(), rpc: preparationTiming(error) };
+        throw error;
+      }
       remaining(record.prepareDeadline);
       assertStatusScope(receipt, scope);
       invariant(receipt?.commitKnown === true && receipt.stage === 'prepared' &&
@@ -132,7 +152,11 @@ export async function prepareCoordinatorPhased({ scope: inputScope, budgetMs, ch
         'COORDINATOR_PREPARATION_ACK_INVALID');
       await save({ state: 'prepared-known', statusClassification: 'prepared', prepareAcknowledgedAt: clock() });
     } catch (error) {
-      await save({ state: 'prepare-unknown', lastFailureCode: reasonCode(error), prepareRpc: preparationTiming(error) });
+      await save({ state: 'prepare-unknown', lastFailureCode: reasonCode(error), prepareRpc: preparationTiming(error),
+        ...(prepareFailure && record.firstPrepareFailureCode === null ? {
+          firstPrepareFailureCode: prepareFailure.code, firstPrepareFailureAt: prepareFailure.at,
+          firstPrepareRpc: prepareFailure.rpc,
+        } : {}) });
       // Completed hard rejections and lost authority must stop immediately.
       if (Number.isInteger(error?.status) || /FENCE|SCOPE|IDENTITY|INTENT|CANDIDATE|PLAN|ACK_INVALID/.test(reasonCode(error)))
         return held(error);
@@ -207,6 +231,7 @@ export async function inspectHeldCoordinatorPreparation({ scope: inputScope, loc
     faultEvidence: { coordinatorPreparation: { scopeDigest: digest(scope), originalFence: record.fence,
       profile: record.profile, state: 'restart-held', prepareSent: record.prepareSent,
       statusClassification: observed, startupDeadline: record.startupDeadline,
-      prepareDeadline: record.prepareDeadline } },
+      prepareDeadline: record.prepareDeadline,
+      ...preparationFailureEvidence(record) } },
   });
 }

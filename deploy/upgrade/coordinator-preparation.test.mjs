@@ -11,6 +11,12 @@ const candidate = { artifactDigest: digest('coordinator'), startIdentity: 'origi
   pid: 42, origin: 'http://127.0.0.1:1234', artifactRoot: '/private/candidate-root' };
 const prepared = () => ({ stage: 'prepared', commitKnown: true, applied: false, resumeAction: 'quiesce' });
 const unknown = () => new DOMException('Response lost', 'TimeoutError');
+const timedPrepareFailure = () => Object.assign(unknown(), {
+  rpcContext: { action: 'prepare', startedAt: '2026-11-10T00:00:00.000Z',
+    traceId: '11111111-1111-4111-8111-111111111111', timeoutMs: 100, elapsedMs: 95,
+    bindingMs: 1, serializationMs: 0.1, firstResponseMs: null, decodeMs: null },
+  preparationOutcome: { requestDispatched: true, responseDecoded: false },
+});
 
 function fixture(overrides = {}) {
   let now = 1000, last;
@@ -57,6 +63,10 @@ test('A expiry cannot open B or send prepare', async () => {
   await assert.rejects(f.run(), { code: 'COORDINATOR_PREPARATION_HELD', suppressRecovery: true });
   assert.equal(f.last().state, 'startup-held');
   assert.equal(f.last().prepareDeadline, null);
+  assert.equal(f.last().firstPrepareFailureCode, null);
+  assert.equal(f.last().firstPrepareFailureAt, null);
+  assert.equal(f.last().firstPrepareRpc, null);
+  assert.equal(f.last().holdReasonCode, 'COORDINATOR_PREPARATION_EXPIRED');
   assert.deepEqual(mutations(f), []);
 });
 
@@ -96,11 +106,80 @@ test('late prepared is classification only; no critical mutation after B expiry'
   assert.equal(f.last().prepareDeadline, 1100);
 });
 
+test('prepare timeout survives absent status and remaining-clock expiry as the first RPC failure', async () => {
+  const f = fixture(({ tick, calls }) => ({
+    prepare: async body => { calls.push(['prepare', body]); tick(95); throw timedPrepareFailure(); },
+    status: async body => { calls.push(['status', body]); tick(3); return { stage: 'absent', definitelyNotApplied: true }; },
+  }));
+  await assert.rejects(f.run(), error => {
+    const evidence = error.faultEvidence.coordinatorPreparation;
+    assert.equal(evidence.firstPrepareFailureCode, 'UPGRADE_RPC_TIMEOUT');
+    assert.equal(evidence.firstPrepareFailureAt, 1095);
+    assert.equal(evidence.firstPrepareRpc.elapsedMs, 95);
+    assert.equal(evidence.firstPrepareRpc.firstResponseMs, null);
+    assert.equal(evidence.lastFailureCode, 'COORDINATOR_PREPARATION_EXPIRED');
+    assert.equal(evidence.holdReasonCode, 'COORDINATOR_PREPARATION_EXPIRED');
+    return error.code === 'COORDINATOR_PREPARATION_HELD';
+  });
+  assert.equal(f.last().prepareDeadline, 1100);
+  assert.equal(f.last().heldAt, 1100);
+  assert.equal(f.last().statusClassification, 'absent-not-proof');
+  assert.equal(f.last().firstPrepareFailureCode, 'UPGRADE_RPC_TIMEOUT');
+  assert.deepEqual(f.last().firstPrepareRpc, f.last().prepareRpc);
+  for (const row of f.records.filter(row => row.firstPrepareFailureCode !== null)) {
+    assert.equal(row.firstPrepareFailureAt, 1095);
+    assert.deepEqual(row.firstPrepareRpc, f.last().firstPrepareRpc);
+  }
+  assert.deepEqual(mutations(f).map(([kind]) => kind), ['prepare']);
+});
+
+test('status or fence failures retain the original prepare RPC cause and a separate final hold reason', async t => {
+  for (const phase of ['status', 'fence']) await t.test(phase, async () => {
+    let sent = false;
+    const code = phase === 'status' ? 'STATUS_READ_FAILED' : 'UPGRADE_FENCE_EXPIRED';
+    const f = fixture(({ calls, tick }) => ({
+      prepare: async body => { calls.push(['prepare', body]); tick(50); sent = true; throw timedPrepareFailure(); },
+      assertFence: async () => { if (sent && phase === 'fence') throw Object.assign(Error(code), { code }); },
+      status: async () => { calls.push(['status']); throw Object.assign(Error(code), { code }); },
+    }));
+    await assert.rejects(f.run(), error => {
+      const evidence = error.faultEvidence.coordinatorPreparation;
+      assert.equal(evidence.firstPrepareFailureCode, 'UPGRADE_RPC_TIMEOUT');
+      assert.equal(evidence.firstPrepareFailureAt, 1050);
+      assert.equal(evidence.firstPrepareRpc.traceId, timedPrepareFailure().rpcContext.traceId);
+      assert.equal(evidence.lastFailureCode, code);
+      assert.equal(evidence.holdReasonCode, code);
+      return error.code === 'COORDINATOR_PREPARATION_HELD';
+    });
+    assert.deepEqual(mutations(f).map(([kind]) => kind), ['prepare']);
+    assert.equal(f.last().prepareDeadline, 1100);
+  });
+});
+
+test('expiry after a successful prepare response does not invent an RPC failure', async () => {
+  const f = fixture(({ tick, calls }) => ({
+    prepare: async body => { calls.push(['prepare', body]); tick(100); return { stage: 'prepared', commitKnown: true }; },
+  }));
+  await assert.rejects(f.run(), error => {
+    const evidence = error.faultEvidence.coordinatorPreparation;
+    assert.equal(evidence.firstPrepareFailureCode, null);
+    assert.equal(evidence.firstPrepareFailureAt, null);
+    assert.equal(evidence.firstPrepareRpc, null);
+    assert.equal(evidence.holdReasonCode, 'COORDINATOR_PREPARATION_EXPIRED');
+    return error.code === 'COORDINATOR_PREPARATION_HELD';
+  });
+  assert.deepEqual(mutations(f).map(([kind]) => kind), ['prepare']);
+});
+
 test('completed hard rejection and lost authority do not poll or mutate further', async t => {
   for (const code of ['HANDOFF_INTENT_CONFLICT', 'UPGRADE_FENCE_EXPIRED', 'CANDIDATE_IDENTITY_CHANGED'])
     await t.test(code, async () => {
       const f = fixture(() => ({ prepare: async () => { throw Object.assign(Error(code), { code, status: 409 }); } }));
       await assert.rejects(f.run(), { code: 'COORDINATOR_PREPARATION_HELD' });
+      assert.equal(f.last().firstPrepareFailureCode, code);
+      assert.equal(f.last().firstPrepareRpc, null);
+      assert.equal(f.last().lastFailureCode, code);
+      assert.equal(f.last().holdReasonCode, code);
       assert.equal(f.calls.filter(([kind]) => kind === 'status').length, 0);
       assert.deepEqual(mutations(f), []);
     });
@@ -126,6 +205,9 @@ test('a contradictory prepared ACK is a hard hold without status or quiesce', as
     await t.test(JSON.stringify(flags), async () => {
       const f = fixture(() => ({ prepare: async () => ({ stage: 'prepared', commitKnown: true, ...flags }) }));
       await assert.rejects(f.run(), { code: 'COORDINATOR_PREPARATION_HELD' });
+      assert.equal(f.last().firstPrepareFailureCode, null);
+      assert.equal(f.last().firstPrepareRpc, null);
+      assert.equal(f.last().holdReasonCode, 'COORDINATOR_PREPARATION_ACK_INVALID');
       assert.equal(f.calls.filter(([kind]) => kind === 'status').length, 0);
       assert.deepEqual(mutations(f), []);
     });
@@ -176,6 +258,9 @@ test('restart uses current read authority but retains original fence/deadlines a
       assert.equal(records[0].fence, 7);
       assert.equal(records[0].inspectionFence, 8);
       assert.equal(records[0].prepareDeadline, original.prepareDeadline);
+      assert.equal(records[0].firstPrepareFailureCode, original.firstPrepareFailureCode);
+      assert.deepEqual(records[0].firstPrepareRpc, original.firstPrepareRpc);
+      assert.equal(records[0].holdReasonCode, original.holdReasonCode);
       assert.equal(records[0].state, 'restart-held');
     });
 });
@@ -186,6 +271,54 @@ test('missing history cannot be reconstructed from an absent Supervisor', async 
     checkpoint: async () => {}, status: async () => { reads++; }, assertFence: async () => {} }),
   { code: 'COORDINATOR_PREPARATION_HISTORY_REQUIRED' });
   assert.equal(reads, 0);
+});
+
+test('restart fault evidence normalizes historical first-failure fields without rewriting the journal', async () => {
+  const f = fixture(() => ({ prepare: async () => { throw unknown(); }, status: async () => { throw unknown(); } }));
+  await assert.rejects(f.run());
+  const local = { ...structuredClone(f.last()), firstPrepareFailureCode: 'UPGRADE_RPC_TIMEOUT',
+    firstPrepareFailureAt: 0, holdReasonCode: 'COORDINATOR_PREPARATION_EXPIRED',
+    firstPrepareRpc: { ...timedPrepareFailure().rpcContext, path: 'http://private-origin-marker/',
+      headers: { authorization: 'private-header-marker' }, body: candidate, extra: 'private-extra-marker',
+      requestDispatched: true, responseDecoded: false } };
+  let saved;
+  await assert.rejects(inspectHeldCoordinatorPreparation({ scope: { ...scope, fence: 8 },
+    local: { preparation: local }, clock: () => 9000, checkpoint: async value => { saved = value; },
+    status: async () => prepared(), assertFence: async () => {},
+  }), error => {
+    const evidence = error.faultEvidence.coordinatorPreparation;
+    assert.equal(evidence.firstPrepareFailureCode, 'UPGRADE_RPC_TIMEOUT');
+    assert.equal(evidence.firstPrepareFailureAt, 0);
+    assert.equal(evidence.holdReasonCode, 'COORDINATOR_PREPARATION_EXPIRED');
+    assert.equal(evidence.firstPrepareRpc.path, '/internal/upgrades/:attemptId/coordinator-handoff');
+    assert.equal(evidence.firstPrepareRpc.elapsedMs, 95);
+    for (const marker of ['private-origin-marker', 'private-header-marker', 'private-extra-marker', candidate.origin, candidate.artifactRoot])
+      assert.equal(JSON.stringify(evidence).includes(marker), false);
+    return error.code === 'COORDINATOR_PREPARATION_HELD';
+  });
+  assert.deepEqual(saved.firstPrepareRpc, local.firstPrepareRpc);
+  assert.equal(saved.firstPrepareFailureAt, 0);
+});
+
+test('restart fault evidence emits null for missing or malformed optional first-failure fields', async t => {
+  const f = fixture(() => ({ prepare: async () => { throw unknown(); }, status: async () => { throw unknown(); } }));
+  await assert.rejects(f.run());
+  for (const kind of ['old-record', 'malformed']) await t.test(kind, async () => {
+    const local = structuredClone(f.last());
+    for (const key of ['firstPrepareFailureCode', 'firstPrepareFailureAt', 'firstPrepareRpc', 'holdReasonCode']) delete local[key];
+    if (kind === 'malformed') Object.assign(local, { firstPrepareFailureCode: 'private-code-marker',
+      firstPrepareFailureAt: Infinity, firstPrepareRpc: { action: 'status', headers: 'private-header-marker' },
+      holdReasonCode: 'private-reason-marker' });
+    await assert.rejects(inspectHeldCoordinatorPreparation({ scope: { ...scope, fence: 8 },
+      local: { preparation: local }, clock: () => 9000, checkpoint: async () => {},
+      status: async () => prepared(), assertFence: async () => {},
+    }), error => {
+      const evidence = error.faultEvidence.coordinatorPreparation;
+      for (const key of ['firstPrepareFailureCode', 'firstPrepareFailureAt', 'firstPrepareRpc', 'holdReasonCode'])
+        assert.equal(evidence[key], null);
+      return error.code === 'COORDINATOR_PREPARATION_HELD';
+    });
+  });
 });
 
 test('failure evidence contains fixed timing/classification, no identity markers or candidate paths', async () => {
@@ -204,6 +337,8 @@ test('failure evidence contains fixed timing/classification, no identity markers
     assert.equal(output.includes('secret-header'), false);
     assert.equal(error.faultEvidence.coordinatorPreparation.prepareRpc.elapsedMs, 83);
     assert.equal(error.faultEvidence.coordinatorPreparation.prepareRpc.method, 'POST');
+    assert.deepEqual(error.faultEvidence.coordinatorPreparation.firstPrepareRpc,
+      error.faultEvidence.coordinatorPreparation.prepareRpc);
     return error.suppressRecovery === true;
   });
 });
