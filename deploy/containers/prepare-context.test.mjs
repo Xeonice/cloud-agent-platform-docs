@@ -120,7 +120,7 @@ test("the current trusted deploy context builds without retired Mac sources and 
   const copied = [...dockerfile.matchAll(/^COPY ([\w-]+)\/ /gm)].map(
     (match) => match[1],
   );
-  assert.deepEqual(copied, ["tools", "container-tools"]);
+  assert.deepEqual(copied, ["tools", "upgrade", "container-tools"]);
   for (const directory of copied)
     assert.equal((await fs.stat(join(context, directory))).isDirectory(), true);
   const tools = manifest.files.filter(({ target }) =>

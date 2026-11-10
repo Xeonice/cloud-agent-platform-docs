@@ -55,6 +55,8 @@ const PIPELINES = [
   "web.groovy",
   "mutation.groovy",
   "sandbox-images.groovy",
+  "instance-package.groovy",
+  "upgrade-evidence.groovy",
 ];
 const config = async (name) =>
   JSON.parse(await fs.readFile(join(source, name), "utf8"));

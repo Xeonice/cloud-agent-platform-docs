@@ -1,5 +1,5 @@
 pipeline {
-  agent { label 'agent-platform-linux-deploy' }
+  agent { label 'agent-platform-linux-api-build' }
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
@@ -8,12 +8,12 @@ pipeline {
     buildDiscarder(logRotator(daysToKeepStr: '60', numToKeepStr: '300', artifactNumToKeepStr: '10'))
   }
   parameters {
-    string(name: 'SHA', defaultValue: '', description: 'Exact approved production API commit')
+    string(name: 'SHA', defaultValue: '', description: 'Exact approved API build commit')
     string(name: 'ROOT_SHA', defaultValue: '', description: 'Exact approved project commit containing the container definition')
   }
   environment {
     NODE22 = '/usr/local/bin/node'
-    API_TOOL = '/opt/agent-platform/tools/api-container.mjs'
+    API_TOOL = '/opt/agent-platform/tools/deploy/containers/api-build.mjs'
   }
   stages {
     stage('Resolve approved branch') {
@@ -49,27 +49,11 @@ pipeline {
         }
       }
     }
-    stage('Drain, consistent backup and Docker service publication') {
-      steps {
-        sh '"$NODE22" "$API_TOOL" deploy "$RELEASE_SHA" "$BUILD_NUMBER" > deployment.json'
-        script {
-          def result = readJSON(file: 'deployment.json')
-          currentBuild.description = "${env.RELEASE_SHA.take(12)} · ${result.state}"
-          if (!(result.state in ['current', 'deployed'])) { unstable("Release is ${result.state}; Jenkins discovery will retry") }
-        }
-      }
-    }
+
   }
   post {
     always {
-      script {
-        def folder = "runtime-report-${env.BUILD_NUMBER}"
-        def code = sh(script: '"$NODE22" "$API_TOOL" monitor "runtime-report-$BUILD_NUMBER"', returnStatus: true)
-        if (code == 2) { unstable('Runtime snapshot reports an unhealthy container') }
-        if (code != 0 && code != 2) { error('Runtime snapshot collection failed') }
-        archiveArtifacts artifacts: "head.json,api-validation.json,ci.json,deployment.json,api-package.json,api-package-${env.BUILD_NUMBER}.tgz,${folder}/report.json,${folder}/report.html,${folder}/*.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
-        publishHTML(target: [allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: folder, reportFiles: 'report.html', reportName: 'Service status and logs'])
-      }
+      archiveArtifacts artifacts: 'head.json,api-validation.json,ci.json,api-package.json,api-package-*.tgz', allowEmptyArchive: true, fingerprint: true, followSymlinks: false
     }
   }
 }

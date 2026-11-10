@@ -1,0 +1,20 @@
+/* 仅镜像 CLI 版本增量；颜色、字体与间距沿用原 v2。 */
+[data-cli-versions-design] .image-cli-versions { font: var(--text-copy-13); overflow-wrap: anywhere; }
+[data-cli-versions-design] .image-cli-versions__current { display: flex; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+[data-cli-versions-design] .image-cli-versions__current .image-cli-versions { order: -1; }
+[data-cli-versions-design] .image-cli-versions__source { font: var(--text-label-12); }
+[data-cli-versions-design] .image-cli-versions--history { flex: 1 1 100%; }
+[data-cli-versions-design] .p7-history__row { flex-wrap: wrap; }
+[data-cli-versions-design] .l4b-compare dd { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+[data-cli-versions-design] .l4b-compare dd .image-cli-versions { flex-basis: 100%; }
+[data-cli-versions-design] .image-cli-versions__selected { overflow-wrap: anywhere; }
+[data-cli-versions-design] [data-cli-versions="validation"] { display: block; margin-top: 8px; }
+@media (max-width: 560px) {
+  [data-cli-versions-design] article[data-img] .kv { grid-template-columns: minmax(76px, auto) minmax(0, 1fr); }
+  [data-cli-versions-design] .p7-history__row > * { min-width: 0; overflow-wrap: anywhere; }
+}
+/* 原稿在桌面切窄屏时保留侧栏宽度动画；本增量在窄屏立即使用图标轨，避免正文被过渡裁切。 */
+@media (max-width: 639px) {
+  [data-cli-versions-design] #shell { grid-template-columns: var(--shell-rail-w) minmax(0, 1fr); transition: none; }
+  [data-cli-versions-design] #shell-main { min-width: 0; }
+}

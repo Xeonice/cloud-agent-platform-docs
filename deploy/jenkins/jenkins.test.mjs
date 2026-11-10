@@ -1744,12 +1744,12 @@ test("API child accepts real ci-passed receipt path and refuses stale draft-stat
   ci = { ...ci, runId: 7, state: "built" };
   await assert.rejects(
     run("record-build", f.planPath, "api", "7"),
-    /Docker release/,
+    /Docker build/,
   );
   ci = { ...ci, state: "ci-passed", artifactPath: "/untrusted/" + commits.api };
   await assert.rejects(
     run("record-build", f.planPath, "api", "7"),
-    /Docker release/,
+    /Docker build/,
   );
 });
 test("retained immutable web proof survives Jenkins build pruning and keeps original numeric ID", async () => {

@@ -4,6 +4,8 @@
 
 当前依据 [领域需求](../product/requirements/README.md) 的 REQ/AC 定义验收职责，实际通过数量与适用环境以执行记录为准。生产数据、外部凭证和部署维护不能用测试夹具代替验证。
 
+本轮不停机升级与沙箱续接的用例、前后端联合验证及发布门禁统一维护在[独立测试计划](../testing/changes/2026-10-10-不停机升级与沙箱续接测试计划.md)。前端与后端实施文档引用该计划，不分别维护完整测试矩阵；产品9REQ／52AC仍以UPG规格为准。
+
 ## 1. 新框架与证据
 
 API `acceptance` 独立支持 fresh SQLite、真实服务与完整 Nest；web `src/acceptance` 独立MSW支持真实业务与DOM；Storybook 保存视图状态；跨仓 runner 支持浏览器到真实后端。

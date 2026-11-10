@@ -25,6 +25,7 @@ const INPUTS = Object.freeze({
     ...[
       "jenkins-ci.mjs",
       "project-ci.mjs",
+      "deployment-test-sources.mjs",
       "jenkins-web.mjs",
       "mutation.mjs",
       "ci-platform.mjs",

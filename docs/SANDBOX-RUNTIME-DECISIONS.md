@@ -111,14 +111,14 @@ stdin/stdout and forwarded ports*。我们的做法与它正好相反。
 `resizeTty(30,100)` 后 `tput cols`=100，stdin 交互与退出码正常）。
 
 
-## 决策 B：boxlite = **BoxLite micro-VM**（Mac 原生独立内核隔离）
+## 决策 B：boxlite = **BoxLite micro-VM**（Linux KVM 独立内核隔离）
 
-- **aio** = runc 容器（AIO Sandbox 镜像，经 Docker），container 级隔离，默认档。
+- **aio** = runc 容器（AIO Sandbox 镜像，经 Docker），提供 container 级隔离；当前平台服务默认使用 BoxLite／KVM。
 - **boxlite** = 同一 OCI 镜像跑进 **BoxLite Box**（每个 Box = 独立 Linux kernel 的 micro-VM），强隔离档，**非仅标签**。
 - **BoxLite**（github.com/boxlite-ai/boxlite）= Rust micro-VM 运行时，**可插拔 hypervisor：macOS→Apple Hypervisor.framework、Linux→KVM、Windows→WSL2**。sub-50ms、daemonless、无 root、OCI 兼容；有 Node/TS SDK（`@boxlite-ai/boxlite`）+ Python/Rust/C + BoxRun CLI/REST。
-- **为什么是它、不是 gVisor/Kata/Firecracker**：本平台单机私有化、**部署目标含 macOS**，gVisor 是 Linux-only、Firecracker/Kata 需 KVM/Linux，**都上不了 Mac 原生**。BoxLite 是当前唯一能在 Mac（Apple Silicon / Hypervisor.framework）原生跑"独立内核 microVM"的选型——boxlite 这一档从设计之初就是为此而生（P19"独立内核微虚拟机"措辞正确，无需修订）。
+- **平台实例的运行边界**：macOS 宿主通过 Colima VZ 嵌套虚拟化运行 Linux arm64，RuntimeOwner 容器经 `/dev/kvm` 使用 BoxLite。选型围绕独立内核隔离、OCI 镜像、SDK 生命周期及 exec／PTY 契约；gVisor、Kata、Firecracker 的 Linux 要求不构成本部署方式的排除理由。现行规则及实际验收见 [统一虚拟化与实例部署](./ops/统一虚拟化与实例部署.md)。
 - **控制面差异**：aio 生命周期用 dockerode（docker daemon）；boxlite 生命周期用 **BoxLite SDK/API**（非 docker）。~~数据面（沙箱内 `:8080` agent）两档统一。~~ ⚠️ **数据面已不统一**（决策 A 修订）：aio 走沙箱内 API，boxlite 走 BoxLite native exec/PTY；统一的是**契约**不是实现。
-- **落地门槛：已实测通过 ✅**（本机 macOS 15.5 / Apple Silicon）：
+- **历史本地 SDK 开发验证**（本机 macOS 15.5 / Apple Silicon；下列结果仅为 SDK 能力，不是当前服务部署验收）：
   - **aio(Docker)**：`/v1/shell/exec`（S1 当时的验证端点；**数据面现已切到 `/v1/bash/exec`**，见 04 §2.3★）+ `ws /v1/shell/ws` 终端 ✅；Chromium 经 CDP 真导航 example.com 拿到标题 ✅（在 AIO 镜像 amd64/QEMU 副本上实测；arm64 原生功能等价、未复测）。
   - **boxlite(BoxLite microVM)**：microVM 起 ✅（aarch64, kernel 6.12, Hypervisor.framework, ~6s）；exec/并发 ✅；**Chromium 148 在 microVM 内起动 + 本地渲染 + 联网导航 ✅**（唯一告警 headless 无 dbus，无害，exit 0）。
   - **Box 内 `:8080` 访问机制（此前未知，已确认）**：BoxLite SDK `SimpleBox({ ports:[{hostPort, guestPort}] })` 做端口转发，实测 host→VM HTTP 200。数据面模型在 boxlite 上成立。
@@ -152,10 +152,10 @@ LABEL platform.tmux="true" platform.supportedRuntimes="codex" platform.resourceD
 
 | | 平台 | 镜像 | 数据面 | 控制面 |
 |---|---|---|---|---|
-| **boxlite** | macOS（Virtualization.framework） | **精简镜像**（tmux + node + CLI，**实测 1.25GB**，见下方订正） | BoxLite native exec/PTY | BoxLite SDK |
-| **aio** | Linux（boxlite 在 Linux 上用不了，这是 aio 存在的全部理由） | 上游 aio + CLI 派生层 | **aio 自己的 HTTP API** | 容器运行时（docker） |
+| **boxlite** | Linux KVM（macOS 宿主经 Colima VZ 嵌套虚拟化） | **精简镜像**（tmux + node + CLI，**实测 1.25GB**，见下方订正） | BoxLite native exec/PTY | BoxLite SDK |
+| **aio** | Linux Docker，按 provider 契约保留 | 上游 aio + CLI 派生层 | **aio 自己的 HTTP API** | 容器运行时（docker） |
 
-⚠️ **别把两档的定位搞反**（本文档作者犯过）：boxlite 是 **macOS** 档，aio 是 **Linux** 档。
+**provider 按隔离和数据面能力区分，不按宿主操作系统分档。** 当前平台服务在 Linux 中使用 BoxLite／KVM；AIO 使用 Docker 容器及其 HTTP 数据面。
 
 ### aio 数据面：**早就是**它自己的 API（本节初稿写错，2026-08-29 订正）
 
@@ -393,13 +393,13 @@ git 历史里的一个 **117 行**文件（删除于本轮）。⚠️ 恢复它
 1. **BoxLite 有独立于 Docker 的 OCI image store**（`~/.boxlite`），且**层下载不断点续传**——每次重试新建 `.downloading` 临时文件，慢网下大镜像（如 Chromium 层 ~727MB）直连外网几乎拉不全。
 2. **可行解 = 本地 registry 中转**：Docker（可续传）拉好目标 arm64 镜像 → `docker push localhost:5001/...` → BoxLite runtime 配 `imageRegistries:[{host:'docker.io',search:true},{host:'localhost:5001',transport:'http'}]` → 走 localhost 秒拉。落地时预置沙箱镜像（AIO Sandbox）走此中转，避免每次冷拉。
 3. **坑**：自定义 `imageRegistries` 会**替换**默认表，**必须显式保留 `docker.io`**，否则连 bootstrap base（`debian:bookworm-slim`）都 `manifest unknown`。
-4. macOS Apple Silicon 上 Hypervisor.framework **无需额外权限**即可起 microVM；原生二进制为 `@boxlite-ai/boxlite-darwin-arm64`（~79MB `.node`，napi-rs），须确保完整安装（曾遇截断二进制 dlopen 失败）。
+4. **仅限本地 SDK 开发**：macOS Apple Silicon 上 Hypervisor.framework 曾实测可起 microVM；Darwin SDK 二进制为 `@boxlite-ai/boxlite-darwin-arm64`（~79MB `.node`，napi-rs），须确保完整安装（曾遇截断二进制 dlopen 失败）。
 5. BoxRun CLI 公开安装 URL（`boxlite.ai/boxrun/install`）当前 **404**——集成走 npm SDK `@boxlite-ai/boxlite`，勿依赖该 CLI。
 
 ## 减债原则落地
 
 1. 终端/exec 契约 = 沙箱内 API 数据面 → microVM 化零改动。
 2. 前端 socket.io 协议是**稳定边界**，后端翻译层吸收 provider 差异。
-3. BoxLite 可插拔 hypervisor 覆盖 macOS/Linux/Windows，boxlite 档跨平台单机可跑（Mac 原生，无需 Linux/KVM）；aio 走 Docker。
+3. 当前平台实例统一运行在 Colima Linux 中，BoxLite 经 KVM，AIO 经 Docker。SDK 的跨平台开发能力不替代服务部署所需的 Linux／KVM 验证。
 4. ~~docker exec 保留为 fallback（裸镜像/无 agent），不删，但非主路。~~
    ⚠️ **本条已被「决策 C-2」废止（2026-08-29）**，`DockerExecAgentClient` 已删除。理由见该节。

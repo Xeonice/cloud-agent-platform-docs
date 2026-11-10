@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "node:http";
+import { startRuntimeImageRegistry } from "./image-runtime-registry";
+import type { ImageSpecRegistry } from "../../api/packages/contracts/src/image-spec.contract";
 
 const root = resolve(fileURLToPath(import.meta.url), "../../..");
 const apiRoot = join(root, "api");
@@ -52,8 +54,12 @@ async function main() {
     join(apiRoot, "acceptance/support/protocol-resources.ts"),
   ) as {
     ProtocolProvider: new () => { name: string; close(): void };
-    registryMetadataFixture(): unknown;
+    registryMetadataFixture(): ImageSpecRegistry;
   };
+  const imageRegistry = await startRuntimeImageRegistry(
+    registryMetadataFixture(),
+    apiRoot,
+  );
   const provider = new ProtocolProvider();
   const registry = {
     defaultProvider: provider.name,
@@ -72,7 +78,7 @@ async function main() {
     .overrideProvider(contracts.SANDBOX_PROVIDER_REGISTRY)
     .useValue(registry)
     .overrideProvider(contracts.IMAGE_SPEC_REGISTRY)
-    .useValue(registryMetadataFixture())
+    .useValue(imageRegistry.registry)
     .compile();
   const app = module.createNestApplication();
   configurePlatformApp(app);
@@ -99,6 +105,7 @@ async function main() {
     closing = true;
     void app.close().finally(() => {
       provider.close();
+      imageRegistry.close();
       endpoint.close();
       rmSync(dataRoot, { recursive: true, force: true });
       process.exit(0);

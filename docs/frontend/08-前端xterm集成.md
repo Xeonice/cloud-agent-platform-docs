@@ -699,6 +699,8 @@ views/terminal/TerminalTabBar.view#onSelect(sessionId)
 
 **最容易写错的两点**：① 重连必须带**上一次服务端下发的 `socketSessionKey`**，否则后端认不出是同一会话，会开一个新 pty（现场丢失）；② 重连成功后**不要主动 `terminal.clear()`**——后端重绘会自己覆盖，前端清屏反而制造"历史没了"的错觉。
 
+**计划增量（2026-10-10，尚未实施）**：以 [UPG PRD](../product/requirements/UPG.md) 和 [前端实施方案](changes/2026-10-10-升级提示与原终端续接.md) 为准。目标CD只发版本/包，具实例升级权限用户明确点击、经server授权/CSRF及targetDigest＋expectedActivationGeneration＋requestId幂等/CAS受理后才实例升级；catalog available无attempt/percent，版本读取用户保留只读图标/浮卡/详情、只有实例升级capability用户有立即升级，检查/跨日/页面刷新不启动部署，下载/候选/线上迁移仅受理后。Web绑定本实例版本化入口，CD不能用共享alias自动换页。activation-confirmed100且生产Webready/page不同才自主刷新；service新release复用sameWeb仍可升级但不强刷。本次固定manifest可含已声明兼容桥链及合格安全自动回退，不跟随CD新target，新尝试须用户再发起。原sandbox/Agent/tmux跨升级存活；refresh/attach不create/start、重跑initialPrompt或replay输入。终端恢复用认证inventory校验非凭据书签，socketSessionKey/会话凭据仅内存；协议/hash按明确兼容协商，原身份＋attach-ready后才恢复成功。日关闭贯穿available→ongoing→ready但不取消已受理升级，未知保留现场；前后端验收、真实跨仓和ARM64/KVM/BoxLite连续性门禁统一见 [独立测试计划](../testing/changes/2026-10-10-不停机升级与沙箱续接测试计划.md)，实施和测试仍planned。
+
 | 文件 | 层 | 职责 |
 |---|---|---|
 | `services/ws/ptySocket.ts` | service | 退避调度、带 key 重连 |

@@ -744,6 +744,13 @@ export async function runWebPhase(
   if (role === "trusted" && !production)
     throw new Error("Only main builds can use production publication phases");
 
+  if(phase === "prepare-ci-env") {
+    if((await git(["rev-parse","HEAD"])).trim()!==sha)throw new Error("Prepared CI input differs from pinned Web source");
+    const cache=join(work,"public-vercel-cache");await fs.mkdir(cache,{mode:0o700});
+    const settings=safeProject({projectId:WEB.projectId,orgId:WEB.orgId,settings:{framework:"nextjs",nodeVersion:"22.x",buildCommand:"pnpm build",installCommand:"pnpm install --frozen-lockfile",rootDirectory:null}});
+    await writeJson(join(cache,"project.json"),settings);await fs.writeFile(join(cache,"production.env"),Object.entries(PUBLIC_ENV).map(([k,v])=>k+"="+JSON.stringify(v)).join("\n")+"\n",{mode:0o600,flag:"wx"});await writeJson(join(cache,"provenance.json"),{sha,rootSha,apiSha,projectId:WEB.projectId,production:true});
+    return {phase,state:"passed",credentialAccess:false};
+  }
   if (phase === "prepare-env") {
     await recheckHead(operations, work, env, sha);
     const cache = join(work, "public-vercel-cache");
