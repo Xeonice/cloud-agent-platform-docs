@@ -12,6 +12,32 @@ test("model qualification requires a dedicated isolated instance", async () => {
     startQualificationModel({ isolated: false, instanceId: "production" }),
   );
 });
+test("optional traffic suppression is explicit, nonsecret and does not change the model protocol or parent environment", async () => {
+  const key = "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC";
+  const previous = process.env[key];
+  for (const options of [{}, { disableNonessentialTraffic: false }, { disableNonessentialTraffic: true }]) {
+    const model = await startQualificationModel({
+      isolated: true, instanceId: "upgrade-acceptance-optional-traffic", ...options,
+    });
+    try {
+      assert.deepEqual(model.imageEnv.filter((row) => row.key === key),
+        options.disableNonessentialTraffic === true ? [{ key, value: "1", secret: false }] : []);
+      const response = await fetch(model.origin + "/v1/messages", {
+        method: "POST", headers: { "x-api-key": model.runtimeCredential.secret },
+        body: JSON.stringify({ model: "qualification", messages: [], stream: false }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).stop_reason, "end_turn");
+      assert.equal(process.env[key], previous);
+    } finally { await model.close(); }
+  }
+});
+test("optional traffic suppression rejects ambiguous truthy values before opening a fixture", async () => {
+  for (const disableNonessentialTraffic of ["1", "false", 1, null])
+    await assert.rejects(startQualificationModel({
+      isolated: true, instanceId: "upgrade-acceptance-optional-traffic", disableNonessentialTraffic,
+    }), /INVALID_NONESSENTIAL_TRAFFIC_OPTION/);
+});
 test("finite tasks receive a real final response only after their tool result and explicit release", async () => {
   const model = await startQualificationModel({
     isolated: true,

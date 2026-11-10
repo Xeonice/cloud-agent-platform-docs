@@ -191,7 +191,10 @@ export async function startQualificationModel({
   guestHost = "host.boxlite.internal",
   port = 0,
   qualificationInput,
+  disableNonessentialTraffic = false,
 }) {
+  if (typeof disableNonessentialTraffic !== "boolean")
+    throw new Error("INVALID_NONESSENTIAL_TRAFFIC_OPTION");
   if (qualificationInput?.sameInstanceQa !== undefined) {
     if (qualificationInput.instanceId !== instanceId || qualificationInput.isolated !== isolated)
       throw new Error('DEDICATED_QUALIFICATION_INSTANCE_REQUIRED');
@@ -411,6 +414,14 @@ export async function startQualificationModel({
       return { taskId: id, finalResponseReleased: true };
     },
     imageEnv: [
+      // Opt-in diagnostic control, not a platform/runtime default. The official
+      // CLI switch disables optional traffic; it does not block model requests.
+      // https://code.claude.com/docs/en/env-vars
+      ...(disableNonessentialTraffic ? [{
+        key: "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+        value: "1",
+        secret: false,
+      }] : []),
       {
         key: "NO_PROXY",
         value: [guestHost, "localhost", "127.0.0.1", "::1"].join(","),
