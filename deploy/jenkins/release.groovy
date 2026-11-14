@@ -13,13 +13,13 @@ pipeline {
   }
   environment {
     NODE22 = '/usr/local/bin/node'
-    RELEASE_TOOL = '/opt/agent-platform/tools/project-release.mjs'
-    WEB_TOOL = '/opt/agent-platform/tools/jenkins-web.mjs'
-    MONITOR_TOOL = '/opt/agent-platform/tools/api-container.mjs'
+    RELEASE_TOOL = '/opt/agent-platform/tools/deploy/jenkins/project-release.mjs'
+    SIGN_TOOL = '/opt/agent-platform/tools/deploy/upgrade/build-distribution.mjs'
+    PUBLISH_TOOL = '/opt/agent-platform/tools/deploy/upgrade/publish-distribution.mjs'
   }
   stages {
     stage('Discover and pin complete project') {
-      agent { label 'agent-platform-linux-deploy' }
+      agent { label 'agent-platform-linux-publisher' }
       steps {
         script {
           env.RELEASE_REQUIRED = 'false'
@@ -53,7 +53,7 @@ pipeline {
       }
     }
     stage('Retain verified frontend build for retry') {
-      agent { label 'agent-platform-linux-deploy' }
+      agent { label 'agent-platform-linux-publisher' }
       when { environment name: 'RELEASE_REQUIRED', value: 'true' }
       steps {
         sh '"$NODE22" "$RELEASE_TOOL" record-build "$PLAN_PATH" web "$WEB_BUILD" > verified-web-build.json'
@@ -74,60 +74,70 @@ pipeline {
       }
     }
     stage('Retain verified acceptance build for retry') {
-      agent { label 'agent-platform-linux-deploy' }
+      agent { label 'agent-platform-linux-publisher' }
       when { environment name: 'RELEASE_REQUIRED', value: 'true' }
       steps { sh '"$NODE22" "$RELEASE_TOOL" record-build "$PLAN_PATH" contract "$CONTRACT_BUILD" > verified-contract-build.json' }
     }
-    stage('Docker backend CI and safe service publication') {
+    stage('Backend CI and immutable image package only') {
       when { environment name: 'RELEASE_REQUIRED', value: 'true' }
       steps {
         script {
           def result = build job: 'agent-platform-api', parameters: [string(name: 'SHA', value: env.API_SHA), string(name: 'ROOT_SHA', value: env.ROOT_SHA)], wait: true, propagate: false
           env.API_BUILD = result.number.toString()
-          if (result.result == 'UNSTABLE') {
-            env.RELEASE_READY = 'false'
-            currentBuild.description = "${env.RELEASE_TAG} · waiting for safe API publication"
-            unstable('Production is busy or the release needs review. Jenkins discovery retries safely; no frontend or GitHub release is published.')
-          } else if (result.result != 'SUCCESS') { error("API publication ${result.result}; frontend and GitHub publication stopped") }
+          if (result.result != 'SUCCESS') { error("API build ${result.result}; distribution stopped") }
         }
       }
     }
-    stage('Adopt and upload frontend bits to Vercel') {
-      agent { label 'agent-platform-linux-deploy' }
-      when { allOf { environment name: 'RELEASE_REQUIRED', value: 'true'; environment name: 'RELEASE_READY', value: 'true' } }
+    stage('Actual architecture self-hosted instance package') {
+      when { environment name: 'RELEASE_REQUIRED', value: 'true' }
       steps {
-        sh 'mkdir -m 700 "$WORKSPACE/web-upload-$BUILD_NUMBER"'
-        sh '"$NODE22" "$RELEASE_TOOL" fetch-web "$PLAN_PATH" "$WEB_BUILD" "$WORKSPACE/web-upload-$BUILD_NUMBER" > web-adoption.json'
-        sh '"$NODE22" "$WEB_TOOL" adopt "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > web-adopted.json'
-        sh '"$NODE22" "$WEB_TOOL" upload "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-upload.json'
-        sh '"$NODE22" "$WEB_TOOL" promote "$WEB_SHA" refs/heads/main "$WORKSPACE/web-upload-$BUILD_NUMBER" "$ROOT_SHA" "$API_SHA" > vercel-promoted.json'
+        script {
+          def result = build job: 'agent-platform-instance-package', parameters: [string(name: 'ROOT_SHA',value:env.ROOT_SHA),string(name:'API_SHA',value:env.API_SHA),string(name:'WEB_SHA',value:env.WEB_SHA),string(name:'RELEASE_ID',value:env.RELEASE_TAG),string(name:'PLATFORM',value:'linux'),string(name:'ARCH',value:'arm64')],wait:true,propagate:false
+          env.INSTANCE_PACKAGE_BUILD = result.number.toString()
+          if (result.result != 'SUCCESS') { error("Actual architecture package ${result.result}; no version published") }
+        }
+      }
+    }
+    stage('Full upgrade continuity and recovery evidence') {
+      when { environment name: 'RELEASE_REQUIRED', value: 'true' }
+      steps {
+        script {
+          def result = build job:'agent-platform-upgrade-evidence',parameters:[string(name:'ROOT_SHA',value:env.ROOT_SHA),string(name:'API_SHA',value:env.API_SHA),string(name:'WEB_SHA',value:env.WEB_SHA),string(name:'INSTANCE_PACKAGE_BUILD',value:env.INSTANCE_PACKAGE_BUILD)],wait:true,propagate:false
+          env.UPGRADE_EVIDENCE_BUILD=result.number.toString()
+          if (result.result != 'SUCCESS') { error("Upgrade acceptance ${result.result}; signed release withheld") }
+        }
       }
     }
     stage('Package complete downloadable release') {
-      agent { label 'agent-platform-linux-deploy' }
+      agent { label 'agent-platform-linux-publisher' }
       when { allOf { environment name: 'RELEASE_REQUIRED', value: 'true'; environment name: 'RELEASE_READY', value: 'true' } }
       steps { sh '"$NODE22" "$RELEASE_TOOL" package "$PLAN_PATH" "$API_BUILD" "$WEB_BUILD" "$CONTRACT_BUILD" > packaged.json' }
     }
-    stage('Upload and verify GitHub Release') {
-      agent { label 'agent-platform-linux-deploy' }
-      when { allOf { environment name: 'RELEASE_REQUIRED', value: 'true'; environment name: 'RELEASE_READY', value: 'true' } }
+    stage('Sign fixed manifest and architecture package') {
+      agent { label 'agent-platform-linux-publisher' }
+      when { environment name:'RELEASE_REQUIRED',value:'true' }
       steps {
-        sh '"$NODE22" "$RELEASE_TOOL" upload "$PLAN_PATH" > github-release.json'
-        script { currentBuild.description = "${env.RELEASE_TAG} · published to GitHub and production" }
+        sh '"$NODE22" "$RELEASE_TOOL" prepare-distribution "$PLAN_PATH" "$INSTANCE_PACKAGE_BUILD" "$UPGRADE_EVIDENCE_BUILD" > distribution-config.json'
+        script { env.DISTRIBUTION_OUTPUT = readJSON(file:'distribution-config.json').outputRoot }
+        sh '"$NODE22" "$SIGN_TOOL" sign distribution-config.json > signed-distribution.json'
       }
     }
+    stage('Publish immutable signed distribution only') {
+      agent { label 'agent-platform-linux-publisher' }
+      when { environment name:'RELEASE_REQUIRED',value:'true' }
+      steps {
+        withCredentials([string(credentialsId:'agent-platform-distribution-publisher',variable:'GITHUB_TOKEN')]) {
+          sh '"$NODE22" "$PUBLISH_TOOL" "$DISTRIBUTION_OUTPUT" > github-distribution.json'
+        }
+        script { currentBuild.description = "${env.RELEASE_TAG} · published; instances unchanged" }
+      }
+    }
+
   }
   post {
     always {
-      node('agent-platform-linux-deploy') {
-        script {
-          def folder = "runtime-report-${env.BUILD_NUMBER}"
-          def code = sh(script: '"$NODE22" "$MONITOR_TOOL" monitor "runtime-report-$BUILD_NUMBER"', returnStatus: true)
-          if (code == 2) { unstable('Service snapshot reports an unhealthy runtime') }
-          if (code != 0 && code != 2) { error('Runtime report collection failed') }
-          archiveArtifacts artifacts: "project-plan.json,project-pin.json,verified-web-build.json,verified-contract-build.json,web-adoption.json,web-adopted.json,vercel-upload.json,vercel-promoted.json,packaged.json,github-release.json,${folder}/report.json,${folder}/report.html,${folder}/api.redacted.log,${folder}/tunnel.redacted.log,${folder}/dns.redacted.log,${folder}/cicd.redacted.log,${folder}/build.redacted.log", allowEmptyArchive: true, fingerprint: true, followSymlinks: false
-          publishHTML(target: [allowMissing: false, alwaysLinkToLastBuild: true, keepAll: true, reportDir: folder, reportFiles: 'report.html', reportName: 'Service status and logs'])
-        }
+      node('agent-platform-linux-publisher') {
+        archiveArtifacts artifacts:'project-plan.json,project-pin.json,verified-web-build.json,verified-contract-build.json,packaged.json,distribution-config.json,signed-distribution.json,github-distribution.json',allowEmptyArchive:true,fingerprint:true,followSymlinks:false
       }
     }
   }

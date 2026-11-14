@@ -34,6 +34,7 @@ const system = {
   node: "/usr/local/bin/node",
 };
 const sha = "a".repeat(40);
+const runtimeVersions = { codex: "0.150.1", "claude-code": "2.1.251" };
 const config = {
   version: 1,
   registry: "ghcr.io",
@@ -78,14 +79,23 @@ async function fixture(t) {
   }
   return { root, work, original };
 }
-function registryModel(revision = sha, arches = ["amd64", "arm64"]) {
+function registryModel(
+  revision = sha,
+  arches = ["amd64", "arm64"],
+  versionLabel = () => JSON.stringify(runtimeVersions),
+) {
   const data = new Map();
   const manifests = [];
   for (const arch of arches) {
     const body = JSON.stringify({
       os: "linux",
       architecture: arch,
-      config: { Labels: { "org.opencontainers.image.revision": revision } },
+      config: {
+        Labels: {
+          "org.opencontainers.image.revision": revision,
+          "platform.runtimeVersions": versionLabel(arch),
+        },
+      },
     });
     const configDigest = hash(body);
     data.set("/blobs/" + configDigest, body);
@@ -173,6 +183,24 @@ test("image requests/configuration bind both provider coordinates and reject PRs
   const f = await fixture(t);
   const plan = await imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH));
   assert.equal(plan.images[0].tag, "cc2.1.251-cx0.150.1-gaaaaaaaaaaaa");
+  assert.deepEqual(plan.images[0].runtimeVersions, runtimeVersions);
+  await fs.writeFile(
+    join(f.original, "config/sandbox-publish.json"),
+    JSON.stringify({ ...config, versionTag: "v9.0.0" }),
+  );
+  assert.equal(
+    (await imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH))).images[0]
+      .tag,
+    "v9.0.0",
+  );
+  await assert.rejects(
+    imagePlan(f.original, imageRequest(sha, IMAGE_BRANCH, "v1.2.3")),
+    /package-bound versionTag/,
+  );
+  await fs.writeFile(
+    join(f.original, "config/sandbox-publish.json"),
+    JSON.stringify(config),
+  );
   await fs.symlink(
     "/tmp",
     join(f.original, config.images[0].context, "outside"),
@@ -189,18 +217,21 @@ test("anonymous OCI validation verifies both platform/config digests and source 
     "ghcr.io/xeonice/agent-platform-boxlite",
     "v1.2.3",
     sha,
+    runtimeVersions,
     registryFetcher(model),
   );
   assert.deepEqual(verified, {
     digest: model.digest,
     platforms: ["linux/amd64", "linux/arm64"],
     anonymous: true,
+    runtimeVersions,
   });
   await assert.rejects(
     anonymousImage(
       "ghcr.io/xeonice/agent-platform-boxlite",
       "v1.2.3",
       "b".repeat(40),
+      runtimeVersions,
       registryFetcher(model),
     ),
     /different source/,
@@ -210,6 +241,7 @@ test("anonymous OCI validation verifies both platform/config digests and source 
       "ghcr.io/xeonice/agent-platform-boxlite",
       "v1.2.3",
       sha,
+      runtimeVersions,
       registryFetcher(registryModel(sha, ["arm64"])),
     ),
     /linux\/amd64/,
@@ -224,17 +256,52 @@ test("anonymous OCI validation verifies both platform/config digests and source 
       "ghcr.io/xeonice/agent-platform-boxlite",
       "v1.2.3",
       sha,
+      runtimeVersions,
       registryFetcher(broken),
     ),
     /bytes differ/,
   );
 });
 
-async function publisherFixture(t, mode, scopes = "repo, write:packages") {
+test("publication rejects absent, malformed and mismatched runtime metadata on either architecture", async () => {
+  for (const label of [
+    () => undefined,
+    () => "not-json",
+    () => "null",
+    () => JSON.stringify({ codex: runtimeVersions.codex }),
+    () => JSON.stringify({ ...runtimeVersions, codex: "0.150.10" }),
+    (arch) =>
+      JSON.stringify({
+        ...runtimeVersions,
+        "claude-code": arch === "arm64" ? "2.1.250" : "2.1.251",
+      }),
+  ]) {
+    await assert.rejects(
+      anonymousImage(
+        "ghcr.io/xeonice/agent-platform-boxlite",
+        "v1.2.3",
+        sha,
+        runtimeVersions,
+        registryFetcher(registryModel(sha, ["amd64", "arm64"], label)),
+      ),
+      /runtime version/,
+    );
+  }
+});
+
+async function publisherFixture(
+  t,
+  mode,
+  scopes = "repo, write:packages",
+  versionLabel,
+  existing = mode === "promote",
+) {
   const f = await fixture(t);
   const calls = [];
   const published = new Set();
-  const model = registryModel();
+  if (existing)
+    for (const image of config.images) published.add(`xeonice/${image.image}`);
+  const model = registryModel(sha, ["amd64", "arm64"], versionLabel);
   let reads = 0;
   const token = "test-private-value-do-not-project";
   const run = async (command, args, options) => {
@@ -253,6 +320,10 @@ async function publisherFixture(t, mode, scopes = "repo, write:packages") {
     }
     assert.equal(command, DOCKER);
     assert.equal(options.env.DOCKER_HOST, DOCKER_HOST);
+    if (args[0] === "--context") {
+      assert.equal(args[1], BUILDER);
+      args = args.slice(2);
+    } else assert.notEqual(args[1], "build");
     if (args[0] === "context") {
       const privateConfig = JSON.parse(
         await fs.readFile(
@@ -296,6 +367,11 @@ async function publisherFixture(t, mode, scopes = "repo, write:packages") {
       return "Platforms: linux/amd64, linux/arm64";
     }
     if (args[1] === "build") {
+      assert.equal(args.filter((arg) => arg === "--tag").length, 1);
+      assert.equal(
+        args.some((arg) => arg.endsWith(":latest")),
+        false,
+      );
       assert.equal(
         args[args.indexOf("--platform") + 1],
         "linux/amd64,linux/arm64",
@@ -309,6 +385,13 @@ async function publisherFixture(t, mode, scopes = "repo, write:packages") {
         args[args.indexOf("--metadata-file") + 1],
         JSON.stringify({ "containerimage.digest": model.digest }),
       );
+      return "";
+    }
+    if (args[1] === "imagetools") {
+      assert.equal(mode, "promote");
+      assert.equal(args[2], "create");
+      assert.ok(args[4].endsWith(":latest"));
+      assert.ok(args[5].endsWith("@" + model.digest));
       return "";
     }
     throw new Error("Unexpected image command");
@@ -363,6 +446,13 @@ test("publish sends token only over login stdin/private Docker config, publishes
   const f = await publisherFixture(t, "publish");
   assert.equal(f.result.status, "published");
   assert.equal(f.result.images.length, 2);
+  for (const image of f.result.images)
+    assert.deepEqual(image.runtimeVersions, runtimeVersions);
+  assert.ok(f.result.images.every((image) => image.latestPromoted === false));
+  assert.equal(
+    f.calls.some((call) => call.args.includes("imagetools")),
+    false,
+  );
   assert.equal(
     f.result.images.every(
       (image) => image.anonymous && image.status === "published",
@@ -387,6 +477,69 @@ test("publish sends token only over login stdin/private Docker config, publishes
     (await fs.readdir(f.work)).filter((name) => name.startsWith(".docker-")),
     [],
   );
+});
+
+test("resuming immutable publication never promotes latest and builds no existing version", async (t) => {
+  const f = await publisherFixture(t, "publish", undefined, undefined, true);
+  assert.equal(f.result.status, "published");
+  assert.equal(
+    f.calls.some(
+      (call) =>
+        call.args.includes("--push") || call.args.includes("imagetools"),
+    ),
+    false,
+  );
+  assert.ok(
+    f.result.images.every((image) => image.reused && !image.latestPromoted),
+  );
+});
+
+test("explicit promotion verifies both immutable images and never builds a missing version", async (t) => {
+  const f = await publisherFixture(t, "promote");
+  assert.equal(f.result.status, "promoted");
+  assert.equal(
+    f.calls.filter((call) => call.args.includes("imagetools")).length,
+    2,
+  );
+  assert.equal(
+    f.calls.some((call) => call.args.includes("--push")),
+    false,
+  );
+  assert.ok(f.result.images.every((image) => image.latestPromoted));
+  const absent = await publisherFixture(
+    t,
+    "promote",
+    undefined,
+    undefined,
+    false,
+  );
+  assert.equal(absent.result.status, "failed");
+  assert.equal(
+    absent.calls.some(
+      (call) =>
+        call.args.includes("--push") || call.args.includes("imagetools"),
+    ),
+    false,
+  );
+});
+
+test("a pushed image with incorrect runtime metadata cannot produce a successful publication receipt", async (t) => {
+  const f = await publisherFixture(t, "publish", undefined, () =>
+    JSON.stringify({ ...runtimeVersions, codex: "0.150.10" }),
+  );
+  assert.equal(f.result.status, "failed");
+  assert.equal(
+    f.calls.filter((call) => call.args.includes("--push")).length,
+    2,
+  );
+  assert.ok(
+    f.result.images.every(
+      (image) =>
+        image.status === "failed" &&
+        /runtime versions differ/.test(image.error),
+    ),
+  );
+  assert.equal(JSON.stringify(f.result).includes(f.token), false);
 });
 
 test("missing write:packages fails before login/build and cannot be reported as publish success", async (t) => {

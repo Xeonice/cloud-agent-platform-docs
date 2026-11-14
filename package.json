@@ -9,7 +9,7 @@
     "node": "22.x"
   },
   "scripts": {
-    "deploy:test": "node --test deploy/jenkins/*.test.mjs deploy/containers/*.test.mjs deploy/ops/*.test.mjs",
+    "deploy:test": "node deploy/test-sources.mjs",
     "docs:check": "node scripts/docs-check.mjs"
   }
 }

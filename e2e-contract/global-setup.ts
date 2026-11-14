@@ -12,7 +12,7 @@ function walk(directory: string): string[] {
     const path = join(directory, entry.name);
     return entry.isDirectory()
       ? walk(path)
-      : entry.name.endsWith(".ts")
+      : /\.(?:ts|mjs)$/.test(entry.name)
         ? [path]
         : [];
   });

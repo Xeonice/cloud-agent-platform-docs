@@ -37,6 +37,22 @@ async function fixture(t) {
     ),
     join(root, "scripts/check.mjs"),
   );
+  await fs.cp(
+    new URL("../../api/scripts/check-agent-cli-versions.mjs", import.meta.url),
+    join(root, "scripts/check-agent-cli-versions.mjs"),
+  );
+  const adapters = join(
+    root,
+    "packages/modules/runtime/src/infrastructure/adapters",
+  );
+  await fs.mkdir(adapters, { recursive: true });
+  await fs.cp(
+    new URL(
+      "../../api/packages/modules/runtime/src/infrastructure/adapters/agent-cli-versions.ts",
+      import.meta.url,
+    ),
+    join(adapters, "agent-cli-versions.ts"),
+  );
   await fs.mkdir(join(root, "config"));
   await fs.mkdir(join(root, "packages/shared-kernel/src/domain"), {
     recursive: true,
@@ -54,7 +70,19 @@ async function fixture(t) {
     await fs.mkdir(join(root, image.context), { recursive: true });
     await fs.writeFile(
       join(root, image.context, "Dockerfile"),
-      "FROM node:22\nENV LANG=C.UTF-8\n",
+      "FROM node:22\nENV LANG=C.UTF-8\n" +
+        (
+          await fs.readFile(
+            new URL(`../../api/${image.context}/Dockerfile`, import.meta.url),
+            "utf8",
+          )
+        )
+          .split("\n")
+          .filter((line) =>
+            /^ARG (CODEX_VERSION|CLAUDE_CODE_VERSION)=/.test(line),
+          )
+          .join("\n") +
+        "\n",
     );
   }
   return {

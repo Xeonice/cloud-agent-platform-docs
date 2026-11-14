@@ -211,7 +211,7 @@ test("Linux runs every existing API gate through pinned Corepack without inherit
       ["test:acceptance:report"],
       ["build"],
       [],
-      ["openapi:emit"],
+      ["check:openapi"],
     ],
   );
   for (const child of children) {
@@ -247,10 +247,9 @@ test("Linux runs every existing API gate through pinned Corepack without inherit
     true,
   );
   assert.deepEqual(f.calls.at(-1).args, [
-    "diff",
-    "--exit-code",
-    "--",
-    "openapi.json",
+    "/usr/local/lib/node_modules/corepack/dist/corepack.js",
+    "pnpm",
+    "check:openapi",
   ]);
 });
 
@@ -259,7 +258,7 @@ test("an OpenAPI drift failure propagates rather than recording successful valid
   const original = f.options.execute;
   f.options.execute = async (...args) => {
     await original(...args);
-    if (args[1][0] === "diff") throw new Error("fixture drift");
+    if (args[1].includes("check:openapi")) throw new Error("fixture drift");
     return sha;
   };
   await assert.rejects(f.invoke("openapi"), /fixture drift/);

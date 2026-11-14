@@ -252,11 +252,13 @@ interface ──▶ application ──▶ domain
 
 | 层 | 允许依赖 | 明确禁止 |
 |---|---|---|
-| `domain` | domain、shared-kernel、`node:crypto`（纯计算）、`node:stream`（**仅 `import type`**） | **其余一切 import**：三方库（provider SDK/drizzle/socket.io/better-sqlite3）、`@nestjs/*`、`node:fs` / `node:child_process` 等 IO 内建、`@platform/contracts` 与别的 module |
+| `domain` | 本上下文domain、`@platform/shared-kernel/pure`、`node:crypto`（纯计算）、`node:stream`（**仅 `import type`**） | **其余一切 import**：shared-kernel根入口及IO子文件、三方库（provider SDK/drizzle/socket.io/better-sqlite3）、`@nestjs/*`、`node:fs` / `node:child_process` 等 IO 内建、`@platform/contracts` 与别的 module |
 | `application` | domain、contracts（端口接口） | 直接 import infrastructure 具体实现（由 DI 运行时注入到接口 token） |
 | `interface` | application 暴露的 DTO/Service | 触碰 domain 内部细节 |
 | `infrastructure` | domain（实现端口）、contracts、三方库 | — |
-| `contracts` | 仅 TypeScript 标准库类型 | 反向依赖任何 modules/* |
+| `contracts` | TypeScript标准类型、共享内核基础类型／目录 | 反向依赖任何 modules/* 实现 |
+
+`shared-kernel/pure`只转出经审查的ID／值守卫、时钟与事务等端口、领域基类和纯计算工具；FS、crypto主密钥、环境变量默认值及数据库token留在根入口，供基础设施和组合根使用。lint按源码／声明文件解析限制领域与纯内核自身的依赖，并显式检查import、require、动态import和re-export；相对路径不能绕开。闭集与实际反例以`api/eslint.config.mjs`和`acceptance/architecture/pure/lint-boundaries.spec.ts`为准。
 
 具体 ESLint 配置落在文档 09 §2。
 
@@ -302,6 +304,7 @@ interface ──▶ application ──▶ domain
 - 例：`SandboxStateChanged` 事件 → terminal 上下文级联关闭会话、WS 事件通道推送前端。
 - **`automation` → `sandbox` 只走 application service**：调度器调 `SandboxApplicationService.createSandbox()` 创建标准 Task，不得自行登记配额、不得直接改状态机、不得绕过工作区独立副本（P21-7 §9）。这条是本规则最容易被违反的一处——"定时任务想快点跑起来"的诱惑很大，但绕过一次就意味着两套生命周期逻辑。
 - **`project` → `sandbox` 的级联删除**同理走 application service 编排（先按状态机销毁实例与卷、保留标记的成果卷，再删项目记录，13 §2）。
+- **`sandbox` → `credential` 的撤销清理**只走 credential application 的 `CREDENTIAL_REVOCATION_FACADE`，不持有或导入对方的 `CredentialSandboxBinding` 实体、Repository 或事务写入能力。门面只返回不可变的 `{ bindingId, credentialId, sandboxId }` 引用；sandbox 在事务外销毁对应实例，credential 自己用 `UnitOfWork`、`Clock` 和仓储条件确认清理。确认必须同时匹配三个 ID、绑定尚未清理且凭证已经撤销；迟到、重复或失配的确认不得改写别的绑定。失败仍留在待清理集合，由既有启动恢复与重试继续处理（[05 §4](./05-Runtime鉴权流转.md)、[23 §8.4](./23-领域模型与聚合设计.md)）。
 
 ## 6. 风险与备选
 

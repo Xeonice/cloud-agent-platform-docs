@@ -5,10 +5,14 @@ test("browser actions use actual Nest and current SQLite through the same-origin
   page,
   request,
 }) => {
-  const init = await request.post(`${API_ORIGIN}/api/system/init`, {
-    data: {},
-  });
-  expect(init.status()).toBe(201);
+  const initStatus = await request.get(`${API_ORIGIN}/api/system/init-status`);
+  expect(initStatus.status()).toBe(200);
+  if (!(await initStatus.json()).initialized) {
+    const init = await request.post(`${API_ORIGIN}/api/system/init`, {
+      data: {},
+    });
+    expect(init.status()).toBe(201);
+  }
   const credential = await request.post(
     `${API_ORIGIN}/api/runtimes/codex/credentials/secret`,
     {

@@ -9,6 +9,7 @@ export const API_ORIGIN = `http://127.0.0.1:${apiPort}`;
 export const WEB_ORIGIN = `http://127.0.0.1:${webPort}`;
 export default defineConfig({
   testDir: "./acceptance",
+  testIgnore: 'upgrade-*.spec.mjs',
   globalSetup: "./global-setup.ts",
   fullyParallel: false,
   workers: 1,

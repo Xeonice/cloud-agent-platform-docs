@@ -1,0 +1,10 @@
+import { spawn } from 'node:child_process';
+import * as fs from 'node:fs/promises';
+import { validateSecretFile } from '../jenkins/ci-agent-entrypoint.mjs';
+const names=new Set(['linux-publisher','linux-api-build','linux-arm64-package','linux-upgrade-evidence']);
+if(process.platform!=='linux'||process.arch!=='arm64'||process.getuid()!==1000||!names.has(process.env.JENKINS_AGENT_NAME))throw Error('Publication worker identity rejected');
+const u=new URL(process.env.JENKINS_URL);if(!['http:','https:'].includes(u.protocol)||u.username||u.password||u.search||u.hash)throw Error('Publication Jenkins origin rejected');
+for(const name of ['admin-api.json','runtime.env','owner.key','coordinator.key'])if(await fs.lstat('/run/agent-platform/jenkins-tools/'+name).catch(()=>null))throw Error('Publication worker has forbidden instance or admin credentials');
+await validateSecretFile();await fs.mkdir('/home/jenkins/agent',{recursive:true,mode:0o700});
+const child=spawn('/opt/java/openjdk/bin/java',['-jar','/usr/share/jenkins/agent.jar','-url',u.href,'-name',process.env.JENKINS_AGENT_NAME,'-secret','@/run/secrets/jenkins_agent_secret','-webSocket','-workDir','/home/jenkins/agent'],{stdio:'inherit',shell:false,env:{PATH:'/usr/local/bin:/usr/bin:/bin',HOME:'/home/jenkins',USER:'jenkins',LOGNAME:'jenkins',JAVA_HOME:'/opt/java/openjdk',LANG:'C.UTF-8'}});
+for(const signal of ['SIGINT','SIGTERM','SIGHUP'])process.on(signal,()=>child.kill(signal));child.once('error',()=>{process.exitCode=1;});child.once('exit',(code,signal)=>{process.exitCode=signal?1:code;});

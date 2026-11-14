@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { validRef, SHA } from "./jenkins-ci.mjs";
 import { createStatusApp } from "./github-status-app.mjs";
@@ -145,6 +145,80 @@ export function parametersMatch(value, expected) {
     ([name, val]) => actual[name] === String(val),
   );
 }
+export function exactParametersMatch(value, expected) {
+  const entries = (value?.actions ?? []).flatMap(
+    (action) => action.parameters ?? [],
+  );
+  return (
+    entries.length === Object.keys(expected).length &&
+    parametersMatch(value, expected)
+  );
+}
+// Explicit requests do not discover branches, tags, other PRs or releases.
+// The operator freezes the current three heads after the CI change is committed.
+export function scopedRequests(value) {
+  const keys = (object) =>
+    Object.keys(object ?? {})
+      .sort()
+      .join(",");
+  if (
+    value?.schemaVersion !== 1 ||
+    keys(value) !== "commits,pullRequests,requestId,schemaVersion" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$/.test(value.requestId ?? "") ||
+    keys(value.commits) !== "api,project,web" ||
+    keys(value.pullRequests) !== "api,project,web" ||
+    Object.keys(REPOSITORIES).some(
+      (repo) =>
+        !SHA.test(value.commits[repo] ?? "") ||
+        !Number.isSafeInteger(value.pullRequests[repo]) ||
+        value.pullRequests[repo] < 1,
+    )
+  )
+    throw new Error(
+      "Scoped CI requires one exact commit and PR per fixed repository",
+    );
+  const requests = ["api", "web", "project"].map((repo) => {
+    const sha = value.commits[repo],
+      ref = "refs/pull/" + value.pullRequests[repo] + "/head";
+    return {
+      repo,
+      sha,
+      ref,
+      key: repo + ":" + ref,
+      job: DISCOVERY_JOBS[repo],
+      params:
+        repo === "api"
+          ? { SHA: sha, REF: ref }
+          : repo === "web"
+            ? {
+                SHA: sha,
+                REF: ref,
+                ROOT_SHA: value.commits.project,
+                API_SHA: value.commits.api,
+              }
+            : {
+                ROOT_SHA: sha,
+                API_SHA: value.commits.api,
+                WEB_SHA: value.commits.web,
+              },
+    };
+  });
+  const canonical = {
+    schemaVersion: 1,
+    requestId: value.requestId,
+    commits: Object.fromEntries(
+      Object.keys(REPOSITORIES).map((repo) => [repo, value.commits[repo]]),
+    ),
+    pullRequests: Object.fromEntries(
+      Object.keys(REPOSITORIES).map((repo) => [repo, value.pullRequests[repo]]),
+    ),
+  };
+  return {
+    request: canonical,
+    requests,
+    key: createHash("sha256").update(JSON.stringify(canonical)).digest("hex"),
+  };
+}
 async function privateFile(path) {
   const handle = await fs.open(
     path,
@@ -236,6 +310,13 @@ async function gitRefs(spec) {
   });
 }
 export function createDiscoverer(overrides = {}) {
+  const scope =
+    overrides.requests === undefined
+      ? null
+      : scopedRequests(overrides.requests);
+  const scopedAction = overrides.action ?? "advance";
+  if (scope && !["advance", "reconcile"].includes(scopedAction))
+    throw new Error("Scoped CI supports only advance or reconcile");
   const context = deploymentContext(
     overrides.identity ?? userInfo(),
     overrides.system ?? buildSystem(),
@@ -292,6 +373,9 @@ export function createDiscoverer(overrides = {}) {
       }
       throw new Error("Open PR discovery exceeded bounded pagination");
     });
+  const pullFor =
+    overrides.pull ??
+    (async (repo, number) => (await github(repo, "pulls/" + number)).json());
   const postStatus =
     overrides.status ??
     (async (item) => {
@@ -318,7 +402,7 @@ export function createDiscoverer(overrides = {}) {
     });
   async function jenkinsRequest(path, options = {}) {
     if (
-      !/^(?:queue\/api\/json|queue\/item\/[1-9][0-9]*\/api\/json|job\/[A-Za-z0-9-]+\/(?:api\/json(?:\?tree=[A-Za-z0-9_,[\]]+)?|buildWithParameters|[1-9][0-9]*\/api\/json))$/.test(
+      !/^(?:queue\/api\/json|queue\/item\/[1-9][0-9]*\/api\/json|job\/[A-Za-z0-9-]+\/(?:api\/json(?:\?tree=[A-Za-z0-9_$.,[\]]+)?|buildWithParameters|[1-9][0-9]*\/(?:api\/json|artifact\/web-cross-repository\/contract.json)))$/.test(
         path,
       )
     )
@@ -380,6 +464,10 @@ export function createDiscoverer(overrides = {}) {
         return { schemaVersion: 2, refs: {}, pending: [], statuses: [] };
       throw error;
     });
+    if (scope && !state.schemaVersion)
+      throw new Error(
+        "Scoped CI will not migrate unrelated legacy discovery state",
+      );
     // Explicit old-state retirement: do not mistake an API-only ref baseline for
     // complete three-repository discovery. Preserve its pending native requests.
     if (!state.schemaVersion)
@@ -412,6 +500,99 @@ export function createDiscoverer(overrides = {}) {
       completed = [],
       queued = [],
       errors = [];
+    const matches = scope ? exactParametersMatch : parametersMatch;
+    const owns = (item) =>
+      !scope ||
+      (item.scopeKey === scope.key &&
+        scope.requests.some(
+          (request) =>
+            request.repo === item.repo &&
+            request.sha === item.sha &&
+            request.ref === item.ref &&
+            request.job === item.job &&
+            request.key === item.key &&
+            JSON.stringify(request.params) === JSON.stringify(item.params),
+        ));
+    if (scope) {
+      if (!overrides.status && (await statusApp.source()).kind !== "github-app")
+        throw new Error(
+          "Scoped required checks require the configured GitHub App",
+        );
+      if (
+        state.scopedRequests != null &&
+        (typeof state.scopedRequests !== "object" ||
+          Array.isArray(state.scopedRequests))
+      )
+        throw new Error("Invalid scoped CI state");
+      state.scopedRequests ??= {};
+      const existing = state.scopedRequests[scope.key];
+      if (
+        existing &&
+        (JSON.stringify(existing.request) !== JSON.stringify(scope.request) ||
+          !existing.results ||
+          typeof existing.results !== "object")
+      )
+        throw new Error("Scoped CI request identity changed");
+      if (scopedAction === "advance")
+        for (const item of scope.requests) {
+          const number = scope.request.pullRequests[item.repo];
+          const pull = await pullFor(item.repo, number);
+          const eligible = eligiblePulls([pull], REPOSITORIES[item.repo].name, [
+            REPOSITORIES[item.repo].branch,
+          ]);
+          if (
+            pull.number !== number ||
+            pull.state !== "open" ||
+            eligible.length !== 1 ||
+            eligible[0].ref !== item.ref ||
+            eligible[0].sha !== item.sha
+          )
+            throw new Error("Scoped CI PR head, repository or base changed");
+        }
+      state.scopedRequests[scope.key] ??= {
+        request: scope.request,
+        results: {},
+      };
+      state.scopedRequests[scope.key].dispatchIntents ??= {};
+      if (
+        state.pending.some((item) => item.scopeKey === scope.key && !owns(item))
+      )
+        throw new Error("Persisted scoped request parameters changed");
+      if (
+        state.pending.some(
+          (item) =>
+            item.scopeKey !== scope.key &&
+            scope.requests.some(
+              (request) =>
+                item.job === request.job &&
+                exactParametersMatch(
+                  {
+                    actions: [
+                      {
+                        parameters: Object.entries(item.params ?? {}).map(
+                          ([name, value]) => ({ name, value }),
+                        ),
+                      },
+                    ],
+                  },
+                  request.params,
+                ),
+            ),
+        )
+      )
+        throw new Error(
+          "An unowned pending request already uses these exact parameters",
+        );
+    }
+    function scopedResult(item, result, location) {
+      if (!scope) return;
+      state.scopedRequests[scope.key].results[item.repo] = {
+        job: item.job,
+        params: item.params,
+        result,
+        location,
+      };
+    }
     async function save() {
       state.updatedAt = stamp();
       await atomic(statePath, state);
@@ -423,10 +604,12 @@ export function createDiscoverer(overrides = {}) {
           !(
             old.repo === item.repo &&
             old.sha === item.sha &&
-            old.context === STATUS_CONTEXTS[item.repo]
+            old.context === STATUS_CONTEXTS[item.repo] &&
+            (!scope || old.scopeKey === scope.key)
           ),
       );
       state.statuses.push({
+        ...(scope ? { scopeKey: scope.key } : {}),
         repo: item.repo,
         sha: item.sha,
         context: STATUS_CONTEXTS[item.repo],
@@ -440,10 +623,101 @@ export function createDiscoverer(overrides = {}) {
               : "Jenkins verification did not pass",
       });
     }
+    const historyPath = (job) =>
+      "job/" +
+      job +
+      "/api/json?tree=builds[number,url,building,result,queueId,timestamp,actions[parameters[name,value],causes[_class,upstreamProject,upstreamBuild]]]";
+    async function matchingScopedRuns(item) {
+      const [queue, history] = await Promise.all([
+        jk.get("queue/api/json"),
+        jk.get(historyPath(item.job)),
+      ]);
+      const runs = new Map();
+      for (const queued of queue.items ?? []) {
+        if (
+          queued.task?.name !== item.job ||
+          !exactParametersMatch(queued, item.params)
+        )
+          continue;
+        if (!Number.isSafeInteger(queued.id) || queued.id < 1)
+          throw new Error("Matching queue identity is invalid");
+        runs.set(queued.id, {
+          queueId: queued.id,
+          location: JENKINS + "queue/item/" + queued.id + "/",
+          queued,
+        });
+      }
+      for (const build of history.builds ?? []) {
+        if (!exactParametersMatch(build, item.params)) continue;
+        if (
+          !Number.isSafeInteger(build.queueId) ||
+          build.queueId < 1 ||
+          !isTrustedJenkinsLocation(build.url, item.job)
+        )
+          throw new Error(
+            "Matching build has no trustworthy original queue identity",
+          );
+        runs.set(build.queueId, {
+          queueId: build.queueId,
+          location: canonicalJenkinsLocation(build.url),
+          result: build,
+        });
+      }
+      return [...runs.values()];
+    }
+    function rememberPending(item, run) {
+      const pending = {
+        ...item,
+        scopeKey: scope.key,
+        queueId: run.queueId,
+        dispatchedByScope: true,
+        location: run.location,
+        queuedAt: stamp(),
+        ...(run.result
+          ? {
+              buildNumber: run.result.number,
+              executableQueueId: run.queueId,
+            }
+          : {}),
+      };
+      state.pending.push(pending);
+      state.refs[item.key] = item.sha;
+      return pending;
+    }
+    if (scope) {
+      const record = state.scopedRequests[scope.key];
+      for (const item of scope.requests) {
+        const intent = record.dispatchIntents[item.repo];
+        if (intent?.state !== "dispatching") continue;
+        if (
+          intent.job !== item.job ||
+          JSON.stringify(intent.params) !== JSON.stringify(item.params) ||
+          !Array.isArray(intent.knownQueueIds)
+        )
+          throw new Error("Durable scoped dispatch intent changed");
+        const runs = (await matchingScopedRuns(item)).filter(
+          (run) => !intent.knownQueueIds.includes(run.queueId),
+        );
+        if (runs.length !== 1) {
+          errors.push({
+            key: item.key,
+            error: "Dispatch outcome unresolved; lookup only, no redispatch",
+          });
+          continue;
+        }
+        const run = runs[0];
+        rememberPending(item, run);
+        intent.state = "acknowledged";
+        intent.queueId = run.queueId;
+        intent.recoveredFromDurableIntent = true;
+        status(item, "pending", JENKINS + "job/" + item.job + "/");
+        await save();
+      }
+    }
     async function actualRequest(job, params) {
       const queue = await jk.get("queue/api/json");
       for (const item of queue.items ?? [])
-        if (item.task?.name === job && parametersMatch(item, params)) {
+        if (item.task?.name === job && matches(item, params)) {
           const location = JENKINS + "queue/item/" + item.id + "/";
           if (!isTrustedJenkinsLocation(location, job))
             throw new Error("Invalid actual Jenkins queue identity");
@@ -455,14 +729,18 @@ export function createDiscoverer(overrides = {}) {
           "/api/json?tree=builds[number,url,building,result,actions[parameters[name,value]]]",
       );
       for (const item of history.builds ?? [])
-        if (parametersMatch(item, params)) {
+        if (matches(item, params)) {
           if (!isTrustedJenkinsLocation(item.url, job))
             throw new Error("Untrusted actual Jenkins build");
-          return { location: item.url, result: item };
+          return {
+            location: scope ? canonicalJenkinsLocation(item.url) : item.url,
+            result: item,
+          };
         }
       return null;
     }
     for (const item of [...state.pending]) {
+      if (!owns(item)) continue;
       if (
         !validRequest(item) ||
         !isTrustedJenkinsLocation(item.location, item.job)
@@ -482,6 +760,7 @@ export function createDiscoverer(overrides = {}) {
             delete state.refs[item.key];
             completed.push({ key: item.key, result: "LOST_QUEUE_RETRY" });
             status(item, "failure", JENKINS + "job/" + item.job + "/");
+            scopedResult(item, "LOST_QUEUE", item.location);
             await save();
             continue;
           }
@@ -493,21 +772,52 @@ export function createDiscoverer(overrides = {}) {
             ));
         }
         if (item.location.includes("/queue/")) {
+          if (
+            scope &&
+            (value.id !==
+              Number(new URL(item.location).pathname.split("/")[3]) ||
+              !exactParametersMatch(value, item.params))
+          )
+            throw new Error(
+              "Actual scoped queue identity or parameters changed",
+            );
           if (value.cancelled) {
             state.pending = state.pending.filter((old) => old !== item);
             delete state.refs[item.key];
             completed.push({ key: item.key, result: "ABORTED" });
             status(item, "failure", JENKINS + "job/" + item.job + "/");
+            scopedResult(item, "ABORTED", item.location);
           } else if (value.executable?.url) {
             if (!isTrustedJenkinsLocation(value.executable.url, item.job))
               throw new Error("Untrusted queue executable");
-            item.location = value.executable.url;
+            item.location = scope
+              ? canonicalJenkinsLocation(value.executable.url)
+              : value.executable.url;
+            if (scope) {
+              item.buildNumber = Number(
+                new URL(item.location).pathname.split("/")[3],
+              );
+              item.executableQueueId = value.id;
+            }
           }
           await save();
           continue;
         }
-        if (!parametersMatch(value, item.params))
+        if (!matches(value, item.params))
           throw new Error("Jenkins execution used different source parameters");
+        if (
+          scope &&
+          (typeof value.building !== "boolean" ||
+            !Number.isSafeInteger(value.number) ||
+            value.number < 1 ||
+            canonicalJenkinsLocation(value.url) !== item.location ||
+            value.number !==
+              Number(new URL(item.location).pathname.split("/")[3]) ||
+            value.queueId !== item.queueId)
+        )
+          throw new Error(
+            "Actual scoped build identity or terminal state is unknown",
+          );
         if (value.building || value.result == null) continue;
         state.pending = state.pending.filter((old) => old !== item);
         if (
@@ -525,6 +835,7 @@ export function createDiscoverer(overrides = {}) {
           result: value.result,
           buildUrl: item.location,
         });
+        scopedResult(item, value.result, item.location);
         await save();
       } catch (error) {
         errors.push({ key: item.key, error: error.message });
@@ -532,7 +843,7 @@ export function createDiscoverer(overrides = {}) {
     }
     const discovered = {},
       commits = {};
-    for (const [repo, spec] of Object.entries(REPOSITORIES)) {
+    for (const [repo, spec] of scope ? [] : Object.entries(REPOSITORIES)) {
       const refs = [
         ...(await refsFor(spec, repo)).filter((entry) =>
           followedRef(repo, entry.ref),
@@ -557,7 +868,7 @@ export function createDiscoverer(overrides = {}) {
       discovered[repo] = [...unique].map(([ref, sha]) => ({ ref, sha }));
       commits[repo] = unique.get("refs/heads/" + spec.branch);
     }
-    const key = projectKey(commits);
+    const key = projectKey(scope ? scope.request.commits : commits);
     async function enqueue(item) {
       if (!validRequest(item))
         throw new Error("Untrusted new Jenkins source request");
@@ -574,30 +885,159 @@ export function createDiscoverer(overrides = {}) {
       // retried; published project state, not a historical SUCCESS, decides release.
       if (
         found?.result &&
-        !found.result.building &&
+        (scope ? found.result.building === false : !found.result.building) &&
         found.result.result !== null
       ) {
         if (
           found.result.result === "SUCCESS" &&
           item.job !== DISCOVERY_JOBS.release
         ) {
+          if (
+            scope &&
+            (!Number.isSafeInteger(found.result.number) ||
+              found.result.number < 1 ||
+              canonicalJenkinsLocation(found.result.url) !== found.location ||
+              found.result.number !==
+                Number(new URL(found.location).pathname.split("/")[3]))
+          )
+            throw new Error("Reused scoped build identity is invalid");
           state.refs[item.key] = item.sha;
           status(item, "success", found.location);
+          scopedResult(item, "SUCCESS", found.location);
           await save();
           return;
         }
         found = null;
       }
+      if (scope && found)
+        throw new Error(
+          "A matching running build is not an owned scoped dispatch",
+        );
+      if (scope) {
+        await overrides.beforeQueue?.(item);
+        const runs = await matchingScopedRuns(item);
+        if (runs.some((run) => run.queued || run.result?.building !== false))
+          throw new Error(
+            "A matching running build is not an owned scoped dispatch",
+          );
+        state.scopedRequests[scope.key].dispatchIntents[item.repo] = {
+          state: "dispatching",
+          job: item.job,
+          params: item.params,
+          knownQueueIds: runs.map((run) => run.queueId),
+          createdAt: stamp(),
+        };
+        // Persist before POST. A missing response is recovered by observation;
+        // the same intent can never send another POST.
+        await save();
+      }
+      if (scope) await overrides.beforeQueue?.(item);
       const location =
         found?.location ?? (await jk.queue(item.job, item.params));
       if (!isTrustedJenkinsLocation(location, item.job))
         throw new Error("Jenkins did not return a trusted queue URL");
-      state.pending.push({ ...item, location, queuedAt: stamp() });
+      if (
+        scope &&
+        !/^\/queue\/item\/[1-9][0-9]*\/$/.test(new URL(location).pathname)
+      )
+        throw new Error(
+          "New scoped dispatch did not return an actual queue ID",
+        );
+      state.pending.push({
+        ...item,
+        ...(scope ? { scopeKey: scope.key } : {}),
+        ...(scope
+          ? {
+              queueId: Number(new URL(location).pathname.split("/")[3]),
+              dispatchedByScope: true,
+            }
+          : {}),
+        location,
+        queuedAt: stamp(),
+      });
+      if (scope) {
+        const intent =
+          state.scopedRequests[scope.key].dispatchIntents[item.repo];
+        intent.state = "acknowledged";
+        intent.queueId = Number(new URL(location).pathname.split("/")[3]);
+      }
       if (item.sha) state.refs[item.key] = item.sha;
       status(item, "pending", JENKINS + "job/" + item.job + "/");
       // Persist before calling GitHub. A failed status update cannot enqueue twice.
       await save();
       queued.push({ key: item.key, job: item.job, queueUrl: location });
+    }
+    if (scope && scopedAction === "advance" && errors.length === 0) {
+      const results = state.scopedRequests[scope.key].results;
+      for (const request of scope.requests) {
+        if (results[request.repo]?.result === "SUCCESS") continue;
+        if (results[request.repo] || state.pending.some(owns)) break;
+        if (request.repo !== "project") {
+          await enqueue(request);
+          break;
+        }
+        // Web SUCCESS alone is insufficient: bind the actual recorded child,
+        // then verify that child's exact parameters and terminal Jenkins result.
+        const web = results.web;
+        const report = await jk.get(
+          new URL(web.location).pathname.slice(1) +
+            "artifact/web-cross-repository/contract.json",
+        );
+        const child = report?.child;
+        const childUrl =
+          JENKINS + "job/" + DISCOVERY_JOBS.project + "/" + child?.number + "/";
+        if (
+          report?.schemaVersion !== 1 ||
+          report.job !== DISCOVERY_JOBS.web ||
+          report.state !== "passed" ||
+          report.buildNumber !==
+            Number(new URL(web.location).pathname.split("/")[3]) ||
+          JSON.stringify(report.commits) !==
+            JSON.stringify({
+              root: scope.request.commits.project,
+              api: scope.request.commits.api,
+              web: scope.request.commits.web,
+            }) ||
+          !exactParametersMatch(
+            {
+              actions: [
+                {
+                  parameters: Object.entries(report.parameters ?? {}).map(
+                    ([name, value]) => ({ name, value }),
+                  ),
+                },
+              ],
+            },
+            request.params,
+          ) ||
+          child?.job !== DISCOVERY_JOBS.project ||
+          child.result !== "SUCCESS" ||
+          !Number.isSafeInteger(child.number) ||
+          child.number < 1 ||
+          !isTrustedJenkinsLocation(childUrl, DISCOVERY_JOBS.project) ||
+          canonicalJenkinsLocation(child.url) !== childUrl
+        )
+          throw new Error(
+            "Web contract child evidence does not match the scoped request",
+          );
+        const actual = await jk.get(
+          new URL(childUrl).pathname.slice(1) + "api/json",
+        );
+        if (
+          !exactParametersMatch(actual, request.params) ||
+          actual.building !== false ||
+          actual.result !== "SUCCESS" ||
+          actual.number !== child.number ||
+          canonicalJenkinsLocation(actual.url) !== childUrl
+        )
+          throw new Error(
+            "Actual contract child did not pass the exact scoped parameters",
+          );
+        state.refs[request.key] = request.sha;
+        scopedResult(request, "SUCCESS", childUrl);
+        status(request, "success", childUrl);
+        await save();
+      }
     }
     for (const [repo, refs] of Object.entries(discovered))
       for (const { ref, sha } of refs) {
@@ -677,19 +1117,21 @@ export function createDiscoverer(overrides = {}) {
           await save();
         }
       }
-    const current = await jsonFile(
-      join(deployRoot, "project-release-current.json"),
-    ).catch((error) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    });
+    const current = scope
+      ? null
+      : await jsonFile(join(deployRoot, "project-release-current.json")).catch(
+          (error) => {
+            if (error.code === "ENOENT") return null;
+            throw error;
+          },
+        );
     if (
       current &&
       (current.state !== "published" ||
         current.key !== projectKey(current.commits))
     )
       throw new Error("Invalid current project publication evidence");
-    if (current?.key !== key) {
+    if (!scope && current?.key !== key) {
       try {
         await enqueue({
           key: "release:" + key,
@@ -700,10 +1142,21 @@ export function createDiscoverer(overrides = {}) {
         errors.push({ key: "release:" + key, error: error.message });
       }
     }
-    state.initializedAt ??= stamp();
+    if (!scope) state.initializedAt ??= stamp();
     await save();
     // Each repository status failure is independent and its outbox survives.
     for (const item of [...state.statuses]) {
+      if (
+        scope &&
+        (item.scopeKey !== scope.key ||
+          !scope.requests.some(
+            (request) =>
+              request.repo === item.repo &&
+              request.sha === item.sha &&
+              item.context === STATUS_CONTEXTS[request.repo],
+          ))
+      )
+        continue;
       if (
         !REPOSITORIES[item.repo] ||
         !SHA.test(item.sha) ||
@@ -740,6 +1193,19 @@ export function createDiscoverer(overrides = {}) {
       githubStatusSource,
       errors,
       updatedAt: state.updatedAt,
+      ...(scope
+        ? {
+            scopeKey: scope.key,
+            scopedResults: state.scopedRequests[scope.key].results,
+            scopedPending: state.pending.filter(owns).length,
+            scopedPendingStatuses: state.statuses.filter(
+              (item) => item.scopeKey === scope.key,
+            ).length,
+            scopedUnresolvedDispatches: Object.values(
+              state.scopedRequests[scope.key].dispatchIntents,
+            ).filter((intent) => intent.state === "dispatching").length,
+          }
+        : {}),
     };
   };
 }

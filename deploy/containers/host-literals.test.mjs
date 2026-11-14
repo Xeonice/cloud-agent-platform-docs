@@ -286,20 +286,23 @@ test("no deploy or scripts code names a Mac account, home, UID, Docker CLI or No
     );
 });
 
-// The three Mac-only CLIs under deploy/jenkins are copied into the deploy
+// These Mac-only CLIs under deploy/jenkins are copied into the deploy
 // image without ../containers; they may import the layout only on their CLI
 // path. No other image file may load it at all.
 const MAC_CLIS = new Set(
-  ["manage.mjs", "setup-github-app.mjs", "import-ghcr-token.mjs"].map(
-    (name) => "deploy/jenkins/" + name,
-  ),
+  [
+    "manage.mjs",
+    "setup-github-app.mjs",
+    "import-ghcr-token.mjs",
+    "scoped-ci-monitor.mjs",
+  ].map((name) => "deploy/jenkins/" + name),
 );
 const STATIC_IMPORT =
   /^\s*(?:import|export)\s[^;]*?["'][^"']*host-layout(?:\.mjs)?["']/m;
 const DYNAMIC_IMPORT =
   /\bimport\s*\(\s*["'\x60][^"'\x60]*host-layout\.mjs["'\x60]\s*\)/;
 
-test("no image ships or statically imports host-layout.mjs; only the three Mac CLIs import it dynamically", async (t) => {
+test("no image ships or statically imports host-layout.mjs; only the explicit Mac CLIs import it dynamically", async (t) => {
   const temporary = await fs.realpath(
     await fs.mkdtemp(join(tmpdir(), "host-literals-")),
   );

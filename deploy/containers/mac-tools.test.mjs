@@ -19,6 +19,7 @@ const TOOLS = [
   "deploy/jenkins/manage.mjs",
   "deploy/jenkins/setup-github-app.mjs",
   "deploy/jenkins/import-ghcr-token.mjs",
+  "deploy/jenkins/scoped-ci-monitor.mjs",
   "deploy/containers/bootstrap-host.mjs",
   "deploy/containers/controller.mjs",
   "deploy/containers/verify-controller.mjs",
@@ -29,6 +30,7 @@ const IMAGE_COPIES = [
   "manage.mjs",
   "setup-github-app.mjs",
   "import-ghcr-token.mjs",
+  "scoped-ci-monitor.mjs",
 ];
 
 test("no Mac operator tool names a host path, account, UID or binary location", async () => {
@@ -100,6 +102,14 @@ test("the deploy image copies of the Mac-only CLIs import without the host layou
     pathToFileURL(join(tools, "import-ghcr-token.mjs")).href
   );
   assert.deepEqual(Object.keys(token), []);
+  const monitor = await import(
+    pathToFileURL(join(tools, "scoped-ci-monitor.mjs")).href
+  );
+  assert.equal(typeof monitor.runScopedMonitor, "function");
+  assert.deepEqual(await monitor.runScopedMonitor([]), {
+    state: "held",
+    actions: 0,
+  });
   // Run as a CLI inside the image, the copy stops at the missing module before
   // reading any credential or contacting Jenkins.
   const cli = spawnSync(

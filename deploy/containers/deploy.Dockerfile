@@ -6,6 +6,7 @@ USER root
 COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=docker /usr/local/libexec/docker/cli-plugins/ /usr/local/lib/docker/cli-plugins/
 COPY tools/ /opt/agent-platform/tools/
+COPY upgrade/ /opt/agent-platform/upgrade/
 COPY container-tools/ /opt/agent-platform/container-tools/
 RUN chmod -R go-w /opt/agent-platform /usr/local/lib/docker/cli-plugins \
     && node --check /opt/agent-platform/tools/api-container.mjs \
