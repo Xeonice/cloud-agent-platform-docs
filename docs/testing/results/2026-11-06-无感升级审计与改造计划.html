@@ -74,13 +74,21 @@
     <header class="hero">
       <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">原因复核完成 · 升级仍未完成</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-<p class="hero-lede">多次失败不是同一个环境故障。旧首迁先停服务再准备候选，直接造成中断；本机后续演练又暴露测试契约、产品交接和生产规模性能问题。最新prepare与Guest超时仍未查明具体根因。下面分开说明统计口径、已定位机制与尚未闭合的问题，历史通过不覆盖新包失败。</p>
+<p class="hero-lede">原要求一直是先启动新服务、迁移完成后再关闭旧服务。旧首迁执行器却偏离要求，先停服务再准备候选，直接造成中断；本机后续演练又暴露测试契约、产品交接和生产规模性能问题。最新prepare与Guest超时仍未查明具体根因。下面分开说明需求与实现的偏差、统计口径和仍未闭合的问题。</p>
       <div class="meta"><span>对象：公司实例原审计＋Mac mini后续验证</span><span>复核：2026年11月15日，仅既有原件与源码</span><span>本次无新实验、远端探测或线上升级</span></div>
     </header>
 
     <section class="section" id="failure-cause-review-20261115" aria-labelledby="failure-cause-review-title">
       <div class="section-head"><span class="section-number">复核</span><h2 id="failure-cause-review-title">为什么反复失败：设计、验证和诊断没有一起收敛</h2></div>
       <div class="callout danger"><h3>不能用最后一次沙箱超时解释整个失败链。</h3><p>本次复核截至11月10日已归档材料，不代表11月15日实时状态。已证原因包括旧停服顺序、四类产品缺陷、测试与环境准备错误，以及两次不同的生产SLO失败；<strong>Q13／Q14 prepare与Q15／Guest路线的具体深层原因仍未闭合</strong>。不能统一归为磁盘、Node版本、网络或KVM。</p></div>
+      <div class="callout amber" style="margin-top:17px"><h3>原要求没有变；先停旧是在实现中引入的偏差</h3><p>最早可证的代码提交是<strong>2026年10月20日06:44:27（北京时间），961f2bd5</strong>：先停旧Foundation／Installer／writer，再导出并启动新五角色。同提交设计仍要求原业务保持、先旁观和兼容桥，且禁止直接重启整套Foundation代替设计。没有查到能证明用户批准改成先停旧的仓库记录；Git姓名和时间不代表用户决策。</p><p><strong>测试也把错误顺序当成成功预期：</strong>原版测试L703–714明确断言先stop旧三角色、再start新五角色。它验证了执行器能照这套顺序完成，没有验证用户要求的连续服务。现行代码已禁止该正式执行路径，历史测试仅用于显式fixture／恢复，不能冒称目前仍获准使用。</p></div>
+      <div class="table-wrap" tabindex="0" aria-label="设计实现偏差与上轮改造范围的时间线"><table><thead><tr><th scope="col">Git时间（北京时间）</th><th scope="col">代码／文档变化</th><th scope="col">含义</th></tr></thead><tbody>
+        <tr><td>10月20日06:44:27<br><code>961f2bd5</code></td><td>新增首迁执行器，先停旧、后导出和启动新角色；同提交设计仍是渐进接管</td><td>实现和测试偏离了同期设计，不能归为用户改需求。</td></tr>
+        <tr><td>11月7日02:24:16<br><code>e50cd065</code></td><td>禁用旧stop-first；准备保留旧入口的接入方案，先兼容A、再接真正Control</td><td>纠正旧算法的使用边界，新接管仍未实现完整。</td></tr>
+        <tr><td>11月9日00:32:02<br><code>2018a9a</code></td><td>明确把当前交付改成A7兼容升级，FullControl独立后排</td><td>过渡升级成为当前唯一交付，不能再把它称作完整新控制架构已上线。</td></tr>
+        <tr><td>11月10日01:53:05<br><code>713edc5f</code></td><td>A7改A8，继续修兼容链的A／B准备预算</td><td>分段预算并未解决Q14超时，也没有完成独立Control接管。</td></tr>
+      </tbody></table></div>
+      <p class="note"><strong>上一次整体重写没有落好的关键点：</strong>新控制系统如何不停服接管旧实例仍未闭合；A5–A8实际均无ControlPackage，仍用旧兼容升级通道安装新业务组件。prepared只提前监听端口，并非全部业务钩子已就绪；代表规模、独立恢复和阶段诊断也未完整验证。故“有新代码／有局部通过”不能等同整套新流程已替换上线。详细承诺—实现—后果对照见下方完整复核链接中的§0.5–§0.6。</p>
       <div class="table-wrap" tabindex="0" aria-label="不同失败范围与统计口径"><table><thead><tr><th scope="col">范围</th><th scope="col">核实结果</th><th scope="col">原因与边界</th></tr></thead><tbody>
         <tr><td>公司实例旧首迁</td><td>23批中15批已停旧服务；14回退＋1宿主重启中断，迁移成功0</td><td>先停旧Foundation／写者，再导出、冷启与验证；路径、SQLite挂载、镜像依赖、字段／收据等基础集成错误在停服后暴露。下方第01–03节属于这一历史范围。</td></tr>
         <tr><td>本机完整演练Q1–Q15</td><td><strong>15次＝13失败／中断＋2通过</strong>，通过仅Q9／Q11</td><td>按主要阻断点：测试／准备合同4、环境与容量2、已定位产品缺陷4、具体根因未闭合超时3。构建、stage和独立Guest对照不计新增Native。</td></tr>
