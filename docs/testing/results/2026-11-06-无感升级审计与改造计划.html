@@ -25,7 +25,8 @@
     <div class="brand"><span class="brand-mark" aria-hidden="true">A</span><span>Agent 管理平台<br><small class="muted">工程审计与改造计划</small></span></div>
     <div class="side-rule"></div>
     <nav aria-label="报告章节">
-      <a href="#current-a7-plan-v2" class="active"><span class="nav-number">当前</span>Q15失败／单Guest诊断</a>
+      <a href="#failure-cause-review-20261115" class="active"><span class="nav-number">复核</span>为什么多次失败</a>
+      <a href="#current-a7-plan-v2"><span class="nav-number">当前</span>Q15失败／单Guest诊断</a>
       <a href="#summary"><span class="nav-number">01</span>结论与统计口径</a>
       <a href="#audit"><span class="nav-number">02</span>失败与服务影响</a>
       <a href="#causes"><span class="nav-number">03</span>共同根因</a>
@@ -51,7 +52,7 @@
       <a href="#a5-published-q9-stage-only"><span class="nav-number">23</span>A5发布与Q9 stage问题</a>
       <a href="#q9-independent-stage-capacity-hold"><span class="nav-number">24</span>Q9续构与待验收证据</a>
       <a href="#q9-native-full-pass-production-pending"><span class="nav-number">25</span>Q9完整通过与窗口补证</a>
-      <a href="#production-a5-inflight-single-request"><span class="nav-number">26</span>生产单次更新进行中</a>
+      <a href="#production-a5-inflight-single-request"><span class="nav-number">26</span>A5请求受理（历史）</a>
       <a href="#production-a5-failed-service-readable"><span class="nav-number">27</span>生产失败与服务可访问边界</a>
       <a href="#probe-cadence-sixty-second-pressure-pass"><span class="nav-number">28</span>65秒采样压力回归通过</a>
       <a href="#manual-source-route-recovered-a6-building"><span class="nav-number">29</span>源路由恢复与A6构建</a>
@@ -61,21 +62,47 @@
       <a href="#q11-native-started-after-qualified-disk-release"><span class="nav-number">33</span>Q11启动与归档净释放</a>
       <a href="#q11-native-pass-original-windows-pending"><span class="nav-number">34</span>Q11通过与窗口待核</a>
       <a href="#q11-four-original-windows-full-pass"><span class="nav-number">35</span>Q11兼容验收闭环通过</a>
-      <a href="#production-a6-single-request-inflight"><span class="nav-number">36</span>线上A6唯一更新运行中</a>
+      <a href="#production-a6-single-request-inflight"><span class="nav-number">36</span>A6请求受理（历史）</a>
       <a href="#production-a6-slo-probe-failed-original-owners-preserved"><span class="nav-number">37</span>A6生产首窗SLO失败</a>
       <a href="#a6-manual-source-route-recovered-ci-restored"><span class="nav-number">38</span>源路由恢复与CI复原</a>
       <a href="#schema29-performance-local-pass-manual-observer-wired"><span class="nav-number">39</span>性能本地通过与只读接线</a>
       <a href="#a7-published-q12-capacity-guard-not-qualified"><span class="nav-number">40</span>A7发布与Q12容量中断</a>
     </nav>
-    <div class="side-bottom"><strong>2026 年 11 月 6 日</strong>实例 100.73.71.22<br>统计快照 07:44:42 UTC<br>15:44:42 中国标准时间<br>11月7日追加：本机 Mac mini<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
+    <div class="side-bottom"><strong>11月15日：原因复核</strong>复核截至11月10日原件<br>非当日线上状态快照<br>公司旧首迁：11月6日统计<br>后续验证：本机 Mac mini<button type="button" class="print-button" id="print-report">打印报告 / 保存为 PDF ↗</button></div>
   </aside>
   <main class="main" id="main">
     <header class="hero">
-      <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">Q15失败 · Docker对照通过 · 生产HELD</span></div>
+      <div class="hero-top"><span class="eyebrow">Engineering review · UPG</span><span class="badge">原因复核完成 · 升级仍未完成</span></div>
       <h1>无感升级失败审计<br>与服务改造计划</h1>
-<p class="hero-lede">A8已实际构建、签名发布、匿名完整读回并通过同包规模性能专项；Q14唯一真实Native终态失败：647.683秒／exit1／无容量TERM，交接未applied。Q15已终态失败：Agent工具启动超时，未建任何升级attempt；当前QA已正常停止、Build4CPU／8GiB与两CI已实际恢复。A7／Q13及Q14历史失败与生产两次failed保持，A8生产POST0、入口继续HELD。</p>
-      <div class="meta"><span>对象：公司实例原审计＋Mac mini后续验证</span><span>当前目标：先定位Guest启动／回传→同A8新Native验收→fresh生产；完整Control另排</span><span>报告类型：事实审计 + 实施与验证进展</span></div>
+<p class="hero-lede">多次失败不是同一个环境故障。旧首迁先停服务再准备候选，直接造成中断；本机后续演练又暴露测试契约、产品交接和生产规模性能问题。最新prepare与Guest超时仍未查明具体根因。下面分开说明统计口径、已定位机制与尚未闭合的问题，历史通过不覆盖新包失败。</p>
+      <div class="meta"><span>对象：公司实例原审计＋Mac mini后续验证</span><span>复核：2026年11月15日，仅既有原件与源码</span><span>本次无新实验、远端探测或线上升级</span></div>
     </header>
+
+    <section class="section" id="failure-cause-review-20261115" aria-labelledby="failure-cause-review-title">
+      <div class="section-head"><span class="section-number">复核</span><h2 id="failure-cause-review-title">为什么反复失败：设计、验证和诊断没有一起收敛</h2></div>
+      <div class="callout danger"><h3>不能用最后一次沙箱超时解释整个失败链。</h3><p>本次复核截至11月10日已归档材料，不代表11月15日实时状态。已证原因包括旧停服顺序、四类产品缺陷、测试与环境准备错误，以及两次不同的生产SLO失败；<strong>Q13／Q14 prepare与Q15／Guest路线的具体深层原因仍未闭合</strong>。不能统一归为磁盘、Node版本、网络或KVM。</p></div>
+      <div class="table-wrap" tabindex="0" aria-label="不同失败范围与统计口径"><table><thead><tr><th scope="col">范围</th><th scope="col">核实结果</th><th scope="col">原因与边界</th></tr></thead><tbody>
+        <tr><td>公司实例旧首迁</td><td>23批中15批已停旧服务；14回退＋1宿主重启中断，迁移成功0</td><td>先停旧Foundation／写者，再导出、冷启与验证；路径、SQLite挂载、镜像依赖、字段／收据等基础集成错误在停服后暴露。下方第01–03节属于这一历史范围。</td></tr>
+        <tr><td>本机完整演练Q1–Q15</td><td><strong>15次＝13失败／中断＋2通过</strong>，通过仅Q9／Q11</td><td>按主要阻断点：测试／准备合同4、环境与容量2、已定位产品缺陷4、具体根因未闭合超时3。构建、stage和独立Guest对照不计新增Native。</td></tr>
+        <tr><td>本机真实线上A5／A6</td><td><strong>2次POST、2次failed、重发0</strong>；A7／A8线上POST0</td><td>A5采样不足10Hz；A6真实请求失败／超2秒。两次手工恢复均只切回源API路由，未整版回滚或confirmed。</td></tr>
+        <tr><td>最新单Guest诊断</td><td>R3／R4／R6回传门失败，R5观察RPC超时</td><td>属于独立诊断；不能解释更早所有失败，也不能用普通Docker通过补Guest或完整升级资格。</td></tr>
+      </tbody></table></div>
+      <div class="table-wrap" tabindex="0" aria-label="演练失败原因与修复闭环"><table><thead><tr><th scope="col">原次／类别</th><th scope="col">具体问题</th><th scope="col">现在能确认什么</th></tr></thead><tbody>
+        <tr><td>Q1／Q2／Q5／Q10<br>测试与准备合同</td><td>空库generation复制错误；异步operation误当attempt；同Web完成态断言错误；总counter预算未分开工具启动。</td><td>后续相应链路已真实越过。Q10改为工具180秒＋counter60秒，不能说原准备总预算未变或CLI慢因已解决。</td></tr>
+        <tr><td>Q3／Q12<br>环境与容量</td><td>dockerd PATH缺AppArmor parser；运行峰值不足，跌破4GiB保护线。</td><td>环境与容量门已修正、后续越过；不表示产品或整条升级链通过。</td></tr>
+        <tr><td>Q4／Q6／Q7／Q8<br>产品缺陷</td><td>后台工作未排空即判失败；终端库存未补发；容量根硬编码；ready发布与续租425竞态。</td><td>分别有Q5／Q7／Q8／Q9真实越过原失败点的证据；不将旧包通过移植为当前A8资格。</td></tr>
+        <tr><td>Q13／Q14<br>prepare超时未闭合</td><td>原共享预算剩约83秒，新分段B预算约120秒，均无首响应；事后副本已有prepared行。</td><td>预算拆分没有解决超时；缺提交／返回阶段时刻。窄对照16.6–16.8秒没有复现完整场景，不能认定响应丢失或唯一CPU／I/O原因。</td></tr>
+        <tr><td>Q15与Guest链<br>启动／回传未闭合</td><td>Q15升级请求前180秒无首工具；后续Guest有counter3却无完成／回传。R5另是5秒read-job观察超时。</td><td>R6主要CPU属于Guest执行域，具体内部程序、CLI／SDK／spool阶段仍未知；不是KVM缺陷已证。已收到的模型POST仅几十毫秒，HEAD401在成功对照也出现。</td></tr>
+      </tbody></table></div>
+      <div class="split" style="margin-top:17px">
+        <div class="card"><h3>A5：采样器未达到10Hz</h3><p>原60秒窗source565条／<strong>9.4Hz</strong>、candidate564条／9.383Hz；已采样请求失败0、最大612ms。setInterval遇同步工作漏slot的机制已复现并修正。没有原生产完整事件循环剖析，不能指定唯一阻塞来源。</p></div>
+        <div class="card"><h3>A6：真实请求失败与响应超限</h3><p>source48样本／<strong>10失败／2,901ms</strong>，candidate66／4失败／3,473ms，首窗即熔断。后续确认历史COUNT扫描及schema29反复处理大snapshot的同步负载，减负回归通过；尚未证明其独自解释原秒级尖峰。</p></div>
+      </div>
+      <p class="note"><strong>为什么QA通过仍线上失败：</strong>旧QA使用fresh generation1、小型独立DB，不复制生产库；生产有277,135条历史probe及4,053,536B交接证据。旧演练没有授予该规模覆盖，代表性不足；不能臆造旧QA精确行数或将此差异当作每次生产失败的唯一原因。</p>
+      <div class="callout amber" style="margin-top:17px"><h3>完整改造尚未交付，局部修复不等于根因闭环</h3><p>当前正式首迁策略仍是<code>onlineAdoptionImplemented=false</code>，apply／resume在动作前拒绝旧stop-first。兼容升级和局部性能已有进展，但完整独立Control接入未完成；当前A8完整验收仍失败。执行层应承担未提前封闭整包、真实配置、代表规模和恢复链路的责任。清盘、扩容、增加预算或修复相邻问题，不能自动记为prepare及Guest深层根因已解决。</p></div>
+      <p class="note">报告表达也需修正：旧公司15次触停、本机15次演练与2次线上失败原先分散在历史追加中；Markdown开头还停在Q13／13次。本次集中纠正口径，保留原失败和时点事实；未修改产品、门限、执行计划或启动新实验。</p>
+      <div class="references"><a href="./2026-11-07-Macmini在线更新预检与试验验证.md#failure-cause-review-20261115">完整复核：逐次原因、修复证据与未知项 ↗</a><a href="./2026-11-06-无感升级失败审计.md">公司旧迁移15批原始审计 ↗</a></div>
+    </section>
 
     <section class="section" id="current-a7-plan-v2" aria-labelledby="current-a7-plan-v2-title">
       <div class="section-head"><span class="section-number">当前</span><h2 id="current-a7-plan-v2-title">A8同包性能通过；R6诊断仍超时，线上升级未放行</h2></div>
